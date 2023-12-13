@@ -23,11 +23,16 @@
     "langchain": "^0.0.125",
     "lucide-react": "^0.125.0",
     "next": "13.2.3",
-    "pdf-parse": "1.1.1",
+    "node-exiftool": "^2.3.0",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^4.0.269",
+    "pdfreader": "^3.0.2",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-markdown": "^8.0.5",
-    "tailwind-merge": "^1.10.0"
+    "tailwind-merge": "^1.10.0",
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
     "@types/node": "^18.14.6",
