@@ -9,6 +9,7 @@ import { hideBin } from 'yargs/helpers';
 import { PDFDocument } from "pdf-lib";
 import { PDFLoader } from 'langchain/document_loaders/fs/pdf';
 import fs from 'fs';
+import exiftool from 'node-exiftool';
 
 /* Name of directory to retrieve your files from */
 const filePath = 'docs';
@@ -31,6 +32,26 @@ const loadPDFMetadata = async (path) => {
   };
 };
 
+const extractMetadata = async (pdfFilePath) => {
+  const ep = new exiftool.ExiftoolProcess();
+  try {
+    await ep.open();
+    const metadata = await ep.readMetadata(pdfFilePath, ['-File:all']);
+    await ep.close();
+    if (metadata.data && metadata.data.length > 0) {
+      return metadata.data[0]; // Return the first item from the metadata array
+    }
+    console.error("No metadata found in PDF:", pdfFilePath);
+    return {};
+  } catch (error) {
+    console.error("Error processing PDF:", error);
+    return {};
+  } finally {
+    // Ensure the exiftool process is closed even if an error occurs
+    ep.close().catch((error) => console.error("Failed to close exiftool:", error));
+  }
+};
+
 export const run = async () => {
   try {
     /*load raw docs from the all files in the directory */
@@ -43,19 +64,26 @@ export const run = async () => {
         // Load PDF contents
         const pdfLoader = new PDFLoader(path);
         const content = await pdfLoader.load(); // Assuming PDFLoader has a load() method
-    
-        // Load PDF metadata
-        const metadata = await loadPDFMetadata(path);
-    
+      
+        // Initialize metadata
+        let metadata = null;
+      
+        // Load PDF metadata using exiftool
+        try {
+          metadata = await extractMetadata(path);
+        } catch (error) {
+          console.error("Error extracting metadata:", error);
+        }
+      
         // Return an object containing both content and metadata
         return {
           path,
           content, 
-          metadata,
+          metadata, // This will be null if there was an error
         };
       },
     });
-    let rawDocs = await directoryLoader.load();
+    let rawDocs = await directoryLoader.load()
     process.stdout.write('Number of items in rawDocs: ' + rawDocs.length + '\n');
 
     // Add URL to metadata for each document
@@ -112,7 +140,7 @@ export const run = async () => {
       console.log('Dry run mode. Skipping Pinecone call and OpenAI embeddings.');
     }
   } catch (error) {
-    console.log('error', error);
+    console.error('error', error);
     throw new Error('Failed to ingest your data');
   }
 };
