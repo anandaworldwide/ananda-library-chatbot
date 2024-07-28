@@ -5,13 +5,14 @@
 /data-ingestion/docs-anandaLib/
 /data-ingestion/docs-jram/
 /data-ingestion/docs-*/
-/*-debug.log
-/emulator-data/
 /data-ingestion/media/
 /data-ingestion/ingestion_checkpoint.json
 /data-ingestion/scripts/queue/
 /data-ingestion/scripts/queue-*/
 /data-ingestion/scripts/data/
+/firebase/*-debug.log
+/firebase/emulator-data/
+/web/ui-debug.log
 *.mp3
 
 # IDE
@@ -20,7 +21,7 @@
 *.pyc
 
 # dependencies
-/node_modules
+/web/node_modules
 /.pnp
 .pnp.js
 

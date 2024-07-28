@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "pages/api/chat.ts": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/pruneRateLimits",
+      "schedule": "0 0 * * 0"
+    }
+  ]
+}
