@@ -10,8 +10,8 @@
 /data-ingestion/scripts/queue/
 /data-ingestion/scripts/queue-*/
 /data-ingestion/scripts/data/
-/firebase/*-debug.log
-/firebase/emulator-data/
+/web/firebase/*-debug.log
+/web/firebase/emulator-data/
 /web/ui-debug.log
 *.mp3
 
