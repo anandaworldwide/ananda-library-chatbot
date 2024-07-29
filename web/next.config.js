@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
   webpack: (config, { dev, isServer }) => {
     config.experiments = { ...config.experiments, topLevelAwait: true };
     
@@ -23,6 +24,7 @@ const nextConfig = {
       },
     ];
   },
+  distDir: 'web/.next',
 };
 
 export default nextConfig;
