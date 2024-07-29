@@ -6,15 +6,15 @@
   "author": "Mayooear<twitter:@mayowaoshin>",
   "type": "module",
   "scripts": {
-    "dev": "yarn --cwd web dev",
-    "build": "yarn --cwd web build",
-    "start": "yarn --cwd web start",
-    "type-check": "yarn --cwd web type-check",
-    "lint": "yarn --cwd web lint",
-    "format": "yarn --cwd web format",
-    "ingest": "yarn --cwd data-ingestion ingest",
-    "ingest-trace": "yarn --cwd data-ingestion ingest-trace",
-    "firebase-emulator": "yarn --cwd web firebase-emulator"
+    "dev": "next dev web",
+    "build": "next build web",
+    "start": "next start web",
+    "type-check": "tsc --noEmit -p web/tsconfig.json",
+    "lint": "eslint --ignore-path .gitignore \"web/**/*.+(ts|js|tsx)\"",
+    "format": "prettier --ignore-path .gitignore \"web/**/*.+(ts|js|tsx)\" --write",
+    "ingest": "NODE_OPTIONS='--max-old-space-size=6000' tsx -r dotenv/config web/scripts/ingest-text-data.ts",
+    "ingest-trace": "NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' tsx -r dotenv/config web/scripts/ingest-text-data.ts",
+    "firebase-emulator": "firebase emulators:start --import web/firebase/emulator-data --export-on-exit web/firebase/emulator-data --inspect-functions"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.609.0",
