@@ -1,6 +1,6 @@
 {
   "functions": {
-    "pages/api/chat.ts": {
+    "web/pages/api/chat.ts": {
       "maxDuration": 60
     }
   },
@@ -8,6 +8,18 @@
     {
       "path": "/api/pruneRateLimits",
       "schedule": "0 0 * * 0"
+    }
+  ],
+  "builds": [
+    {
+      "src": "web/package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "web/$1"
     }
   ]
 }
