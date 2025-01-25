@@ -8,7 +8,16 @@ export function getClientIp(req: NextApiRequest | NextRequest): string {
     return '127.0.0.1';
   }
 
-  // Check for Vercel-specific headers first
+  // Check for Cloudflare-specific headers first
+  const cfConnectingIp = typeof req.headers.get === 'function' ? 
+    req.headers.get('cf-connecting-ip') : 
+    (req.headers as Record<string, string | string[]>)['cf-connecting-ip'];
+
+  if (cfConnectingIp) {
+    return Array.isArray(cfConnectingIp) ? cfConnectingIp[0] : cfConnectingIp;
+  }
+
+  // Then check for Vercel-specific headers
   const forwardedFor = typeof req.headers.get === 'function' ? 
     req.headers.get('x-forwarded-for') : 
     (req.headers as Record<string, string | string[]>)['x-forwarded-for'];
