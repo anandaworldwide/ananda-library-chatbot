@@ -8,58 +8,30 @@ export function getClientIp(req: NextApiRequest | NextRequest): string {
     return '127.0.0.1';
   }
 
-  // For NextRequest (App Router)
-  if ('ip' in req) {
-    return req.ip || '';
+  // Check for Vercel-specific headers first
+  const forwardedFor = typeof req.headers.get === 'function' ? 
+    req.headers.get('x-forwarded-for') : 
+    (req.headers as Record<string, string | string[]>)['x-forwarded-for'];
+
+  if (forwardedFor) {
+    // x-forwarded-for can contain multiple IPs, we want the first one
+    return Array.isArray(forwardedFor) ? 
+      forwardedFor[0].split(',')[0].trim() : 
+      forwardedFor.split(',')[0].trim();
   }
 
-  // Type guard for NextRequest headers
-  const isNextRequestHeaders = (headers: unknown): headers is Headers => {
-    return (
-      typeof headers === 'object' &&
-      headers !== null &&
-      'get' in headers &&
-      typeof (headers as Headers).get === 'function'
-    );
-  };
+  // Check for real IP header (common in proxy setups)
+  const realIp = typeof req.headers.get === 'function' ? 
+    req.headers.get('x-real-ip') : 
+    (req.headers as Record<string, string | string[]>)['x-real-ip'];
 
-  if (isNextRequestHeaders(req.headers)) {
-    // NextRequest headers
-    const cfConnectingIp = req.headers.get('cf-connecting-ip');
-    if (cfConnectingIp) return cfConnectingIp;
+  if (realIp) {
+    return Array.isArray(realIp) ? realIp[0] : realIp;
+  }
 
-    const xForwardedFor = req.headers.get('x-forwarded-for');
-    if (xForwardedFor) {
-      const ips = xForwardedFor.split(',');
-      return ips[0].trim();
-    }
-
-    const trueClientIp = req.headers.get('true-client-ip');
-    if (trueClientIp) return trueClientIp;
-  } else {
-    // NextApiRequest headers
-    const cfConnectingIp = req.headers['cf-connecting-ip'];
-    if (cfConnectingIp) {
-      return Array.isArray(cfConnectingIp) ? cfConnectingIp[0] : cfConnectingIp;
-    }
-
-    const xForwardedFor = req.headers['x-forwarded-for'];
-    if (xForwardedFor) {
-      const ips = (
-        Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor
-      ).split(',');
-      return ips[0].trim();
-    }
-
-    const trueClientIp = req.headers['true-client-ip'];
-    if (trueClientIp) {
-      return Array.isArray(trueClientIp) ? trueClientIp[0] : trueClientIp;
-    }
-
-    // Fallback to socket remote address for NextApiRequest
-    if ('socket' in req) {
-      return req.socket.remoteAddress || '';
-    }
+  // If no proxy headers found, try to get direct IP
+  if ('socket' in req) {
+    return req.socket.remoteAddress || '';
   }
 
   return '';
