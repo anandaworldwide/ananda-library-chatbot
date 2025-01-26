@@ -11,6 +11,7 @@ interface DownvotesReviewProps {
 const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
   const [downvotedAnswers, setDownvotedAnswers] = useState<Answer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchDownvotedAnswers = async () => {
@@ -18,12 +19,19 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
         const response = await fetch('/api/downvotedAnswers');
         if (response.ok) {
           const data = await response.json();
-          setDownvotedAnswers(data);
+          const answersWithFixedDates = data.map((answer: Answer) => ({
+            ...answer,
+            timestamp: answer.timestamp
+          }));
+          setDownvotedAnswers(answersWithFixedDates);
+          setError(null);
         } else {
-          console.error('Failed to fetch downvoted answers');
+          const errorData = await response.json().catch(() => null);
+          setError(errorData?.message || 'Failed to fetch downvoted answers');
         }
       } catch (error) {
         console.error('Error fetching downvoted answers:', error);
+        setError('Failed to fetch downvoted answers');
       } finally {
         setIsLoading(false);
       }
@@ -42,19 +50,29 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
     );
   }
 
+  if (error) {
+    return (
+      <Layout siteConfig={siteConfig}>
+        <div className="text-red-600">Error: {error}</div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout siteConfig={siteConfig}>
       <h1 className="text-2xl font-bold mb-4">Review Downvoted Answers</h1>
       {downvotedAnswers.length === 0 ? (
         <p>No downvoted answers to review.</p>
       ) : (
-        downvotedAnswers.map((answer) => (
-          <DownvotedAnswerReview
-            key={answer.id}
-            answer={answer}
-            siteConfig={siteConfig}
-          />
-        ))
+        <div className="space-y-6">
+          {downvotedAnswers.map((answer) => (
+            <DownvotedAnswerReview
+              key={answer.id}
+              answer={answer}
+              siteConfig={siteConfig}
+            />
+          ))}
+        </div>
       )}
     </Layout>
   );
