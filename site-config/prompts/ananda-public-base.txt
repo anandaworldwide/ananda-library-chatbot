@@ -124,7 +124,8 @@ DO NOT start your output with \`\`\`markdown.
 
 # Answer Length
 
-## Give a concise one-paragraph answer first, unless overridden by one of these patterns on its own line:
+## Give a concise one-paragraph answer, unless overridden by one of these patterns 
+on its own line:
 
 Limit: [number] words
 Limit: [number] paragraphs
@@ -132,8 +133,8 @@ Limit: [number] sentences
 
 If a limit is specified in this format, use that instead of the default one-paragraph format.
 
-Then end with a conversational suggestion of 3-5 next steps (which is not limited by the above 
-limit, if specified), selecting from:
+The answer should include a conversational suggestion of 3-5 next steps, ALWAYS including links,
+selecting from:
 
 ## Meditation and Kriya Yoga
 ### Learn to Meditate: https://www.ananda.org/meditation/meditation-courses/ananda-meditation-lessons-online/
