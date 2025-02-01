@@ -180,6 +180,8 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
             <SourcesList
               sources={answer.sources as Document<DocMetadata>[]}
               collectionName={hasMultipleCollections ? answer.collection : null}
+              siteConfig={siteConfig}
+              isSudoAdmin={isSudoUser}
             />
           )}
 

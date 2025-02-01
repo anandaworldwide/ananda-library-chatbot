@@ -29,6 +29,7 @@ import { loadSiteConfig } from '@/utils/server/loadSiteConfig';
 import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { useSudo } from '@/contexts/SudoContext';
+import { SudoProvider } from '@/contexts/SudoContext';
 
 interface AllAnswersProps {
   siteConfig: SiteConfig | null;
@@ -429,82 +430,87 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   }, [checkSudoStatus]);
 
   return (
-    <Layout siteConfig={siteConfig}>
-      {/* Sort dropdown */}
-      <div className="flex justify-between items-center mb-4 px-4 sm:px-6 lg:px-8">
-        <div></div>
-        <div className="flex items-center mt-0.5">
-          <label htmlFor="sortBy" className="mr-2 text-gray-700">
-            Sort by:
-          </label>
-          <select
-            id="sortBy"
-            className="border border-gray-300 rounded p-1"
-            onChange={(e) => handleSortChange(e.target.value)}
-            value={sortBy}
-          >
-            <option value="mostRecent">Most Recent</option>
-            <option value="mostPopular">Most Popular</option>
-          </select>
-        </div>
-      </div>
-      <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
-        {/* Loading spinner */}
-        {(isLoading && !initialLoadComplete) || isChangingPage ? (
-          <div className="flex justify-center items-center h-screen">
-            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
-            <p className="text-lg text-gray-600 ml-4">Loading...</p>
-          </div>
-        ) : (
-          <div key={`${currentPage}-${sortBy}`}>
-            {/* List of answers */}
-            <div>
-              {answers.map((answer) => (
-                <AnswerItem
-                  key={answer.id}
-                  answer={answer}
-                  siteConfig={siteConfig}
-                  handleLikeCountChange={handleLikeCountChange}
-                  handleCopyLink={handleCopyLink}
-                  handleDelete={isSudoUser ? handleDelete : undefined}
-                  linkCopied={linkCopied}
-                  likeStatuses={likeStatuses}
-                  isSudoUser={isSudoUser}
-                  isFullPage={false}
-                />
-              ))}
-            </div>
-
-            {/* Only render pagination controls when answers are loaded */}
-            {answers.length > 0 && (
-              <div className="flex justify-center mt-4">
-                <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1 || isChangingPage}
-                  className="px-4 py-2 mr-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+    <SudoProvider>
+      <Layout siteConfig={siteConfig}>
+        {/* Sort controls */}
+        <div className="bg-white shadow">
+          <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center">
+                <span className="text-gray-700 mr-2">Sort by:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => handleSortChange(e.target.value)}
+                  className="border rounded p-1"
+                  disabled={isLoading || !isSortByInitialized}
                 >
-                  Previous
-                </button>
-                <span className="px-4 py-2">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages || isChangingPage}
-                  className="px-4 py-2 ml-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
-                >
-                  Next
-                </button>
+                  <option value="mostRecent">Most Recent</option>
+                  <option value="mostPopular">Most Popular</option>
+                </select>
               </div>
-            )}
+            </div>
+          </div>
+        </div>
+        <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
+          {/* Loading spinner */}
+          {(isLoading && !initialLoadComplete) || isChangingPage ? (
+            <div className="flex justify-center items-center h-screen">
+              <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
+              <p className="text-lg text-gray-600 ml-4">Loading...</p>
+            </div>
+          ) : (
+            <div key={`${currentPage}-${sortBy}`}>
+              {/* List of answers */}
+              <div>
+                {answers.map((answer) => (
+                  <AnswerItem
+                    key={answer.id}
+                    answer={answer}
+                    siteConfig={siteConfig}
+                    handleLikeCountChange={handleLikeCountChange}
+                    handleCopyLink={handleCopyLink}
+                    handleDelete={isSudoUser ? handleDelete : undefined}
+                    linkCopied={linkCopied}
+                    likeStatuses={likeStatuses}
+                    isSudoUser={isSudoUser}
+                    isFullPage={false}
+                  />
+                ))}
+              </div>
+
+              {/* Only render pagination controls when answers are loaded */}
+              {answers.length > 0 && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1 || isChangingPage}
+                    className="px-4 py-2 mr-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-4 py-2">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages || isChangingPage}
+                    className="px-4 py-2 ml-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {/* Error message display */}
+        {likeError && (
+          <div className="text-red-500 text-sm mt-2 text-center">
+            {likeError}
           </div>
         )}
-      </div>
-      {/* Error message display */}
-      {likeError && (
-        <div className="text-red-500 text-sm mt-2 text-center">{likeError}</div>
-      )}
-    </Layout>
+      </Layout>
+    </SudoProvider>
   );
 };
 

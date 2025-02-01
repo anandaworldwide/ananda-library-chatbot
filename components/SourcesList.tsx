@@ -34,6 +34,7 @@ import {
   getLibraryUrl,
 } from '@/utils/client/libraryMappings';
 import { DocMetadata } from '@/types/DocMetadata';
+import { SiteConfig } from '@/types/siteConfig';
 
 // Helper function to extract the title from document metadata
 const extractTitle = (metadata: DocMetadata): string => {
@@ -43,6 +44,8 @@ const extractTitle = (metadata: DocMetadata): string => {
 interface SourcesListProps {
   sources: Document<DocMetadata>[];
   collectionName?: string | null;
+  siteConfig?: SiteConfig | null;
+  isSudoAdmin?: boolean;
 }
 
 // Function to transform YouTube URLs into embed URLs
@@ -67,11 +70,18 @@ const transformYouTubeUrl = (url: string, startTime: number | undefined) => {
 const SourcesList: React.FC<SourcesListProps> = ({
   sources,
   collectionName = null,
+  siteConfig,
+  isSudoAdmin = false,
 }) => {
   // State to track expanded sources
   const [expandedSources, setExpandedSources] = useState<Set<number>>(
     new Set(),
   );
+  const [showSourcesPopover, setShowSourcesPopover] = useState<boolean>(false);
+
+  // Check if sources should be hidden based on site config
+  const shouldHideSources = siteConfig?.hideSources && !isSudoAdmin;
+  const shouldShowSimpleLink = siteConfig?.hideSources && isSudoAdmin;
 
   // Render audio player for audio sources
   const renderAudioPlayer = useCallback(
@@ -253,6 +263,81 @@ const SourcesList: React.FC<SourcesListProps> = ({
     );
   };
 
+  // Simple link view for admins when sources are hidden
+  if (shouldShowSimpleLink) {
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setShowSourcesPopover(!showSourcesPopover)}
+          className="text-blue-600 hover:underline text-sm"
+        >
+          {showSourcesPopover ? 'Admin: Hide sources' : 'Admin: Show sources'}
+        </button>
+
+        {showSourcesPopover && (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40"
+              onClick={() => setShowSourcesPopover(false)}
+            />
+
+            {/* Popover */}
+            <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-50 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Sources</h3>
+                <button
+                  onClick={() => setShowSourcesPopover(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <span className="material-icons">close</span>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {sources.map((doc, index) => (
+                  <div key={index} className="border-b border-gray-200 pb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="material-icons text-sm">
+                        {getSourceIcon(doc)}
+                      </span>
+                      {renderSourceTitle(doc)}
+                      {doc.metadata.library &&
+                        doc.metadata.library !== 'Default Library' && (
+                          <span className="text-gray-400 text-sm ml-auto">
+                            {renderLibraryName(doc)}
+                          </span>
+                        )}
+                    </div>
+                    {doc.metadata.type === 'audio' &&
+                      renderAudioPlayer(doc, index, true)}
+                    {doc.metadata.type === 'youtube' &&
+                      renderYouTubePlayer(doc)}
+                    <ReactMarkdown
+                      remarkPlugins={[gfm]}
+                      components={{
+                        a: ({ ...props }) => (
+                          <a
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            {...props}
+                          />
+                        ),
+                      }}
+                    >
+                      {doc.pageContent}
+                    </ReactMarkdown>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // Regular view (unchanged)
   return (
     <div className="bg-white sourcesContainer pb-4">
       {/* Render sources header if there are sources */}
@@ -260,18 +345,29 @@ const SourcesList: React.FC<SourcesListProps> = ({
         <div className="flex justify-between items-center w-full border-b border-gray-200 px-3 py-1">
           <div className="flex items-baseline">
             <h3 className="text-base font-bold mr-2">Sources</h3>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                handleExpandAll();
-              }}
-              className="text-sm text-blue-600 hover:underline"
-            >
-              {expandedSources.size === sources.length
-                ? '(collapse all)'
-                : '(expand all)'}
-            </a>
+            {shouldHideSources ? (
+              isSudoAdmin && (
+                <button
+                  onClick={() => setShowSourcesPopover(!showSourcesPopover)}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  {showSourcesPopover ? '(hide sources)' : '(show sources)'}
+                </button>
+              )
+            ) : (
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleExpandAll();
+                }}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                {expandedSources.size === sources.length
+                  ? '(collapse all)'
+                  : '(expand all)'}
+              </a>
+            )}
           </div>
           {displayCollectionName && (
             <span className="text-sm text-gray-400">
@@ -280,86 +376,92 @@ const SourcesList: React.FC<SourcesListProps> = ({
           )}
         </div>
       )}
-      <div className="px-3">
-        {/* Render each source as an expandable details element */}
-        {sources.map((doc, index) => {
-          const isExpanded = expandedSources.has(index);
-          const isLastSource = index === sources.length - 1;
-          return (
-            <details
-              key={index}
-              className={`${styles.sourceDocsContainer} ${
-                isLastSource ? '' : 'border-b border-gray-200'
-              } group`}
-              open={isExpanded}
-            >
-              {/* Source summary (always visible) */}
-              <summary
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleSourceToggle(index);
-                }}
-                className="flex items-center cursor-pointer list-none py-1 px-2 hover:bg-gray-50"
+      {(!shouldHideSources || (shouldHideSources && showSourcesPopover)) && (
+        <div className="px-3">
+          {/* Render each source as an expandable details element */}
+          {sources.map((doc, index) => {
+            const isExpanded = expandedSources.has(index);
+            const isLastSource = index === sources.length - 1;
+            return (
+              <details
+                key={index}
+                className={`${styles.sourceDocsContainer} ${
+                  isLastSource ? '' : 'border-b border-gray-200'
+                } group`}
+                open={isExpanded}
               >
-                <div className="grid grid-cols-[auto_1fr_auto] items-center w-full gap-2">
-                  <div className="flex items-center">
-                    <span className="inline-block w-4 h-4 transition-transform duration-200 transform group-open:rotate-90 arrow-icon">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        className="w-4 h-4"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </span>
-                    <span className="material-icons text-sm ml-1">
-                      {getSourceIcon(doc)}
-                    </span>
-                  </div>
-                  <div className="flex items-center">
-                    {renderSourceTitle(doc)}
-                  </div>
-                  <div className="text-right">
-                    {doc.metadata.library &&
-                      doc.metadata.library !== 'Default Library' &&
-                      renderLibraryName(doc)}
-                  </div>
-                </div>
-              </summary>
-              {/* Expanded source content */}
-              <div className="pl-5 pb-1">
-                {isExpanded && (
-                  <>
-                    {/* Render audio or YouTube player if applicable */}
-                    {doc.metadata &&
-                      doc.metadata.type === 'audio' &&
-                      renderAudioPlayer(doc, index, isExpanded)}
-                    {doc.metadata &&
-                      doc.metadata.type === 'youtube' &&
-                      renderYouTubePlayer(doc)}
-                  </>
-                )}
-                {/* Render source content as markdown */}
-                <ReactMarkdown
-                  remarkPlugins={[gfm]}
-                  components={{
-                    a: ({ ...props }) => (
-                      <a target="_blank" rel="noopener noreferrer" {...props} />
-                    ),
+                {/* Source summary (always visible) */}
+                <summary
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSourceToggle(index);
                   }}
+                  className="flex items-center cursor-pointer list-none py-1 px-2 hover:bg-gray-50"
                 >
-                  {doc.pageContent}
-                </ReactMarkdown>
-              </div>
-            </details>
-          );
-        })}
-      </div>
+                  <div className="grid grid-cols-[auto_1fr_auto] items-center w-full gap-2">
+                    <div className="flex items-center">
+                      <span className="inline-block w-4 h-4 transition-transform duration-200 transform group-open:rotate-90 arrow-icon">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          className="w-4 h-4"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </span>
+                      <span className="material-icons text-sm ml-1">
+                        {getSourceIcon(doc)}
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      {renderSourceTitle(doc)}
+                    </div>
+                    <div className="text-right">
+                      {doc.metadata.library &&
+                        doc.metadata.library !== 'Default Library' &&
+                        renderLibraryName(doc)}
+                    </div>
+                  </div>
+                </summary>
+                {/* Expanded source content */}
+                <div className="pl-5 pb-1">
+                  {isExpanded && (
+                    <>
+                      {/* Render audio or YouTube player if applicable */}
+                      {doc.metadata &&
+                        doc.metadata.type === 'audio' &&
+                        renderAudioPlayer(doc, index, isExpanded)}
+                      {doc.metadata &&
+                        doc.metadata.type === 'youtube' &&
+                        renderYouTubePlayer(doc)}
+                    </>
+                  )}
+                  {/* Render source content as markdown */}
+                  <ReactMarkdown
+                    remarkPlugins={[gfm]}
+                    components={{
+                      a: ({ ...props }) => (
+                        <a
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          {...props}
+                        />
+                      ),
+                    }}
+                  >
+                    {doc.pageContent}
+                  </ReactMarkdown>
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

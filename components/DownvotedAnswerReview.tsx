@@ -9,11 +9,13 @@ import { SiteConfig } from '../types/siteConfig';
 interface DownvotedAnswerReviewProps {
   answer: Answer;
   siteConfig: SiteConfig;
+  isSudoAdmin?: boolean;
 }
 
 const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
   answer,
   siteConfig,
+  isSudoAdmin = false,
 }) => {
   const hasMultipleCollections = useMultipleCollections(siteConfig);
 
@@ -42,19 +44,24 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
     }
   };
 
-  const formatTimestamp = (timestamp: {
-    _seconds: number;
-    _nanoseconds: number;
-  } | string | null) => {
+  const formatTimestamp = (
+    timestamp:
+      | {
+          _seconds: number;
+          _nanoseconds: number;
+        }
+      | string
+      | null,
+  ) => {
     if (!timestamp) {
       return 'Unknown date';
     }
-    
+
     // Handle string timestamp format
     if (typeof timestamp === 'string') {
       return new Date(timestamp).toLocaleString();
     }
-    
+
     // Handle Firestore timestamp format
     if (timestamp._seconds) {
       return new Date(timestamp._seconds * 1000).toLocaleString();
@@ -72,13 +79,15 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
             return JSON.parse(answer.sources as unknown as string);
           } catch {
             // Create a basic document structure for text sources
-            return [{
-              pageContent: answer.sources,
-              metadata: {
-                type: 'text',
-                title: 'Legacy Source'
-              }
-            }];
+            return [
+              {
+                pageContent: answer.sources,
+                metadata: {
+                  type: 'text',
+                  title: 'Legacy Source',
+                },
+              },
+            ];
           }
         })()
     : [];
@@ -98,6 +107,8 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
         <SourcesList
           sources={parsedSources}
           collectionName={hasMultipleCollections ? answer.collection : null}
+          siteConfig={siteConfig}
+          isSudoAdmin={isSudoAdmin}
         />
       )}
       <div className="mt-2 text-sm text-gray-600">

@@ -9,4 +9,5 @@ export interface ExtendedAIMessage {
   docId?: string;
   collection?: string;
   relatedQuestions?: RelatedQuestion[];
+  isSudoAdmin?: boolean;
 }

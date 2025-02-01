@@ -13,6 +13,7 @@ import LikeButton from '@/components/LikeButton';
 import { SiteConfig } from '@/types/siteConfig';
 import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
+import { useSudo } from '@/contexts/SudoContext';
 
 interface MessageItemProps {
   message: ExtendedAIMessage;
@@ -60,6 +61,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
   showSourcesBelow = false, // Default to showing sources above
 }) => {
   const [likeError, setLikeError] = useState<string | null>(null);
+  const { isSudoUser } = useSudo();
 
   // Handles the like button click, updating the like count and managing errors
   const onLikeButtonClick = (answerId: string, newLikeCount: number) => {
@@ -162,6 +164,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
                 ? message.collection
                 : null
             }
+            siteConfig={siteConfig}
+            isSudoAdmin={isSudoUser}
           />
         </div>
       );

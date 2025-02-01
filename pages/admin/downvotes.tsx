@@ -3,6 +3,7 @@ import Layout from '@/components/layout';
 import DownvotedAnswerReview from '@/components/DownvotedAnswerReview';
 import { Answer } from '@/types/answer';
 import { SiteConfig } from '@/types/siteConfig';
+import { SudoProvider } from '@/contexts/SudoContext';
 
 interface DownvotesReviewProps {
   siteConfig: SiteConfig | null;
@@ -21,7 +22,7 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
           const data = await response.json();
           const answersWithFixedDates = data.map((answer: Answer) => ({
             ...answer,
-            timestamp: answer.timestamp
+            timestamp: answer.timestamp,
           }));
           setDownvotedAnswers(answersWithFixedDates);
           setError(null);
@@ -41,40 +42,52 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
   }, []);
 
   if (isLoading) {
-    return <Layout siteConfig={siteConfig}>Loading...</Layout>;
+    return (
+      <SudoProvider>
+        <Layout siteConfig={siteConfig}>Loading...</Layout>
+      </SudoProvider>
+    );
   }
 
   if (!siteConfig) {
     return (
-      <Layout siteConfig={null}>Error: Site configuration not available</Layout>
+      <SudoProvider>
+        <Layout siteConfig={null}>
+          Error: Site configuration not available
+        </Layout>
+      </SudoProvider>
     );
   }
 
   if (error) {
     return (
-      <Layout siteConfig={siteConfig}>
-        <div className="text-red-600">Error: {error}</div>
-      </Layout>
+      <SudoProvider>
+        <Layout siteConfig={siteConfig}>
+          <div className="text-red-600">Error: {error}</div>
+        </Layout>
+      </SudoProvider>
     );
   }
 
   return (
-    <Layout siteConfig={siteConfig}>
-      <h1 className="text-2xl font-bold mb-4">Review Downvoted Answers</h1>
-      {downvotedAnswers.length === 0 ? (
-        <p>No downvoted answers to review.</p>
-      ) : (
-        <div className="space-y-6">
-          {downvotedAnswers.map((answer) => (
-            <DownvotedAnswerReview
-              key={answer.id}
-              answer={answer}
-              siteConfig={siteConfig}
-            />
-          ))}
-        </div>
-      )}
-    </Layout>
+    <SudoProvider>
+      <Layout siteConfig={siteConfig}>
+        <h1 className="text-2xl font-bold mb-4">Review Downvoted Answers</h1>
+        {downvotedAnswers.length === 0 ? (
+          <p>No downvoted answers to review.</p>
+        ) : (
+          <div className="space-y-6">
+            {downvotedAnswers.map((answer) => (
+              <DownvotedAnswerReview
+                key={answer.id}
+                answer={answer}
+                siteConfig={siteConfig}
+              />
+            ))}
+          </div>
+        )}
+      </Layout>
+    </SudoProvider>
   );
 };
 

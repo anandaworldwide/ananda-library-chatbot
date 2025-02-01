@@ -4,7 +4,6 @@
 
 // React and Next.js imports
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import Link from 'next/link';
 
 // Component imports
 import Layout from '@/components/layout';
@@ -38,6 +37,7 @@ import Cookies from 'js-cookie';
 import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
+import { SudoProvider } from '@/contexts/SudoContext';
 
 // Main component for the chat interface
 export default function Home({
@@ -620,20 +620,12 @@ export default function Home({
   // Render maintenance mode message if active
   if (isMaintenanceMode) {
     return (
-      <Layout siteConfig={siteConfig}>
-        <div className="flex flex-col items-center justify-center min-h-screen">
-          <h1 className="text-3xl font-bold">
-            This page is currently down for maintenance until approx. 1pm PT.
-          </h1>
-          <p className="mt-4">
-            You can still view the{' '}
-            <Link href="/answers" className="text-blue-500">
-              All&nbsp;Answers
-            </Link>{' '}
-            page.
-          </p>
-        </div>
-      </Layout>
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <h1 className="text-2xl font-bold mb-4">
+          Site is currently under maintenance
+        </h1>
+        <p>Please check back later.</p>
+      </div>
     );
   }
 
@@ -648,106 +640,112 @@ export default function Home({
           siteConfig={siteConfig}
         />
       )}
-      <Layout siteConfig={siteConfig}>
-        <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />
-        <div className="flex flex-col h-full">
-          {/* Private session banner */}
-          {privateSession && (
-            <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-              <span className="material-icons text-2xl mr-2">lock</span>
-              You are in a Private Session (
-              <button
-                onClick={handlePrivateSessionChange}
-                className="underline hover:text-purple-900"
-              >
-                end private session
-              </button>
-              )
+      <SudoProvider>
+        <Layout siteConfig={siteConfig}>
+          <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />
+          <div className="flex flex-col h-full">
+            {/* Private session banner */}
+            {privateSession && (
+              <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
+                <span className="material-icons text-2xl mr-2">lock</span>
+                You are in a Private Session (
+                <button
+                  onClick={handlePrivateSessionChange}
+                  className="underline hover:text-purple-900"
+                >
+                  end private session
+                </button>
+                )
+              </div>
+            )}
+            <div className="flex-grow overflow-hidden answers-container">
+              <div ref={messageListRef} className="h-full overflow-y-auto">
+                {/* Render chat messages */}
+                {messages.map((message, index) => (
+                  <MessageItem
+                    key={`chatMessage-${index}`}
+                    messageKey={`chatMessage-${index}`}
+                    message={message}
+                    previousMessage={
+                      index > 0 ? messages[index - 1] : undefined
+                    }
+                    index={index}
+                    isLastMessage={index === messages.length - 1}
+                    loading={loading}
+                    privateSession={privateSession}
+                    collectionChanged={collectionChanged}
+                    hasMultipleCollections={hasMultipleCollections}
+                    likeStatuses={likeStatuses}
+                    linkCopied={linkCopied}
+                    votes={votes}
+                    siteConfig={siteConfig}
+                    handleLikeCountChange={handleLikeCountChange}
+                    handleCopyLink={handleCopyLink}
+                    handleVote={handleVote}
+                    lastMessageRef={lastMessageRef}
+                    voteError={voteError}
+                    allowAllAnswersPage={
+                      siteConfig?.allowAllAnswersPage ?? false
+                    }
+                  />
+                ))}
+                <div ref={bottomOfListRef} style={{ height: '1px' }} />
+              </div>
             </div>
-          )}
-          <div className="flex-grow overflow-hidden answers-container">
-            <div ref={messageListRef} className="h-full overflow-y-auto">
-              {/* Render chat messages */}
-              {messages.map((message, index) => (
-                <MessageItem
-                  key={`chatMessage-${index}`}
-                  messageKey={`chatMessage-${index}`}
-                  message={message}
-                  previousMessage={index > 0 ? messages[index - 1] : undefined}
-                  index={index}
-                  isLastMessage={index === messages.length - 1}
+            <div className="mt-4 px-2 md:px-0">
+              {/* Render chat input component */}
+              {isLoadingQueries ? null : (
+                <ChatInput
                   loading={loading}
+                  handleSubmit={handleSubmit}
+                  handleEnter={handleEnter}
+                  handleClick={handleClick}
+                  handleCollectionChange={handleCollectionChange}
+                  handlePrivateSessionChange={handlePrivateSessionChange}
+                  collection={collection}
                   privateSession={privateSession}
-                  collectionChanged={collectionChanged}
-                  hasMultipleCollections={hasMultipleCollections}
-                  likeStatuses={likeStatuses}
-                  linkCopied={linkCopied}
-                  votes={votes}
+                  error={chatError}
+                  setError={setError}
+                  randomQueries={randomQueries}
+                  shuffleQueries={shuffleQueries}
+                  textAreaRef={textAreaRef}
+                  mediaTypes={mediaTypes}
+                  handleMediaTypeChange={handleMediaTypeChange}
                   siteConfig={siteConfig}
-                  handleLikeCountChange={handleLikeCountChange}
-                  handleCopyLink={handleCopyLink}
-                  handleVote={handleVote}
-                  lastMessageRef={lastMessageRef}
-                  voteError={voteError}
-                  allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
+                  input={query}
+                  handleInputChange={handleInputChange}
+                  setQuery={setQuery}
+                  setShouldAutoScroll={setIsNearBottom}
+                  handleStop={handleStop}
+                  isNearBottom={isNearBottom}
+                  setIsNearBottom={setIsNearBottom}
+                  isLoadingQueries={isLoadingQueries}
+                  sourceCount={sourceCount}
+                  setSourceCount={setSourceCount}
                 />
-              ))}
-              <div ref={bottomOfListRef} style={{ height: '1px' }} />
+              )}
             </div>
-          </div>
-          <div className="mt-4 px-2 md:px-0">
-            {/* Render chat input component */}
-            {isLoadingQueries ? null : (
-              <ChatInput
-                loading={loading}
-                handleSubmit={handleSubmit}
-                handleEnter={handleEnter}
-                handleClick={handleClick}
-                handleCollectionChange={handleCollectionChange}
-                handlePrivateSessionChange={handlePrivateSessionChange}
-                collection={collection}
-                privateSession={privateSession}
-                error={chatError}
-                setError={setError}
-                randomQueries={randomQueries}
-                shuffleQueries={shuffleQueries}
-                textAreaRef={textAreaRef}
-                mediaTypes={mediaTypes}
-                handleMediaTypeChange={handleMediaTypeChange}
-                siteConfig={siteConfig}
-                input={query}
-                handleInputChange={handleInputChange}
-                setQuery={setQuery}
-                setShouldAutoScroll={setIsNearBottom}
-                handleStop={handleStop}
-                isNearBottom={isNearBottom}
-                setIsNearBottom={setIsNearBottom}
-                isLoadingQueries={isLoadingQueries}
-                sourceCount={sourceCount}
-                setSourceCount={setSourceCount}
-              />
+            {/* Private session banner (bottom) */}
+            {privateSession && (
+              <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
+                <span className="material-icons text-2xl mr-2">lock</span>
+                You are in a Private Session (
+                <button
+                  onClick={handlePrivateSessionChange}
+                  className="underline hover:text-purple-900"
+                >
+                  end private session
+                </button>
+                )
+              </div>
             )}
           </div>
-          {/* Private session banner (bottom) */}
-          {privateSession && (
-            <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-              <span className="material-icons text-2xl mr-2">lock</span>
-              You are in a Private Session (
-              <button
-                onClick={handlePrivateSessionChange}
-                className="underline hover:text-purple-900"
-              >
-                end private session
-              </button>
-              )
-            </div>
+          {/* Display like error if any */}
+          {likeError && (
+            <div className="text-red-500 text-sm mt-2">{likeError}</div>
           )}
-        </div>
-        {/* Display like error if any */}
-        {likeError && (
-          <div className="text-red-500 text-sm mt-2">{likeError}</div>
-        )}
-      </Layout>
+        </Layout>
+      </SudoProvider>
     </>
   );
 }
