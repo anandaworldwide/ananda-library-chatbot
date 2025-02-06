@@ -246,9 +246,9 @@ Check Pinecone dashboard to verify your namespace and vectors have been added.
 
 ## Run the unit tests
 
-````bash
+```bash
 python -m unittest discover -s python/data_ingestion/tests/ -p 'test*.py'
-`3``
+```
 
 ## Running the Development Server
 
@@ -256,7 +256,7 @@ Start the development server for a specific site:
 
 ```bash
 npm run dev [site]
-````
+```
 
 Go to `http://localhost:3000` and type a question in the chat interface!
 
@@ -293,6 +293,76 @@ In general, keep an eye out in the `issues` and `discussions` section of this re
    the correct prompt for your site.
 4. Create .env.[site] and add your site's API keys. Be sure to get a unique GOOGLE_APPLICATION_CREDENTIALS for
    your site.
+
+## Using S3 for Prompts (Optional)
+
+You can store prompt files in AWS S3 instead of the local filesystem. The system will load files:
+
+- With `s3:` prefix from your S3 bucket
+- Without prefix from the local filesystem
+
+**Note:** Currently, S3 prompt files are shared between development and production environments. Be cautious
+when making changes as they will affect all environments immediately.
+
+1. Configure S3 access in your .env file:
+
+   ```env
+   AWS_REGION=us-west-1
+   S3_BUCKET_NAME=your-bucket-name
+   AWS_ACCESS_KEY_ID=your-access-key
+   AWS_SECRET_ACCESS_KEY=your-secret-key
+   ```
+
+2. In your site's prompt config (e.g. `site-config/prompts/[site].json`), prefix S3-stored files with `s3:`:
+
+   ```json
+   {
+     "templates": {
+       "baseTemplate": {
+         "file": "s3:your-site-base.txt" // Will load from S3
+       },
+       "localTemplate": {
+         "file": "local-file.txt" // Will load from local filesystem
+       }
+     }
+   }
+   ```
+
+3. Managing S3 Prompts:
+
+   ```bash
+   # Pull a prompt from S3 (and acquire lock)
+   npm run prompt [site] pull [filename]
+
+   # Edit the local copy (uses VS Code, $EDITOR, or vim)
+   npm run prompt [site] edit [filename]
+
+   # See differences between local and S3 version
+   npm run prompt [site] diff [filename]
+
+   # Push changes back to S3 (and release lock)
+   npm run prompt [site] push [filename]
+   ```
+
+   Example:
+
+   ```bash
+   # Full workflow example
+   npm run prompt ananda-public pull ananda-public-base.txt
+   npm run prompt ananda-public edit ananda-public-base.txt
+   npm run prompt ananda-public diff ananda-public-base.txt
+   npm run prompt ananda-public push ananda-public-base.txt
+   ```
+
+   Features:
+
+   - 5-minute file locking to prevent concurrent edits
+   - Automatic versioning through S3 versioning
+   - Local staging directory (.prompts-staging)
+   - Uses VS Code if available, falls back to $EDITOR or vim
+   - Diff command to review changes before pushing
+
+4. Files are stored in the `site-config/prompts/` directory in your S3 bucket
 
 ## To activate NPS survey
 

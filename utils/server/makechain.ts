@@ -12,6 +12,12 @@ import { VectorStoreRetriever } from '@langchain/core/vectorstores';
 import fs from 'fs/promises';
 import path from 'path';
 import { BaseLanguageModel } from '@langchain/core/language_models/base';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-west-1',
+});
 
 // Define types and interfaces for the chain input and configuration
 type AnswerChainInput = {
@@ -43,6 +49,39 @@ async function loadTextFile(filePath: string): Promise<string> {
   }
 }
 
+async function streamToString(stream: Readable): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk) => chunks.push(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+  });
+}
+
+async function loadTextFileFromS3(
+  bucket: string,
+  key: string,
+): Promise<string> {
+  try {
+    console.log(`Loading file from S3: ${bucket}/${key}`);
+    const response = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+    );
+
+    if (!response.Body) {
+      throw new Error('Empty response body');
+    }
+
+    return await streamToString(response.Body as Readable);
+  } catch (error) {
+    console.error(`Failed to load from S3: ${bucket}/${key}`, error);
+    return '';
+  }
+}
+
 // Process a template by loading content from a file or using provided content
 async function processTemplate(
   template: TemplateContent,
@@ -51,7 +90,24 @@ async function processTemplate(
 ): Promise<string> {
   let content = template.content || '';
   if (template.file) {
-    content = await loadTextFile(path.join(basePath, template.file));
+    if (template.file.toLowerCase().startsWith('s3:'.toLowerCase())) {
+      // Load from S3
+      if (!process.env.S3_BUCKET_NAME) {
+        throw new Error(
+          'S3_BUCKET_NAME not configured but s3: file path specified',
+        );
+      }
+      const startTime = Date.now();
+      const s3Path = template.file.slice(3); // Remove 's3:' prefix
+      content = await loadTextFileFromS3(
+        process.env.S3_BUCKET_NAME,
+        `site-config/prompts/${s3Path}`,
+      );
+      console.log(`Loading S3 file took ${Date.now() - startTime}ms`);
+    } else {
+      // Load from local filesystem
+      content = await loadTextFile(path.join(basePath, template.file));
+    }
   }
   return substituteVariables(content, variables);
 }
@@ -79,7 +135,7 @@ async function loadSiteConfig(siteId: string): Promise<SiteConfig> {
     return JSON.parse(data);
   } catch (error) {
     console.warn(
-      `Failed to load site-specific config for ${siteId}. Using default. (Error: ${error})`,
+      `ERROR: Failed to load site-specific config for ${siteId}. Using default. (Error: ${error})`,
     );
     const defaultPath = path.join(promptsDir, 'default.json');
     const defaultData = await fs.readFile(defaultPath, 'utf8');

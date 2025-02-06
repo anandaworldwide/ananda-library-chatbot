@@ -65,3 +65,6 @@ next-env.d.ts
 /Notion_DB
 
 .yarn/
+
+# prompts
+.prompts-staging/

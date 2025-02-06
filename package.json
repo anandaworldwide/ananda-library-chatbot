@@ -14,7 +14,8 @@
     "format": "prettier --ignore-path .gitignore \"**/*.+(ts|js|tsx)\" --write",
     "ingest": "NODE_OPTIONS='--max-old-space-size=6000' tsx -r dotenv/config scripts/ingest-text-data.ts",
     "ingest-trace": "NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' tsx -r dotenv/config scripts/ingest-text-data.ts",
-    "emulator": "firebase emulators:start --import ./emulator-data --export-on-exit ./emulator-data --inspect-functions"
+    "emulator": "firebase emulators:start --import ./emulator-data --export-on-exit ./emulator-data --inspect-functions",
+    "prompt": "tsx -r dotenv/config scripts/manage-prompts.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.609.0",
