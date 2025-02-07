@@ -52,17 +52,6 @@ async function streamToString(stream: Readable): Promise<string> {
 async function ensureStagingDir() {
   try {
     await fs.mkdir(STAGING_DIR, { recursive: true });
-    // Add to .gitignore if not already there
-    const gitignorePath = '.gitignore';
-    let gitignore = '';
-    try {
-      gitignore = await fs.readFile(gitignorePath, 'utf8');
-    } catch {
-      // File doesn't exist, create it
-    }
-    if (!gitignore.includes(STAGING_DIR)) {
-      await fs.appendFile(gitignorePath, `\n${STAGING_DIR}/\n`);
-    }
   } catch (error) {
     console.error('Failed to create staging directory:', error);
     process.exit(1);
