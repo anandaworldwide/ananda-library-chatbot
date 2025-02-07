@@ -338,13 +338,17 @@ const SourcesList: React.FC<SourcesListProps> = ({
   }
 
   // Regular view (unchanged)
-  return (
+  return !shouldHideSources || (shouldHideSources && isSudoAdmin) ? (
     <div className="bg-white sourcesContainer pb-4">
       {/* Render sources header if there are sources */}
       {sources.length > 0 && (
-        <div className="flex justify-between items-center w-full border-b border-gray-200 px-3 py-1">
+        <div
+          className={`flex justify-between items-center w-full px-3 py-1 ${!shouldHideSources || (shouldHideSources && isSudoAdmin) ? 'border-b border-gray-200' : ''}`}
+        >
           <div className="flex items-baseline">
-            <h3 className="text-base font-bold mr-2">Sources</h3>
+            {!shouldHideSources && (
+              <h3 className="text-base font-bold mr-2">Sources</h3>
+            )}
             {shouldHideSources ? (
               isSudoAdmin && (
                 <button
@@ -463,7 +467,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
         </div>
       )}
     </div>
-  );
+  ) : null;
 };
 
 export default SourcesList;

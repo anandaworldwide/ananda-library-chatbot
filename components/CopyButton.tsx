@@ -48,7 +48,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({
   const handleCopy = async () => {
     let contentToCopy = `## Question:\n\n${question}\n\n## Answer:\n\n${markdown}`;
 
-    if (sources && sources.length > 0) {
+    if (sources && sources.length > 0 && !siteConfig?.hideSources) {
       contentToCopy += '\n\n### Sources\n' + formatSources(sources);
     }
 
