@@ -212,21 +212,27 @@ const MessageItem: React.FC<MessageItemProps> = ({
             {/* Action icons container */}
             <div className="mt-2 flex items-center space-x-2">
               {/* Render action buttons for AI messages */}
-              {message.type === 'apiMessage' && index !== 0 && (
-                <>
-                  <CopyButton
-                    markdown={message.message}
-                    answerId={message.docId ?? ''}
-                    sources={message.sourceDocs}
-                    question={previousMessage?.message ?? ''}
-                    siteConfig={siteConfig}
-                  />
-                </>
-              )}
+              {message.type === 'apiMessage' &&
+                index !== 0 &&
+                !loading &&
+                message.docId &&
+                isLastMessage && (
+                  <>
+                    <CopyButton
+                      markdown={message.message}
+                      answerId={message.docId}
+                      sources={message.sourceDocs}
+                      question={previousMessage?.message ?? ''}
+                      siteConfig={siteConfig}
+                    />
+                  </>
+                )}
               {/* Render additional actions for non-private AI messages */}
               {!privateSession &&
                 message.type === 'apiMessage' &&
-                message.docId && (
+                message.docId &&
+                !loading &&
+                isLastMessage && (
                   <>
                     {/* Copy link button */}
                     <button
