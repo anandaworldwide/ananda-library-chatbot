@@ -63,7 +63,6 @@ async function loadTextFileFromS3(
   key: string,
 ): Promise<string> {
   try {
-    console.log(`Loading file from S3: ${bucket}/${key}`);
     const response = await s3Client.send(
       new GetObjectCommand({
         Bucket: bucket,
@@ -215,10 +214,16 @@ interface ModelConfig {
 // Main function to create the language model chain
 export const makeChain = async (
   retriever: VectorStoreRetriever,
-  modelConfig: ModelConfig = { model: 'gpt-4o', temperature: 0 },
+  modelConfig: ModelConfig = { model: 'gpt-4o', temperature: 0.3 },
   sourceCount: number = 4,
 ) => {
-  const { model, temperature, label } = modelConfig;
+  const { model, temperature: modelTemperature, label } = modelConfig;
+  const siteId = process.env.SITE_ID || 'default';
+
+  // Load site config to get temperature
+  const configPath = path.join(process.cwd(), 'site-config/config.json');
+  const siteConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  const temperature = siteConfig[siteId]?.temperature ?? modelTemperature;
 
   // Initialize the language model with error handling
   let languageModel: BaseLanguageModel;
@@ -237,7 +242,6 @@ export const makeChain = async (
     throw new Error(`Model initialization failed for ${label || model}`);
   }
 
-  const siteId = process.env.SITE_ID || 'default';
   const condenseQuestionPrompt =
     ChatPromptTemplate.fromTemplate(CONDENSE_TEMPLATE);
 
