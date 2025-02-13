@@ -73,17 +73,13 @@ const SourcesList: React.FC<SourcesListProps> = ({
   siteConfig,
   isSudoAdmin = false,
 }) => {
-  // State to track expanded sources
+  // State hooks
   const [expandedSources, setExpandedSources] = useState<Set<number>>(
     new Set(),
   );
   const [showSourcesPopover, setShowSourcesPopover] = useState<boolean>(false);
 
-  // Check if sources should be hidden based on site config
-  const shouldHideSources = siteConfig?.hideSources && !isSudoAdmin;
-  const shouldShowSimpleLink = siteConfig?.hideSources && isSudoAdmin;
-
-  // Render audio player for audio sources
+  // Callback hooks
   const renderAudioPlayer = useCallback(
     (doc: Document<DocMetadata>, index: number, isExpanded: boolean) => {
       if (doc.metadata.type === 'audio') {
@@ -106,7 +102,6 @@ const SourcesList: React.FC<SourcesListProps> = ({
     [],
   );
 
-  // Render YouTube player for YouTube sources
   const renderYouTubePlayer = useCallback((doc: Document<DocMetadata>) => {
     if (doc.metadata.type === 'youtube') {
       if (!doc.metadata.url) {
@@ -135,6 +130,15 @@ const SourcesList: React.FC<SourcesListProps> = ({
     }
     return null;
   }, []);
+
+  // Check if sources should be hidden based on site config
+  const shouldHideSources = siteConfig?.hideSources && !isSudoAdmin;
+  const shouldShowSimpleLink = siteConfig?.hideSources && isSudoAdmin;
+
+  // Return null if sources should be hidden and user is not admin
+  if (shouldHideSources) {
+    return null;
+  }
 
   // double colon separates parent title from the (child) source title,
   // e.g., "2009 Summer Clarity Magazine:: Letters of Encouragement". We here
@@ -338,7 +342,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
   }
 
   // Regular view (unchanged)
-  return !shouldHideSources || (shouldHideSources && isSudoAdmin) ? (
+  return (
     <div className="bg-white sourcesContainer pb-4">
       {/* Render sources header if there are sources */}
       {sources.length > 0 && (
@@ -467,7 +471,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
         </div>
       )}
     </div>
-  ) : null;
+  );
 };
 
 export default SourcesList;
