@@ -73,8 +73,8 @@
     "showSourceCountSelector": true
   },
   "ananda-public": {
-    "name": "The Ananda Public Chatbot",
-    "shortname": "Ananda Public Chatbot",
+    "name": "The Ananda.org Chatbot",
+    "shortname": "Ananda.org Chatbot",
     "tagline": "Explore, Discover, Learn – Uncover the treasures of our path.",
     "greeting": "Hi! How can I help you?",
     "welcome_popup_heading": "Welcome!",
@@ -98,18 +98,15 @@
       }
     },
     "enableSuggestedQueries": true,
-    "enableMediaTypeSelection": true,
+    "enableMediaTypeSelection": false,
     "enableAuthorSelection": false,
     "requireLogin": false,
-    "allowPrivateSessions": true,
-    "allowAllAnswersPage": true,
+    "allowPrivateSessions": false,
+    "allowAllAnswersPage": false,
     "loginImage": null,
     "header": {
       "logo": "ananda-logo.png",
-      "navItems": [
-        { "label": "Ask", "path": "/" },
-        { "label": "All&nbsp;Answers", "path": "/answers" }
-      ]
+      "navItems": [{ "label": "Ask", "path": "/" }]
     },
     "footer": {
       "links": [

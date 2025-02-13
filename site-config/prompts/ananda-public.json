@@ -1,9 +1,5 @@
 {
-  "variables": {
-    "treasuresTalks": "623",
-    "youtubeVideos": "800",
-    "bhaktanFiles": "717"
-  },
+  "variables": {},
   "templates": {
     "baseTemplate": {
       "file": "s3:ananda-public-base.txt"
