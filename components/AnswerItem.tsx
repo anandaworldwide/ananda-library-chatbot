@@ -262,9 +262,6 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
                 {/* Display IP address */}
                 <span className="ml-6">IP: ({answer.ip})</span>
 
-                {/* Display Firebase answer ID */}
-                <span className="ml-6">ID: {answer.id}</span>
-
                 {/* Display downvote indicator if applicable */}
                 {answer.vote === -1 && (
                   <button className="ml-4 text-red-600" title="Downvote">
