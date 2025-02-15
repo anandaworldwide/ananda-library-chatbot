@@ -15,6 +15,12 @@
       "master_swami": "Master and Swami",
       "whole_library": "All authors"
     },
+    "includedLibraries": [
+      "Ananda Library",
+      "Ananda Youtube",
+      "Treasures",
+      "The Bhaktan Files"
+    ],
     "libraryMappings": {
       "Ananda Youtube": {
         "displayName": "Ananda YouTube",
@@ -88,14 +94,12 @@
     "collectionConfig": {
       "whole_library": "All authors"
     },
+    "includedLibraries": ["Crystal Clarity"],
+    "enabledMediaTypes": ["text"],
     "libraryMappings": {
-      "Ananda Youtube": {
-        "displayName": "Ananda YouTube",
-        "url": "https://www.youtube.com/user/AnandaWorldwide"
-      },
-      "Treasures": {
-        "displayName": "Treasures",
-        "url": "https://www.treasuresalongthepath.com/"
+      "Crystal Clarity": {
+        "displayName": "Crystal Clarity",
+        "url": "https://crystalclarity.com/"
       }
     },
     "enableSuggestedQueries": true,
@@ -130,8 +134,6 @@
     },
     "npsSurveyFrequencyDays": 0,
     "queriesPerUserPerDay": 40,
-    "includedLibraries": ["Ananda Youtube", "Treasures", "The Bhaktan Files"],
-    "enabledMediaTypes": ["audio", "youtube"],
     "enableModelComparison": false,
     "showSourceCountSelector": false,
     "hideSources": true,
