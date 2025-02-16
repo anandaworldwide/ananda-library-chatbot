@@ -2,7 +2,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import re
-from typing import Set, Dict, List
+from typing import Set, Dict, List, Optional, Tuple
 import logging
 import traceback
 import argparse
@@ -11,6 +11,9 @@ from dataclasses import dataclass, asdict
 import sys
 import os
 from datetime import datetime
+import signal
+import pickle
+from pathlib import Path
 
 # Add parent directory to Python path for importing utility modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -20,7 +23,7 @@ from openai import OpenAI
 
 # Configure logging with timestamps
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
@@ -83,12 +86,36 @@ def chunk_content(content: str, target_words: int = 150, overlap_words: int = 75
     print(f"Chunking complete: {len(chunks)} chunks created")
     return chunks
 
+@dataclass
+class CrawlerState:
+    visited_urls: Set[str]
+    attempted_urls: Set[str]  # URLs we've tried but failed
+    pending_urls: List[str]   # Queue of URLs to visit
+
 class AnandaCrawler:
     def __init__(self, start_url: str = "https://ananda.org"):
         self.start_url = start_url
-        self.visited_urls: Set[str] = set()
         self.domain = urlparse(start_url).netloc
-        logging.debug(f"Initialized crawler with start URL: {start_url}, domain: {self.domain}")
+        # Use a checkpoints directory in the user's home directory
+        checkpoint_dir = Path.home() / '.ananda_crawler_checkpoints'
+        checkpoint_dir.mkdir(exist_ok=True)
+        self.checkpoint_file = checkpoint_dir / f"crawler_checkpoint_{self.domain}.pkl"
+        
+        # Initialize state
+        self.state = CrawlerState(
+            visited_urls=set(),
+            attempted_urls=set(),
+            pending_urls=[]
+        )
+        
+        # Load previous checkpoint if exists
+        if self.checkpoint_file.exists():
+            try:
+                with open(self.checkpoint_file, 'rb') as f:
+                    self.state = pickle.load(f)
+                logging.info(f"Loaded checkpoint: {len(self.state.visited_urls)} visited, {len(self.state.pending_urls)} pending")
+            except Exception as e:
+                logging.error(f"Failed to load checkpoint: {e}")
         
         # Skip patterns for URLs
         self.skip_patterns = [
@@ -100,6 +127,15 @@ class AnandaCrawler:
             r'/wp-admin/',
             r'\?',  # Skip URLs with query parameters
         ]
+
+    def save_checkpoint(self):
+        """Save crawler state to checkpoint file"""
+        try:
+            with open(self.checkpoint_file, 'wb') as f:
+                pickle.dump(self.state, f)
+            logging.info(f"Saved checkpoint: {len(self.state.visited_urls)} visited, {len(self.state.pending_urls)} pending")
+        except Exception as e:
+            logging.error(f"Failed to save checkpoint: {e}")
 
     def normalize_url(self, url: str) -> str:
         """Remove hash fragment from URL and enforce HTTPS"""
@@ -146,44 +182,81 @@ class AnandaCrawler:
             logging.error("No content found in HTML")
             return ""
 
-    def crawl_page(self, page, url: str) -> tuple[PageContent, List[str]]:
+    async def reveal_nav_items(self, page):
+        """Reveal all navigation menu items by triggering hover events"""
+        try:
+            # Click all menu toggles
+            await page.click('button.menu-toggle', timeout=1000)
+            
+            # Find all top-level nav items
+            nav_items = await page.query_selector_all('li.menu-item-has-children')
+            
+            for item in nav_items:
+                try:
+                    # Hover over each nav item to reveal submenus
+                    await item.hover()
+                    await page.wait_for_timeout(500)  # Wait for animation
+                    
+                    # Click to expand if needed (some menus might need click instead of hover)
+                    await item.click()
+                    await page.wait_for_timeout(500)
+                except Exception as e:
+                    logging.debug(f"Error revealing menu item: {e}")
+                    continue
+
+        except Exception as e:
+            logging.debug(f"Error in reveal_nav_items: {e}")
+
+    def crawl_page(self, page, url: str) -> Tuple[Optional[Dict], List[str]]:
         try:
             logging.info(f"Navigating to {url}")
-            response = page.goto(url, timeout=60000)
-            logging.info(f"Response status: {response.status if response else 'No response'}")
+            # Strip anchor fragments to avoid duplicate crawls
+            clean_url = url.split('#')[0]
+            page.goto(clean_url)
             
-            if not response or response.status != 200:
-                logging.error(f"Failed to load {url} with status {response.status if response else 'No response'}")
-                return None, []
+            # Wait for main content to load
+            page.wait_for_selector('body', timeout=10000)
             
-            page.wait_for_load_state('domcontentloaded', timeout=30000)
-            page.wait_for_timeout(5000)  # Wait for JS rendering
-            logging.debug("Page load state: domcontentloaded, waited 5s for rendering")
+            # More targeted menu handling
+            page.evaluate("""() => {
+                // Only process top-level menu items that aren't already expanded
+                document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item, index) => {
+                    setTimeout(() => {
+                        // Skip items that are part of an already expanded menu
+                        if (!item.closest('.sub-menu')) {
+                            item.classList.add('active');
+                            item.classList.add('focus');
+                            
+                            // Force immediate child submenus visible
+                            const submenu = item.querySelector(':scope > .sub-menu');
+                            if (submenu) {
+                                submenu.style.display = 'block';
+                                submenu.style.visibility = 'visible';
+                                submenu.style.opacity = '1';
+                            }
+                        }
+                    }, index * 300);
+                });
+            }""")
             
-            html = page.content()
-            logging.debug(f"Raw HTML length: {len(html)}")
-            if len(html) < 100:
-                logging.warning(f"HTML content suspiciously short for {url}: {html[:200]}")
+            # Shorter timeout since we're being more targeted
+            page.wait_for_timeout(2000)
+            
+            # Get links, excluding anchor-only URLs
+            links = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('a[href]'))
+                    .map(a => a.href)
+                    .filter(href => !href.endsWith('#') && !href.includes('/#'));
+            }""")
             
             title = page.title()
             logging.debug(f"Page title: {title}")
-            clean_text = self.clean_content(html)
+            clean_text = self.clean_content(page.content())
             logging.debug(f"Cleaned text length: {len(clean_text)}")
             
             if not clean_text.strip():
                 logging.warning(f"No content extracted from {url}")
                 return None, []
-            
-            links = []
-            elements = page.query_selector_all('a[href]')
-            logging.debug(f"Found {len(elements)} raw links")
-            for link in elements:
-                href = link.get_attribute('href')
-                if href:
-                    absolute_url = urljoin(url, href)
-                    if self.is_valid_url(absolute_url):
-                        links.append(absolute_url)
-            logging.info(f"Found {len(links)} valid links on {url}")
             
             return PageContent(
                 url=url,
@@ -209,40 +282,43 @@ class AnandaCrawler:
                 page.set_extra_http_headers({
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
                 })
-                logging.debug("Browser launched and User-Agent set")
                 
-                urls_to_crawl = [self.start_url]
+                # Initialize queue if empty
+                if not self.state.pending_urls:
+                    if self.normalize_url(self.start_url) not in self.state.visited_urls:
+                        self.state.pending_urls.append(self.start_url)
+                
                 crawled_pages = []
                 
-                while urls_to_crawl and len(crawled_pages) < max_pages:
-                    url = urls_to_crawl.pop(0)
+                while self.state.pending_urls and len(crawled_pages) < max_pages:
+                    url = self.state.pending_urls.pop(0)
                     normalized_url = self.normalize_url(url)
-                    logging.info(f"Processing URL: {url}")
                     
-                    if normalized_url in self.visited_urls:
-                        logging.debug(f"Skipping already visited URL: {url} (normalized: {normalized_url})")
+                    if normalized_url in self.state.visited_urls:
                         continue
                     
                     content, new_links = self.crawl_page(page, url)
                     
                     if content:
-                        self.visited_urls.add(normalized_url)  # Add normalized URL to visited
+                        self.state.visited_urls.add(normalized_url)
                         crawled_pages.append(content)
                         logging.info(f"Successfully crawled: {url}")
                         for link in new_links:
                             normalized_link = self.normalize_url(link)
-                            if normalized_link not in self.visited_urls and link not in urls_to_crawl:
-                                urls_to_crawl.append(link)
-                        logging.info(f"Queue size: {len(urls_to_crawl)}")
+                            if (normalized_link not in self.state.visited_urls and 
+                                normalized_link not in self.state.attempted_urls and
+                                link not in self.state.pending_urls):
+                                self.state.pending_urls.append(link)
+                        print(f"Queue size: {len(self.state.pending_urls)} URLs pending")
                     else:
-                        logging.warning(f"No content returned for {url}")
-                        self.visited_urls.add(normalized_url)  # Still mark normalized URL as visited
+                        self.state.attempted_urls.add(normalized_url)
+                    
+                    # Save checkpoint periodically
+                    if len(crawled_pages) % 10 == 0:
+                        self.save_checkpoint()
                 
                 return crawled_pages
-            except Exception as e:
-                logging.error(f"Browser error: {str(e)}")
-                logging.error(traceback.format_exc())
-                return []
+                
             finally:
                 browser.close()
 
@@ -277,6 +353,13 @@ def sanitize_for_id(text: str) -> str:
     text = re.sub(r'[^a-zA-Z0-9-]', '_', text)
     return text
 
+def handle_exit(signum, frame):
+    """Handle exit signals gracefully"""
+    print("\nReceived exit signal. Saving checkpoint...")
+    if hasattr(handle_exit, 'crawler'):
+        handle_exit.crawler.save_checkpoint()
+    sys.exit(0)  # Force immediate exit
+
 def main():
     parser = argparse.ArgumentParser(description='Crawl Ananda.org website and store in Pinecone')
     parser.add_argument(
@@ -285,8 +368,45 @@ def main():
         help='Site ID for environment variables (e.g., ananda-public). Will load from .env.[site]'
     )
     parser.add_argument('--max-pages', type=int, default=10, help='Maximum number of pages to crawl')
-    parser.add_argument('--start-url', default='https://ananda.org', help='Starting URL for crawler')
+    parser.add_argument('--domain', default='ananda.org', help='Domain to crawl (e.g., ananda.org)')
+    parser.add_argument('--continue', action='store_true', help='Continue from previous checkpoint')
     args = parser.parse_args()
+
+    # Convert domain to full URL
+    start_url = f"https://{args.domain}"
+    if not urlparse(start_url).netloc:
+        print(f"Invalid domain: {args.domain}")
+        return
+
+    # Set up signal handlers
+    signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGTERM, handle_exit)
+    
+    # Initialize crawler
+    crawler = AnandaCrawler(start_url=start_url)
+    handle_exit.crawler = crawler  # Store crawler reference for signal handler
+
+    # Only load checkpoint if --continue flag is present
+    if not getattr(args, 'continue'):
+        crawler.state = CrawlerState(
+            visited_urls=set(),
+            attempted_urls=set(),
+            pending_urls=[]
+        )  # Start fresh
+        if crawler.checkpoint_file.exists():
+            crawler.checkpoint_file.unlink()  # Remove existing checkpoint
+    elif crawler.checkpoint_file.exists():
+        print(f"\nContinuing from checkpoint:")
+        print(f"- Previously visited URLs: {len(crawler.state.visited_urls)}")
+        print(f"- Top level domains visited:")
+        domain_counts = {}
+        for url in crawler.state.visited_urls:
+            domain = urlparse(url).netloc
+            domain_counts[domain] = domain_counts.get(domain, 0) + 1
+        for domain, count in domain_counts.items():
+            print(f"  • {domain}: {count} pages")
+    else:
+        print("No checkpoint file found to continue from")
 
     # Load environment variables
     load_env(args.site)
@@ -296,70 +416,78 @@ def main():
     index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
     print(f"Target Pinecone index: {index_name}\n")
     
-    # Initialize crawler
-    crawler = AnandaCrawler(start_url=args.start_url)
-    
-    # Crawl pages
-    print(f"\nStarting crawl of {args.start_url} with max pages: {args.max_pages}")
-    pages = crawler.crawl(max_pages=args.max_pages)
-    
-    if not pages:
-        print("No pages were crawled successfully.")
-        return
-    
-    print(f"\nSuccessfully crawled {len(pages)} pages.")
-    
-    # Prepare chunks for Pinecone
-    chunks = crawler.prepare_for_pinecone(pages)
-    
-    # Preview chunks
-    print("\nPreview of chunks to be indexed:")
-    for i, chunk in enumerate(chunks[:3]):  # Show first 3 chunks
-        print(f"\nChunk {i+1}:")
-        print(f"URL: {chunk.metadata['source']}")
-        print(f"Title: {chunk.metadata['title']}")
-        print(f"Content preview: {chunk.text[:200]}...")
-    
-    if len(chunks) > 3:
-        print(f"\n... and {len(chunks) - 3} more chunks")
+    try:
+        # Crawl pages
+        print(f"\nStarting crawl of {start_url} with max pages: {args.max_pages}")
+        pages = crawler.crawl(max_pages=args.max_pages)
         
-    # Initialize OpenAI and Pinecone
-    client = OpenAI()
-    index = load_pinecone()
-    
-    batch_size = 100
-    for i in range(0, len(chunks), batch_size):
-        batch = chunks[i:i + batch_size]
-        batch_dicts = [{"text": chunk.text} for chunk in batch]
-        embeddings = create_embeddings(batch_dicts, client)
+        # Save final checkpoint
+        crawler.save_checkpoint()
         
-        # Prepare vectors for Pinecone
-        vectors = []
-        for j, (chunk, embedding) in enumerate(zip(batch, embeddings)):
-            # Create standardized ID format: type||source||title||hash||chunkN
-            page_hash = hex(abs(hash(chunk.metadata['source'])))[2:10]
-            sanitized_title = sanitize_for_id(chunk.metadata['title'])
-            vector_id = f"text||Ananda.org||{sanitized_title}||{page_hash}||chunk{chunk.metadata['chunk_index']}"
+        if not pages:
+            print("No pages were crawled successfully.")
+            return
             
-            vector = {
-                "id": vector_id,
-                "values": embedding,
-                "metadata": chunk.metadata
-            }
-            vectors.append(vector)
+        print(f"\nSuccessfully crawled {len(pages)} pages.")
+        
+        # Prepare chunks for Pinecone
+        chunks = crawler.prepare_for_pinecone(pages)
+        
+        # Preview chunks
+        print("\nPreview of chunks to be indexed:")
+        for i, chunk in enumerate(chunks[:3]):  # Show first 3 chunks
+            print(f"\nChunk {i+1}:")
+            print(f"URL: {chunk.metadata['source']}")
+            print(f"Title: {chunk.metadata['title']}")
+            print(f"Content preview: {chunk.text[:200]}...")
+        
+        if len(chunks) > 3:
+            print(f"\n... and {len(chunks) - 3} more chunks")
+        
+        # Initialize OpenAI and Pinecone
+        client = OpenAI()
+        index = load_pinecone()
+        
+        batch_size = 100
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+            batch_dicts = [{"text": chunk.text} for chunk in batch]
+            embeddings = create_embeddings(batch_dicts, client)
             
-            # Log metadata and ID for first vector in each batch
-            if j == 0:
-                print("\nSample vector ID:")
-                print(vector_id)
-                print("\nSample vector metadata:")
-                print(json.dumps(vector["metadata"], indent=2))
+            # Prepare vectors for Pinecone
+            vectors = []
+            for j, (chunk, embedding) in enumerate(zip(batch, embeddings)):
+                # Create standardized ID format: type||source||title||hash||chunkN
+                page_hash = hex(abs(hash(chunk.metadata['source'])))[2:10]
+                sanitized_title = sanitize_for_id(chunk.metadata['title'])
+                vector_id = f"text||Ananda.org||{sanitized_title}||{page_hash}||chunk{chunk.metadata['chunk_index']}"
                 
-        # Upsert to Pinecone
-        index.upsert(vectors=vectors)
-        print(f"Uploaded {len(vectors)} vectors to Pinecone (batch {i//batch_size + 1})")
-    
-    print("\nIndexing completed successfully!")
+                vector = {
+                    "id": vector_id,
+                    "values": embedding,
+                    "metadata": chunk.metadata
+                }
+                vectors.append(vector)
+                
+                # Log metadata and ID for first vector in each batch
+                if j == 0:
+                    logging.debug("\nSample vector ID:")
+                    logging.debug(vector_id)
+                    logging.debug("\nSample vector metadata:")
+                    logging.debug(json.dumps(vector["metadata"], indent=2))
+                
+            # Upsert to Pinecone
+            index.upsert(vectors=vectors)
+            print(f"Uploaded {len(vectors)} vectors to Pinecone (batch {i//batch_size + 1})")
+        
+        print("\nIndexing completed successfully!")
+    except SystemExit:
+        raise  # Re-raise system exit to ensure clean shutdown
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        logging.error(traceback.format_exc())
+    finally:
+        crawler.save_checkpoint()
 
 if __name__ == "__main__":
     main()
