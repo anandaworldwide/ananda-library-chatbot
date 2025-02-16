@@ -108,10 +108,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [showControlsInfo, setShowControlsInfo] = useState(false);
   //const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Effect to set initial suggestions expanded state based on visit count
+  // Effect to set initial suggestions expanded state based on saved preference
   useEffect(() => {
-    const visitCount = parseInt(localStorage.getItem('visitCount') || '0');
-    setSuggestionsExpanded(visitCount < 10);
+    const savedPreference = localStorage.getItem('suggestionsExpanded');
+    setSuggestionsExpanded(
+      savedPreference === null ? true : savedPreference === 'true',
+    );
   }, [setSuggestionsExpanded]);
 
   // Effect to reset input after submission
@@ -234,7 +236,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   // Function to toggle suggestions visibility
   const toggleSuggestions = (e: React.MouseEvent) => {
     e.preventDefault();
-    setSuggestionsExpanded(!suggestionsExpanded);
+    const newState = !suggestionsExpanded;
+    setSuggestionsExpanded(newState);
+    localStorage.setItem('suggestionsExpanded', newState.toString());
   };
 
   // Function to handle clicking on a suggested query
