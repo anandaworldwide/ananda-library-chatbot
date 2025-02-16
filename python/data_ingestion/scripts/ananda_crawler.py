@@ -20,7 +20,7 @@ from openai import OpenAI
 
 # Configure logging with timestamps
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
@@ -101,13 +101,22 @@ class AnandaCrawler:
             r'\?',  # Skip URLs with query parameters
         ]
 
+    def normalize_url(self, url: str) -> str:
+        """Remove hash fragment from URL and enforce HTTPS"""
+        # Remove hash fragment
+        url = url.split('#')[0]
+        # Convert HTTP to HTTPS
+        if url.startswith('http://'):
+            url = 'https://' + url[7:]
+        return url
+
     def should_skip_url(self, url: str) -> bool:
         """Check if URL should be skipped based on patterns"""
         return any(re.search(pattern, url) for pattern in self.skip_patterns)
 
     def is_valid_url(self, url: str) -> bool:
         """Check if URL should be crawled"""
-        if not url or not url.startswith('http'):
+        if not url or not url.startswith('https://'):
             return False
         parsed = urlparse(url)
         if parsed.netloc != self.domain:
@@ -181,8 +190,8 @@ class AnandaCrawler:
                 title=title,
                 content=clean_text,
                 metadata={
-                    'source': 'Ananda.org',
-                    'type': 'text'
+                    'type': 'text',
+                    'source': url
                 }
             ), links
             
@@ -207,25 +216,27 @@ class AnandaCrawler:
                 
                 while urls_to_crawl and len(crawled_pages) < max_pages:
                     url = urls_to_crawl.pop(0)
+                    normalized_url = self.normalize_url(url)
                     logging.info(f"Processing URL: {url}")
                     
-                    if url in self.visited_urls:
-                        logging.debug(f"Skipping already visited URL: {url}")
+                    if normalized_url in self.visited_urls:
+                        logging.debug(f"Skipping already visited URL: {url} (normalized: {normalized_url})")
                         continue
                     
                     content, new_links = self.crawl_page(page, url)
                     
                     if content:
-                        self.visited_urls.add(url)  # Add to visited only after successful crawl
+                        self.visited_urls.add(normalized_url)  # Add normalized URL to visited
                         crawled_pages.append(content)
                         logging.info(f"Successfully crawled: {url}")
                         for link in new_links:
-                            if link not in self.visited_urls and link not in urls_to_crawl:
+                            normalized_link = self.normalize_url(link)
+                            if normalized_link not in self.visited_urls and link not in urls_to_crawl:
                                 urls_to_crawl.append(link)
                         logging.info(f"Queue size: {len(urls_to_crawl)}")
                     else:
                         logging.warning(f"No content returned for {url}")
-                        self.visited_urls.add(url)  # Still mark as visited to avoid retrying
+                        self.visited_urls.add(normalized_url)  # Still mark normalized URL as visited
                 
                 return crawled_pages
             except Exception as e:
@@ -243,11 +254,9 @@ class AnandaCrawler:
             for j, chunk in enumerate(chunks):
                 chunk_metadata = {
                     **page.metadata,
-                    'url': page.url,
                     'title': page.title,
                     'chunk_index': j,
                     'total_chunks': len(chunks),
-                    'source': 'Ananda.org',
                     'type': 'text',
                     'library': 'Ananda.org',
                     'text': chunk,
@@ -285,11 +294,7 @@ def main():
     # Verify we're using the right environment
     print(f"\nUsing environment from .env.{args.site}")
     index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
-    print(f"Target Pinecone index: {index_name}")
-    confirm = input("Is this the correct environment? (yes/no): ")
-    if confirm.lower() not in ['yes', 'y']:
-        print("Aborting due to environment mismatch.")
-        return
+    print(f"Target Pinecone index: {index_name}\n")
     
     # Initialize crawler
     crawler = AnandaCrawler(start_url=args.start_url)
@@ -311,7 +316,7 @@ def main():
     print("\nPreview of chunks to be indexed:")
     for i, chunk in enumerate(chunks[:3]):  # Show first 3 chunks
         print(f"\nChunk {i+1}:")
-        print(f"URL: {chunk.metadata['url']}")
+        print(f"URL: {chunk.metadata['source']}")
         print(f"Title: {chunk.metadata['title']}")
         print(f"Content preview: {chunk.text[:200]}...")
     
@@ -332,7 +337,7 @@ def main():
         vectors = []
         for j, (chunk, embedding) in enumerate(zip(batch, embeddings)):
             # Create standardized ID format: type||source||title||hash||chunkN
-            page_hash = hex(abs(hash(chunk.metadata['url'])))[2:10]
+            page_hash = hex(abs(hash(chunk.metadata['source'])))[2:10]
             sanitized_title = sanitize_for_id(chunk.metadata['title'])
             vector_id = f"text||Ananda.org||{sanitized_title}||{page_hash}||chunk{chunk.metadata['chunk_index']}"
             
