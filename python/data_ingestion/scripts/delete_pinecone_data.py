@@ -63,9 +63,9 @@ def delete_records_by_prefix(index, prefix: str) -> None:
 
     # Confirm before deleting records by prefix
     confirmation = input(
-        f"Are you sure you want to delete {len(record_ids)} records with prefix:\n'{prefix}'\n(yes/no): "
+        f"Are you sure you want to delete {len(record_ids)} records with prefix:\n'{prefix}'\n(Yes/no): "
     ).lower()
-    if confirmation in ["yes", "y"]:
+    if confirmation not in ["no", "n"]:
         # Delete records in batches of 100 to avoid timeout
         batch_size = 100
         for i in range(0, len(record_ids), batch_size):
