@@ -36,54 +36,47 @@ class WebsiteChunk:
         self.text = text
         self.metadata = metadata
 
-def chunk_content(content: str, chunk_size: int = 1000, overlap: int = 500) -> List[str]:
-    """Split content into overlapping chunks"""
+def chunk_content(content: str, target_words: int = 150, overlap_words: int = 75) -> List[str]:
+    """Split content into overlapping chunks by word count"""
+    words = content.split()
     chunks = []
     start = 0
-    content_len = len(content)
+    total_words = len(words)
     
-    print(f"Starting chunking of {content_len} characters")
+    print(f"Starting chunking of {total_words} words")
     
-    while start < content_len:
-        # Calculate initial end position
-        end = min(start + chunk_size, content_len)
+    while start < total_words:
+        # Calculate end position
+        end = min(start + target_words, total_words)
         
-        # If we're not at the end, look for a good break point
-        if end < content_len:
-            # Look for sentence breaks in the last 100 chars of the chunk
-            search_start = max(start, end - 100)
-            search_text = content[search_start:end]
+        # If not at the end, look for a good break point
+        if end < total_words:
+            # Look back up to 20 words for a sentence end
+            look_back = min(20, target_words)
+            search_text = ' '.join(words[end - look_back:end])
             
             # Find last sentence break
             last_period = search_text.rfind('.')
-            last_newline = search_text.rfind('\n')
-            
-            # If we found a break point, adjust end
-            if last_period > 0 or last_newline > 0:
-                break_point = max(last_period, last_newline)
-                end = search_start + break_point + 1
+            if last_period > 0:
+                # Count words before the period
+                words_to_period = len(search_text[:last_period].split())
+                end = end - look_back + words_to_period + 1  # +1 to include the period
         
-        # Failsafe: If no good break found or end <= start, force a break
-        if end <= start:
-            end = min(start + chunk_size, content_len)
-            print(f"Warning: Forced break at position {end}")
-        
-        # Extract chunk and append
-        chunk = content[start:end].strip()
-        if chunk:  # Only add non-empty chunks
+        # Create chunk
+        chunk = ' '.join(words[start:end]).strip()
+        if chunk:
             chunks.append(chunk)
-            print(f"Created chunk {len(chunks)}: {start}-{end} ({len(chunk)} chars)")
+            print(f"Created chunk {len(chunks)}: words {start}-{end} ({end-start} words)")
         
-        # Move start position for next chunk
-        start = end - overlap
-        
-        # Failsafe: Ensure forward progress
-        if start >= end:
-            start = end
-            print(f"Warning: Reset overlap at position {start}")
+        # Move start position for next chunk with safety check
+        new_start = end - overlap_words
+        if new_start <= start:  # If we're not making progress
+            new_start = end  # Skip overlap and continue from end
+            print(f"Warning: Reset overlap at word {end}")
+        start = new_start
         
         # Extra safety check
-        if len(chunks) > content_len / 100:  # Sanity check - no more than 1 chunk per 100 chars
+        if len(chunks) > total_words / 50:  # No more than 1 chunk per 50 words
             print("Warning: Too many chunks created, breaking")
             break
     
@@ -188,8 +181,8 @@ class AnandaCrawler:
                 title=title,
                 content=clean_text,
                 metadata={
-                    'source': 'ananda.org',
-                    'type': 'webpage'
+                    'source': 'Ananda.org',
+                    'type': 'text'
                 }
             ), links
             
@@ -244,16 +237,9 @@ class AnandaCrawler:
 
     def prepare_for_pinecone(self, pages: List[PageContent]) -> List[WebsiteChunk]:
         """Prepare crawled content for Pinecone insertion"""
-        all_chunks = []
-        print(f"\nProcessing {len(pages)} pages into chunks:")
-        
-        for i, page in enumerate(pages, 1):
-            print(f"\nPage {i}/{len(pages)}: {page.url}")
-            print(f"Content length: {len(page.content)} characters")
-            
-            chunks = chunk_content(page.content)
-            print(f"Created {len(chunks)} chunks (avg size: {sum(len(c) for c in chunks)/len(chunks):.0f} chars)")
-            
+        all_chunks = []        
+        for i, page in enumerate(pages, 1):            
+            chunks = chunk_content(page.content)            
             for j, chunk in enumerate(chunks):
                 chunk_metadata = {
                     **page.metadata,
@@ -261,15 +247,26 @@ class AnandaCrawler:
                     'title': page.title,
                     'chunk_index': j,
                     'total_chunks': len(chunks),
-                    'source': 'ananda.org',
+                    'source': 'Ananda.org',
                     'type': 'text',
                     'library': 'Ananda.org',
+                    'text': chunk,
                     'crawl_timestamp': datetime.now().isoformat()
                 }
                 all_chunks.append(WebsiteChunk(chunk, chunk_metadata))
         
         print(f"\nTotal chunks created: {len(all_chunks)}")
         return all_chunks
+
+def sanitize_for_id(text: str) -> str:
+    """Sanitize text for use in Pinecone vector IDs"""
+    # Replace non-ASCII chars with ASCII equivalents
+    text = text.replace('—', '-').replace("'", "'").replace('"', '"').replace('"', '"')
+    # Remove any remaining non-ASCII chars
+    text = ''.join(c for c in text if ord(c) < 128)
+    # Replace spaces and special chars with underscores
+    text = re.sub(r'[^a-zA-Z0-9-]', '_', text)
+    return text
 
 def main():
     parser = argparse.ArgumentParser(description='Crawl Ananda.org website and store in Pinecone')
@@ -309,7 +306,6 @@ def main():
     
     # Prepare chunks for Pinecone
     chunks = crawler.prepare_for_pinecone(pages)
-    print(f"\nPrepared {len(chunks)} chunks for indexing.")
     
     # Preview chunks
     print("\nPreview of chunks to be indexed:")
@@ -321,29 +317,25 @@ def main():
     
     if len(chunks) > 3:
         print(f"\n... and {len(chunks) - 3} more chunks")
-    
-    # Ask for confirmation
-    confirm = input("\nDo you want to proceed with indexing these chunks to Pinecone? (yes/no): ")
-    if confirm.lower() != 'yes':
-        print("Indexing cancelled.")
-        return
-    
+        
     # Initialize OpenAI and Pinecone
     client = OpenAI()
     index = load_pinecone()
     
-    print("\nGenerating embeddings and uploading to Pinecone...")
     batch_size = 100
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i:i + batch_size]
-        # Convert WebsiteChunks to dicts with text field
         batch_dicts = [{"text": chunk.text} for chunk in batch]
         embeddings = create_embeddings(batch_dicts, client)
         
         # Prepare vectors for Pinecone
         vectors = []
         for j, (chunk, embedding) in enumerate(zip(batch, embeddings)):
-            vector_id = f"ananda_org_{i+j}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            # Create standardized ID format: type||source||title||hash||chunkN
+            page_hash = hex(abs(hash(chunk.metadata['url'])))[2:10]
+            sanitized_title = sanitize_for_id(chunk.metadata['title'])
+            vector_id = f"text||Ananda.org||{sanitized_title}||{page_hash}||chunk{chunk.metadata['chunk_index']}"
+            
             vector = {
                 "id": vector_id,
                 "values": embedding,
@@ -351,11 +343,13 @@ def main():
             }
             vectors.append(vector)
             
-            # Log metadata for first vector in each batch
+            # Log metadata and ID for first vector in each batch
             if j == 0:
+                print("\nSample vector ID:")
+                print(vector_id)
                 print("\nSample vector metadata:")
                 print(json.dumps(vector["metadata"], indent=2))
-        
+                
         # Upsert to Pinecone
         index.upsert(vectors=vectors)
         print(f"Uploaded {len(vectors)} vectors to Pinecone (batch {i//batch_size + 1})")
