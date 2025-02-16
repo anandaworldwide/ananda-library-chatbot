@@ -200,6 +200,7 @@
     "collectionConfig": {
       "whole_library": "All Documents"
     },
+    "includedLibraries": ["Crystal Clarity"],
     "libraryMappings": {},
     "enableSuggestedQueries": true,
     "enableMediaTypeSelection": false,
