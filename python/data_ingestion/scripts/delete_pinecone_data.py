@@ -103,7 +103,7 @@ if __name__ == "__main__":
     group.add_argument(
         "--prefix",
         type=str,
-        help="Custom ID prefix to delete records (e.g., 'text||Ananda.org||Some Title')"
+        help="Custom ID prefix to delete records (e.g., 'text||ananda.org||Some Title')"
     )
 
     # Optional arguments
