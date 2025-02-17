@@ -5,6 +5,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Python: ananda_crawler.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/data_ingestion/scripts/ananda_crawler.py",
+      "console": "integratedTerminal",
+      "args": ["--site", "ananda-public", "--max-pages", "1000"]
+    },
+    {
       "name": "Python: supercut.py",
       "type": "debugpy",
       "request": "launch",
