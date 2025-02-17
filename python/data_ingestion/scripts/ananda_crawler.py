@@ -252,36 +252,44 @@ class AnandaCrawler:
     def crawl_page(self, page, url: str) -> Tuple[Optional[Dict], List[str]]:
         try:
             logging.info(f"Navigating to {url}")
-            page.goto(url, timeout=30000)  # Increased timeout to 30 seconds
+            # Add wait_until option and handle response
+            response = page.goto(url, timeout=30000, wait_until='networkidle')
+            if not response:
+                logging.error(f"Failed to get response from {url}")
+                return None, []
             
-            # Wait for main content to load
-            page.wait_for_selector('body', timeout=30000)  # Increased timeout
+            if response.status >= 400:
+                logging.error(f"HTTP {response.status} error for {url}")
+                return None, []
             
-            # More targeted menu handling
-            page.evaluate("""() => {
-                // Only process top-level menu items that aren't already expanded
-                document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item, index) => {
-                    setTimeout(() => {
-                        // Skip items that are part of an already expanded menu
-                        if (!item.closest('.sub-menu')) {
-                            item.classList.add('active');
-                            item.classList.add('focus');
-                            
-                            // Force immediate child submenus visible
-                            const submenu = item.querySelector(':scope > .sub-menu');
-                            if (submenu) {
-                                submenu.style.display = 'block';
-                                submenu.style.visibility = 'visible';
-                                submenu.style.opacity = '1';
+            # Wait for content with error handling
+            try:
+                page.wait_for_selector('body', timeout=30000)
+            except PlaywrightTimeout:
+                logging.error(f"Timeout waiting for body content on {url}")
+                return None, []
+
+            # More targeted menu handling with error catching
+            try:
+                page.evaluate("""() => {
+                    document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item, index) => {
+                        try {
+                            if (!item.closest('.sub-menu')) {
+                                item.classList.add('active');
+                                const submenu = item.querySelector(':scope > .sub-menu');
+                                if (submenu) {
+                                    submenu.style.display = 'block';
+                                    submenu.style.visibility = 'visible';
+                                }
                             }
+                        } catch (e) {
+                            console.error('Menu handling error:', e);
                         }
-                    }, index * 300);
-                });
-            }""")
-            
-            # Shorter timeout since we're being more targeted
-            page.wait_for_timeout(2000)
-            
+                    });
+                }""")
+            except Exception as e:
+                logging.debug(f"Menu handling failed (non-critical): {e}")
+
             # Get links, filtering for valid URLs only
             links = page.evaluate("""() => {
                 return Array.from(document.querySelectorAll('a[href]'))
