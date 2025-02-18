@@ -1,27 +1,28 @@
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
-from bs4 import BeautifulSoup
-from urllib.parse import urlparse
-import re
-from typing import Set, Dict, List, Optional, Tuple
-import logging
-import traceback
+# Standard library imports
 import argparse
-from dataclasses import dataclass
-import sys
-import os
-from datetime import datetime
-import signal
-import pickle
-from pathlib import Path
-import pinecone
-from data_ingestion.scripts.pinecone_utils import create_embeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
-from dotenv import load_dotenv
 import hashlib
+import logging
+import os
+import pickle
+import re
+import signal
+import sys
+import time
+import traceback
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple
+from urllib.parse import urlparse
 
-# Add parent directory to Python path for importing utility modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Third party imports
+import pinecone
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+from playwright.sync_api import sync_playwright
 
 # Configure logging with timestamps
 logging.basicConfig(
@@ -249,82 +250,113 @@ class AnandaCrawler:
         except Exception as e:
             logging.debug(f"Error in reveal_nav_items: {e}")
 
-    def crawl_page(self, page, url: str) -> Tuple[Optional[Dict], List[str]]:
-        try:
-            logging.info(f"Navigating to {url}")
-            # Add wait_until option and handle response
-            response = page.goto(url, timeout=30000, wait_until='networkidle')
-            if not response:
-                logging.error(f"Failed to get response from {url}")
-                return None, []
-            
-            if response.status >= 400:
-                logging.error(f"HTTP {response.status} error for {url}")
-                return None, []
-            
-            # Wait for content with error handling
+    def crawl_page(self, browser, page, url: str) -> Tuple[Optional[Dict], List[str]]:
+        retries = 2
+        while retries > 0:
             try:
-                page.wait_for_selector('body', timeout=30000)
-            except PlaywrightTimeout:
-                logging.error(f"Timeout waiting for body content on {url}")
-                return None, []
+                logging.info(f"Navigating to {url}")
+                # Add wait_until option and handle response
+                try:
+                    # Set page timeout
+                    page.set_default_timeout(30000)  # 30 seconds
+                    response = page.goto(url, wait_until='networkidle')
+                except PlaywrightTimeout:
+                    logging.error(f"Navigation timeout for {url}")
+                    # Try to recover the page instance
+                    try:
+                        page.close()
+                        page = browser.new_page()
+                        page.set_extra_http_headers({
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
+                        })
+                    except Exception:
+                        logging.error("Failed to recover page instance")
+                    retries -= 1
+                    if retries > 0:
+                        continue
+                    return None, []
+                except Exception as e:
+                    logging.error(f"Navigation failed for {url}: {e}")
+                    retries -= 1
+                    if retries > 0:
+                        continue
+                    return None, []
 
-            # More targeted menu handling with error catching
-            try:
-                page.evaluate("""() => {
-                    document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item, index) => {
-                        try {
-                            if (!item.closest('.sub-menu')) {
-                                item.classList.add('active');
-                                const submenu = item.querySelector(':scope > .sub-menu');
-                                if (submenu) {
-                                    submenu.style.display = 'block';
-                                    submenu.style.visibility = 'visible';
+                if not response:
+                    logging.error(f"Failed to get response from {url}")
+                    return None, []
+                
+                if response.status >= 400:
+                    logging.error(f"HTTP {response.status} error for {url}")
+                    return None, []
+
+                # Wait for content with error handling
+                try:
+                    page.wait_for_selector('body', timeout=30000)
+                except PlaywrightTimeout:
+                    logging.error(f"Timeout waiting for body content on {url}")
+                    return None, []
+
+                # More targeted menu handling with error catching
+                try:
+                    page.evaluate("""() => {
+                        document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item, index) => {
+                            try {
+                                if (!item.closest('.sub-menu')) {
+                                    item.classList.add('active');
+                                    const submenu = item.querySelector(':scope > .sub-menu');
+                                    if (submenu) {
+                                        submenu.style.display = 'block';
+                                        submenu.style.visibility = 'visible';
+                                    }
                                 }
+                            } catch (e) {
+                                console.error('Menu handling error:', e);
                             }
-                        } catch (e) {
-                            console.error('Menu handling error:', e);
-                        }
-                    });
-                }""")
-            except Exception as e:
-                logging.debug(f"Menu handling failed (non-critical): {e}")
+                        });
+                    }""")
+                except Exception as e:
+                    logging.debug(f"Menu handling failed (non-critical): {e}")
 
-            # Get links, filtering for valid URLs only
-            links = page.evaluate("""() => {
-                return Array.from(document.querySelectorAll('a[href]'))
-                    .map(a => a.href)
-                    .filter(href => !href.endsWith('#') && !href.includes('/#'));
-            }""")
-            
-            # Filter links to only include same domain
-            valid_links = [link for link in links if self.is_valid_url(link)]
-            if len(links) != len(valid_links):
-                logging.debug(f"Filtered out {len(links) - len(valid_links)} external links")
-            
-            title = page.title()
-            logging.debug(f"Page title: {title}")
-            clean_text = self.clean_content(page.content())
-            logging.debug(f"Cleaned text length: {len(clean_text)}")
-            
-            if not clean_text.strip():
-                logging.warning(f"No content extracted from {url}")
+                # Get links, filtering for valid URLs only
+                links = page.evaluate("""() => {
+                    return Array.from(document.querySelectorAll('a[href]'))
+                        .map(a => a.href)
+                        .filter(href => !href.endsWith('#') && !href.includes('/#'));
+                }""")
+                
+                # Filter links to only include same domain
+                valid_links = [link for link in links if self.is_valid_url(link)]
+                if len(links) != len(valid_links):
+                    logging.debug(f"Filtered out {len(links) - len(valid_links)} external links")
+                
+                title = page.title()
+                logging.debug(f"Page title: {title}")
+                clean_text = self.clean_content(page.content())
+                logging.debug(f"Cleaned text length: {len(clean_text)}")
+                
+                if not clean_text.strip():
+                    logging.warning(f"No content extracted from {url}")
+                    return None, []
+                
+                return PageContent(
+                    url=url,
+                    title=title,
+                    content=clean_text,
+                    metadata={
+                        'type': 'text',
+                        'source': url
+                    }
+                ), valid_links
+                
+            except Exception as e:
+                logging.error(f"Error crawling {url}: {str(e)}")
+                logging.error(traceback.format_exc())
+                retries -= 1
+                if retries > 0:
+                    logging.info(f"Retrying {url} ({retries} attempts remaining)")
+                    continue
                 return None, []
-            
-            return PageContent(
-                url=url,
-                title=title,
-                content=clean_text,
-                metadata={
-                    'type': 'text',
-                    'source': url
-                }
-            ), valid_links
-            
-        except Exception as e:
-            logging.error(f"Error crawling {url}: {str(e)}")
-            logging.error(traceback.format_exc())
-            return None, []
 
     def crawl(self, max_pages: int = 10):
         logging.debug(f"Starting crawl with max_pages={max_pages}")
@@ -350,7 +382,7 @@ class AnandaCrawler:
                     if normalized_url in self.state.visited_urls:
                         continue
                     
-                    content, new_links = self.crawl_page(page, url)
+                    content, new_links = self.crawl_page(browser, page, url)
                     
                     if content:
                         self.state.visited_urls.add(normalized_url)
@@ -566,7 +598,16 @@ def main():
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
                 })
                 
+                # Add timeout for the entire crawl process
+                start_time = time.time()
+                max_runtime = 60*60*8  # 8 hour timeout
+                
                 while crawler.state.pending_urls and pages_processed < args.max_pages:
+                    # Check for overall timeout
+                    if time.time() - start_time > max_runtime:
+                        logging.warning("Maximum runtime reached, stopping crawl")
+                        break
+                        
                     url = crawler.state.pending_urls.pop(0)
                     normalized_url = crawler.normalize_url(url)
                     
@@ -577,14 +618,13 @@ def main():
                         print(f"Skipping already visited URL: {url}")
                         continue
                         
-                    # Crawl single page
-                    content, new_links = crawler.crawl_page(page, url)
+                    content, new_links = crawler.crawl_page(browser, page, url)
                     
                     if content:
                         crawler.state.visited_urls.add(normalized_url)
                         pages_processed += 1
                         
-                        # Process new links immediately
+                        # Process new links
                         for link in new_links:
                             normalized_link = crawler.normalize_url(link)
                             if (normalized_link not in crawler.state.visited_urls and 
@@ -594,12 +634,9 @@ def main():
                         
                         print(f"Queue size: {len(crawler.state.pending_urls)} URLs pending")
                         
-                        # Ingest the page immediately
+                        # Process the page content
                         try:
-                            # Extract text and create chunks
                             chunks = create_chunks_from_page(content)
-                            
-                            # Create embeddings and upsert to Pinecone
                             if chunks:
                                 embeddings = crawler.create_embeddings(chunks, url, content.title)
                                 upsert_to_pinecone(embeddings, pinecone_index)
@@ -607,14 +644,14 @@ def main():
                                 print(f"Created {len(chunks)} chunks, {len(embeddings)} embeddings")
                         except Exception as e:
                             logging.error(f"Failed to process page {url}: {e}")
-                            logging.error(traceback.format_exc())  # Add stack trace
-                            
-                        # Save checkpoint after each successful page
-                        crawler.save_checkpoint()
+                            logging.error(traceback.format_exc())
                     else:
                         crawler.state.attempted_urls.add(normalized_url)
                     
-                    # Check exit flag after each page
+                    # Save checkpoint after each page
+                    crawler.save_checkpoint()
+                    
+                    # Check exit flag
                     if handle_exit.exit_requested:
                         print("\nGracefully stopping crawler...")
                         break
