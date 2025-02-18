@@ -94,14 +94,14 @@
     "collectionConfig": {
       "whole_library": "All authors"
     },
-    "includedLibraries": ["Crystal Clarity", "Ananda.org"],
+    "includedLibraries": ["Crystal Clarity", "ananda.org"],
     "enabledMediaTypes": ["text"],
     "libraryMappings": {
       "Crystal Clarity": {
         "displayName": "Crystal Clarity",
         "url": "https://crystalclarity.com/"
       },
-      "Ananda.org": {
+      "ananda.org": {
         "displayName": "Ananda.org",
         "url": "https://www.ananda.org/"
       }
