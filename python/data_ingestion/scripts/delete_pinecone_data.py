@@ -17,7 +17,6 @@ Usage:
 
 3. Delete by custom prefix:
    python delete_pinecone_data.py --site <site> --prefix "text||Ananda.org||Some Title"
-
 Examples:
 - Delete all audio records:
   python delete_pinecone_data.py --site ananda --file-type audio
@@ -27,6 +26,9 @@ Examples:
 
 - Delete specific subsource records:
   python delete_pinecone_data.py --site ananda --source "Ananda.org" --subsource "Bhaktivedanta Archives"
+
+Known bugs:
+- Pinecone IDs containing spaces will never match for unknown reasons
 """
 
 import os
@@ -63,9 +65,9 @@ def delete_records_by_prefix(index, prefix: str) -> None:
 
     # Confirm before deleting records by prefix
     confirmation = input(
-        f"Are you sure you want to delete {len(record_ids)} records with prefix:\n'{prefix}'\n(Yes/no): "
+        f"\nAre you sure you want to delete {len(record_ids)} records with prefix:\n'{prefix}'\n(yes/No): "
     ).lower()
-    if confirmation not in ["no", "n"]:
+    if confirmation in ["yes", "y"]:
         # Delete records in batches of 100 to avoid timeout
         batch_size = 100
         for i in range(0, len(record_ids), batch_size):
