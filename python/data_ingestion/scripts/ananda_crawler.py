@@ -449,8 +449,8 @@ def sanitize_for_id(text: str) -> str:
     text = text.replace('—', '-').replace("'", "'").replace('"', '"').replace('"', '"')
     # Remove any remaining non-ASCII chars
     text = ''.join(c for c in text if ord(c) < 128)
-    # Replace spaces and special chars with underscores
-    text = re.sub(r'[^a-zA-Z0-9-]', '_', text)
+    # Replace special chars with underscores, preserving spaces
+    text = re.sub(r'[^a-zA-Z0-9\s-]', '_', text)
     return text
 
 def handle_exit(signum, frame):
