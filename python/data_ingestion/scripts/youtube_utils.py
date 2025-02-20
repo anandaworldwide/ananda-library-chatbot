@@ -22,11 +22,11 @@ import random
 import uuid
 import logging
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, COMM
 import re
 import time
-from yt_dlp.utils import DownloadError
 
 # Set up logging
 logger = logging.getLogger(__name__)
