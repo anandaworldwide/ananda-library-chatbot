@@ -19,6 +19,7 @@ import signal
 from data_ingestion.scripts.media_utils import get_file_hash, split_audio, get_media_metadata
 from data_ingestion.scripts.youtube_utils import load_youtube_data_map, save_youtube_data_map
 from datetime import datetime
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,18 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
     return None
 
 
+def get_file_hash(file_path=None, youtube_id=None):
+    """Generate MD5 hash from either file path or YouTube ID"""
+    if youtube_id:
+        # For YouTube videos, hash the ID to match existing format
+        return hashlib.md5(youtube_id.encode('utf-8')).hexdigest()
+    elif file_path:
+        # Existing file path hashing logic
+        return hashlib.md5(file_path.encode('utf-8')).hexdigest()
+    else:
+        raise ValueError("Either file_path or youtube_id must be provided")
+
+
 def save_transcription(file_path, transcripts, youtube_id=None):
     """
     Save transcription to gzipped JSON file and update database.
@@ -198,6 +211,9 @@ def save_transcription(file_path, transcripts, youtube_id=None):
         transcripts: List of transcription segments or dict with transcription data
         youtube_id: YouTube video ID if applicable
     """
+    # Generate hash based on either file_path or youtube_id
+    file_hash = get_file_hash(file_path=file_path, youtube_id=youtube_id)
+    
     # Convert list of transcripts to expected format if needed
     if isinstance(transcripts, list):
         transcription_data = {
@@ -226,8 +242,6 @@ def save_transcription(file_path, transcripts, youtube_id=None):
             }
 
     # Generate unique filename based on content
-    file_hash = get_file_hash(file_path)
-    
     json_filename = f"{file_hash}.json.gz"
     json_filepath = os.path.join(TRANSCRIPTIONS_DIR, json_filename)
 
@@ -252,6 +266,9 @@ def save_transcription(file_path, transcripts, youtube_id=None):
         logger.error(f"Database error: {e}")
         raise
 
+    logger.info(f"Transcription metadata updated for file {file_path}")
+    logger.info(f"Transcription json: {json_filepath}")
+
 
 def transcribe_media(
     file_path,
@@ -275,6 +292,13 @@ def transcribe_media(
         return existing_transcription
 
     client = OpenAI()
+
+    # Validate we have a file to process
+    if not file_path:
+        logger.error("No file path provided for transcription")
+        if is_youtube_video:
+            logger.error("YouTube video processing requires downloaded audio file path")
+        return None
 
     logger.info(f"Splitting audio into chunks for {file_name}...")
 
