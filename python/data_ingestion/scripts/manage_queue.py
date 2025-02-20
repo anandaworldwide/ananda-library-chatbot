@@ -556,9 +556,9 @@ def main():
         "--clear", action="store_true", help="Clear all items from the queue"
     )
     parser.add_argument(
-        "--reset-failed",
+        "--reprocess-failed",
         action="store_true", 
-        help="Reset items in error or interrupted state back to pending"
+        help="Reprocess items in error or interrupted state"
     )
     parser.add_argument(
         "--remove-completed",
@@ -575,9 +575,9 @@ def main():
     parser.add_argument("--playlists-file", help="Path to XLSX file containing playlist information")
     parser.add_argument("--queue", default=None, help="Specify an alternative queue name")
     parser.add_argument(
-        "--reset-processing-items",
+        "--reprocess-processing-items",
         action="store_true",
-        help="Reset items in processing state to pending",
+        help="Reprocess items in processing state",
     )
     parser.add_argument("--remove", help="Remove a specific item from the queue by ID")
     parser.add_argument("--status", action="store_true", help="Print the queue status")
@@ -595,6 +595,27 @@ def main():
     if args.queue:
         logger.info(f"Using queue: {args.queue}")
 
+    # Check for conflicting arguments
+    management_args = sum([bool(x) for x in [
+        args.status,
+        args.remove,
+        args.playlists_file,
+        args.reprocess_all,
+        args.reprocess,
+        args.list,
+        args.clear,
+        args.reprocess_failed,
+        args.reprocess_processing_items,
+        args.remove_completed,
+        args.urls_file,
+        any([args.video, args.playlist, args.audio, args.directory])
+    ]])
+
+    if management_args > 1:
+        logger.error("Error: Multiple operations specified. Please use only one command at a time.")
+        parser.print_help()
+        return
+
     # Route to appropriate operation handler
     if args.status:
         print_queue_status(queue)
@@ -610,9 +631,9 @@ def main():
         list_queue_items(queue)
     elif args.clear:
         clear_queue(queue)
-    elif args.reset_failed:
+    elif args.reprocess_failed:
         reset_stuck_items(queue)
-    elif args.reset_processing_items:
+    elif args.reprocess_processing_items:
         reset_processing_items(queue)
     elif args.remove_completed:
         remove_completed_items(queue)
