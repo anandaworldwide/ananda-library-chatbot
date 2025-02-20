@@ -49,20 +49,16 @@ def query_with_retries(index, vector_id, max_retries=3, initial_delay=1):
             delay = initial_delay * (2 ** attempt) + random.uniform(0, 1)
             time.sleep(delay)
 
-def get_pinecone_stats():
+def get_pinecone_stats(id_prefix=None):
     """
     Retrieves and aggregates statistics from Pinecone vectors.
     
-    Processes vectors in batches to optimize performance while collecting
-    metadata counts for author, library, and type fields.
-    
-    Returns:
-        dict: Counters for each metadata field (author, library, type)
+    Args:
+        id_prefix (str, optional): Filter vectors by ID prefix
     """
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
     index = pc.Index(os.getenv('PINECONE_INGEST_INDEX_NAME'))
     
-    # Initialize counters for each metadata field
     stats = {
         'author': Counter(),
         'library': Counter(),
@@ -74,12 +70,11 @@ def get_pinecone_stats():
     total_vectors = index_stats.total_vector_count
     pbar = tqdm(total=total_vectors, desc="Processing vectors")
     
-    # Process vectors in batches for better performance
     batch_size = 100
     id_batch = []
     
-    # Main processing loop
-    for vector_ids in index.list():
+    # Use prefix parameter in list() call
+    for vector_ids in index.list(prefix=id_prefix):
         id_batch.extend(vector_ids)
         
         if len(id_batch) >= batch_size:
@@ -126,9 +121,10 @@ def print_stats(stats):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Get Pinecone vector statistics')
     parser.add_argument('--site', required=True, help='Site ID for environment variables')
+    parser.add_argument('--prefix', help='Filter vectors by ID prefix')
     args = parser.parse_args()
     
     # Load environment variables for the specified site
     load_env(args.site)
-    stats = get_pinecone_stats()
+    stats = get_pinecone_stats(args.prefix)
     print_stats(stats)
