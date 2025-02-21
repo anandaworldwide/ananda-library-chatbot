@@ -14,6 +14,7 @@ import path from 'path';
 import { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
+import { PineconeStore } from '@langchain/pinecone';
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'us-west-1',
@@ -211,23 +212,89 @@ interface ModelConfig {
   label?: string; // For identifying which model in streaming responses
 }
 
+// Calculate the number of sources to retrieve from each library based on weights
+const calculateSources = (
+  totalSources: number,
+  libraries: { name: string; weight?: number }[],
+) => {
+  if (!libraries || libraries.length === 0) {
+    return [];
+  }
+
+  const totalWeight = libraries.reduce(
+    (sum, lib) => sum + (lib.weight !== undefined ? lib.weight : 1),
+    0,
+  );
+  return libraries.map((lib) => ({
+    name: lib.name,
+    sources:
+      lib.weight !== undefined
+        ? Math.round(totalSources * (lib.weight / totalWeight))
+        : Math.floor(totalSources / libraries.length),
+  }));
+};
+
+async function retrieveDocumentsByLibrary(
+  retriever: VectorStoreRetriever,
+  libraryName: string,
+  k: number,
+  query: string,
+  baseFilter?: Record<string, unknown>,
+): Promise<Document[]> {
+  const libraryFilter = { library: libraryName };
+
+  let finalFilter: Record<string, unknown>;
+  if (baseFilter) {
+    // Merge baseFilter with libraryFilter using $and
+    finalFilter = {
+      $and: [baseFilter, libraryFilter],
+    };
+  } else {
+    finalFilter = libraryFilter;
+  }
+
+  console.log(
+    'Final filter in retrieveDocumentsByLibrary:',
+    JSON.stringify(finalFilter),
+  );
+  const documents = await retriever.vectorStore.similaritySearch(
+    query,
+    k,
+    finalFilter,
+  );
+  return documents;
+}
+
 // Main function to create the language model chain
 export const makeChain = async (
   retriever: VectorStoreRetriever,
   modelConfig: ModelConfig = { model: 'gpt-4o', temperature: 0.3 },
   sourceCount: number = 4,
+  baseFilter?: Record<string, unknown>,
 ) => {
+  const pineconeStore = retriever.vectorStore as PineconeStore;
+  console.log('Retriever pre-set filter:', pineconeStore.filter);
+  sourceCount = 10; // TODO: remove this
   const { model, temperature: modelTemperature, label } = modelConfig;
   const siteId = process.env.SITE_ID || 'default';
 
-  // Load site config to get temperature
   const configPath = path.join(process.cwd(), 'site-config/config.json');
   const siteConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
   const temperature = siteConfig[siteId]?.temperature ?? modelTemperature;
-
-  // Initialize the language model with error handling
   let languageModel: BaseLanguageModel;
+
+  // Normalizes includedLibraries from site config: converts string library names to objects
+  // with default weight 1, while preserving weighted objects for proportional source retrieval.
+  const rawIncludedLibraries: Array<
+    string | { name: string; weight?: number }
+  > = siteConfig[siteId]?.includedLibraries || [];
+  const includedLibraries = rawIncludedLibraries.map((lib) =>
+    typeof lib === 'string' ? { name: lib, weight: 1 } : lib,
+  );
+  const sourcesDistribution = calculateSources(sourceCount, includedLibraries);
+
   try {
+    // Initialize the language model
     languageModel = new ChatOpenAI({
       temperature,
       modelName: model,
@@ -244,16 +311,11 @@ export const makeChain = async (
 
   const condenseQuestionPrompt =
     ChatPromptTemplate.fromTemplate(CONDENSE_TEMPLATE);
-
-  // Get the full template for the site
   const fullTemplate = await getFullTemplate(siteId);
-
-  // Replace dynamic variables in the template
   const templateWithReplacedVars = fullTemplate.replace(
     /\${(context|chat_history|question)}/g,
     (match, key) => `{${key}}`,
   );
-
   const answerPrompt = ChatPromptTemplate.fromTemplate(
     templateWithReplacedVars,
   );
@@ -266,15 +328,36 @@ export const makeChain = async (
     new StringOutputParser(),
   ]);
 
-  // Set the number of documents to retrieve
-  retriever.k = sourceCount;
+  // Runnable sequence for retrieving documents
+  const retrievalSequence = RunnableSequence.from([
+    async (input: AnswerChainInput) => {
+      const allDocuments: Document[] = [];
 
-  // Create a chain to retrieve and format documents based on a query
-  const retrievalChain = RunnableSequence.from([
-    (input: string) => {
-      return input;
+      if (!includedLibraries || includedLibraries.length === 0) {
+        // Single-call case: use baseFilter directly
+        const docs = await retriever.vectorStore.similaritySearch(
+          input.question,
+          sourceCount,
+          baseFilter, // Use baseFilter
+        );
+        allDocuments.push(...docs);
+      } else {
+        // Multi-call case: pass baseFilter to retrieveDocumentsByLibrary
+        for (const { name, sources } of sourcesDistribution) {
+          if (sources > 0) {
+            const docs = await retrieveDocumentsByLibrary(
+              retriever,
+              name,
+              sources,
+              input.question,
+              baseFilter, // Pass baseFilter
+            );
+            allDocuments.push(...docs);
+          }
+        }
+      }
+      return allDocuments;
     },
-    retriever,
     (docs: Document[]) => {
       if (docs.length === 0) {
         console.warn(`Warning: makeChain: No sources returned for query`);
@@ -292,16 +375,14 @@ export const makeChain = async (
     {
       context: RunnableSequence.from([
         new RunnablePassthrough<AnswerChainInput>(),
-        async (input: AnswerChainInput) =>
-          retrievalChain.invoke(input.question),
+        async (input: AnswerChainInput) => retrievalSequence.invoke(input), // Pass full input
         (output: { combinedContent: string }) => output.combinedContent,
       ]),
       chat_history: (input: AnswerChainInput) => input.chat_history,
       question: (input: AnswerChainInput) => input.question,
       documents: RunnableSequence.from([
         new RunnablePassthrough<AnswerChainInput>(),
-        async (input: AnswerChainInput) =>
-          retrievalChain.invoke(input.question),
+        async (input: AnswerChainInput) => retrievalSequence.invoke(input), // Pass full input
         (output: { documents: Document[] }) => output.documents,
       ]),
     },
@@ -324,7 +405,6 @@ export const makeChain = async (
     },
     answerChain,
     (result: string) => {
-      // Add warning logs with model identification
       if (result.includes("I don't have any specific information")) {
         console.warn(
           `Warning: AI response indicates no relevant information found (${label || model})`,

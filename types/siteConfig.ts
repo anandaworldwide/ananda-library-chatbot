@@ -44,7 +44,7 @@ export interface SiteConfig {
   allowAllAnswersPage: boolean;
   npsSurveyFrequencyDays: number;
   queriesPerUserPerDay: number;
-  includedLibraries?: string[];
+  includedLibraries?: Array<string | { name: string; weight?: number }>; // Updated
   enabledMediaTypes?: ('text' | 'audio' | 'youtube')[];
   enableModelComparison?: boolean;
   showSourceCountSelector?: boolean;

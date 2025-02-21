@@ -64,6 +64,8 @@ imageio==2.37.0
     # via moviepy
 imageio-ffmpeg==0.6.0
     # via moviepy
+jiter==0.8.2
+    # via openai
 jmespath==1.0.1
     # via
     #   boto3
@@ -72,15 +74,15 @@ jsonpatch==1.33
     # via langchain-core
 jsonpointer==3.0.0
     # via jsonpatch
-langchain-core==0.2.43
+langchain-core==0.3.37
     # via
     #   langchain-openai
     #   langchain-text-splitters
-langchain-openai==0.1.20
+langchain-openai==0.3.6
     # via -r requirements.in
-langchain-text-splitters==0.2.4
+langchain-text-splitters==0.3.6
     # via -r requirements.in
-langsmith==0.1.147
+langsmith==0.3.8
     # via langchain-core
 moviepy==1.0.3
     # via -r requirements.in
@@ -92,7 +94,7 @@ numpy==2.2.3
     # via
     #   imageio
     #   moviepy
-openai==1.35.9
+openai==1.63.2
     # via
     #   -r requirements.in
     #   langchain-openai
@@ -197,3 +199,5 @@ websockets==15.0
     # via yt-dlp
 yt-dlp==2024.7.9
     # via -r requirements.in
+zstandard==0.23.0
+    # via langsmith

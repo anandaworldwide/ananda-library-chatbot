@@ -94,7 +94,10 @@
     "collectionConfig": {
       "whole_library": "All authors"
     },
-    "includedLibraries": ["Crystal Clarity", "ananda.org"],
+    "includedLibraries": [
+      { "name": "Crystal Clarity", "weight": 15 },
+      { "name": "ananda.org", "weight": 85 }
+    ],
     "enabledMediaTypes": ["text"],
     "libraryMappings": {
       "Crystal Clarity": {

@@ -150,19 +150,15 @@ async function setupPineconeAndFilter(
   mediaTypes: Record<string, boolean>,
   siteConfig: SiteConfig,
 ): Promise<{ index: Index<RecordMetadata>; filter: PineconeFilter }> {
-  // Initialize Pinecone client and index
   const pinecone = await getPineconeClient();
   const index = pinecone.Index(
     getPineconeIndexName() || '',
   ) as Index<RecordMetadata>;
 
-  // Set up filter for vector search
   const filter: PineconeFilter = {
     $and: [{ type: { $in: [] } }],
   };
 
-  // Add author filter for 'master_swami' collection if configured
-  // TODO: Move author filters into config.json
   if (
     collection === 'master_swami' &&
     siteConfig.collectionConfig?.master_swami
@@ -172,24 +168,24 @@ async function setupPineconeAndFilter(
     });
   }
 
-  // Add library filter based on site configuration
-  if (siteConfig.includedLibraries) {
-    filter.$and.push({ library: { $in: siteConfig.includedLibraries } });
+  // Apply library filter only if includedLibraries is non-empty
+  if (siteConfig.includedLibraries && siteConfig.includedLibraries.length > 0) {
+    const libraryNames = siteConfig.includedLibraries.map((lib) =>
+      typeof lib === 'string' ? lib : lib.name,
+    );
+    filter.$and.push({ library: { $in: libraryNames } });
   }
 
-  // Set up media type filters
   const enabledMediaTypes = siteConfig.enabledMediaTypes || [
     'text',
     'audio',
     'youtube',
   ];
-
   enabledMediaTypes.forEach((type) => {
     if (mediaTypes[type]) {
       filter.$and[0].type.$in.push(type);
     }
   });
-
   if (filter.$and[0].type.$in.length === 0) {
     filter.$and[0].type.$in = enabledMediaTypes;
   }
@@ -197,9 +193,16 @@ async function setupPineconeAndFilter(
   return { index, filter };
 }
 
+// Define the options type inline
+interface PineconeStoreOptions {
+  pineconeIndex: Index<RecordMetadata>;
+  textKey: string;
+  filter?: PineconeFilter; // Optional filter
+}
+
 async function setupVectorStoreAndRetriever(
   index: Index<RecordMetadata>,
-  filter: PineconeFilter,
+  filter: PineconeFilter | undefined,
   sendData: (data: {
     token?: string;
     sourceDocs?: Document[];
@@ -213,17 +216,16 @@ async function setupVectorStoreAndRetriever(
   retriever: ReturnType<PineconeStore['asRetriever']>;
   documentPromise: Promise<Document[]>;
 }> {
-  // Initialize vector store with Pinecone
+  const vectorStoreOptions = {
+    pineconeIndex: index as any, // Type assertion to bypass mismatch
+    textKey: 'text' as const,
+  };
+
   const vectorStore = await PineconeStore.fromExistingIndex(
     new OpenAIEmbeddings({}),
-    {
-      pineconeIndex: index,
-      textKey: 'text',
-      filter: filter,
-    },
+    vectorStoreOptions,
   );
 
-  // Create retriever with callback to send source documents
   const retriever = vectorStore.asRetriever({
     callbacks: [
       {
@@ -236,7 +238,6 @@ async function setupVectorStoreAndRetriever(
     k: sourceCount,
   });
 
-  // Set up promise to resolve with retrieved documents
   let resolveWithDocuments: (value: Document[]) => void;
   const documentPromise = new Promise<Document[]>((resolve) => {
     resolveWithDocuments = resolve;
@@ -252,12 +253,14 @@ async function setupAndExecuteLanguageModelChain(
   history: [string, string][],
   sendData: (data: StreamingResponseData) => void,
   sourceCount: number = 4,
+  filter?: PineconeFilter,
 ): Promise<string> {
   // Create language model chain with sourceCount
   const chain = await makeChain(
     retriever,
     { model: 'gpt-4o', temperature: 0 },
     sourceCount,
+    filter,
   );
 
   // Format chat history for the language model
@@ -553,6 +556,7 @@ export async function POST(req: NextRequest) {
           sanitizedInput.history,
           sendData,
           sanitizedInput.sourceCount || 4,
+          filter,
         );
 
         // Log warning if no sources were found
