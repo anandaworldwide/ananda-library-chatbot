@@ -33,6 +33,7 @@ import { Document } from 'langchain/document';
 
 // Third-party library imports
 import Cookies from 'js-cookie';
+import debounce from 'lodash/debounce';
 
 import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
@@ -288,17 +289,28 @@ export default function Home({
   );
 
   const handleStreamingResponse = useCallback(
-    (data: StreamingResponseData) => {
+    debounce((data: StreamingResponseData) => {
       if (data.token) {
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
       }
 
       if (data.sourceDocs) {
-        const immutableSourceDocs = [...data.sourceDocs];
-        //         setSourceCount(immutableSourceDocs.length);
-        setSourceDocs(immutableSourceDocs);
-        updateMessageState(accumulatedResponseRef.current, immutableSourceDocs);
+        console.log('Received sourceDocs:', typeof data.sourceDocs, data.sourceDocs);
+        try {
+          setTimeout(() => {
+            const immutableSourceDocs = Array.isArray(data.sourceDocs) 
+              ? [...data.sourceDocs]
+              : [];
+            setSourceDocs(immutableSourceDocs);
+            updateMessageState(accumulatedResponseRef.current, immutableSourceDocs);
+          }, 100);
+        } catch (error) {
+          console.error('Error handling sourceDocs:', error);
+          // Fallback to empty array if parsing fails
+          setSourceDocs([]);
+          updateMessageState(accumulatedResponseRef.current, []);
+        }
       }
 
       if (data.done) {
@@ -340,14 +352,8 @@ export default function Home({
           }
         });
       }
-    },
-    [
-      setLoading,
-      setError,
-      setMessageState,
-      fetchRelatedQuestions,
-      updateMessageState,
-    ],
+    }, 50),
+    [setLoading, setError, setMessageState, fetchRelatedQuestions, updateMessageState],
   );
 
   // Effect to scroll to bottom after related questions are added
