@@ -33,7 +33,6 @@ import { Document } from 'langchain/document';
 
 // Third-party library imports
 import Cookies from 'js-cookie';
-import debounce from 'lodash/debounce';
 
 import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
@@ -289,7 +288,7 @@ export default function Home({
   );
 
   const handleStreamingResponse = useCallback(
-    debounce((data: StreamingResponseData) => {
+    (data: StreamingResponseData) => {
       if (data.token) {
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
@@ -352,7 +351,7 @@ export default function Home({
           }
         });
       }
-    }, 50),
+    },
     [setLoading, setError, setMessageState, fetchRelatedQuestions, updateMessageState],
   );
 
