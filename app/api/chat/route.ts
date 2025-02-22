@@ -1,13 +1,43 @@
 /**
  * This file implements a custom chat route for handling streaming responses on Vercel production.
- * It processes incoming chat requests, interacts with a language model and vector store,
- * and returns responses in a streaming format. The route also handles rate limiting,
- * input validation, and error handling. It supports different collections and media types,
- * and can optionally save responses to Firestore for non-private sessions.
+ *
+ * Core functionality:
+ * - Handles both standard chat and model comparison requests
+ * - Implements server-sent events (SSE) for real-time streaming
+ * - Manages rate limiting per user/IP
+ * - Validates and sanitizes all inputs
+ * - Integrates with Pinecone for vector search
+ * - Supports filtering by media type and collection
+ * - Optional response persistence to Firestore
+ *
+ * Request flow:
+ * 1. Input validation and sanitization
+ * 2. Rate limit checking
+ * 3. Pinecone setup with filters (media type, collection, library)
+ * 4. Vector store and retriever initialization
+ * 5. LLM chain execution with streaming
+ * 6. Optional response saving to Firestore
+ *
+ * Error handling:
+ * - Handles Pinecone connection issues
+ * - Manages OpenAI rate limits and quotas
+ * - Validates JSON structure and input lengths
+ * - Provides detailed error messages for debugging
+ *
+ * Security features:
+ * - XSS prevention through input sanitization
+ * - Rate limiting per IP
+ * - Input length restrictions
+ * - Collection access validation
+ *
+ * Performance considerations:
+ * - Uses streaming to reduce time-to-first-token
+ * - Concurrent document retrieval and response generation
+ * - Efficient filter application at the vector store level
  */
 
-// We have to use a custom chat route because that's how we can get streaming on Vercel production,
-// per https://vercel.com/docs/functions/streaming/quickstart
+// Custom route required for Vercel production streaming support
+// See: https://vercel.com/docs/functions/streaming/quickstart
 //
 // TODO: wrap this in apiMiddleware
 //
@@ -50,6 +80,13 @@ interface ComparisonRequestBody extends ChatRequestBody {
   useExtraSources: boolean;
   sourceCount: number;
 }
+
+// Define a minimal type that matches PineconeStore.fromExistingIndex expectations
+type PineconeStoreOptions = {
+  pineconeIndex: Index<RecordMetadata>;
+  textKey: string;
+  // We omit filter since we're handling it at runtime
+};
 
 async function validateAndPreprocessInput(req: NextRequest): Promise<
   | {
@@ -193,13 +230,6 @@ async function setupPineconeAndFilter(
   return { index, filter };
 }
 
-// Define the options type inline
-interface PineconeStoreOptions {
-  pineconeIndex: Index<RecordMetadata>;
-  textKey: string;
-  filter?: PineconeFilter; // Optional filter
-}
-
 async function setupVectorStoreAndRetriever(
   index: Index<RecordMetadata>,
   filter: PineconeFilter | undefined,
@@ -216,9 +246,9 @@ async function setupVectorStoreAndRetriever(
   retriever: ReturnType<PineconeStore['asRetriever']>;
   documentPromise: Promise<Document[]>;
 }> {
-  const vectorStoreOptions = {
-    pineconeIndex: index as any, // Type assertion to bypass mismatch
-    textKey: 'text' as const,
+  const vectorStoreOptions: PineconeStoreOptions = {
+    pineconeIndex: index,
+    textKey: 'text',
   };
 
   const vectorStore = await PineconeStore.fromExistingIndex(
