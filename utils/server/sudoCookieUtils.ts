@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import Cookies from 'cookies';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { isDevelopment } from '@/utils/env';
