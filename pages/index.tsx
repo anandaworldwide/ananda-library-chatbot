@@ -402,7 +402,7 @@ export default function Home({
       const newAbortController = new AbortController();
       setAbortController(newAbortController);
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

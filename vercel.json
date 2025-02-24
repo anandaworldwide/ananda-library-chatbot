@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "pages/api/chat.ts": {
-      "maxDuration": 240
-    }
-  },
   "crons": [
     {
       "path": "/api/relatedQuestions?updateBatch=50",

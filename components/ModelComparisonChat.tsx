@@ -255,7 +255,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
 
       console.log('Sending request with:', requestBody); // Debug log
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/chat/v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
