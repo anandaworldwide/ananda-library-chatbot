@@ -90,12 +90,17 @@ type PineconeStoreOptions = {
 
 // Helper function to check if a string matches a pattern with wildcards
 function matchesPattern(origin: string, pattern: string): boolean {
+  // Extract domain from origin (remove protocol)
+  const originDomain = origin.replace(/^https?:\/\//, '');
+
   // Escape special regex characters but not the asterisk
   const escapedPattern = pattern
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     .replace(/\\\*/g, '.*');
   const regex = new RegExp(`^${escapedPattern}$`, 'i');
-  return regex.test(origin);
+
+  // Check if the domain part (without protocol) matches the pattern
+  return regex.test(originDomain);
 }
 
 // Middleware to handle CORS
@@ -115,8 +120,15 @@ function handleCors(req: NextRequest, siteConfig: SiteConfig) {
   // Check against allowedFrontEndDomains from site config
   const allowedDomains = siteConfig.allowedFrontEndDomains || [];
 
+  console.log(`Checking CORS for origin: ${origin}`);
+  console.log(`Allowed domains:`, allowedDomains);
+
   for (const pattern of allowedDomains) {
+    console.log(`Testing pattern: ${pattern} against origin: ${origin}`);
     if (matchesPattern(origin, pattern)) {
+      console.log(
+        `CORS allowed for origin: ${origin} matching pattern: ${pattern}`,
+      );
       return null; // Origin is allowed
     }
   }
