@@ -39,7 +39,6 @@ import path from 'path';
 import { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
-import { PineconeStore } from '@langchain/pinecone';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
 
 // S3 client for loading remote templates and configurations
@@ -287,10 +286,6 @@ async function retrieveDocumentsByLibrary(
     finalFilter = libraryFilter;
   }
 
-  console.log(
-    'Final filter in retrieveDocumentsByLibrary:',
-    JSON.stringify(finalFilter),
-  );
   const documents = await retriever.vectorStore.similaritySearch(
     query,
     k,
@@ -309,16 +304,12 @@ export const makeChain = async (
   sendData?: (data: StreamingResponseData) => void,
   resolveDocs?: (docs: Document[]) => void,
 ) => {
-  const pineconeStore = retriever.vectorStore as PineconeStore;
-  console.log('Retriever pre-set filter:', pineconeStore.filter);
-
   const siteId = process.env.SITE_ID || 'default';
   const configPath = path.join(process.cwd(), 'site-config/config.json');
   const siteConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
 
   const { model, temperature: modelTemperature, label } = modelConfig;
   const temperature = siteConfig[siteId]?.temperature ?? modelTemperature;
-  console.log('model:', model, 'temperature:', temperature);
   let languageModel: BaseLanguageModel;
 
   // Normalizes includedLibraries from site config: converts string library names to objects
@@ -338,10 +329,6 @@ export const makeChain = async (
       modelName: model,
       streaming: true,
     }) as BaseLanguageModel;
-
-    console.log(
-      `Initialized model ${label || model} with temperature ${temperature}`,
-    );
   } catch (error) {
     console.error(`Failed to initialize model ${model}:`, error);
     throw new Error(`Model initialization failed for ${label || model}`);
@@ -424,19 +411,7 @@ export const makeChain = async (
       context: (input: {
         retrievalOutput: { combinedContent: string; documents: Document[] };
         originalInput: AnswerChainInput;
-      }) => {
-        console.log(
-          'Sources being used for generation:',
-          JSON.parse(input.retrievalOutput.combinedContent).map(
-            (doc: { id: string; library: string; content: string }) => ({
-              id: doc.id,
-              library: doc.library,
-              content: doc.content.substring(0, 100) + '...',
-            }),
-          ),
-        );
-        return input.retrievalOutput.combinedContent;
-      },
+      }) => input.retrievalOutput.combinedContent,
       chat_history: (input: {
         retrievalOutput: { combinedContent: string; documents: Document[] };
         originalInput: AnswerChainInput;

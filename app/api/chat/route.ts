@@ -88,6 +88,82 @@ type PineconeStoreOptions = {
   // We omit filter since we're handling it at runtime
 };
 
+// Helper function to check if a string matches a pattern with wildcards
+function matchesPattern(origin: string, pattern: string): boolean {
+  // Escape special regex characters but not the asterisk
+  const escapedPattern = pattern
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\\\*/g, '.*');
+  const regex = new RegExp(`^${escapedPattern}$`, 'i');
+  return regex.test(origin);
+}
+
+// Middleware to handle CORS
+function handleCors(req: NextRequest, siteConfig: SiteConfig) {
+  const origin = req.headers.get('origin');
+
+  // If no origin header, allow the request (likely a server-side or direct API call)
+  if (!origin) {
+    return null;
+  }
+
+  // Allow localhost for development
+  if (origin.startsWith('http://localhost:') || origin === 'http://localhost') {
+    return null;
+  }
+
+  // Check against allowedFrontEndDomains from site config
+  const allowedDomains = siteConfig.allowedFrontEndDomains || [];
+
+  for (const pattern of allowedDomains) {
+    if (matchesPattern(origin, pattern)) {
+      return null; // Origin is allowed
+    }
+  }
+
+  // If we get here, the origin is not allowed
+  console.warn(`CORS blocked request from origin: ${origin}`);
+  return NextResponse.json(
+    { error: 'CORS policy: No access from this origin' },
+    { status: 403 },
+  );
+}
+
+// Function to add CORS headers to responses for allowed origins
+function addCorsHeaders(
+  response: NextResponse,
+  req: NextRequest,
+  siteConfig: SiteConfig,
+): NextResponse {
+  const origin = req.headers.get('origin');
+
+  // If no origin, no need to add CORS headers
+  if (!origin) {
+    return response;
+  }
+
+  // Check if origin is allowed
+  const isLocalhost =
+    origin.startsWith('http://localhost:') || origin === 'http://localhost';
+  const allowedDomains = siteConfig.allowedFrontEndDomains || [];
+  const isAllowedDomain = allowedDomains.some((pattern) =>
+    matchesPattern(origin, pattern),
+  );
+
+  // If origin is allowed, add CORS headers
+  if (isLocalhost || isAllowedDomain) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.headers.set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization',
+    );
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+
+  return response;
+}
+
 async function validateAndPreprocessInput(req: NextRequest): Promise<
   | {
       sanitizedInput: ChatRequestBody;
@@ -99,7 +175,6 @@ async function validateAndPreprocessInput(req: NextRequest): Promise<
   let requestBody: ChatRequestBody;
   try {
     requestBody = await req.json();
-    console.log('Request body:', JSON.stringify(requestBody));
   } catch (error) {
     console.error('Error parsing request body:', error);
     console.log('Raw request body:', await req.text());
@@ -246,7 +321,6 @@ async function setupVectorStoreAndRetriever(
   retriever: ReturnType<PineconeStore['asRetriever']>;
   documentPromise: Promise<Document[]>;
 }> {
-  console.log('Setting up vector store and retriever');
   let resolveWithDocuments: (value: Document[]) => void;
   const documentPromise = new Promise<Document[]>((resolve) => {
     resolveWithDocuments = resolve;
@@ -265,15 +339,11 @@ async function setupVectorStoreAndRetriever(
   const retriever = vectorStore.asRetriever({
     callbacks: [
       {
-        handleRetrieverStart() {
-          console.log('Retriever started');
-        },
         handleRetrieverError(error) {
           console.error('Retriever error:', error);
           resolveWithDocuments([]);
         },
         handleRetrieverEnd(docs: Document[]) {
-          console.log('Retriever finished, found', docs.length, 'documents');
           resolveWithDocuments(docs);
           sendData({ sourceDocs: docs });
         },
@@ -295,17 +365,15 @@ async function setupAndExecuteLanguageModelChain(
   filter?: PineconeFilter,
   resolveDocs?: (docs: Document[]) => void,
 ): Promise<string> {
-  console.log('Setting up LLM chain');
   try {
     const chain = await makeChain(
       retriever,
-      { model: 'gpt-4o', temperature: 0 }, // TODO: dont hardcode
+      { model: 'gpt-4o', temperature: 0 },
       sourceCount,
       filter,
       sendData,
       resolveDocs,
     );
-    console.log('Chain created successfully');
 
     // Format chat history for the language model
     const pastMessages = history
@@ -417,7 +485,6 @@ async function handleComparisonRequest(
   const stream = new ReadableStream({
     async start(controller) {
       const sendData = (data: StreamingResponseData & { model?: string }) => {
-        console.log('Attempting to send data:', Object.keys(data));
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
@@ -432,8 +499,6 @@ async function handleComparisonRequest(
         // Use the source count directly from the request body
         // The frontend is responsible for using siteConfig.defaultNumSources
         const sourceCount = requestBody.sourceCount || 4;
-
-        console.log('Using source count for comparison:', sourceCount);
 
         // Setup Vector Store and Retriever
         const { retriever, documentPromise } =
@@ -532,39 +597,21 @@ async function handleComparisonRequest(
     },
   });
 
-  return new NextResponse(stream, {
+  // Replace standard response with one that has CORS headers
+  const response = new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
     },
   });
+
+  return addCorsHeaders(response, req, siteConfig);
 }
 
-// main POST handler
-export async function POST(req: NextRequest) {
-  console.log('Starting POST handler');
-
-  // Validate and preprocess the input
-  const validationResult = await validateAndPreprocessInput(req);
-  console.log(
-    'Validation result:',
-    validationResult instanceof NextResponse ? 'Error Response' : 'Valid Input',
-  );
-
-  if (validationResult instanceof NextResponse) {
-    return validationResult;
-  }
-
-  const { sanitizedInput, originalQuestion } = validationResult;
-
-  // Check if this is a comparison request
-  const isComparison = 'modelA' in sanitizedInput;
-  console.log('Request type:', isComparison ? 'Comparison' : 'Regular Chat');
-
-  // Load site configuration
+// Handle OPTIONS requests for CORS preflight
+export async function OPTIONS(req: NextRequest) {
   const siteConfig = loadSiteConfigSync();
-  console.log('Site config loaded:', !!siteConfig);
 
   if (!siteConfig) {
     return NextResponse.json(
@@ -573,8 +620,43 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Create a basic response
+  const response = new NextResponse(null, { status: 204 });
+
+  // Add CORS headers and return
+  return addCorsHeaders(response, req, siteConfig);
+}
+
+// main POST handler
+export async function POST(req: NextRequest) {
+  // Validate and preprocess the input
+  const validationResult = await validateAndPreprocessInput(req);
+  if (validationResult instanceof NextResponse) {
+    return validationResult;
+  }
+
+  const { sanitizedInput, originalQuestion } = validationResult;
+
+  // Check if this is a comparison request
+  const isComparison = 'modelA' in sanitizedInput;
+
+  // Load site configuration
+  const siteConfig = loadSiteConfigSync();
+
+  if (!siteConfig) {
+    return NextResponse.json(
+      { error: 'Failed to load site configuration' },
+      { status: 500 },
+    );
+  }
+
+  // Check CORS restrictions
+  const corsCheckResult = handleCors(req, siteConfig);
+  if (corsCheckResult) {
+    return corsCheckResult;
+  }
+
   if (isComparison) {
-    console.log('Handling comparison request');
     return handleComparisonRequest(
       req,
       sanitizedInput as ComparisonRequestBody,
@@ -584,32 +666,22 @@ export async function POST(req: NextRequest) {
 
   // Apply rate limiting
   const rateLimitResult = await applyRateLimiting(req, siteConfig);
-  console.log(
-    'Rate limit check result:',
-    rateLimitResult ? 'Limited' : 'Allowed',
-  );
-
   if (rateLimitResult) {
     return rateLimitResult;
   }
 
-  console.log('Starting stream setup');
   // Get client IP for logging purposes
   const clientIP = getClientIp(req);
 
   // Set up streaming response
-  console.log('Before stream creation');
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       const sendData = (data: StreamingResponseData) => {
-        console.log('Attempting to send data:', Object.keys(data));
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
       try {
-        console.log('Stream processing started');
-
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
           sanitizedInput.collection,
@@ -648,7 +720,6 @@ export async function POST(req: NextRequest) {
 
         // Wait for documents for Firestore, but sources are already sent
         const promiseDocuments = await documentPromise;
-        console.log('Documents received:', promiseDocuments.length);
 
         if (promiseDocuments.length === 0) {
           console.warn(
@@ -663,7 +734,6 @@ export async function POST(req: NextRequest) {
 
         // Save answer to Firestore if not a private session
         if (!sanitizedInput.privateSession) {
-          console.log('Saving to Firestore...');
           const docId = await saveAnswerToFirestore(
             originalQuestion,
             fullResponse,
@@ -672,11 +742,9 @@ export async function POST(req: NextRequest) {
             sanitizedInput.history,
             clientIP,
           );
-          console.log('Saved to Firestore with ID:', docId);
           sendData({ docId });
         }
 
-        console.log('Closing stream controller');
         controller.close();
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
@@ -687,14 +755,15 @@ export async function POST(req: NextRequest) {
       }
     },
   });
-  console.log('After stream creation');
 
   // Return streaming response
-  return new NextResponse(stream, {
+  const response = new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
     },
   });
+
+  return addCorsHeaders(response, req, siteConfig);
 }

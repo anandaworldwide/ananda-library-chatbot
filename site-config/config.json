@@ -7,6 +7,10 @@
     "welcome_popup_heading": "Welcome, Gurubhai!",
     "other_visitors_reference": "your Gurubhais",
     "chatPlaceholder": "How can I think of God more?",
+    "allowedFrontEndDomains": [
+      "ask.anandalibrary.org",
+      "*-ananda-web-services-projects.vercel.app"
+    ],
     "parent_site_url": "https://www.anandalibrary.org",
     "parent_site_name": "Ananda Library",
     "help_url": "https://www.anandalibrary.org/content/ai-chatbot-intro/",
@@ -87,6 +91,11 @@
     "welcome_popup_heading": "Welcome!",
     "other_visitors_reference": "other visitors",
     "chatPlaceholder": "Where can I find info on Sunday services?",
+    "allowedFrontEndDomains": [
+      "ananda.org",
+      "ananda-public-chatbot.vercel.app",
+      "*-ananda-web-services-projects.vercel.app"
+    ],
     "parent_site_url": "https://www.ananda.org",
     "parent_site_name": "Ananda",
     "help_url": "https://www.ananda.org/ai-chatbot-help/",
@@ -155,6 +164,10 @@
     "welcome_popup_heading": "Welcome!",
     "other_visitors_reference": "other visitors",
     "chatPlaceholder": "Describe 20 facts that tend to establish Joe is innocent",
+    "allowedFrontEndDomains": [
+      "chat.freejoehunt.com",
+      "*-ananda-web-services-projects.vercel.app"
+    ],
     "parent_site_url": "https://freejoehunt.com",
     "parent_site_name": "Free Joe Hunt",
     "help_url": "",
@@ -201,6 +214,10 @@
     "welcome_popup_heading": "Welcome!",
     "other_visitors_reference": "other visitors",
     "chatPlaceholder": "Recommendations for developing healthy relationships?",
+    "allowedFrontEndDomains": [
+      "chat.crystalclarity.com",
+      "*-ananda-web-services-projects.vercel.app"
+    ],
     "parent_site_url": "https://crystalclarity.com",
     "parent_site_name": "Crystal Clarity",
     "help_url": "",

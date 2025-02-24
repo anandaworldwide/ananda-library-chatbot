@@ -21,6 +21,7 @@ export interface SiteConfig {
   parent_site_name: string;
   help_url: string;
   help_text: string;
+  allowedFrontEndDomains?: string[]; // Array of allowed domains for CORS, supports * wildcards (e.g. "*.example.com")
   collectionConfig: {
     [key: string]: string;
   };
@@ -50,4 +51,5 @@ export interface SiteConfig {
   showSourceCountSelector?: boolean;
   hideSources?: boolean;
   defaultNumSources?: number;
+  temperature?: number; // Added for LLM temperature setting
 }
