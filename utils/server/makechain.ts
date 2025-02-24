@@ -311,12 +311,14 @@ export const makeChain = async (
 ) => {
   const pineconeStore = retriever.vectorStore as PineconeStore;
   console.log('Retriever pre-set filter:', pineconeStore.filter);
-  const { model, temperature: modelTemperature, label } = modelConfig;
-  const siteId = process.env.SITE_ID || 'default';
 
+  const siteId = process.env.SITE_ID || 'default';
   const configPath = path.join(process.cwd(), 'site-config/config.json');
   const siteConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
+
+  const { model, temperature: modelTemperature, label } = modelConfig;
   const temperature = siteConfig[siteId]?.temperature ?? modelTemperature;
+  console.log('model:', model, 'temperature:', temperature);
   let languageModel: BaseLanguageModel;
 
   // Normalizes includedLibraries from site config: converts string library names to objects

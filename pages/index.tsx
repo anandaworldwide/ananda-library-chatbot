@@ -248,7 +248,9 @@ export default function Home({
     }
   }, []);
 
-  const [sourceCount, setSourceCount] = useState<number>(4);
+  const [sourceCount, setSourceCount] = useState<number>(
+    siteConfig?.defaultNumSources || 4,
+  );
 
   const updateMessageState = useCallback(
     (newResponse: string, newSourceDocs: Document[] | null) => {

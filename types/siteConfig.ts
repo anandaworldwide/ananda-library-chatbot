@@ -49,4 +49,5 @@ export interface SiteConfig {
   enableModelComparison?: boolean;
   showSourceCountSelector?: boolean;
   hideSources?: boolean;
+  defaultNumSources?: number;
 }

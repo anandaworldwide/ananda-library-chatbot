@@ -98,6 +98,7 @@
       { "name": "ananda.org", "weight": 67 },
       { "name": "Crystal Clarity", "weight": 33 }
     ],
+    "defaultNumSources": 6,
     "enabledMediaTypes": ["text"],
     "libraryMappings": {
       "Crystal Clarity": {

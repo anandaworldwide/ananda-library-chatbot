@@ -422,13 +422,20 @@ async function handleComparisonRequest(
       };
 
       try {
-        // Set up Pinecone and retriever using existing functions
+        // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
           requestBody.collection,
           requestBody.mediaTypes,
           siteConfig,
         );
 
+        // Use the source count directly from the request body
+        // The frontend is responsible for using siteConfig.defaultNumSources
+        const sourceCount = requestBody.sourceCount || 4;
+
+        console.log('Using source count for comparison:', sourceCount);
+
+        // Setup Vector Store and Retriever
         const { retriever, documentPromise } =
           await setupVectorStoreAndRetriever(
             index,
@@ -439,7 +446,7 @@ async function handleComparisonRequest(
                 sendData({ ...data, model: 'B' });
               }
             },
-            requestBody.sourceCount,
+            sourceCount,
           );
 
         // Create chains for both models
@@ -450,7 +457,7 @@ async function handleComparisonRequest(
             temperature: requestBody.temperatureA,
             label: 'A',
           },
-          requestBody.sourceCount,
+          sourceCount,
         );
         const chainB = await makeChain(
           retriever,
@@ -459,7 +466,7 @@ async function handleComparisonRequest(
             temperature: requestBody.temperatureB,
             label: 'B',
           },
-          requestBody.sourceCount,
+          sourceCount,
         );
 
         // Format chat history
