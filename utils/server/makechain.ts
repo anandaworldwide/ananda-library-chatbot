@@ -40,6 +40,7 @@ import { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { PineconeStore } from '@langchain/pinecone';
+import { StreamingResponseData } from '@/types/StreamingResponseData';
 
 // S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
@@ -236,9 +237,7 @@ const combineDocumentsFn = (docs: Document[]) => {
   const serializedDocs = docs.map((doc) => ({
     content: doc.pageContent,
     metadata: doc.metadata,
-    // 9/4/24 MO: Note this was formerly doc.id before estype checking was added. maybe this is
-    // going to break?
-    id: doc.metadata.id,
+    id: doc.id,
     library: doc.metadata.library,
   }));
   return JSON.stringify(serializedDocs);
@@ -307,10 +306,11 @@ export const makeChain = async (
   modelConfig: ModelConfig = { model: 'gpt-4o', temperature: 0.3 },
   sourceCount: number = 4,
   baseFilter?: Record<string, unknown>,
+  sendData?: (data: StreamingResponseData) => void,
+  resolveDocs?: (docs: Document[]) => void,
 ) => {
   const pineconeStore = retriever.vectorStore as PineconeStore;
   console.log('Retriever pre-set filter:', pineconeStore.filter);
-  sourceCount = 10; // TODO: remove this
   const { model, temperature: modelTemperature, label } = modelConfig;
   const siteId = process.env.SITE_ID || 'default';
 
@@ -368,17 +368,14 @@ export const makeChain = async (
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
       const allDocuments: Document[] = [];
-
       if (!includedLibraries || includedLibraries.length === 0) {
-        // Single-call case: use baseFilter directly
         const docs = await retriever.vectorStore.similaritySearch(
           input.question,
           sourceCount,
-          baseFilter, // Use baseFilter
+          baseFilter,
         );
         allDocuments.push(...docs);
       } else {
-        // Multi-call case: pass baseFilter to retrieveDocumentsByLibrary
         for (const { name, sources } of sourcesDistribution) {
           if (sources > 0) {
             const docs = await retrieveDocumentsByLibrary(
@@ -386,11 +383,18 @@ export const makeChain = async (
               name,
               sources,
               input.question,
-              baseFilter, // Pass baseFilter
+              baseFilter,
             );
             allDocuments.push(...docs);
           }
         }
+      }
+      // Send the documents as soon as they are retrieved
+      if (sendData) {
+        sendData({ sourceDocs: allDocuments });
+      }
+      if (resolveDocs) {
+        resolveDocs(allDocuments);
       }
       return allDocuments;
     },
@@ -408,19 +412,41 @@ export const makeChain = async (
   // Generate an answer to the standalone question based on the chat history
   // and retrieved documents. Additionally, we return the source documents directly.
   const answerChain = RunnableSequence.from([
+    // Step 1: Combine retrieval and original input
     {
-      context: RunnableSequence.from([
-        new RunnablePassthrough<AnswerChainInput>(),
-        async (input: AnswerChainInput) => retrievalSequence.invoke(input), // Pass full input
-        (output: { combinedContent: string }) => output.combinedContent,
-      ]),
-      chat_history: (input: AnswerChainInput) => input.chat_history,
-      question: (input: AnswerChainInput) => input.question,
-      documents: RunnableSequence.from([
-        new RunnablePassthrough<AnswerChainInput>(),
-        async (input: AnswerChainInput) => retrievalSequence.invoke(input), // Pass full input
-        (output: { documents: Document[] }) => output.documents,
-      ]),
+      retrievalOutput: retrievalSequence,
+      originalInput: new RunnablePassthrough<AnswerChainInput>(),
+    },
+    // Step 2: Map to the required fields
+    {
+      context: (input: {
+        retrievalOutput: { combinedContent: string; documents: Document[] };
+        originalInput: AnswerChainInput;
+      }) => {
+        console.log(
+          'Sources being used for generation:',
+          JSON.parse(input.retrievalOutput.combinedContent).map(
+            (doc: { id: string; library: string; content: string }) => ({
+              id: doc.id,
+              library: doc.library,
+              content: doc.content.substring(0, 100) + '...',
+            }),
+          ),
+        );
+        return input.retrievalOutput.combinedContent;
+      },
+      chat_history: (input: {
+        retrievalOutput: { combinedContent: string; documents: Document[] };
+        originalInput: AnswerChainInput;
+      }) => input.originalInput.chat_history,
+      question: (input: {
+        retrievalOutput: { combinedContent: string; documents: Document[] };
+        originalInput: AnswerChainInput;
+      }) => input.originalInput.question,
+      documents: (input: {
+        retrievalOutput: { combinedContent: string; documents: Document[] };
+        originalInput: AnswerChainInput;
+      }) => input.retrievalOutput.documents,
     },
     answerPrompt,
     languageModel,

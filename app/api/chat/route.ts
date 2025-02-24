@@ -246,6 +246,12 @@ async function setupVectorStoreAndRetriever(
   retriever: ReturnType<PineconeStore['asRetriever']>;
   documentPromise: Promise<Document[]>;
 }> {
+  console.log('Setting up vector store and retriever');
+  let resolveWithDocuments: (value: Document[]) => void;
+  const documentPromise = new Promise<Document[]>((resolve) => {
+    resolveWithDocuments = resolve;
+  });
+
   const vectorStoreOptions: PineconeStoreOptions = {
     pineconeIndex: index,
     textKey: 'text',
@@ -259,18 +265,21 @@ async function setupVectorStoreAndRetriever(
   const retriever = vectorStore.asRetriever({
     callbacks: [
       {
+        handleRetrieverStart() {
+          console.log('Retriever started');
+        },
+        handleRetrieverError(error) {
+          console.error('Retriever error:', error);
+          resolveWithDocuments([]);
+        },
         handleRetrieverEnd(docs: Document[]) {
+          console.log('Retriever finished, found', docs.length, 'documents');
           resolveWithDocuments(docs);
           sendData({ sourceDocs: docs });
         },
       } as Partial<BaseCallbackHandler>,
     ],
     k: sourceCount,
-  });
-
-  let resolveWithDocuments: (value: Document[]) => void;
-  const documentPromise = new Promise<Document[]>((resolve) => {
-    resolveWithDocuments = resolve;
   });
 
   return { vectorStore, retriever, documentPromise };
@@ -284,51 +293,59 @@ async function setupAndExecuteLanguageModelChain(
   sendData: (data: StreamingResponseData) => void,
   sourceCount: number = 4,
   filter?: PineconeFilter,
+  resolveDocs?: (docs: Document[]) => void,
 ): Promise<string> {
-  // Create language model chain with sourceCount
-  const chain = await makeChain(
-    retriever,
-    { model: 'gpt-4o', temperature: 0 },
-    sourceCount,
-    filter,
-  );
+  console.log('Setting up LLM chain');
+  try {
+    const chain = await makeChain(
+      retriever,
+      { model: 'gpt-4o', temperature: 0 }, // TODO: dont hardcode
+      sourceCount,
+      filter,
+      sendData,
+      resolveDocs,
+    );
+    console.log('Chain created successfully');
 
-  // Format chat history for the language model
-  const pastMessages = history
-    .map((message: [string, string]) => {
-      return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join('\n');
-    })
-    .join('\n');
+    // Format chat history for the language model
+    const pastMessages = history
+      .map((message: [string, string]) => {
+        return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join('\n');
+      })
+      .join('\n');
 
-  let fullResponse = '';
+    let fullResponse = '';
 
-  // Invoke the chain with callbacks for streaming tokens
-  const chainPromise = chain.invoke(
-    {
-      question: sanitizedQuestion,
-      chat_history: pastMessages,
-    },
-    {
-      callbacks: [
-        {
-          // Callback for handling new tokens from the language model
-          handleLLMNewToken(token: string) {
-            fullResponse += token;
-            sendData({ token });
-          },
-          // Callback for handling the end of the chain execution
-          handleChainEnd() {
-            sendData({ done: true });
-          },
-        } as Partial<BaseCallbackHandler>,
-      ],
-    },
-  );
+    // Invoke the chain with callbacks for streaming tokens
+    const chainPromise = chain.invoke(
+      {
+        question: sanitizedQuestion,
+        chat_history: pastMessages,
+      },
+      {
+        callbacks: [
+          {
+            // Callback for handling new tokens from the language model
+            handleLLMNewToken(token: string) {
+              fullResponse += token;
+              sendData({ token });
+            },
+            // Callback for handling the end of the chain execution
+            handleChainEnd() {
+              sendData({ done: true });
+            },
+          } as Partial<BaseCallbackHandler>,
+        ],
+      },
+    );
 
-  // Wait for the chain to complete
-  await chainPromise;
-
-  return fullResponse;
+    // Wait for the chain to complete
+    await chainPromise;
+    return fullResponse;
+  } catch (error) {
+    console.error('Error in setupAndExecuteLanguageModelChain:', error);
+    throw error;
+  }
 }
 
 // Function to save the answer and related information to Firestore
@@ -400,6 +417,7 @@ async function handleComparisonRequest(
   const stream = new ReadableStream({
     async start(controller) {
       const sendData = (data: StreamingResponseData & { model?: string }) => {
+        console.log('Attempting to send data:', Object.keys(data));
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
@@ -518,16 +536,29 @@ async function handleComparisonRequest(
 
 // main POST handler
 export async function POST(req: NextRequest) {
+  console.log('Starting POST handler');
+
   // Validate and preprocess the input
   const validationResult = await validateAndPreprocessInput(req);
+  console.log(
+    'Validation result:',
+    validationResult instanceof NextResponse ? 'Error Response' : 'Valid Input',
+  );
+
   if (validationResult instanceof NextResponse) {
     return validationResult;
   }
 
   const { sanitizedInput, originalQuestion } = validationResult;
 
+  // Check if this is a comparison request
+  const isComparison = 'modelA' in sanitizedInput;
+  console.log('Request type:', isComparison ? 'Comparison' : 'Regular Chat');
+
   // Load site configuration
   const siteConfig = loadSiteConfigSync();
+  console.log('Site config loaded:', !!siteConfig);
+
   if (!siteConfig) {
     return NextResponse.json(
       { error: 'Failed to load site configuration' },
@@ -535,9 +566,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Check if this is a comparison request
-  const isComparison = 'modelA' in sanitizedInput;
   if (isComparison) {
+    console.log('Handling comparison request');
     return handleComparisonRequest(
       req,
       sanitizedInput as ComparisonRequestBody,
@@ -547,23 +577,32 @@ export async function POST(req: NextRequest) {
 
   // Apply rate limiting
   const rateLimitResult = await applyRateLimiting(req, siteConfig);
+  console.log(
+    'Rate limit check result:',
+    rateLimitResult ? 'Limited' : 'Allowed',
+  );
+
   if (rateLimitResult) {
     return rateLimitResult;
   }
 
+  console.log('Starting stream setup');
   // Get client IP for logging purposes
   const clientIP = getClientIp(req);
 
   // Set up streaming response
+  console.log('Before stream creation');
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      // Helper function to send data chunks
       const sendData = (data: StreamingResponseData) => {
+        console.log('Attempting to send data:', Object.keys(data));
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 
       try {
+        console.log('Stream processing started');
+
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
           sanitizedInput.collection,
@@ -571,13 +610,23 @@ export async function POST(req: NextRequest) {
           siteConfig,
         );
 
-        const { retriever, documentPromise } =
-          await setupVectorStoreAndRetriever(
-            index,
-            filter,
-            sendData,
-            sanitizedInput.sourceCount || 4,
-          );
+        const { retriever } = await setupVectorStoreAndRetriever(
+          index,
+          filter,
+          sendData,
+          sanitizedInput.sourceCount || 4,
+        );
+
+        // Factory function to define promise and resolver together
+        const createDocumentPromise = () => {
+          let resolveFn: (docs: Document[]) => void;
+          const promise = new Promise<Document[]>((resolve) => {
+            resolveFn = resolve;
+          });
+          return { documentPromise: promise, resolveWithDocuments: resolveFn! };
+        };
+        const { documentPromise, resolveWithDocuments } =
+          createDocumentPromise();
 
         // Execute language model chain
         const fullResponse = await setupAndExecuteLanguageModelChain(
@@ -587,10 +636,13 @@ export async function POST(req: NextRequest) {
           sendData,
           sanitizedInput.sourceCount || 4,
           filter,
+          resolveWithDocuments,
         );
 
-        // Log warning if no sources were found
+        // Wait for documents for Firestore, but sources are already sent
         const promiseDocuments = await documentPromise;
+        console.log('Documents received:', promiseDocuments.length);
+
         if (promiseDocuments.length === 0) {
           console.warn(
             `Warning: No sources returned for query: "${sanitizedInput.question}"`,
@@ -599,8 +651,12 @@ export async function POST(req: NextRequest) {
           console.log('Pinecone index:', getPineconeIndexName());
         }
 
+        // Grok  Said remove this line if sending in the chain is sufficient.
+        // sendData({ sourceDocs: promiseDocuments });
+
         // Save answer to Firestore if not a private session
         if (!sanitizedInput.privateSession) {
+          console.log('Saving to Firestore...');
           const docId = await saveAnswerToFirestore(
             originalQuestion,
             fullResponse,
@@ -609,18 +665,22 @@ export async function POST(req: NextRequest) {
             sanitizedInput.history,
             clientIP,
           );
-
+          console.log('Saved to Firestore with ID:', docId);
           sendData({ docId });
         }
 
+        console.log('Closing stream controller');
         controller.close();
       } catch (error: unknown) {
+        console.error('Error in stream handler:', error);
         handleError(error, sendData);
       } finally {
+        console.log('Stream processing ended');
         controller.close();
       }
     },
   });
+  console.log('After stream creation');
 
   // Return streaming response
   return new NextResponse(stream, {

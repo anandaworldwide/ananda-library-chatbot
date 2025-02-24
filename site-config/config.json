@@ -95,8 +95,8 @@
       "whole_library": "All authors"
     },
     "includedLibraries": [
-      { "name": "Crystal Clarity", "weight": 15 },
-      { "name": "ananda.org", "weight": 85 }
+      { "name": "ananda.org", "weight": 67 },
+      { "name": "Crystal Clarity", "weight": 33 }
     ],
     "enabledMediaTypes": ["text"],
     "libraryMappings": {

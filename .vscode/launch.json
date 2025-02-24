@@ -48,9 +48,9 @@
       }
     },
     {
-      "name": "npm run dev jairam",
+      "name": "npm run dev ananda-public",
       "request": "launch",
-      "runtimeArgs": ["run", "dev", "jairam"],
+      "runtimeArgs": ["run", "dev", "ananda-public"],
       "runtimeExecutable": "${env:HOME}/.nvm/versions/node/v20.17.0/bin/npm",
       "skipFiles": ["<node_internals>/**"],
       "type": "node",
