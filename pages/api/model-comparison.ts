@@ -74,8 +74,14 @@ export default async function handler(
     }
 
     // Add library filter based on site configuration
-    if (siteConfig.includedLibraries) {
-      filter.$and.push({ library: { $in: siteConfig.includedLibraries } });
+    if (
+      siteConfig.includedLibraries &&
+      siteConfig.includedLibraries.length > 0
+    ) {
+      const libraryNames = siteConfig.includedLibraries.map((lib) =>
+        typeof lib === 'string' ? lib : lib.name,
+      );
+      filter.$and.push({ library: { $in: libraryNames } });
     }
 
     async function setupRetrieverAndDocumentPromise() {
