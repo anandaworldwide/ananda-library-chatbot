@@ -59,6 +59,7 @@ import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { SiteConfig } from '@/types/siteConfig';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
 import { getClientIp } from '@/utils/server/ipUtils';
+import { isDevelopment } from '@/utils/env';
 
 export const runtime = 'nodejs';
 export const maxDuration = 240;
@@ -106,14 +107,31 @@ function matchesPattern(origin: string, pattern: string): boolean {
 // Middleware to handle CORS
 function handleCors(req: NextRequest, siteConfig: SiteConfig) {
   const origin = req.headers.get('origin');
+  const referer = req.headers.get('referer');
 
   // If no origin header, allow the request (likely a server-side or direct API call)
   if (!origin) {
+    // Check if this is a WordPress request (might use Referer instead of Origin)
+    if (
+      isDevelopment() &&
+      referer &&
+      (referer.includes('.local') ||
+        referer.includes('localhost') ||
+        referer.includes('wordpress'))
+    ) {
+      console.log(`Allowing request with referer: ${referer}`);
+      return null;
+    }
     return null;
   }
 
-  // Allow localhost for development
-  if (origin.startsWith('http://localhost:') || origin === 'http://localhost') {
+  // Allow localhost and *.local domains only in development
+  if (
+    isDevelopment() &&
+    (origin.startsWith('http://localhost:') ||
+      origin === 'http://localhost' ||
+      origin.match(/^https?:\/\/[^.]+\.local(:\d+)?$/))
+  ) {
     return null;
   }
 
@@ -148,22 +166,46 @@ function addCorsHeaders(
   siteConfig: SiteConfig,
 ): NextResponse {
   const origin = req.headers.get('origin');
+  const referer = req.headers.get('referer');
 
-  // If no origin, no need to add CORS headers
+  // If no origin, check if it's a WordPress request using Referer
+  if (
+    !origin &&
+    isDevelopment() &&
+    referer &&
+    (referer.includes('.local') ||
+      referer.includes('localhost') ||
+      referer.includes('wordpress'))
+  ) {
+    // For WordPress requests without origin, use a wildcard or extract domain from referer
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.headers.set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization',
+    );
+    response.headers.set('Access-Control-Allow-Credentials', 'false'); // Must be false when using wildcard origin
+    return response;
+  }
+
+  // If no origin and not a WordPress request, no need to add CORS headers
   if (!origin) {
     return response;
   }
 
   // Check if origin is allowed
-  const isLocalhost =
-    origin.startsWith('http://localhost:') || origin === 'http://localhost';
+  const isLocalDev =
+    isDevelopment() &&
+    (origin.startsWith('http://localhost:') ||
+      origin === 'http://localhost' ||
+      origin.match(/^https?:\/\/[^.]+\.local(:\d+)?$/));
   const allowedDomains = siteConfig.allowedFrontEndDomains || [];
   const isAllowedDomain = allowedDomains.some((pattern) =>
     matchesPattern(origin, pattern),
   );
 
   // If origin is allowed, add CORS headers
-  if (isLocalhost || isAllowedDomain) {
+  if (isLocalDev || isAllowedDomain) {
     response.headers.set('Access-Control-Allow-Origin', origin);
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     response.headers.set(
@@ -176,7 +218,10 @@ function addCorsHeaders(
   return response;
 }
 
-async function validateAndPreprocessInput(req: NextRequest): Promise<
+async function validateAndPreprocessInput(
+  req: NextRequest,
+  siteConfig: SiteConfig,
+): Promise<
   | {
       sanitizedInput: ChatRequestBody;
       originalQuestion: string;
@@ -190,10 +235,11 @@ async function validateAndPreprocessInput(req: NextRequest): Promise<
   } catch (error) {
     console.error('Error parsing request body:', error);
     console.log('Raw request body:', await req.text());
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: 'Invalid JSON in request body' },
       { status: 400 },
     );
+    return addCorsHeaders(response, req, siteConfig);
   }
 
   const { collection, question } = requestBody;
@@ -203,10 +249,11 @@ async function validateAndPreprocessInput(req: NextRequest): Promise<
     typeof question !== 'string' ||
     !validator.isLength(question, { min: 1, max: 4000 })
   ) {
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: 'Invalid question. Must be between 1 and 4000 characters.' },
       { status: 400 },
     );
+    return addCorsHeaders(response, req, siteConfig);
   }
 
   const originalQuestion = question;
@@ -220,10 +267,11 @@ async function validateAndPreprocessInput(req: NextRequest): Promise<
     typeof collection !== 'string' ||
     !['master_swami', 'whole_library'].includes(collection)
   ) {
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: 'Invalid collection provided' },
       { status: 400 },
     );
+    return addCorsHeaders(response, req, siteConfig);
   }
 
   return {
@@ -251,10 +299,11 @@ async function applyRateLimiting(
   );
 
   if (!isAllowed) {
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: 'Daily query limit reached. Please try again tomorrow.' },
       { status: 429 },
     );
+    return addCorsHeaders(response, req, siteConfig);
   }
 
   return null; // Rate limiting passed
@@ -635,23 +684,40 @@ export async function OPTIONS(req: NextRequest) {
   // Create a basic response
   const response = new NextResponse(null, { status: 204 });
 
-  // Add CORS headers and return
+  // In development mode, be more permissive with CORS
+  if (isDevelopment()) {
+    const origin = req.headers.get('origin');
+    const referer = req.headers.get('referer');
+
+    // If we have an origin header, use it
+    if (origin) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+    }
+    // If no origin but we have a referer, use * (wildcard)
+    else if (referer) {
+      response.headers.set('Access-Control-Allow-Origin', '*');
+      response.headers.set('Access-Control-Allow-Credentials', 'false');
+    }
+
+    // Add permissive headers for development
+    response.headers.set(
+      'Access-Control-Allow-Methods',
+      'GET, POST, OPTIONS, PUT, DELETE',
+    );
+    response.headers.set(
+      'Access-Control-Allow-Headers',
+      'X-Requested-With, Content-Type, Authorization',
+    );
+
+    return response;
+  }
+
+  // In production, add standard CORS headers
   return addCorsHeaders(response, req, siteConfig);
 }
 
 // main POST handler
 export async function POST(req: NextRequest) {
-  // Validate and preprocess the input
-  const validationResult = await validateAndPreprocessInput(req);
-  if (validationResult instanceof NextResponse) {
-    return validationResult;
-  }
-
-  const { sanitizedInput, originalQuestion } = validationResult;
-
-  // Check if this is a comparison request
-  const isComparison = 'modelA' in sanitizedInput;
-
   // Load site configuration
   const siteConfig = loadSiteConfigSync();
 
@@ -661,6 +727,17 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  // Validate and preprocess the input
+  const validationResult = await validateAndPreprocessInput(req, siteConfig);
+  if (validationResult instanceof NextResponse) {
+    return validationResult;
+  }
+
+  const { sanitizedInput, originalQuestion } = validationResult;
+
+  // Check if this is a comparison request
+  const isComparison = 'modelA' in sanitizedInput;
 
   // Check CORS restrictions
   const corsCheckResult = handleCors(req, siteConfig);
