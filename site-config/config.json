@@ -93,6 +93,7 @@
     "chatPlaceholder": "Where can I find info on Sunday services?",
     "allowedFrontEndDomains": [
       "ananda.org",
+      "staging.ananda.org",
       "ananda-public-chatbot.vercel.app",
       "*-ananda-web-services-projects.vercel.app",
       "chatbot-test.local/sample-page/"
