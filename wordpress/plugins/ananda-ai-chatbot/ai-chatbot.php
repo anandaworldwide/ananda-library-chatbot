@@ -43,6 +43,18 @@ function aichatbot_register_options() {
         'sanitize_callback' => 'aichatbot_validate_window_height',
         'default' => 600,
     ));
+    
+    // Register setting for full page chat URL
+    register_setting('aichatbot_settings_group', 'aichatbot_fullpage_url', array(
+        'type' => 'string',
+        'default' => '/chat',
+    ));
+    
+    // Register setting for placeholder questions
+    register_setting('aichatbot_settings_group', 'aichatbot_placeholder_questions', array(
+        'type' => 'string',
+        'default' => "Ask me anything about this website",
+    ));
 }
 add_action('admin_init', 'aichatbot_register_options');
 
@@ -121,6 +133,39 @@ function aichatbot_settings_page() {
                         </p>
                     </td>
                 </tr>
+                
+                <!-- Full Page Chat Settings -->
+                <tr>
+                    <th colspan="2"><h2 class="title">Full Page Chat Settings</h2></th>
+                </tr>
+                
+                <tr>
+                    <th><label for="aichatbot_fullpage_url">Full Page Chat URL</label></th>
+                    <td>
+                        <input type="text" id="aichatbot_fullpage_url" name="aichatbot_fullpage_url" 
+                               value="<?php echo esc_attr(get_option('aichatbot_fullpage_url', '/chat')); ?>" size="50" />
+                        <p class="description">
+                            Enter the URL for the full page chat experience. This can be a relative URL (e.g., "/chat") 
+                            or an absolute URL (e.g., "https://example.com/chat").
+                        </p>
+                    </td>
+                </tr>
+                
+                <!-- Placeholder Questions Settings -->
+                <tr>
+                    <th colspan="2"><h2 class="title">Placeholder Questions</h2></th>
+                </tr>
+                
+                <tr>
+                    <th><label for="aichatbot_placeholder_questions">Placeholder Questions</label></th>
+                    <td>
+                        <textarea id="aichatbot_placeholder_questions" name="aichatbot_placeholder_questions" 
+                                  rows="10" cols="60"><?php echo esc_attr(get_option('aichatbot_placeholder_questions')); ?></textarea>
+                        <p class="description">
+                            Enter one question per line. These will be randomly shown as placeholders in the chat input when empty.
+                        </p>
+                    </td>
+                </tr>
             </table>
             <?php submit_button(); ?>
         </form>
@@ -151,12 +196,16 @@ function aichatbot_enqueue_assets() {
     $font_size = get_option('aichatbot_font_size', 16);
     $window_width = get_option('aichatbot_window_width', 375);
     $window_height = get_option('aichatbot_window_height', 600);
+    $fullpage_url = get_option('aichatbot_fullpage_url', '/chat');
     
+    // Pass data to JavaScript
     wp_localize_script('aichatbot-js', 'aichatbotData', array(
         'vercelUrl' => $vercel_url,
         'fontSizePx' => $font_size,
         'windowWidthPx' => $window_width,
-        'windowHeightPx' => $window_height
+        'windowHeightPx' => $window_height,
+        'fullPageUrl' => $fullpage_url,
+        'placeholderQuestionsText' => get_option('aichatbot_placeholder_questions', '')
     ));
 }
 add_action('wp_enqueue_scripts', 'aichatbot_enqueue_assets');
@@ -172,7 +221,7 @@ function aichatbot_add_custom_css() {
         #aichatbot-window {
             width: ' . $window_width . 'px;
             height: ' . $window_height . 'px;
-            font-size: ' . $font_size . 'px;
+            font-size: ' . $font_size . 'px !important;
         }
         #aichatbot-messages, 
         #aichatbot-input,
@@ -180,7 +229,19 @@ function aichatbot_add_custom_css() {
         .aichatbot-bot-message, 
         .aichatbot-error-message, 
         .aichatbot-typing {
-            font-size: ' . $font_size . 'px;
+            font-size: ' . $font_size . 'px !important;
+        }
+        
+        /* Make sure message content respects font size */
+        .aichatbot-message-content {
+            font-size: ' . $font_size . 'px !important;
+        }
+        
+        .aichatbot-message-content *,
+        .aichatbot-message-content p,
+        .aichatbot-message-content li,
+        .aichatbot-message-content a {
+            font-size: inherit !important;
         }
         
         /* Responsive adjustments for mobile */
@@ -207,6 +268,7 @@ function aichatbot_add_chat_bubble() {
           </div>';
     echo '<div id="aichatbot-window" style="display:none;">
             <div id="aichatbot-messages"></div>
+            <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Assist uses AI, mistakes may occur.</div>
             <div id="aichatbot-input-container">
                 <input type="text" id="aichatbot-input" placeholder="How can I learn to meditate?" />
                 <button id="aichatbot-send"><i class="fas fa-paper-plane"></i></button>

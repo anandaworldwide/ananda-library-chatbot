@@ -15,17 +15,44 @@
  * - Session persistence across page navigation
  * - Auto-focus on input field when chat opens
  * - Close on Escape key or clicking outside
+ * - Full page chat option for expanded experience
  */
 
-document.addEventListener("DOMContentLoaded", () => {
-  const bubble = document.getElementById("aichatbot-bubble");
-  const chatWindow = document.getElementById("aichatbot-window");
-  const input = document.getElementById("aichatbot-input");
-  const sendButton = document.getElementById("aichatbot-send");
-  const messages = document.getElementById("aichatbot-messages");
+document.addEventListener('DOMContentLoaded', () => {
+  const bubble = document.getElementById('aichatbot-bubble');
+  const chatWindow = document.getElementById('aichatbot-window');
+  const input = document.getElementById('aichatbot-input');
+  const sendButton = document.getElementById('aichatbot-send');
+  const messages = document.getElementById('aichatbot-messages');
+
+  // Default placeholder questions in case WordPress settings are not available
+  let placeholderQuestions = ['Ask me anything about this website'];
+
+  // Override with questions from WordPress if available
+  if (
+    typeof aichatbotData !== 'undefined' &&
+    aichatbotData.placeholderQuestionsText &&
+    aichatbotData.placeholderQuestionsText.trim() !== ''
+  ) {
+    // Split the text into lines and filter out empty lines
+    const questions = aichatbotData.placeholderQuestionsText
+      .split('\n')
+      .map((question) => question.trim())
+      .filter((question) => question !== '');
+
+    if (questions.length > 0) {
+      placeholderQuestions = questions;
+    }
+  }
+
+  // Function to get a random placeholder question
+  function getRandomPlaceholder() {
+    const randomIndex = Math.floor(Math.random() * placeholderQuestions.length);
+    return placeholderQuestions[randomIndex];
+  }
 
   // Apply customization settings from WordPress if available
-  if (typeof aichatbotData !== "undefined") {
+  if (typeof aichatbotData !== 'undefined') {
     // Apply font size setting if provided
     if (aichatbotData.fontSizePx) {
       const fontSize = parseInt(aichatbotData.fontSizePx);
@@ -54,13 +81,36 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Add a header with close button to the chat window
-  const header = document.createElement("div");
-  header.id = "aichatbot-header";
+  const header = document.createElement('div');
+  header.id = 'aichatbot-header';
   header.innerHTML = `
-    <h3>Chat Assistant</h3>
+    <h3>Ananda Assist</h3>
     <span id="aichatbot-close"><i class="fas fa-chevron-down"></i></span>
   `;
   chatWindow.insertBefore(header, chatWindow.firstChild);
+
+  // Add full page chat button but don't append it yet - we'll add it to the controls container
+  const fullPageButton = document.createElement('div');
+  fullPageButton.id = 'aichatbot-fullpage';
+  fullPageButton.innerHTML = `<i class="fas fa-expand-alt"></i> Open full page chat`;
+
+  // Full page chat button functionality
+  fullPageButton.addEventListener('click', () => {
+    // Get the full page chat URL (either from WordPress data or default)
+    let fullPageUrl = '/chat';
+
+    if (typeof aichatbotData !== 'undefined' && aichatbotData.fullPageUrl) {
+      fullPageUrl = aichatbotData.fullPageUrl;
+    }
+
+    // Open the full page chat in a new tab/window
+    window.open(fullPageUrl, '_blank');
+  });
+
+  // Create controls container (to hold both buttons)
+  const controlsContainer = document.createElement('div');
+  controlsContainer.id = 'aichatbot-controls';
+  chatWindow.appendChild(controlsContainer);
 
   // Chat history storage
   let chatHistory = [];
@@ -69,7 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadChatState() {
     try {
       // Load chat history
-      const savedHistory = sessionStorage.getItem("aichatbot_history");
+      const savedHistory = sessionStorage.getItem('aichatbot_history');
       if (savedHistory) {
         chatHistory = JSON.parse(savedHistory);
 
@@ -77,19 +127,19 @@ document.addEventListener("DOMContentLoaded", () => {
         chatHistory.forEach(([userMsg, botMsg]) => {
           // Add user message
           if (userMsg) {
-            const userMessage = document.createElement("div");
-            userMessage.className = "aichatbot-user-message";
+            const userMessage = document.createElement('div');
+            userMessage.className = 'aichatbot-user-message';
             userMessage.textContent = userMsg;
             messages.appendChild(userMessage);
           }
 
           // Add bot message
           if (botMsg) {
-            const botMessage = document.createElement("div");
-            botMessage.className = "aichatbot-bot-message";
+            const botMessage = document.createElement('div');
+            botMessage.className = 'aichatbot-bot-message';
 
-            const messageContent = document.createElement("div");
-            messageContent.className = "aichatbot-message-content";
+            const messageContent = document.createElement('div');
+            messageContent.className = 'aichatbot-message-content';
             messageContent.innerHTML = renderMarkdown(botMsg);
 
             botMessage.appendChild(messageContent);
@@ -104,27 +154,27 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // Load UI state (window open/closed)
-      const windowVisible = sessionStorage.getItem("aichatbot_window_visible");
+      const windowVisible = sessionStorage.getItem('aichatbot_window_visible');
 
       // Check screen width - only auto-open on larger screens
       const isLargeScreen = window.innerWidth >= 768; // Typical tablet/desktop breakpoint
 
-      if (windowVisible === "true") {
+      if (windowVisible === 'true') {
         // If it was visible and screen is large enough, show it
         // Otherwise leave it minimized on mobile
-        chatWindow.style.display = isLargeScreen ? "flex" : "none";
+        chatWindow.style.display = isLargeScreen ? 'flex' : 'none';
       } else {
         // Default to hiding chat window if it was previously closed
-        chatWindow.style.display = "none";
+        chatWindow.style.display = 'none';
       }
     } catch (e) {
-      console.error("Error loading chat state:", e);
+      console.error('Error loading chat state:', e);
       // Default to hiding chat window
-      chatWindow.style.display = "none";
+      chatWindow.style.display = 'none';
     }
 
     // Focus on input field when chat window is shown
-    if (chatWindow.style.display === "flex") {
+    if (chatWindow.style.display === 'flex') {
       setTimeout(() => input.focus(), 0);
     }
 
@@ -135,57 +185,60 @@ document.addEventListener("DOMContentLoaded", () => {
   // Save chat history and UI state to sessionStorage
   function saveChatState() {
     try {
-      sessionStorage.setItem("aichatbot_history", JSON.stringify(chatHistory));
-      sessionStorage.setItem("aichatbot_window_visible", chatWindow.style.display === "flex");
+      sessionStorage.setItem('aichatbot_history', JSON.stringify(chatHistory));
+      sessionStorage.setItem(
+        'aichatbot_window_visible',
+        chatWindow.style.display === 'flex',
+      );
 
       // Update placeholder whenever chat history is saved
       if (chatHistory.length > 0) {
-        input.placeholder = "";
+        input.placeholder = '';
       }
     } catch (e) {
-      console.error("Error saving chat state:", e);
+      console.error('Error saving chat state:', e);
     }
   }
 
   // Load chat state on page load
   loadChatState();
 
-  // Set placeholder text for the input field - only when no chat history exists
-  function updatePlaceholder() {
-    if (chatHistory.length === 0) {
-      input.placeholder = "How can I learn to meditate?";
-    } else {
-      input.placeholder = "";
+  // Add initial welcome message if chat is empty
+  function addWelcomeMessage() {
+    if (chatHistory.length === 0 && messages.children.length === 0) {
+      const welcomeMessage = document.createElement('div');
+      welcomeMessage.className = 'aichatbot-bot-message';
+
+      const messageContent = document.createElement('div');
+      messageContent.className = 'aichatbot-message-content';
+      messageContent.innerHTML = '<p>Hi! Ask me anything.</p>';
+
+      welcomeMessage.appendChild(messageContent);
+      messages.appendChild(welcomeMessage);
     }
   }
 
-  // Initial placeholder setup
-  updatePlaceholder();
+  // Call once on page load
+  addWelcomeMessage();
 
-  // Clear placeholder as soon as user starts typing if it's their first message
-  input.addEventListener("input", () => {
-    if (chatHistory.length === 0 && input.value.length > 0) {
-      input.placeholder = "";
+  // Set placeholder text for the input field - only when no chat history exists
+  function updatePlaceholder() {
+    if (chatHistory.length === 0 && messages.children.length === 0) {
+      input.placeholder = getRandomPlaceholder();
     }
-  });
-
-  // Restore placeholder if input is cleared and no chat history exists
-  input.addEventListener("blur", () => {
-    if (chatHistory.length === 0 && input.value.length === 0) {
-      input.placeholder = "How can I learn to meditate?";
-    }
-  });
+  }
 
   // Close button functionality
-  document.getElementById("aichatbot-close").addEventListener("click", () => {
-    chatWindow.style.display = "none";
+  document.getElementById('aichatbot-close').addEventListener('click', () => {
+    chatWindow.style.display = 'none';
     saveChatState();
   });
 
-  // Show/hide chat window when bubble is clicked
-  bubble.addEventListener("click", (e) => {
-    chatWindow.style.display = chatWindow.style.display === "none" ? "flex" : "none";
-    if (chatWindow.style.display === "flex") {
+  // Also call when chat window is opened
+  bubble.addEventListener('click', (e) => {
+    chatWindow.style.display =
+      chatWindow.style.display === 'none' ? 'flex' : 'none';
+    if (chatWindow.style.display === 'flex') {
       // Focus on input field when chat window is shown
       setTimeout(() => input.focus(), 0);
       // Scroll to bottom when opening chat window
@@ -193,11 +246,14 @@ document.addEventListener("DOMContentLoaded", () => {
         messages.scrollTop = messages.scrollHeight;
       }, 0);
 
+      // Add welcome message if chat is empty
+      addWelcomeMessage();
+
       // Ensure placeholder is correct when opening chat
       if (chatHistory.length > 0) {
-        input.placeholder = "";
+        input.placeholder = '';
       } else {
-        input.placeholder = "How can I learn to meditate?";
+        input.placeholder = getRandomPlaceholder();
       }
     }
     saveChatState();
@@ -206,27 +262,31 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Close chat window when clicking outside of it
-  document.addEventListener("click", (e) => {
-    if (chatWindow.style.display === "flex" && !chatWindow.contains(e.target) && e.target !== bubble) {
-      chatWindow.style.display = "none";
+  document.addEventListener('click', (e) => {
+    if (
+      chatWindow.style.display === 'flex' &&
+      !chatWindow.contains(e.target) &&
+      e.target !== bubble
+    ) {
+      chatWindow.style.display = 'none';
       saveChatState();
     }
   });
 
   // Handle Escape key to minimize chat window
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && chatWindow.style.display === "flex") {
-      chatWindow.style.display = "none";
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && chatWindow.style.display === 'flex') {
+      chatWindow.style.display = 'none';
       saveChatState();
     }
   });
 
   // Send message when button is clicked
-  sendButton.addEventListener("click", sendMessage);
+  sendButton.addEventListener('click', sendMessage);
 
   // Send message when Enter key is pressed
-  input.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
+  input.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
       sendMessage();
     }
   });
@@ -235,7 +295,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentAbortController = null;
 
   // Default collection and settings
-  const defaultCollection = "whole_library";
+  const defaultCollection = 'whole_library';
   const privateSession = false;
   const mediaTypes = { text: true, audio: false, youtube: false };
   const sourceCount = 6;
@@ -251,85 +311,85 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Add stop button to UI
-  const stopButton = document.createElement("button");
-  stopButton.id = "aichatbot-stop";
+  const stopButton = document.createElement('button');
+  stopButton.id = 'aichatbot-stop';
   stopButton.innerHTML = '<i class="fas fa-stop"></i>';
-  stopButton.style.backgroundColor = "#FFF9C4"; // Pale yellow background
-  stopButton.style.color = "#555"; // Darker text for better contrast
-  stopButton.style.display = "none";
-  stopButton.addEventListener("click", () => {
+  stopButton.style.backgroundColor = '#FFF9C4'; // Pale yellow background
+  stopButton.style.color = '#555'; // Darker text for better contrast
+  stopButton.style.display = 'none';
+  stopButton.addEventListener('click', () => {
     stopStreaming();
-    stopButton.style.display = "none";
-    sendButton.style.display = "inline-block";
+    stopButton.style.display = 'none';
+    sendButton.style.display = 'inline-block';
   });
   sendButton.parentNode.insertBefore(stopButton, sendButton.nextSibling);
 
   // Track accumulated response for streaming
-  let accumulatedResponse = "";
+  let accumulatedResponse = '';
   let currentBotMessage = null;
 
   // Simple markdown parser function
   function renderMarkdown(text) {
-    if (!text) return "";
+    if (!text) return '';
 
     // Pre-process: Convert double line breaks to paragraph markers without adding extra newlines
-    text = text.replace(/\n\s*\n/g, "<p-break>");
+    text = text.replace(/\n\s*\n/g, '<p-break>');
 
     // Handle basic markdown
     return (
       text
         // Headers: # Header 1, ## Header 2, etc.
-        .replace(/^### (.*$)/gim, "<h3>$1</h3>")
-        .replace(/^## (.*$)/gim, "<h2>$1</h2>")
-        .replace(/^# (.*$)/gim, "<h1>$1</h1>")
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
 
         // Bold: **text** or __text__
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-        .replace(/__(.*?)__/g, "<strong>$1</strong>")
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.*?)__/g, '<strong>$1</strong>')
 
         // Italic: *text* or _text_
-        .replace(/\*(.*?)\*/g, "<em>$1</em>")
-        .replace(/_(.*?)_/g, "<em>$1</em>")
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/_(.*?)_/g, '<em>$1</em>')
 
         // Links: [title](url)
         .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')
 
         // Lists: - item or * item
-        .replace(/^\s*-\s*(.*$)/gim, "<ul><li>$1</li></ul>")
-        .replace(/^\s*\*\s*(.*$)/gim, "<ul><li>$1</li></ul>")
+        .replace(/^\s*-\s*(.*$)/gim, '<ul><li>$1</li></ul>')
+        .replace(/^\s*\*\s*(.*$)/gim, '<ul><li>$1</li></ul>')
 
         // Numbered lists: 1. item
-        .replace(/^\s*\d+\.\s*(.*$)/gim, "<ol><li>$1</li></ol>")
+        .replace(/^\s*\d+\.\s*(.*$)/gim, '<ol><li>$1</li></ol>')
 
         // Blockquotes: > text
-        .replace(/^\s*>\s*(.*$)/gim, "<blockquote>$1</blockquote>")
+        .replace(/^\s*>\s*(.*$)/gim, '<blockquote>$1</blockquote>')
 
         // Code blocks
-        .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
+        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
 
         // Inline code: `code`
-        .replace(/`(.*?)`/g, "<code>$1</code>")
+        .replace(/`(.*?)`/g, '<code>$1</code>')
 
         // Line breaks (but not before or after paragraph breaks)
-        .replace(/\n(?!<p-break>|<\/?(ul|ol|li|h|p|bl|code|table))/gm, "<br />")
-        .replace(/<br \/>(<p-break>)/g, "$1")
-        .replace(/(<p-break>)<br \/>/g, "$1")
+        .replace(/\n(?!<p-break>|<\/?(ul|ol|li|h|p|bl|code|table))/gm, '<br />')
+        .replace(/<br \/>(<p-break>)/g, '$1')
+        .replace(/(<p-break>)<br \/>/g, '$1')
 
         // Merge adjacent list items
-        .replace(/<\/ul>\s*<ul>/g, "")
-        .replace(/<\/ol>\s*<ol>/g, "")
+        .replace(/<\/ul>\s*<ul>/g, '')
+        .replace(/<\/ol>\s*<ol>/g, '')
 
         // Fix extra breaks in lists
-        .replace(/<\/li><br \/><li>/g, "</li><li>")
+        .replace(/<\/li><br \/><li>/g, '</li><li>')
 
         // Post-process: Convert paragraph markers to actual paragraphs with moderate margin
         // and ensure no extra BR tags are around paragraph breaks
-        .replace(/<br \/>*<p-break>/g, "<p-break>")
-        .replace(/<p-break><br \/>*/g, "<p-break>")
-        .replace(/<p-break>/g, "</p><p>")
+        .replace(/<br \/>*<p-break>/g, '<p-break>')
+        .replace(/<p-break><br \/>*/g, '<p-break>')
+        .replace(/<p-break>/g, '</p><p>')
 
         // Wrap content in paragraph tags if not already wrapped
-        .replace(/^(.+?)(?=<p|$)/s, "<p>$1</p>")
+        .replace(/^(.+?)(?=<p|$)/s, '<p>$1</p>')
     );
   }
 
@@ -338,7 +398,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!message) return;
 
     // Always clear placeholder immediately on sending a message
-    input.placeholder = "";
+    input.placeholder = '';
 
     // If already streaming, stop it
     if (stopStreaming()) {
@@ -346,45 +406,51 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Reset accumulated response
-    accumulatedResponse = "";
+    accumulatedResponse = '';
 
     // Show user message
-    const userMessage = document.createElement("div");
-    userMessage.className = "aichatbot-user-message";
+    const userMessage = document.createElement('div');
+    userMessage.className = 'aichatbot-user-message';
     userMessage.textContent = message;
     messages.appendChild(userMessage);
-    input.value = "";
+    input.value = '';
 
     // Create bot message container but don't add to DOM yet
-    currentBotMessage = document.createElement("div");
-    currentBotMessage.className = "aichatbot-bot-message";
+    currentBotMessage = document.createElement('div');
+    currentBotMessage.className = 'aichatbot-bot-message';
 
     // Add message content directly (no sources info)
-    const messageContent = document.createElement("div");
-    messageContent.className = "aichatbot-message-content";
+    const messageContent = document.createElement('div');
+    messageContent.className = 'aichatbot-message-content';
+    // Ensure font size is properly applied
+    const fontSize =
+      typeof aichatbotData !== 'undefined' && aichatbotData.fontSizePx
+        ? aichatbotData.fontSizePx + 'px'
+        : '16px';
+    messageContent.style.cssText = `font-size: ${fontSize} !important; line-height: 1.5;`;
     currentBotMessage.appendChild(messageContent);
     // We'll add the bot message to the DOM only when content starts streaming
 
     // Show typing indicator
-    const typingIndicator = document.createElement("div");
-    typingIndicator.className = "aichatbot-typing";
-    const typingSpan = document.createElement("span");
-    typingSpan.className = "typing-dots";
-    typingSpan.textContent = ".";
+    const typingIndicator = document.createElement('div');
+    typingIndicator.className = 'aichatbot-typing';
+    const typingSpan = document.createElement('span');
+    typingSpan.className = 'typing-dots';
+    typingSpan.textContent = '.';
     typingIndicator.appendChild(typingSpan);
     messages.appendChild(typingIndicator);
     messages.scrollTop = messages.scrollHeight;
 
     // Toggle buttons
-    sendButton.style.display = "none";
-    stopButton.style.display = "inline-block";
+    sendButton.style.display = 'none';
+    stopButton.style.display = 'inline-block';
 
     try {
       // Create new abort controller
       currentAbortController = new AbortController();
 
       // Update chat history with user message (empty bot response for now)
-      chatHistory.push([message, ""]);
+      chatHistory.push([message, '']);
       // Save state after adding user message
       saveChatState();
       // Update clear history button visibility
@@ -392,8 +458,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Send to Vercel with streaming support
       const response = await fetch(aichatbotData.vercelUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: message,
           history: chatHistory,
@@ -409,22 +475,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (!response.ok) {
         // Try to get the error payload from the response
-        let errorPayload = "";
+        let errorPayload = '';
         try {
           const errorData = await response.json();
           errorPayload = errorData.error || JSON.stringify(errorData);
-        } catch (e) {
+        } catch (error) {
+          console.error('Error parsing error response:', error);
           errorPayload = `Status: ${response.status}`;
         }
         throw new Error(`Server error (${errorPayload})`);
       }
 
       // Check if the response is a stream
-      if (response.headers.get("content-type")?.includes("text/event-stream")) {
+      if (response.headers.get('content-type')?.includes('text/event-stream')) {
         // Handle streaming response
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        const messageContent = currentBotMessage.querySelector(".aichatbot-message-content");
+        const messageContent = currentBotMessage.querySelector(
+          '.aichatbot-message-content',
+        );
         let firstTokenReceived = false;
         let hasContent = false;
 
@@ -433,10 +502,10 @@ document.addEventListener("DOMContentLoaded", () => {
           if (done) break;
 
           const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
+          const lines = chunk.split('\n');
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
+            if (line.startsWith('data: ')) {
               try {
                 const jsonData = JSON.parse(line.slice(5));
 
@@ -450,7 +519,8 @@ document.addEventListener("DOMContentLoaded", () => {
                   // Only add bot message to DOM and remove typing indicator if we have actual visible content
                   if (hasContent && !firstTokenReceived) {
                     // Make sure we're not just receiving metadata or whitespace
-                    const actualContent = accumulatedResponse.replace(/\s+/g, "").length > 0;
+                    const actualContent =
+                      accumulatedResponse.replace(/\s+/g, '').length > 0;
                     if (actualContent) {
                       // Add the bot message to DOM now that we have content
                       messages.appendChild(currentBotMessage);
@@ -463,13 +533,18 @@ document.addEventListener("DOMContentLoaded", () => {
                   }
 
                   // Render markdown for the accumulated response
-                  messageContent.innerHTML = renderMarkdown(accumulatedResponse);
+                  messageContent.innerHTML =
+                    renderMarkdown(accumulatedResponse);
 
                   // Update the last history item with the current accumulated response
                   if (chatHistory.length > 0) {
-                    chatHistory[chatHistory.length - 1][1] = accumulatedResponse;
+                    chatHistory[chatHistory.length - 1][1] =
+                      accumulatedResponse;
                     // Save state periodically as content streams in
-                    if (chatHistory[chatHistory.length - 1][1].length % 100 === 0) {
+                    if (
+                      chatHistory[chatHistory.length - 1][1].length % 100 ===
+                      0
+                    ) {
                       saveChatState();
                     }
                   }
@@ -482,8 +557,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     messages.removeChild(typingIndicator);
                   }
                   currentAbortController = null;
-                  sendButton.style.display = "inline-block";
-                  stopButton.style.display = "none";
+                  sendButton.style.display = 'inline-block';
+                  stopButton.style.display = 'none';
 
                   // Save final state when streaming is complete
                   saveChatState();
@@ -500,7 +575,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   throw new Error(jsonData.error);
                 }
               } catch (parseError) {
-                console.error("Error parsing JSON:", parseError);
+                console.error('Error parsing JSON:', parseError);
               }
             }
           }
@@ -511,10 +586,14 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         // Fallback for non-streaming responses
         const data = await response.json();
-        const messageContent = currentBotMessage.querySelector(".aichatbot-message-content");
+        const messageContent = currentBotMessage.querySelector(
+          '.aichatbot-message-content',
+        );
 
         // Render markdown for the response
-        const renderedContent = renderMarkdown(data.reply || "No response received.");
+        const renderedContent = renderMarkdown(
+          data.reply || 'No response received.',
+        );
         messageContent.innerHTML = renderedContent;
 
         // Add the bot message to DOM now that we have content
@@ -527,7 +606,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Update chat history with the complete response
         if (chatHistory.length > 0) {
-          chatHistory[chatHistory.length - 1][1] = data.reply || "";
+          chatHistory[chatHistory.length - 1][1] = data.reply || '';
           // Save state after receiving complete response
           saveChatState();
 
@@ -542,16 +621,24 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // Show error message
-      const errorMessage = document.createElement("div");
-      errorMessage.className = "aichatbot-error-message";
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'aichatbot-error-message';
 
-      if (error.name === "AbortError") {
-        errorMessage.textContent = "Request was canceled.";
-      } else if (error.name === "TypeError" && error.message.includes("Failed to fetch")) {
+      if (error.name === 'AbortError') {
+        errorMessage.textContent = 'Request was canceled.';
+      } else if (
+        error.name === 'TypeError' &&
+        error.message.includes('Failed to fetch')
+      ) {
         // This typically happens when the server is completely down/unreachable
-        errorMessage.textContent = "Chatbot server is unavailable. Please try again later.";
-      } else if (error.message.includes("NetworkError") || error.message.includes("CORS")) {
-        errorMessage.textContent = "Connection to chatbot server failed. Please try again later.";
+        errorMessage.textContent =
+          'Chatbot server is unavailable. Please try again later.';
+      } else if (
+        error.message.includes('NetworkError') ||
+        error.message.includes('CORS')
+      ) {
+        errorMessage.textContent =
+          'Connection to chatbot server failed. Please try again later.';
       } else {
         errorMessage.textContent = `Error: ${error.message}`;
       }
@@ -559,65 +646,81 @@ document.addEventListener("DOMContentLoaded", () => {
       messages.appendChild(errorMessage);
     } finally {
       // Reset UI state
-      sendButton.style.display = "inline-block";
-      stopButton.style.display = "none";
+      sendButton.style.display = 'inline-block';
+      stopButton.style.display = 'none';
       currentAbortController = null;
       messages.scrollTop = messages.scrollHeight;
     }
   }
 
   // Handle window resize events for responsive behavior
-  window.addEventListener("resize", () => {
-    const windowVisible = sessionStorage.getItem("aichatbot_window_visible");
+  window.addEventListener('resize', () => {
+    const windowVisible = sessionStorage.getItem('aichatbot_window_visible');
     const isLargeScreen = window.innerWidth >= 768;
 
     // If window was visible and we're on a small screen, hide it
-    if (windowVisible === "true" && !isLargeScreen && chatWindow.style.display === "flex") {
-      chatWindow.style.display = "none";
+    if (
+      windowVisible === 'true' &&
+      !isLargeScreen &&
+      chatWindow.style.display === 'flex'
+    ) {
+      chatWindow.style.display = 'none';
       // Don't update sessionStorage here since we still want to remember it was open
     }
     // If window was visible and we transition to large screen, show it
-    else if (windowVisible === "true" && isLargeScreen && chatWindow.style.display === "none") {
-      chatWindow.style.display = "flex";
+    else if (
+      windowVisible === 'true' &&
+      isLargeScreen &&
+      chatWindow.style.display === 'none'
+    ) {
+      chatWindow.style.display = 'flex';
       // Focus the input when we open
       setTimeout(() => input.focus(), 0);
     }
   });
 
   // Save chat state when user leaves the page
-  window.addEventListener("beforeunload", saveChatState);
+  window.addEventListener('beforeunload', saveChatState);
 
   // Function to update the clear history button visibility
   function updateClearHistoryButton() {
-    // Remove any existing clear button
-    const existingButton = document.getElementById("aichatbot-clear-history");
-    if (existingButton) {
-      existingButton.remove();
+    // Get the controls container
+    const controlsContainer = document.getElementById('aichatbot-controls');
+
+    // Clear the controls container
+    if (controlsContainer) {
+      controlsContainer.innerHTML = '';
     }
 
-    // Only add the button if there's chat history
+    // Create clear history button only if there's chat history
     if (chatHistory.length > 0) {
-      const clearButton = document.createElement("div");
-      clearButton.id = "aichatbot-clear-history";
-      clearButton.textContent = "Clear chat history";
-      clearButton.addEventListener("click", clearChatHistory);
+      const clearButton = document.createElement('div');
+      clearButton.id = 'aichatbot-clear-history';
+      clearButton.innerHTML =
+        '<i class="fas fa-trash-alt"></i> Clear chat history';
+      clearButton.addEventListener('click', clearChatHistory);
 
-      // Add after the input container
-      const inputContainer = document.getElementById("aichatbot-input-container");
-      inputContainer.parentNode.insertBefore(clearButton, inputContainer.nextSibling);
+      // Add to the controls container
+      controlsContainer.appendChild(clearButton);
     }
+
+    // Always add the full page button to the controls - it should always be visible
+    controlsContainer.appendChild(fullPageButton);
   }
 
   // Function to clear chat history
   function clearChatHistory() {
     // Store current window state
-    const wasWindowOpen = chatWindow.style.display === "flex";
+    const wasWindowOpen = chatWindow.style.display === 'flex';
 
     // Clear history array
     chatHistory = [];
 
     // Clear the UI
-    messages.innerHTML = "";
+    messages.innerHTML = '';
+
+    // Add welcome message back
+    addWelcomeMessage();
 
     // Restore placeholder text
     updatePlaceholder();
@@ -629,9 +732,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (wasWindowOpen) {
       // Use setTimeout to ensure this happens after any other operations
       setTimeout(() => {
-        chatWindow.style.display = "flex";
+        chatWindow.style.display = 'flex';
         // Extra safety - explicitly set the session storage value
-        sessionStorage.setItem("aichatbot_window_visible", "true");
+        sessionStorage.setItem('aichatbot_window_visible', 'true');
       }, 0);
     }
 

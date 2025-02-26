@@ -58,8 +58,9 @@
   flex-direction: column;
   overflow: hidden;
   z-index: 9999;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue",
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
+    Cantarell, 'Helvetica Neue', sans-serif;
   font-size: 16px;
   line-height: 1.5;
 }
@@ -92,11 +93,12 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: calc(100% - 110px); /* Account for header and input area */
+  max-height: calc(100% - 125px); /* Adjusted for single row of controls */
   scrollbar-width: thin; /* For Firefox */
   scrollbar-color: #c1c1c1 #f5f8fb; /* For Firefox */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue",
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
+    Cantarell, 'Helvetica Neue', sans-serif;
   font-size: 16px;
   line-height: 1.5;
 }
@@ -123,8 +125,7 @@
 
 #aichatbot-input-container {
   display: flex;
-  padding: 10px;
-  border-top: 1px solid #eaeaea;
+  padding: 0 10px 10px 10px;
   background-color: white;
 }
 
@@ -135,8 +136,9 @@
   border-radius: 20px;
   outline: none;
   font-size: 16px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue",
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
+    Cantarell, 'Helvetica Neue', sans-serif;
 }
 
 #aichatbot-input:focus {
@@ -183,7 +185,7 @@
   max-width: 80%;
   padding: 10px 15px;
   border-radius: 18px;
-  font-size: 16px;
+  font-size: 16px !important;
   line-height: 1.5;
 }
 
@@ -204,12 +206,26 @@
 }
 
 /* Styling for markdown elements in bot messages */
+.aichatbot-message-content {
+  font-size: 16px !important;
+  line-height: 1.5;
+}
+
+.aichatbot-message-content * {
+  font-size: inherit !important;
+}
+
+.aichatbot-message-content p {
+  margin: 0 0 0.5em 0;
+  font-size: inherit !important;
+}
+
 .aichatbot-message-content code {
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
   background-color: #f5f5f5;
   padding: 2px 4px;
   border-radius: 3px;
-  font-size: 14px;
+  font-size: 14px !important;
 }
 
 .aichatbot-message-content pre {
@@ -223,7 +239,7 @@
 .aichatbot-message-content pre code {
   background-color: transparent;
   padding: 0;
-  font-size: 14px;
+  font-size: 14px !important;
 }
 
 .aichatbot-message-content a {
@@ -233,10 +249,6 @@
 
 .aichatbot-message-content a:hover {
   text-decoration: underline;
-}
-
-.aichatbot-message-content p {
-  margin: 0 0 0.5em 0;
 }
 
 .aichatbot-message-content h1,
@@ -251,6 +263,11 @@
 .aichatbot-message-content ol {
   padding-left: 20px;
   margin: 0.5em 0;
+}
+
+.aichatbot-message-content ul *,
+.aichatbot-message-content ol * {
+  font-size: inherit !important;
 }
 
 .aichatbot-error-message {
@@ -276,22 +293,22 @@
 
 /* Animated typing dots */
 .typing-dots::after {
-  content: "";
+  content: '';
   animation: dots 1.5s infinite;
 }
 
 @keyframes dots {
   0% {
-    content: ".";
+    content: '.';
   }
   33% {
-    content: "..";
+    content: '..';
   }
   66% {
-    content: "...";
+    content: '...';
   }
   100% {
-    content: ".";
+    content: '.';
   }
 }
 
@@ -317,6 +334,23 @@
   #aichatbot-bubble .fa-wand-magic-sparkles {
     font-size: 20px;
   }
+
+  #aichatbot-fullpage {
+    padding: 10px 0;
+    font-size: 15px;
+  }
+}
+
+/* Clear chat history button and full page button container */
+#aichatbot-controls {
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid #eaeaea;
+}
+
+/* When only one button is in the controls (full page button with no chat history) */
+#aichatbot-controls > div:only-child {
+  border-left: none;
 }
 
 #aichatbot-clear-history {
@@ -325,11 +359,41 @@
   text-align: center;
   padding: 8px;
   cursor: pointer;
-  border-top: 1px solid #eaeaea;
   transition: color 0.2s;
+  flex: 1;
 }
 
 #aichatbot-clear-history:hover {
   color: #d32f2f;
   text-decoration: underline;
+}
+
+/* Full Page Chat Button */
+#aichatbot-fullpage {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  padding: 8px;
+  cursor: pointer;
+  transition: color 0.2s;
+  flex: 1;
+  border-left: 1px solid #eaeaea;
+}
+
+#aichatbot-fullpage:hover {
+  color: #4a90e2;
+  text-decoration: underline;
+}
+
+#aichatbot-fullpage i,
+#aichatbot-clear-history i {
+  margin-right: 5px;
+}
+
+/* Disclaimer text */
+#aichatbot-disclaimer {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  padding: 5px 0;
 }
