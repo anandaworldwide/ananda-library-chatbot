@@ -161,11 +161,17 @@
   align-items: center;
   min-width: 40px;
   height: 40px;
+  padding: 0; /* Remove padding which can affect centering */
 }
 
 #aichatbot-send i,
 #aichatbot-stop i {
   font-size: 16px;
+  display: flex; /* Make icon a flex container */
+  justify-content: center; /* Center horizontally */
+  align-items: center; /* Center vertically */
+  width: 100%; /* Take full width of the button */
+  height: 100%; /* Take full height of the button */
 }
 
 #aichatbot-stop {
