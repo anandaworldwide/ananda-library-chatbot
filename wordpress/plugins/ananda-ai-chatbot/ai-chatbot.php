@@ -260,6 +260,13 @@ add_action('wp_head', 'aichatbot_add_custom_css');
 
 // Add the chat bubble and window to the page
 function aichatbot_add_chat_bubble() {
+    // Get placeholder questions and prepare for random selection
+    $placeholder_text = (string) get_option('aichatbot_placeholder_questions', 'How can I learn to meditate?');
+    $placeholder_array = array_filter(explode("\n", $placeholder_text));
+    $random_placeholder = !empty($placeholder_array) 
+                        ? esc_attr(trim($placeholder_array[array_rand($placeholder_array)])) 
+                        : 'How can I learn to meditate?';
+
     echo '<div id="aichatbot-bubble">
             <span class="fa-stack">
                 <i class="fas fa-circle fa-stack-2x"></i>
@@ -270,7 +277,7 @@ function aichatbot_add_chat_bubble() {
             <div id="aichatbot-messages"></div>
             <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Assist uses AI, mistakes may occur.</div>
             <div id="aichatbot-input-container">
-                <input type="text" id="aichatbot-input" placeholder="How can I learn to meditate?" />
+                <input type="text" id="aichatbot-input" placeholder="' . $random_placeholder . '" />
                 <button id="aichatbot-send"><i class="fas fa-paper-plane"></i></button>
             </div>
           </div>';
