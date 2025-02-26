@@ -1,0 +1,14 @@
+# Composer
+/vendor/
+composer.lock
+
+# IDE stubs
+stubs.php
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db 
