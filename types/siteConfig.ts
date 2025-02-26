@@ -52,4 +52,5 @@ export interface SiteConfig {
   hideSources?: boolean;
   defaultNumSources?: number;
   temperature?: number; // Added for LLM temperature setting
+  modelName?: string; // Added for LLM model selection
 }

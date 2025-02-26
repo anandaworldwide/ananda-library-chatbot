@@ -81,7 +81,8 @@
     "queriesPerUserPerDay": 200,
     "enableModelComparison": true,
     "showSourceCountSelector": true,
-    "temperature": 0.5
+    "temperature": 0.5,
+    "modelName": "gpt-4o"
   },
   "ananda-public": {
     "name": "The Ananda.org Chatbot",
@@ -156,7 +157,8 @@
     "enableModelComparison": false,
     "showSourceCountSelector": false,
     "hideSources": true,
-    "temperature": 0.3
+    "temperature": 0.3,
+    "modelName": "gpt-4o-mini"
   },
   "jairam": {
     "name": "The Free Joe Hunt Chatbot",
@@ -206,7 +208,8 @@
     "queriesPerUserPerDay": 100,
     "enableModelComparison": true,
     "showSourceCountSelector": true,
-    "temperature": 0.5
+    "temperature": 0.5,
+    "modelName": "gpt-4o"
   },
   "crystal": {
     "name": "Crystal Clarity Library Magic",
@@ -257,6 +260,7 @@
     "queriesPerUserPerDay": 40,
     "enableModelComparison": false,
     "showSourceCountSelector": false,
-    "temperature": 0.3
+    "temperature": 0.3,
+    "modelName": "gpt-4o"
   }
 }

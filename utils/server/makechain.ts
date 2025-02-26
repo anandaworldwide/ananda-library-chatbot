@@ -298,7 +298,7 @@ async function retrieveDocumentsByLibrary(
 // Supports multiple models, weighted library access, and site-specific configurations
 export const makeChain = async (
   retriever: VectorStoreRetriever,
-  modelConfig: ModelConfig = { model: 'gpt-4o', temperature: 0.3 },
+  modelConfig: ModelConfig,
   sourceCount: number = 4,
   baseFilter?: Record<string, unknown>,
   sendData?: (data: StreamingResponseData) => void,
@@ -308,8 +308,7 @@ export const makeChain = async (
   const configPath = path.join(process.cwd(), 'site-config/config.json');
   const siteConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
 
-  const { model, temperature: modelTemperature, label } = modelConfig;
-  const temperature = siteConfig[siteId]?.temperature ?? modelTemperature;
+  const { model, temperature, label } = modelConfig;
   let languageModel: BaseLanguageModel;
 
   // Normalizes includedLibraries from site config: converts string library names to objects

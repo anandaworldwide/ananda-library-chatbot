@@ -427,11 +427,15 @@ async function setupAndExecuteLanguageModelChain(
   sourceCount: number = 4,
   filter?: PineconeFilter,
   resolveDocs?: (docs: Document[]) => void,
+  siteConfig?: SiteConfig | null,
 ): Promise<string> {
   try {
+    const modelName = siteConfig?.modelName || 'gpt-4o';
+    const temperature = siteConfig?.temperature || 0.3;
+
     const chain = await makeChain(
       retriever,
-      { model: 'gpt-4o', temperature: 0 },
+      { model: modelName, temperature },
       sourceCount,
       filter,
       sendData,
@@ -826,6 +830,7 @@ export async function POST(req: NextRequest) {
           sanitizedInput.sourceCount || 4,
           filter,
           resolveWithDocuments,
+          siteConfig,
         );
 
         // Wait for documents for Firestore, but sources are already sent
