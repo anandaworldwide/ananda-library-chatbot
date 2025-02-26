@@ -292,7 +292,9 @@ async function applyRateLimiting(
     null,
     {
       windowMs: 24 * 60 * 60 * 1000, // 24 hours
-      max: siteConfig.queriesPerUserPerDay,
+      max: isDevelopment()
+        ? siteConfig.queriesPerUserPerDay * 10
+        : siteConfig.queriesPerUserPerDay,
       name: 'query',
     },
     req.ip,
@@ -444,6 +446,7 @@ async function setupAndExecuteLanguageModelChain(
       .join('\n');
 
     let fullResponse = '';
+    let streamingComplete = false;
 
     // Invoke the chain with callbacks for streaming tokens
     const chainPromise = chain.invoke(
@@ -461,7 +464,7 @@ async function setupAndExecuteLanguageModelChain(
             },
             // Callback for handling the end of the chain execution
             handleChainEnd() {
-              sendData({ done: true });
+              streamingComplete = true;
             },
           } as Partial<BaseCallbackHandler>,
         ],
@@ -470,6 +473,12 @@ async function setupAndExecuteLanguageModelChain(
 
     // Wait for the chain to complete
     await chainPromise;
+
+    // Only send the done signal after the chain has fully completed and all tokens have been processed
+    if (streamingComplete) {
+      sendData({ done: true });
+    }
+
     return fullResponse;
   } catch (error) {
     console.error('Error in setupAndExecuteLanguageModelChain:', error);
@@ -604,6 +613,10 @@ async function handleComparisonRequest(
           })
           .join('\n');
 
+        // Track completion of both models
+        let modelAComplete = false;
+        let modelBComplete = false;
+
         // Run both chains concurrently
         await Promise.all([
           chainA.invoke(
@@ -619,6 +632,9 @@ async function handleComparisonRequest(
                     if (token.trim()) {
                       sendData({ token, model: 'A' });
                     }
+                  },
+                  handleChainEnd() {
+                    modelAComplete = true;
                   },
                 } as Partial<BaseCallbackHandler>,
               ],
@@ -638,6 +654,9 @@ async function handleComparisonRequest(
                       sendData({ token, model: 'B' });
                     }
                   },
+                  handleChainEnd() {
+                    modelBComplete = true;
+                  },
                 } as Partial<BaseCallbackHandler>,
               ],
             },
@@ -648,8 +667,11 @@ async function handleComparisonRequest(
         const sourceDocs = await documentPromise;
         sendData({ sourceDocs });
 
-        // Signal completion
-        sendData({ done: true });
+        // Signal completion only after both models have completed
+        if (modelAComplete && modelBComplete) {
+          sendData({ done: true });
+        }
+
         controller.close();
       } catch (error) {
         handleError(error, sendData);
@@ -683,36 +705,35 @@ export async function OPTIONS(req: NextRequest) {
 
   // Create a basic response
   const response = new NextResponse(null, { status: 204 });
+  const origin = req.headers.get('origin');
 
-  // In development mode, be more permissive with CORS
-  if (isDevelopment()) {
-    const origin = req.headers.get('origin');
-    const referer = req.headers.get('referer');
+  // First, ensure critical preflight headers are present
+  if (origin) {
+    // Check if origin is allowed
+    const allowedDomains = siteConfig.allowedFrontEndDomains || [];
+    const isAllowedDomain = allowedDomains.some((pattern) =>
+      matchesPattern(origin, pattern),
+    );
 
-    // If we have an origin header, use it
-    if (origin) {
+    if (isAllowedDomain || isDevelopment()) {
+      // Add critical CORS headers directly for preflight
       response.headers.set('Access-Control-Allow-Origin', origin);
-    }
-    // If no origin but we have a referer, use * (wildcard)
-    else if (referer) {
-      response.headers.set('Access-Control-Allow-Origin', '*');
-      response.headers.set('Access-Control-Allow-Credentials', 'false');
-    }
+      response.headers.set(
+        'Access-Control-Allow-Methods',
+        'GET, POST, OPTIONS',
+      );
+      response.headers.set(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization',
+      );
 
-    // Add permissive headers for development
-    response.headers.set(
-      'Access-Control-Allow-Methods',
-      'GET, POST, OPTIONS, PUT, DELETE',
-    );
-    response.headers.set(
-      'Access-Control-Allow-Headers',
-      'X-Requested-With, Content-Type, Authorization',
-    );
-
-    return response;
+      console.log(`OPTIONS: Allowing origin: ${origin}`);
+    } else {
+      console.log(`OPTIONS: Rejected origin: ${origin}`);
+    }
   }
 
-  // In production, add standard CORS headers
+  // Then, let addCorsHeaders add any additional headers
   return addCorsHeaders(response, req, siteConfig);
 }
 
