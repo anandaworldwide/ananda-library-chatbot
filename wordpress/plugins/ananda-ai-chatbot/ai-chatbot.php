@@ -55,6 +55,12 @@ function aichatbot_register_options() {
         'type' => 'string',
         'default' => "Ask me anything about this website",
     ));
+    
+    // Register setting for Intercom integration
+    register_setting('aichatbot_settings_group', 'aichatbot_enable_intercom', array(
+        'type' => 'boolean',
+        'default' => false,
+    ));
 }
 add_action('admin_init', 'aichatbot_register_options');
 
@@ -159,13 +165,31 @@ function aichatbot_settings_page() {
                 <tr>
                     <th><label for="aichatbot_placeholder_questions">Placeholder Questions</label></th>
                     <td>
-                        <textarea id="aichatbot_placeholder_questions" name="aichatbot_placeholder_questions" 
-                                  rows="10" cols="60"><?php echo esc_attr(get_option('aichatbot_placeholder_questions')); ?></textarea>
+                        <textarea id="aichatbot_placeholder_questions" name="aichatbot_placeholder_questions" rows="5" cols="50">
+                            <?php echo htmlspecialchars((string) get_option('aichatbot_placeholder_questions', 'How can I learn to meditate?'), ENT_QUOTES, 'UTF-8'); ?>
+                        </textarea>
                         <p class="description">
-                            Enter one question per line. These will be randomly shown as placeholders in the chat input when empty.
+                            Enter placeholder questions for the chatbot input, one per line. These will be randomly shown in the input field.
                         </p>
                     </td>
                 </tr>
+                
+                <!-- Intercom Integration Settings -->
+                <tr>
+                    <th colspan="2"><h2 class="title">Intercom Integration</h2></th>
+                </tr>
+                
+                <tr>
+                    <th><label for="aichatbot_enable_intercom">Enable Intercom Integration</label></th>
+                    <td>
+                        <input type="checkbox" id="aichatbot_enable_intercom" name="aichatbot_enable_intercom" value="1" <?php echo (get_option('aichatbot_enable_intercom', false) ? 'checked="checked"' : ''); ?> />
+                        <p class="description">
+                            Enable integration with Intercom. When enabled, the Intercom widget will be hidden initially
+                            and can be triggered by the chatbot when the user clicks on special text in the AI response.
+                        </p>
+                    </td>
+                </tr>
+                
             </table>
             <?php submit_button(); ?>
         </form>
@@ -198,6 +222,9 @@ function aichatbot_enqueue_assets() {
     $window_height = get_option('aichatbot_window_height', 600);
     $fullpage_url = get_option('aichatbot_fullpage_url', '/chat');
     
+    // Get Intercom integration settings
+    $enable_intercom = get_option('aichatbot_enable_intercom', false);
+    
     // Pass data to JavaScript
     wp_localize_script('aichatbot-js', 'aichatbotData', array(
         'vercelUrl' => $vercel_url,
@@ -205,7 +232,8 @@ function aichatbot_enqueue_assets() {
         'windowWidthPx' => $window_width,
         'windowHeightPx' => $window_height,
         'fullPageUrl' => $fullpage_url,
-        'placeholderQuestionsText' => get_option('aichatbot_placeholder_questions', '')
+        'placeholderQuestionsText' => get_option('aichatbot_placeholder_questions', 'How can I learn to meditate?'),
+        'enableIntercom' => $enable_intercom ? '1' : '0'
     ));
 }
 add_action('wp_enqueue_scripts', 'aichatbot_enqueue_assets');

@@ -16,6 +16,7 @@
  * - Auto-focus on input field when chat opens
  * - Close on Escape key or clicking outside
  * - Full page chat option for expanded experience
+ * - Dynamic Intercom integration via special [any text](GETHUMAN) links
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -24,6 +25,64 @@ document.addEventListener('DOMContentLoaded', () => {
   const input = document.getElementById('aichatbot-input');
   const sendButton = document.getElementById('aichatbot-send');
   const messages = document.getElementById('aichatbot-messages');
+
+  // Handle Intercom integration if enabled
+  let intercomEnabled = false;
+
+  if (typeof aichatbotData !== 'undefined') {
+    intercomEnabled = aichatbotData.enableIntercom === '1';
+
+    // Hide Intercom widget initially if integration is enabled
+    if (intercomEnabled && typeof window.Intercom !== 'undefined') {
+      // Add a class to the body for CSS targeting when Intercom is active
+      document.body.classList.add('intercom-enabled');
+
+      // Hide Intercom widget when page loads
+      const style = document.createElement('style');
+      style.id = 'aichatbot-intercom-style';
+      style.innerHTML = `
+        #intercom-container {
+          display: none !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+
+  // Function to show Intercom and hide chatbot
+  function showIntercom() {
+    if (intercomEnabled && typeof window.Intercom !== 'undefined') {
+      // Remove the CSS that hides Intercom
+      const intercomStyle = document.getElementById('aichatbot-intercom-style');
+      if (intercomStyle) {
+        intercomStyle.remove();
+      }
+
+      // Hide chatbot window
+      chatWindow.style.display = 'none';
+
+      // Show Intercom - use the proper method to both show and open the messenger
+      try {
+        // First try the boot method which is more reliable
+        window.Intercom('boot', {
+          app_id: window.intercomSettings?.app_id,
+          // Open the messenger immediately
+          hide_default_launcher: false,
+        });
+
+        // Then explicitly show and open the messenger
+        window.Intercom('show');
+        window.Intercom('showNewMessage');
+
+        console.log('Intercom triggered successfully');
+        return true;
+      } catch (e) {
+        console.error('Error showing Intercom:', e);
+        return false;
+      }
+    }
+    return false;
+  }
 
   // Default placeholder questions in case WordPress settings are not available
   let placeholderQuestions = ['Ask me anything about this website'];
@@ -114,6 +173,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Chat history storage
   let chatHistory = [];
+
+  // Add click event delegation for Intercom trigger text
+  messages.addEventListener('click', (e) => {
+    // Check if the clicked element is the intercom trigger or a child of it
+    const trigger = e.target.closest('.aichatbot-intercom-trigger');
+    if (trigger) {
+      // Prevent default link behavior if it's within a link
+      e.preventDefault();
+      // Show Intercom when the trigger text is clicked
+      showIntercom();
+    }
+  });
 
   // Load chat history and UI state from sessionStorage
   function loadChatState() {
@@ -231,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Close button functionality
   document.getElementById('aichatbot-close').addEventListener('click', () => {
     chatWindow.style.display = 'none';
+    document.body.classList.remove('aichatbot-window-open');
     saveChatState();
   });
 
@@ -239,6 +311,9 @@ document.addEventListener('DOMContentLoaded', () => {
     chatWindow.style.display =
       chatWindow.style.display === 'none' ? 'flex' : 'none';
     if (chatWindow.style.display === 'flex') {
+      // Add class to body to hide Intercom when our chat is open
+      document.body.classList.add('aichatbot-window-open');
+
       // Focus on input field when chat window is shown
       setTimeout(() => input.focus(), 0);
       // Scroll to bottom when opening chat window
@@ -255,6 +330,9 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         input.placeholder = getRandomPlaceholder();
       }
+    } else {
+      // Remove class when chat window is closed
+      document.body.classList.remove('aichatbot-window-open');
     }
     saveChatState();
     // Prevent event from bubbling up
@@ -269,6 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
       e.target !== bubble
     ) {
       chatWindow.style.display = 'none';
+      document.body.classList.remove('aichatbot-window-open');
       saveChatState();
     }
   });
@@ -277,6 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && chatWindow.style.display === 'flex') {
       chatWindow.style.display = 'none';
+      document.body.classList.remove('aichatbot-window-open');
       saveChatState();
     }
   });
@@ -334,6 +414,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Pre-process: Convert double line breaks to paragraph markers without adding extra newlines
     text = text.replace(/\n\s*\n/g, '<p-break>');
+
+    // Handle Intercom links if integration is enabled - BEFORE other link processing
+    if (intercomEnabled) {
+      // Look for markdown links with GETHUMAN as the URL: [any text](GETHUMAN)
+      text = text.replace(
+        /\[(.*?)\]\(GETHUMAN\)/g,
+        '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+      );
+    }
 
     // Handle basic markdown
     return (
