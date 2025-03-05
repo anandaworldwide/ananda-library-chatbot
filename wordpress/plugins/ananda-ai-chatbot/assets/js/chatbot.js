@@ -374,6 +374,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Track current abort controller for canceling requests
   let currentAbortController = null;
 
+  // Add a flag to track streaming status
+  let isStreaming = false;
+
   // Default collection and settings
   const defaultCollection = 'whole_library';
   const privateSession = false;
@@ -385,6 +388,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentAbortController) {
       currentAbortController.abort();
       currentAbortController = null;
+
+      // Reset streaming flag when manually stopped
+      isStreaming = false;
+
+      // Update clear history button state
+      updateClearHistoryButton();
+
       return true;
     }
     return false;
@@ -534,6 +544,12 @@ document.addEventListener('DOMContentLoaded', () => {
     sendButton.style.display = 'none';
     stopButton.style.display = 'inline-block';
 
+    // Set streaming flag to true
+    isStreaming = true;
+
+    // Update clear history button state
+    updateClearHistoryButton();
+
     try {
       // Create new abort controller
       currentAbortController = new AbortController();
@@ -649,6 +665,9 @@ document.addEventListener('DOMContentLoaded', () => {
                   sendButton.style.display = 'inline-block';
                   stopButton.style.display = 'none';
 
+                  // Set streaming flag to false
+                  isStreaming = false;
+
                   // Save final state when streaming is complete
                   saveChatState();
 
@@ -738,6 +757,13 @@ document.addEventListener('DOMContentLoaded', () => {
       sendButton.style.display = 'inline-block';
       stopButton.style.display = 'none';
       currentAbortController = null;
+
+      // Set streaming flag to false in finally block to ensure it's reset
+      isStreaming = false;
+
+      // Update clear history button state
+      updateClearHistoryButton();
+
       messages.scrollTop = messages.scrollHeight;
     }
   }
@@ -787,7 +813,15 @@ document.addEventListener('DOMContentLoaded', () => {
       clearButton.id = 'aichatbot-clear-history';
       clearButton.innerHTML =
         '<i class="fas fa-trash-alt"></i> Clear chat history';
-      clearButton.addEventListener('click', clearChatHistory);
+
+      // Disable the button visually and functionally during streaming
+      if (isStreaming) {
+        clearButton.classList.add('disabled');
+        clearButton.style.opacity = '0.5';
+        clearButton.style.cursor = 'not-allowed';
+      } else {
+        clearButton.addEventListener('click', clearChatHistory);
+      }
 
       // Add to the controls container
       controlsContainer.appendChild(clearButton);
@@ -824,6 +858,8 @@ document.addEventListener('DOMContentLoaded', () => {
         chatWindow.style.display = 'flex';
         // Extra safety - explicitly set the session storage value
         sessionStorage.setItem('aichatbot_window_visible', 'true');
+        // Set focus back to the input field
+        input.focus();
       }, 0);
     }
 
