@@ -381,6 +381,14 @@ when making changes as they will affect all environments immediately.
 Note: If you encounter any errors related to Google Sheets API activation, check the backend logs
 for specific instructions and follow the provided link to activate the API for your project.
 
+## WordPress Plugin Integration
+
+We provide a WordPress plugin in the `wordpress/plugins/ananda-ai-chatbot` directory
+that adds an AI chatbot bubble to your WordPress site. The plugin connects to this
+project's chat backend (deployed on Vercel or locally for development).
+
+For detailed installation instructions, features, and development setup, please refer to the [plugin's README file](wordpress/plugins/ananda-ai-chatbot/README.md).
+
 ## Open Source Credits
 
 The frontend of this repo is forked from [langchain-chat-nextjs](https://github.com/zahidkhawaja/langchain-chat-nextjs)
