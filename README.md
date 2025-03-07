@@ -189,8 +189,29 @@ debugging, and to avoid charges for using the Firebase services.
 If you don't already have PDF files, you can generate them from a Wordpress
 database.
 
+#### Import MySQL database dump into local MySQL
+
 First, you need to import a MySQL data dump from wordpress into local MySQL
 (or set up access to the DB).
+
+You can use the `python/bin/process_anandalib_dump.py` script to process and import an Ananda Library SQL dump:
+
+```bash
+python python/bin/process_anandalib_dump.py -u [mysql_username] [path_to_sql_dump]
+```
+
+This script:
+
+- Creates a new database with name format `anandalib-YYYY-MM-DD`
+- Processes the SQL dump to fix date formats and add necessary columns
+- Imports the processed SQL into the new database
+
+While this script is specifically tuned for the Ananda Library database structure,
+it can be modified to work with other WordPress or MySQL database dumps. The core
+functionality of creating a dated database, processing SQL to fix compatibility
+issues, and importing the data can be adapted to different schema requirements.
+
+#### Convert to PDFs
 
 Second, you run _python db-to-pdfs.py_ from the `python/data-ingestion/db-to-pdf/`
 directory to generate PDF files.
