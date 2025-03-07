@@ -20,6 +20,25 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Check if the wand-magic-sparkles icon is available, use fallback if not
+  setTimeout(() => {
+    const wandIcon = document.querySelector('.fa-wand-magic-sparkles');
+    if (wandIcon) {
+      // Check if the icon is rendered properly
+      const computedStyle = window.getComputedStyle(wandIcon, ':before');
+      const contentValue = computedStyle.getPropertyValue('content');
+
+      // If the icon isn't rendering properly (empty or "none"), show the fallback
+      if (contentValue === 'none' || contentValue === '') {
+        wandIcon.style.display = 'none';
+        const fallbackIcon = document.querySelector('.fa-magic');
+        if (fallbackIcon) {
+          fallbackIcon.style.display = 'inline-block';
+        }
+      }
+    }
+  }, 500);
+
   const bubble = document.getElementById('aichatbot-bubble');
   const chatWindow = document.getElementById('aichatbot-window');
   const input = document.getElementById('aichatbot-input');

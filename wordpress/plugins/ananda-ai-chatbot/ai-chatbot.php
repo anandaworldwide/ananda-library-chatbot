@@ -199,8 +199,8 @@ function aichatbot_settings_page() {
 
 // Load styles and scripts
 function aichatbot_enqueue_assets() {
-    // Enqueue Font Awesome from CDN
-    wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
+    // Enqueue Font Awesome from CDN with a reliable approach
+    wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css', array(), null);
     wp_enqueue_style('aichatbot-css', plugins_url('assets/css/chatbot.css', __FILE__));
     wp_enqueue_script('aichatbot-js', plugins_url('assets/js/chatbot.js', __FILE__), array(), '1.0', true);
     
@@ -245,6 +245,10 @@ function aichatbot_add_custom_css() {
     $window_width = get_option('aichatbot_window_width', 375);
     $window_height = get_option('aichatbot_window_height', 600);
     
+    // Add Font Awesome directly to ensure it loads
+    echo '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />';
+    
+    // Output custom CSS for chatbot appearance
     echo '<style type="text/css">
         #aichatbot-window {
             width: ' . $window_width . 'px;
@@ -299,6 +303,8 @@ function aichatbot_add_chat_bubble() {
             <span class="fa-stack">
                 <i class="fas fa-circle fa-stack-2x"></i>
                 <i class="fas fa-wand-magic-sparkles fa-stack-1x fa-inverse"></i>
+                <!-- Fallback icon if wand-magic-sparkles isn\'t available -->
+                <i class="fas fa-magic fa-stack-1x fa-inverse" style="display:none;"></i>
             </span>
           </div>';
     echo '<div id="aichatbot-window" style="display:none;">
