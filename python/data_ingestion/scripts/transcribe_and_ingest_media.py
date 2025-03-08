@@ -133,6 +133,7 @@ def verify_and_update_transcription_metadata(transcription_data, file_path, auth
             title, mp3_author, duration, url, album = get_media_metadata(file_path)
             transcription_data.update({
                 'title': title,
+                'author': mp3_author if mp3_author != "Unknown" else author,
                 'file_name': os.path.basename(file_path),
                 'duration': duration,
                 'album': album
@@ -579,9 +580,10 @@ def merge_reports(reports):
         "warnings": [],
         "fully_indexed": 0,
         "chunk_lengths": [],
+        "private_videos": 0,
     }
     for report in reports:
-        for key in ["processed", "skipped", "errors", "fully_indexed"]:
+        for key in ["processed", "skipped", "errors", "fully_indexed", "private_videos"]:
             combined_report[key] += report.get(key, 0)
         combined_report["error_details"].extend(report.get("error_details", []))
         combined_report["warnings"].extend(report.get("warnings", []))
