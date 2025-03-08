@@ -45,6 +45,54 @@ document.addEventListener('DOMContentLoaded', () => {
   const sendButton = document.getElementById('aichatbot-send');
   const messages = document.getElementById('aichatbot-messages');
 
+  // Define initial height constant
+  const INITIAL_HEIGHT = '40px';
+
+  // Initialize textarea to exact height
+  input.style.height = INITIAL_HEIGHT;
+  input.style.overflowY = 'hidden';
+
+  // Set up textarea auto-expand functionality
+  function autoResizeTextarea() {
+    // For empty content, always reset to initial height
+    if (!input.value.trim()) {
+      resetTextareaHeight();
+      return;
+    }
+
+    // Reset height to auto to properly calculate the new height
+    input.style.height = 'auto';
+
+    // Set the height to scrollHeight to fit all content (up to max-height in CSS)
+    input.style.height = `${Math.min(input.scrollHeight, window.innerHeight * 0.4)}px`;
+
+    // If content is longer than max height, keep the scrollbar
+    if (input.scrollHeight > window.innerHeight * 0.4) {
+      input.style.overflowY = 'auto';
+    } else {
+      input.style.overflowY = 'hidden';
+    }
+  }
+
+  // Function to completely reset textarea height
+  function resetTextareaHeight() {
+    input.style.height = 'auto'; // First reset to auto
+    input.style.overflowY = 'hidden';
+    input.style.height = INITIAL_HEIGHT; // Then set to initial height
+
+    // Force a reflow to ensure the height is applied
+    void input.offsetHeight;
+  }
+
+  // Initialize textarea height
+  autoResizeTextarea();
+
+  // Auto-resize when typing
+  input.addEventListener('input', autoResizeTextarea);
+
+  // Reset height when window is resized
+  window.addEventListener('resize', autoResizeTextarea);
+
   // Handle Intercom integration if enabled
   let intercomEnabled = false;
 
@@ -383,10 +431,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Send message when button is clicked
   sendButton.addEventListener('click', sendMessage);
 
-  // Send message when Enter key is pressed
-  input.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
+  // Send message when Enter key is pressed, but allow Shift+Enter for newlines
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); // Prevent default to avoid adding a newline
       sendMessage();
+    } else if (e.key === 'Enter' && e.shiftKey) {
+      // Allow Shift+Enter to create a newline
+      // No need to call autoResizeTextarea() as the input event will handle it
     }
   });
 
@@ -531,7 +583,10 @@ document.addEventListener('DOMContentLoaded', () => {
     userMessage.className = 'aichatbot-user-message';
     userMessage.textContent = message;
     messages.appendChild(userMessage);
+
+    // Clear input and completely reset height
     input.value = '';
+    resetTextareaHeight();
 
     // Create bot message container but don't add to DOM yet
     currentBotMessage = document.createElement('div');

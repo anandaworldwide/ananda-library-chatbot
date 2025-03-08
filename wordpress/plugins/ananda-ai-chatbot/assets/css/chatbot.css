@@ -153,6 +153,7 @@
   display: flex;
   padding: 0 10px 10px 10px;
   background-color: white;
+  align-items: flex-end; /* Align items to bottom to accommodate expanding textarea */
 }
 
 #aichatbot-input {
@@ -165,6 +166,12 @@
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
     Cantarell, 'Helvetica Neue', sans-serif;
+  resize: none; /* Disable manual resizing */
+  overflow-y: auto; /* Add scrollbar when content overflow */
+  min-height: 40px; /* Initial height */
+  max-height: 40vh; /* Limit to 40% of viewport height */
+  line-height: 1.5;
+  margin: 0; /* Remove default margin */
 }
 
 #aichatbot-input:focus {
@@ -351,15 +358,18 @@
     height: 70vh;
     bottom: 10px;
     left: 10px; /* Changed from right: 10px to left: 10px */
-    right: auto;
+  }
+
+  #aichatbot-input {
+    font-size: 16px; /* Maintain good font size on mobile */
+    max-height: 30vh; /* Slightly smaller max height on mobile */
   }
 
   #aichatbot-bubble {
-    width: 40px;
-    height: 40px;
-    font-size: 14px;
+    width: 42px;
+    height: 42px;
     bottom: 10px;
-    left: 10px; /* Changed from right: 60px to left: 10px */
+    left: 10px; /* Changed from right: 10px to left: 10px */
   }
 
   #aichatbot-bubble .fa-stack {

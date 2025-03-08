@@ -311,7 +311,7 @@ function aichatbot_add_chat_bubble() {
             <div id="aichatbot-messages"></div>
             <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Assist uses AI, mistakes may occur.</div>
             <div id="aichatbot-input-container">
-                <input type="text" id="aichatbot-input" placeholder="' . $random_placeholder . '" />
+                <textarea id="aichatbot-input" placeholder="' . $random_placeholder . '" rows="1"></textarea>
                 <button id="aichatbot-send"><i class="fas fa-paper-plane"></i></button>
             </div>
           </div>';
