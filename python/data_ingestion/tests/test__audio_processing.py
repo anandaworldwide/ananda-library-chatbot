@@ -2,7 +2,7 @@ import unittest
 import os
 import logging
 from openai import OpenAI
-from pinecone.core.client.exceptions import PineconeException
+from pinecone import PineconeException
 from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
 from argparse import ArgumentParser
@@ -12,8 +12,10 @@ from data_ingestion.scripts.transcribe_and_ingest_media import process_file
 from data_ingestion.scripts.transcription_utils import TimeoutException, transcribe_media, chunk_transcription
 from data_ingestion.scripts.pinecone_utils import store_in_pinecone, load_pinecone, create_embeddings
 from data_ingestion.scripts.s3_utils import upload_to_s3, S3UploadError, upload_to_s3
-from data_ingestion.scripts.media_utils import get_media_metadata
+from data_ingestion.scripts.media_utils import get_media_metadata, split_audio
 from data_ingestion.tests.test_utils import trim_audio
+import tempfile
+import subprocess
 
 def configure_logging(debug=False):
     # Configure the root logger
@@ -101,7 +103,11 @@ class TestAudioProcessing(unittest.TestCase):
         logger.debug("Starting transcription test")
         transcription = transcribe_media(self.trimmed_audio_path)
         self.assertIsNotNone(transcription)
-        self.assertIsInstance(transcription, dict)
+        self.assertIsInstance(transcription, list)
+        self.assertTrue(len(transcription) > 0)
+        self.assertIsInstance(transcription[0], dict)
+        self.assertIn("text", transcription[0])
+        self.assertIn("words", transcription[0])
 
     def test_chunk_transcription(self):
         logger.debug("Starting process transcription test")
@@ -280,6 +286,85 @@ class TestAudioProcessing(unittest.TestCase):
             self.assertIn("chunk_transcription timed out.", report["error_details"][0])
         
         logger.debug("Process file chunk transcription timeout test completed")
+
+    def test_transcription_with_empty_audio(self):
+        logger.debug("Starting transcription with empty audio test")
+        
+        # Create an empty audio file
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
+            temp_file_path = temp_file.name
+            self.temp_files.append(temp_file_path)
+            
+            # Create a valid but empty MP3 file
+            subprocess.run(['ffmpeg', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '1', '-y', '-acodec', 'libmp3lame', '-b:a', '128k', temp_file_path], check=True)
+            
+            # Mock split_audio to return empty chunks
+            with patch('data_ingestion.scripts.media_utils.split_audio') as mock_split:
+                mock_split.return_value = []
+                transcription = transcribe_media(temp_file_path)
+                
+                self.assertIsNone(transcription, "Expected None for empty audio file")
+        
+        logger.debug("Transcription with empty audio test completed")
+
+    def test_transcription_with_corrupted_audio(self):
+        logger.debug("Starting transcription with corrupted audio test")
+        
+        # Create a corrupted audio file
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
+            temp_file.write(b"This is not valid MP3 data")
+            temp_file_path = temp_file.name
+            self.temp_files.append(temp_file_path)
+            
+            # Test transcription with corrupted audio
+            with self.assertRaises(Exception) as context:
+                transcribe_media(temp_file_path)
+            
+            self.assertIn("Error", str(context.exception))
+        
+        logger.debug("Transcription with corrupted audio test completed")
+
+    def test_pinecone_storage_with_empty_chunks(self):
+        logger.debug("Starting Pinecone storage with empty chunks test")
+        
+        index = load_pinecone()
+        empty_chunks = []
+        empty_embeddings = []
+        
+        # Mock the index.upsert method to raise an exception
+        with patch.object(index, 'upsert', side_effect=PineconeException("No chunks to store")):
+            with self.assertRaises(PineconeException) as context:
+                store_in_pinecone(
+                    index,
+                    empty_chunks,
+                    empty_embeddings,
+                    self.author,
+                    self.library,
+                    is_youtube_video=False
+                )
+            
+            self.assertIn("No chunks to store", str(context.exception))
+        logger.debug("Pinecone storage with empty chunks test completed")
+
+    def test_process_file_with_invalid_path(self):
+        logger.debug("Starting process file with invalid path test")
+        
+        invalid_path = "/path/to/nonexistent/file.mp3"
+        report = process_file(
+            invalid_path,
+            MagicMock(),  # Mock pinecone index
+            self.client,
+            force=False,
+            dryrun=False,
+            default_author=self.author,
+            library_name=self.library,
+            is_youtube_video=False,
+            youtube_data=None,
+        )
+        
+        self.assertEqual(report["errors"], 1)
+        self.assertIn("No such file or directory", report["error_details"][0])
+        logger.debug("Process file with invalid path test completed")
 
 
 if __name__ == "__main__":
