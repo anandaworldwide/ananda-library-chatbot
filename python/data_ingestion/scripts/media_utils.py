@@ -58,6 +58,11 @@ def get_mp3_metadata(file_path):
     2. Filename-based defaults
     3. Generic placeholders
     
+    URL Extraction Strategy:
+    1. Try ID3v2 COMM frame with url descriptor (COMM:url:eng)
+    2. Try generic COMM frames with url descriptor
+    3. Try ffmpeg-style comments (text starting with "url:")
+    
     Returns: (title, author, duration, url, album)
     """
     try:
@@ -68,8 +73,28 @@ def get_mp3_metadata(file_path):
                 "TIT2", [os.path.splitext(os.path.basename(file_path))[0]]
             )[0]
             author = audio.tags.get("TPE1", ["Unknown"])[0]
-            url = audio.tags.get("COMM:url:eng")
-            url = url.text[0] if url else None
+            
+            # URL extraction with multiple format support
+            url = None
+            
+            # Method 1: Try original ID3v2 format (COMM:url:eng)
+            url_tag = audio.tags.get("COMM:url:eng")
+            if url_tag:
+                url = url_tag.text[0]
+                
+            # Method 2: Try any COMM frame with url descriptor
+            if not url:
+                for comment in audio.tags.getall("COMM"):
+                    if comment.desc == 'url':
+                        url = comment.text[0]
+                        break
+                        
+            # Method 3: Try ffmpeg-style comment
+            if not url:
+                comment = audio.tags.get("COMM", [""])[0]
+                if isinstance(comment, str) and comment.startswith("url:"):
+                    url = comment[4:].strip()
+                    
             album = audio.tags.get("TALB", [None])[0]
         else:
             # Fallback to filename-based metadata
