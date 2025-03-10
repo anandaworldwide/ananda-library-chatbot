@@ -541,6 +541,10 @@ function handleError(
         error:
           'The site has exceeded its current quota with OpenAI, please tell an admin to check the plan and billing details.',
       });
+    } else if (error.message.includes('Pinecone')) {
+      sendData({
+        error: `Error connecting to Pinecone: ${error.message}`,
+      });
     } else {
       sendData({ error: error.message || 'Something went wrong' });
     }
@@ -799,7 +803,7 @@ export async function POST(req: NextRequest) {
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
           sanitizedInput.collection,
-          sanitizedInput.mediaTypes,
+          sanitizedInput.mediaTypes || {},
           siteConfig,
         );
 
@@ -825,7 +829,7 @@ export async function POST(req: NextRequest) {
         const fullResponse = await setupAndExecuteLanguageModelChain(
           retriever,
           sanitizedInput.question,
-          sanitizedInput.history,
+          sanitizedInput.history || [],
           sendData,
           sanitizedInput.sourceCount || 4,
           filter,
@@ -844,9 +848,6 @@ export async function POST(req: NextRequest) {
           console.log('Pinecone index:', getPineconeIndexName());
         }
 
-        // Grok  Said remove this line if sending in the chain is sufficient.
-        // sendData({ sourceDocs: promiseDocuments });
-
         // Save answer to Firestore if not a private session
         if (!sanitizedInput.privateSession) {
           const docId = await saveAnswerToFirestore(
@@ -854,13 +855,11 @@ export async function POST(req: NextRequest) {
             fullResponse,
             sanitizedInput.collection,
             promiseDocuments,
-            sanitizedInput.history,
+            sanitizedInput.history || [],
             clientIP,
           );
           sendData({ docId });
         }
-
-        controller.close();
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
         handleError(error, sendData);

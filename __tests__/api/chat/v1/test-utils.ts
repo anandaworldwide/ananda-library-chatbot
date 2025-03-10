@@ -52,7 +52,7 @@ export const mockMakeChain = jest.fn().mockResolvedValue({
 export const mockNextRequest = () => {
   return class extends NextRequest {
     constructor(url: string | URL, init?: RequestInit) {
-      super(url, init as any);
+      super(url, init as RequestInit & { duplex?: string });
     }
   };
 };

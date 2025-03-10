@@ -6,4 +6,5 @@ export interface StreamingResponseData {
   done?: boolean;
   error?: string;
   docId?: string;
+  model?: string;
 }

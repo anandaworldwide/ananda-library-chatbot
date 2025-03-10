@@ -43,7 +43,10 @@ jest.mock('next/server', () => {
     headers: new Headers(init?.headers),
     json: async () => body,
   }));
-  mockResponse.json = jest.fn().mockImplementation((body, init) => ({
+  const mockResponseJson = mockResponse as jest.Mock & {
+    json: jest.Mock;
+  };
+  mockResponseJson.json = jest.fn().mockImplementation((body, init) => ({
     status: init?.status || 200,
     headers: new Headers(init?.headers),
     json: async () => body,
@@ -55,7 +58,7 @@ jest.mock('next/server', () => {
       method: init?.method || 'GET',
       headers: new Headers(init?.headers),
     })),
-    NextResponse: mockResponse,
+    NextResponse: mockResponseJson,
   };
 });
 
