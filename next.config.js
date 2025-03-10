@@ -34,10 +34,13 @@ const nextConfig = {
     return config;
   },
   async rewrites() {
+    // Ensure we have a valid base URL, defaulting to a relative path if not set
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
+
     return [
       {
         source: '/api/sudoCookie',
-        destination: `${process.env.NEXT_PUBLIC_BASE_URL}/api/sudoCookie`,
+        destination: `${baseUrl}/api/sudoCookie`,
       },
     ];
   },

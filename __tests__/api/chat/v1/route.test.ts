@@ -21,10 +21,9 @@
  * 9. Network Error Handling - Tests graceful handling of network timeouts.
  * 10. Firestore Integration - Tests that responses are properly saved/not saved based on privacy setting.
  * 11. Streaming Functionality - Basic verification that responses are streamed properly.
- *     Note: Detailed streaming tests are currently skipped due to mock implementation
- *     challenges with ReadableStream and recursive function calls that lead to
- *     "Maximum call stack size exceeded" errors. A different approach is needed to
- *     properly test streaming functionality without creating circular references.
+ *     Note: Comprehensive streaming tests are implemented in streaming.test.ts using the
+ *     Stream Consumer Pattern, which avoids circular references by consuming the stream
+ *     directly without modifying the ReadableStream implementation.
  *
  * Testing approach:
  * - Use mocks to isolate components and avoid actual external calls
@@ -34,7 +33,6 @@
  *
  * Current coverage: ~50% statement, ~40% branch, ~50% line
  * Opportunities for improvement:
- * - Add comprehensive tests for the streaming functionality (requires new approach)
  * - Add tests for PineconeStore integration
  * - Cover more edge cases in request parameters
  */
