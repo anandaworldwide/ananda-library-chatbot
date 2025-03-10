@@ -1,15 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RequestInit } from 'next/dist/server/web/spec-extension/request';
+import type { SiteConfig } from '@/types/siteConfig';
 
 // Mock dependencies
-export const mockSiteConfig = {
-  allowedOrigins: ['https://example.com', '*.example.com'],
-  pineconeIndex: 'test-index',
-  pineconeEnvironment: 'test-env',
-  openaiApiKey: 'test-key',
-  pineconeApiKey: 'test-key',
-  firebaseServiceAccount: {},
-  firebaseProjectId: 'test-project',
+export const mockSiteConfig: SiteConfig = {
+  siteId: 'test-site',
+  shortname: 'test',
+  name: 'Test Site',
+  tagline: 'Test Tagline',
+  greeting: 'Welcome to Test Site',
+  parent_site_url: 'https://example.com',
+  parent_site_name: 'Example',
+  help_url: 'https://example.com/help',
+  help_text: 'Need help?',
+  allowedFrontEndDomains: ['example.com', '*.example.com'],
+  collectionConfig: {
+    master_swami: 'Master and Swami Collection',
+    whole_library: 'Whole Library',
+  },
+  libraryMappings: {
+    'test-library': {
+      displayName: 'Test Library',
+      url: 'https://example.com/library',
+    },
+  },
+  enableSuggestedQueries: true,
+  enableMediaTypeSelection: true,
+  enableAuthorSelection: true,
+  welcome_popup_heading: 'Welcome!',
+  other_visitors_reference: 'Other visitors also asked...',
+  loginImage: null,
+  chatPlaceholder: 'Ask a question...',
+  header: {
+    logo: 'logo.png',
+    navItems: [{ label: 'Home', path: '/' }],
+  },
+  footer: {
+    links: [{ label: 'About', url: '/about' }],
+  },
+  requireLogin: false,
+  allowPrivateSessions: true,
+  allowAllAnswersPage: true,
+  npsSurveyFrequencyDays: 30,
+  queriesPerUserPerDay: 100,
+  includedLibraries: ['test-library'],
+  enabledMediaTypes: ['text', 'audio', 'youtube'],
+  enableModelComparison: true,
+  showSourceCountSelector: true,
+  hideSources: false,
+  defaultNumSources: 4,
+  temperature: 0.3,
+  modelName: 'gpt-4',
 };
 
 export const mockFirebase = {
@@ -73,6 +114,19 @@ export const setupTestEnv = () => {
   process.env.PINECONE_API_KEY = 'test-key';
   process.env.OPENAI_API_KEY = 'test-openai-key';
   process.env.PINECONE_NAMESPACE = 'test-namespace';
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = JSON.stringify({
+    type: 'service_account',
+    project_id: 'test-project',
+    private_key_id: 'test-key-id',
+    private_key: 'test-private-key',
+    client_email: 'test@test-project.iam.gserviceaccount.com',
+    client_id: 'test-client-id',
+    auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+    token_uri: 'https://oauth2.googleapis.com/token',
+    auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+    client_x509_cert_url:
+      'https://www.googleapis.com/robot/v1/metadata/x509/test%40test-project.iam.gserviceaccount.com',
+  });
 };
 
 // Helper function to create a streaming response
