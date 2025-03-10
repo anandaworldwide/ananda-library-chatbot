@@ -15,6 +15,13 @@ import {
 } from '@/utils/server/redisUtils';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 
+// Check if db is available
+function checkDbAvailable(): void {
+  if (!db) {
+    throw new Error('Database not available');
+  }
+}
+
 // Maximum size for cache chunks (in bytes)
 const MAX_CHUNK_SIZE = 1000000; // Upstash max is 1MB, so we stay well under that.
 
@@ -137,7 +144,10 @@ function getCacheKeyForKeywords(): string {
 export async function getRelatedQuestions(
   questionId: string,
 ): Promise<Answer[]> {
-  const doc = await db
+  // Check if db is available
+  checkDbAvailable();
+
+  const doc = await db!
     .collection(getAnswersCollectionName())
     .doc(questionId)
     .get();
@@ -163,16 +173,19 @@ async function getQuestionsBatch(
   lastProcessedId: string | null,
   batchSize: number,
 ): Promise<Answer[]> {
+  // Check if db is available
+  checkDbAvailable();
+
   console.log(
     `Starting getQuestionsBatch with envName: ${envName}, lastProcessedId: ${lastProcessedId}, batchSize: ${batchSize}`,
   );
 
-  let query = db
+  let query = db!
     .collection(getAnswersCollectionName())
     .orderBy('timestamp', 'desc')
     .limit(batchSize);
   if (lastProcessedId) {
-    const lastDoc = await db
+    const lastDoc = await db!
       .collection(getAnswersCollectionName())
       .doc(lastProcessedId)
       .get();
@@ -196,10 +209,13 @@ async function getQuestionsBatch(
  * Update related questions for a batch of questions
  */
 export async function updateRelatedQuestionsBatch(batchSize: number) {
+  // Check if db is available
+  checkDbAvailable();
+
   // We may not have a full set of keywords, but by the second full pass-through,
   // we should have a pretty good set of keywords.
   const envName = getEnvName();
-  const progressDocRef = db
+  const progressDocRef = db!
     .collection('progress')
     .doc(`${envName}_relatedQuestions`);
   const progressDoc = await progressDocRef.get();
@@ -251,7 +267,7 @@ export async function updateRelatedQuestionsBatch(batchSize: number) {
       question.id,
       question.question,
     );
-    await db
+    await db!
       .collection(getAnswersCollectionName())
       .doc(question.id)
       .update({
@@ -287,8 +303,11 @@ function removeNonAscii(text: string): string {
  * Extract keywords from questions and store them in Firestore and cache
  */
 export async function extractAndStoreKeywords(questions: Answer[]) {
+  // Check if db is available
+  checkDbAvailable();
+
   const tfidf = new TfIdf();
-  const batch = db.batch();
+  const batch = db!.batch();
   const envName = getEnvName();
 
   // Fetch existing cache
@@ -328,7 +347,7 @@ export async function extractAndStoreKeywords(questions: Answer[]) {
       const keywords = Array.from(new Set(rakeKeywords.concat(tfidfKeywords)));
 
       // Add keywords to Firestore
-      const keywordDocRef = db.collection(`${envName}_keywords`).doc(q.id);
+      const keywordDocRef = db!.collection(`${envName}_keywords`).doc(q.id);
       batch.set(keywordDocRef, { keywords, title: q.question });
 
       // Update or add keywords to cache map
@@ -354,6 +373,9 @@ export async function extractAndStoreKeywords(questions: Answer[]) {
 export async function fetchKeywords(): Promise<
   { id: string; keywords: string[]; title: string }[]
 > {
+  // Check if db is available
+  checkDbAvailable();
+
   const cacheKey = getCacheKeyForKeywords();
   const cachedKeywords =
     await safeGetFromCache<{ id: string; keywords: string[]; title: string }[]>(
@@ -365,7 +387,7 @@ export async function fetchKeywords(): Promise<
 
   const keywords: { id: string; keywords: string[]; title: string }[] = [];
   const envName = getEnvName();
-  const snapshot = await db.collection(`${envName}_keywords`).get();
+  const snapshot = await db!.collection(`${envName}_keywords`).get();
   snapshot.forEach((doc) => {
     const data = doc.data();
     keywords.push({ id: doc.id, keywords: data.keywords, title: data.title });
@@ -391,8 +413,11 @@ function calculateJaccardSimilarity(setA: Set<string>, setB: Set<string>) {
 export async function updateRelatedQuestions(
   questionId: string,
 ): Promise<RelatedQuestion[]> {
+  // Check if db is available
+  checkDbAvailable();
+
   // Fetch the specific question by questionId
-  const questionDoc = await db
+  const questionDoc = await db!
     .collection(getAnswersCollectionName())
     .doc(questionId)
     .get();
@@ -441,7 +466,7 @@ export async function updateRelatedQuestions(
     }));
 
   // Update the question with the new related questions, without waiting for the update to complete
-  db.collection(getAnswersCollectionName()).doc(questionId).update({
+  db!.collection(getAnswersCollectionName()).doc(questionId).update({
     relatedQuestionsV2,
   });
 

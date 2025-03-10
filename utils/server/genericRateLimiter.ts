@@ -23,6 +23,12 @@ export async function genericRateLimiter(
   config: RateLimitConfig,
   ip?: string,
 ): Promise<boolean> {
+  // If db is not available, skip rate limiting
+  if (!db) {
+    console.warn('Firestore database not initialized, skipping rate limiting');
+    return true;
+  }
+
   const { windowMs, max, name, collectionPrefix } = {
     ...defaultRateLimitConfig,
     ...config,
@@ -32,7 +38,7 @@ export async function genericRateLimiter(
   const docId = clientIP.replace(/[/.]/g, '_'); // Only sanitize for Firestore doc ID
 
   const now = Date.now();
-  const rateLimitRef = db
+  const rateLimitRef = db!
     .collection(`${collectionPrefix}_${name}_rateLimits`)
     .doc(docId);
 
@@ -85,12 +91,20 @@ export async function deleteRateLimitCounter(
   req: NextApiRequest,
   name: string,
 ): Promise<void> {
+  // If db is not available, skip deletion
+  if (!db) {
+    console.warn(
+      'Firestore database not initialized, skipping rate limit counter deletion',
+    );
+    return;
+  }
+
   const ip = getClientIp(req);
   const key = `${ip}`;
   const collectionName = `${defaultRateLimitConfig.collectionPrefix}_${name}_rateLimits`;
 
   try {
-    const docRef = db.collection(collectionName).doc(key);
+    const docRef = db!.collection(collectionName).doc(key);
     const doc = await docRef.get();
 
     if (doc.exists) {

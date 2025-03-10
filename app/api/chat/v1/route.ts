@@ -499,22 +499,33 @@ async function saveAnswerToFirestore(
   history: [string, string][],
   clientIP: string,
 ): Promise<string> {
-  const answerRef = db.collection(getAnswersCollectionName());
-  const answerEntry = {
-    question: originalQuestion,
-    answer: fullResponse,
-    collection: collection,
-    sources: JSON.stringify(promiseDocuments),
-    likeCount: 0,
-    history: history.map((messagePair: [string, string]) => ({
-      question: messagePair[0],
-      answer: messagePair[1],
-    })),
-    ip: clientIP,
-    timestamp: fbadmin.firestore.FieldValue.serverTimestamp(),
-  };
-  const docRef = await answerRef.add(answerEntry);
-  return docRef.id;
+  // Check if db is available
+  if (!db) {
+    console.warn('Firestore database not initialized, skipping save');
+    return '';
+  }
+
+  try {
+    const answerRef = db.collection(getAnswersCollectionName());
+    const answerEntry = {
+      question: originalQuestion,
+      answer: fullResponse,
+      collection: collection,
+      sources: JSON.stringify(promiseDocuments),
+      likeCount: 0,
+      history: history.map((messagePair: [string, string]) => ({
+        question: messagePair[0],
+        answer: messagePair[1],
+      })),
+      ip: clientIP,
+      timestamp: fbadmin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await answerRef.add(answerEntry);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error saving to Firestore:', error);
+    return '';
+  }
 }
 
 // Function for handling errors and sending appropriate error messages

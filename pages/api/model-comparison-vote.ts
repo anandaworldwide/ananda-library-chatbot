@@ -62,6 +62,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
+  // Check if db is available
+  if (!db) {
+    return res.status(503).json({ error: 'Database not available' });
+  }
+
   try {
     const prefix = isDevelopment() ? 'dev_' : 'prod_';
     const voteRef = db.collection(`${prefix}model_comparison_votes`);

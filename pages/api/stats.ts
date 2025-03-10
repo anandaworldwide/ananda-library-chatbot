@@ -16,6 +16,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(200).json(cachedStats);
   }
 
+  // Check if db is available
+  if (!db) {
+    return res.status(503).json({ error: 'Database not available' });
+  }
+
   try {
     const now = new Date();
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);

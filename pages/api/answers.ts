@@ -24,6 +24,11 @@ async function getAnswers(
   likedOnly: boolean,
   sortBy: string,
 ): Promise<{ answers: Answer[]; totalPages: number }> {
+  // Check if db is available
+  if (!db) {
+    throw new Error('Database not available');
+  }
+
   // Initialize the query with sorting options
   let answersQuery = db
     .collection(getAnswersCollectionName())
@@ -90,6 +95,11 @@ async function getAnswers(
 
 // Deletes an answer by its ID
 async function deleteAnswerById(id: string): Promise<void> {
+  // Check if db is available
+  if (!db) {
+    throw new Error('Database not available');
+  }
+
   try {
     await db.collection(getAnswersCollectionName()).doc(id).delete();
   } catch (error) {
@@ -140,6 +150,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           res.status(429).json({
             message: 'Error: Quota exceeded. Please try again later.',
           });
+        } else if (error.message === 'Database not available') {
+          res.status(503).json({ message: 'Database not available' });
         } else {
           res
             .status(500)
@@ -169,9 +181,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       // Error handling for DELETE requests
       console.error('Handler: Error deleting answer: ', error);
       if (error instanceof Error) {
-        res
-          .status(500)
-          .json({ message: 'Error deleting answer', error: error.message });
+        if (error.message === 'Database not available') {
+          res.status(503).json({ message: 'Database not available' });
+        } else {
+          res
+            .status(500)
+            .json({ message: 'Error deleting answer', error: error.message });
+        }
       } else {
         res.status(500).json({
           message: 'Error deleting answer',
