@@ -8,9 +8,12 @@ import type { SiteConfig } from '@/types/siteConfig';
 // Add global Request mock if needed
 global.Request = class MockRequest extends Request {
   constructor(input: RequestInfo | URL, init?: RequestInit) {
-    super(typeof input === 'string' ? new URL(input) : input, init as any);
+    super(
+      typeof input === 'string' ? new URL(input) : input,
+      init as RequestInit & { duplex?: string },
+    );
   }
-} as any;
+} as typeof global.Request;
 
 // Mock dependencies
 export const mockSiteConfig: SiteConfig = {
