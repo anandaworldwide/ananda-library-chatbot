@@ -1,6 +1,16 @@
+// This file is not a test file, but utility functions for tests.
+// Jest is treating it as a test file because it ends with .test.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { RequestInit } from 'next/dist/server/web/spec-extension/request';
 import type { SiteConfig } from '@/types/siteConfig';
+
+// Add global Request mock if needed
+global.Request = class MockRequest extends Request {
+  constructor(input: RequestInfo | URL, init?: RequestInit) {
+    super(typeof input === 'string' ? new URL(input) : input, init as any);
+  }
+} as any;
 
 // Mock dependencies
 export const mockSiteConfig: SiteConfig = {
