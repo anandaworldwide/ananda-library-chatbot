@@ -20,7 +20,7 @@ const customJestConfig = {
     '<rootDir>/node_modules/',
     '<rootDir>/.next/',
     '<rootDir>/__tests__/api/chat/v1/test-utils.ts',
-    '<rootDir>/__tests__/api/chat/v1/utils/streaming.ts',
+    '<rootDir>/__tests__/api/chat/v1/utils/',
     '<rootDir>/__tests__/api/chat/v1/streaming-test-utils.ts',
   ],
   collectCoverage: true,

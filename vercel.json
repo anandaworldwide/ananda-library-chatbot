@@ -4,5 +4,14 @@
       "path": "/api/relatedQuestions?updateBatch=50",
       "schedule": "0 * * * *"
     }
+  ],
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next",
+      "config": {
+        "buildCommand": "npm run build-with-api-tests"
+      }
+    }
   ]
 }
