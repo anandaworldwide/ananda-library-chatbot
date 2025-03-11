@@ -1,9 +1,7 @@
-# Ananda Chatbot
+# The Ananda Chatbot - A RAG Chatbot for Your PDF Files, Audio Files, and YouTube Videos
 
 [![Run All Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml)
 [![Comprehensive Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml)
-
-# The Ananda Chatbot - A RAG Chatbot for Your PDF Files, Audio Files, and YouTube Videos
 
 Build a chatGPT chatbot for multiple Large PDF files, audio files, and YouTube
 videos. Optionally generate the PDF fileset from a Wordpress database.

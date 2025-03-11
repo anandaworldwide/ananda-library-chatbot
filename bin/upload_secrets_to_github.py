@@ -6,16 +6,17 @@ This script uploads environment variables from site-specific .env files to GitHu
 It automatically creates secrets in both Preview and Production environments for a specified site.
 
 Usage:
-    ./upload_secrets_to_github.py --site SHORTNAME [--repo REPO_NAME] [--repo-level]
+    ./upload_secrets_to_github.py --site SHORTNAME [--repo-level] [--dry-run]
 
 Example:
-    ./upload_secrets_to_github.py --site ananda --repo anandaworldwide/ananda-library-chatbot
+    ./upload_secrets_to_github.py --site ananda
     ./upload_secrets_to_github.py --site ananda --repo-level
+    ./upload_secrets_to_github.py --site ananda --dry-run
 
 Parameters:
     --site: Short name used for finding the environment file (.env.SHORTNAME)
-    --repo: Full GitHub repository name (default: anandaworldwide/ananda-library-chatbot)
     --repo-level: Optional flag to use repository-level secrets instead of environment secrets
+    --dry-run: Show what would be done without actually uploading secrets
 
 Requirements:
     - GitHub CLI (gh) installed and authenticated
@@ -24,8 +25,8 @@ Requirements:
 
 Notes:
     - The script will upload all variables from .env.SHORTNAME to both:
-      * Preview-SHORTNAME-library-chatbot
-      * Production-SHORTNAME-library-chatbot
+      * Preview-[site-name]-chatbot
+      * Production-[site-name]-chatbot
     - Environments will be created if they don't exist
     - Multiline values (like JSON) are properly handled
     - Comments and empty lines are ignored
@@ -117,9 +118,13 @@ def parse_env_file(file_path):
     
     return env_vars
 
-def ensure_environment_exists(environment_name, repo):
+def ensure_environment_exists(environment_name, repo, dry_run=False):
     """Check if a GitHub environment exists and create it if it doesn't."""
     print(f"Checking if environment {environment_name} exists...")
+    
+    if dry_run:
+        print(f"[DRY RUN] Would check if environment {environment_name} exists in repo {repo}")
+        return
     
     try:
         subprocess.run(
@@ -149,59 +154,70 @@ def ensure_environment_exists(environment_name, repo):
             print(f"Error checking environment: {e.stderr.decode()}")
             sys.exit(1)
 
-def upload_to_environment(env_name, site_name, env_vars, repo):
+def upload_to_environment(env_name, site_name, env_vars, repo, dry_run=False):
     """Upload secrets to a specific GitHub environment."""
     # Use a consistent naming convention based on your setup
-    environment = f"{env_name}-{site_name}-library-chatbot"  # Adjust suffix as needed
+    environment = f"{env_name}-{site_name}-chatbot"
     print(f"📤 Uploading to {environment} environment...")
     
-    ensure_environment_exists(environment, repo)
+    ensure_environment_exists(environment, repo, dry_run)
     
     for key, value in env_vars.items():
         if key and value:
-            print(f"  Setting {key} for {environment}")
-            try:
-                subprocess.run(
-                    ['gh', 'secret', 'set', key, '--env', environment, '--body', value, '--repo', repo],
-                    check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-            except subprocess.CalledProcessError as e:
-                print(f"Error setting {key}: {e.stderr.decode() if e.stderr else str(e)}")
+            if dry_run:
+                print(f"  [DRY RUN] Would set {key} for {environment}")
+            else:
+                print(f"  Setting {key} for {environment}")
+                try:
+                    subprocess.run(
+                        ['gh', 'secret', 'set', key, '--env', environment, '--body', value, '--repo', repo],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                except subprocess.CalledProcessError as e:
+                    print(f"Error setting {key}: {e.stderr.decode() if e.stderr else str(e)}")
     
     print(f"✅ Completed uploading secrets to {environment}")
 
-def upload_to_repo_level(env_vars, repo):
+def upload_to_repo_level(env_vars, dry_run=False):
     """Upload secrets at the repository level."""
+    repo = 'anandaworldwide/ananda-library-chatbot'  # Hardcoded repository
     print(f"📤 Uploading to repository-level secrets...")
     
     for key, value in env_vars.items():
         if key and value:
-            print(f"  Setting {key} at repository level")
-            try:
-                # Use GitHub CLI to set the secret at repo level
-                subprocess.run(
-                    ['gh', 'secret', 'set', key, '--body', value, '--repo', repo],
-                    check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-            except subprocess.CalledProcessError as e:
-                print(f"Error setting {key}: {e.stderr.decode() if e.stderr else str(e)}")
+            if dry_run:
+                print(f"  [DRY RUN] Would set {key} at repository level")
+            else:
+                print(f"  Setting {key} at repository level")
+                try:
+                    # Use GitHub CLI to set the secret at repo level
+                    subprocess.run(
+                        ['gh', 'secret', 'set', key, '--body', value, '--repo', repo],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                except subprocess.CalledProcessError as e:
+                    print(f"Error setting {key}: {e.stderr.decode() if e.stderr else str(e)}")
     
     print(f"✅ Completed uploading repository-level secrets")
 
 def main():
     parser = argparse.ArgumentParser(description='Upload environment variables to GitHub environments.')
     parser.add_argument('--site', required=True, help='Short site name for environment file (e.g., ananda)')
-    parser.add_argument('--repo', default='anandaworldwide/ananda-library-chatbot', help='Full GitHub repository name')
     parser.add_argument('--repo-level', action='store_true', help='Use repository-level secrets instead of environment secrets')
+    parser.add_argument('--dry-run', action='store_true', help='Show what would be done without actually uploading secrets')
     
     args = parser.parse_args()
     site = args.site
-    repo = args.repo
+    repo = 'anandaworldwide/ananda-library-chatbot'  # Always use this repository
     use_repo_level = args.repo_level
+    dry_run = args.dry_run
+    
+    if dry_run:
+        print("🔍 DRY RUN MODE - No secrets will be uploaded")
     
     # Check GitHub CLI
     check_gh_cli()
@@ -215,12 +231,15 @@ def main():
     env_vars = parse_env_file(env_file)
     
     if use_repo_level:
-        upload_to_repo_level(env_vars, repo)
+        upload_to_repo_level(env_vars, dry_run)
     else:
-        upload_to_environment("Preview", site, env_vars, repo)
-        upload_to_environment("Production", site, env_vars, repo)
+        upload_to_environment("Preview", site, env_vars, repo, dry_run)
+        upload_to_environment("Production", site, env_vars, repo, dry_run)
     
-    print(f"🎉 All secrets have been uploaded for {site}!")
+    if dry_run:
+        print(f"🎉 [DRY RUN] All secrets would have been uploaded for {site}!")
+    else:
+        print(f"🎉 All secrets have been uploaded for {site}!")
 
 if __name__ == "__main__":
     main()
