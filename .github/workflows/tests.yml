@@ -24,7 +24,7 @@ jobs:
         run: npm ci
 
       - name: Run all tests
-        run: npm test
+        run: npx jest --config=jest.config.cjs
         env:
           NODE_ENV: test
           # Add placeholder for Firebase credentials - these should be set as GitHub secrets

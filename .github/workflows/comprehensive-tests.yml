@@ -54,7 +54,7 @@ jobs:
         run: npm ci
 
       - name: Run API tests
-        run: npx jest --testPathIgnorePatterns="/__tests__/components/,/__tests__/api/chat/v1/test-utils.ts,/__tests__/api/chat/v1/utils/,/__tests__/api/chat/v1/streaming-test-utils.ts"
+        run: npx jest --config=jest.config.cjs --testPathPattern=__tests__/api/
         env:
           NODE_ENV: test
           # Add placeholder for Firebase credentials - these should be set as GitHub secrets
