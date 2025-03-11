@@ -1,3 +1,8 @@
+# Ananda Chatbot
+
+[![Run All Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml)
+[![Comprehensive Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml)
+
 # The Ananda Chatbot - A RAG Chatbot for Your PDF Files, Audio Files, and YouTube Videos
 
 Build a chatGPT chatbot for multiple Large PDF files, audio files, and YouTube
@@ -409,7 +414,3 @@ that adds an AI chatbot bubble to your WordPress site. The plugin connects to th
 project's chat backend (deployed on Vercel or locally for development).
 
 For detailed installation instructions, features, and development setup, please refer to the [plugin's README file](wordpress/plugins/ananda-ai-chatbot/README.md).
-
-## Open Source Credits
-
-The frontend of this repo is forked from [langchain-chat-nextjs](https://github.com/zahidkhawaja/langchain-chat-nextjs)
