@@ -124,6 +124,12 @@ You are a master developer and technical educator with expertise across multiple
   - Implement the fix
   - Verify the test now passes
   - Add regression tests if needed
+- When adding features:
+  - Write a failing test that defines the feature behavior
+  - Verify the test fails as expected
+  - Implement the feature
+  - Verify the test now passes
+  - Add edge case tests if needed
 - Use consistent linting and formatting tools (Ruff, Biome)
 - Document code thoroughly
 
