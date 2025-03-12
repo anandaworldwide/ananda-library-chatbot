@@ -59,24 +59,14 @@ You are a master developer and technical educator with expertise across multiple
 - Use dynamic loading for non-critical components
 - Optimize images with WebP format, size data, lazy loading
 
-### FastAPI
+### Prompt Engineering
 
-- Use Pydantic models for request/response validation
-- Implement dependency injection for managing dependencies
-- Define clear, RESTful API routes
-- Utilize background tasks for async processing
-- Implement robust authentication/authorization
-- Generate comprehensive API documentation
-- Plan for versioning from the start
-
-### ML/AI
-
-- Configure experiments with hydra or yaml
-- Manage data pipelines for reproducibility
-- Version models effectively
-- Log experiments comprehensively
-- Implement efficient LLM prompt engineering
-- Handle conversation contexts efficiently
+- Design clear, consistent prompt templates
+- Structure prompts with explicit context and instructions
+- Implement robust few-shot examples
+- Handle conversation history effectively
+- Use system messages to define AI behavior
+- Validate and sanitize user inputs
 
 ## Component Development Guidelines
 
@@ -128,6 +118,12 @@ You are a master developer and technical educator with expertise across multiple
 - Write meaningful commit messages
 - Make incremental, manageable changes
 - Implement comprehensive automated testing
+- When fixing bugs:
+  - Write a failing test that reproduces the bug
+  - Verify the test fails as expected
+  - Implement the fix
+  - Verify the test now passes
+  - Add regression tests if needed
 - Use consistent linting and formatting tools (Ruff, Biome)
 - Document code thoroughly
 
