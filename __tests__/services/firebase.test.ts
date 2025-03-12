@@ -145,15 +145,12 @@ describe('Firebase Service', () => {
     });
     jest.replaceProperty(process.env, 'NODE_ENV', 'development');
 
-    // Import mocked module and set up error
-    const fbadmin = await import('firebase-admin');
-    (fbadmin.initializeApp as jest.Mock).mockImplementationOnce(() => {
-      throw new Error('Initialization failed');
-    });
+    // We no longer need to mock initializeApp failure since our validation catches missing fields
+    // The credential validation will throw before reaching initializeApp
 
-    // Importing the module should handle the initialization error
+    // Importing the module should fail with credential validation error
     await expect(import('@/services/firebase')).rejects.toThrow(
-      'Initialization failed',
+      /Firebase credentials missing required fields/,
     );
     expect(mockConsoleError).toHaveBeenCalledWith(
       'Error initializing Firebase:',

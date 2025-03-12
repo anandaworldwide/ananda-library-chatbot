@@ -55,9 +55,8 @@ jobs:
         run: npx jest --config=jest.config.cjs --testPathPattern=__tests__/api/
         env:
           NODE_ENV: test
-          # Add placeholder for Firebase credentials - these should be set as GitHub secrets
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          # Add other environment variables as needed
+          # Default to empty JSON object for credentials - Firebase client code will handle missing credentials
+          GOOGLE_APPLICATION_CREDENTIALS: '{}'
           NEXT_PUBLIC_BASE_URL: http://localhost:3000
 
       - name: Upload API test coverage
@@ -89,7 +88,8 @@ jobs:
         run: npm test
         env:
           NODE_ENV: test
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          # Default to empty JSON object for credentials - Firebase client code will handle missing credentials
+          GOOGLE_APPLICATION_CREDENTIALS: '{}'
           NEXT_PUBLIC_BASE_URL: http://localhost:3000
 
       - name: Upload complete test coverage
