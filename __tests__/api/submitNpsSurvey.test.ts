@@ -12,31 +12,30 @@ import { createMocks } from 'node-mocks-http';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../pages/api/submitNpsSurvey';
 
-// Mock the googleapis module
-jest.mock('googleapis', () => {
-  const mockGetFn = jest.fn();
-  const mockAppendFn = jest.fn();
+// Mock the googleapis module using jest.mock
+// The syntax with mock at the top level and outside of the function is required by Jest
+const mockGetFn = jest.fn();
+const mockAppendFn = jest.fn();
 
-  return {
-    google: {
-      auth: {
-        GoogleAuth: jest.fn().mockImplementation(() => ({
-          getClient: jest.fn().mockResolvedValue({}),
-        })),
-      },
-      sheets: jest.fn().mockImplementation(() => ({
-        spreadsheets: {
-          values: {
-            get: mockGetFn,
-            append: mockAppendFn,
-          },
-        },
+// Use automatic mock and then manually define the implementation
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('googleapis', () => ({
+  google: {
+    auth: {
+      GoogleAuth: jest.fn().mockImplementation(() => ({
+        getClient: jest.fn().mockResolvedValue({}),
       })),
     },
-    mockGetFn,
-    mockAppendFn,
-  };
-});
+    sheets: jest.fn().mockImplementation(() => ({
+      spreadsheets: {
+        values: {
+          get: mockGetFn,
+          append: mockAppendFn,
+        },
+      },
+    })),
+  },
+}));
 
 // Mock JSON.parse to handle credentials
 const originalJsonParse = JSON.parse;
@@ -56,9 +55,6 @@ global.JSON.parse = jest.fn().mockImplementation((text) => {
   }
   return originalJsonParse(text);
 });
-
-// Import the mocked functions
-const { mockGetFn, mockAppendFn } = require('googleapis');
 
 describe('NPS Survey API', () => {
   // Set up environment variables before each test
