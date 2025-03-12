@@ -12,6 +12,11 @@ jest.mock('@/utils/client/clipboard', () => ({
   copyTextToClipboard: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Cast the mock to the correct type for proper access to mock.calls
+const mockedCopyTextToClipboard = copyTextToClipboard as jest.MockedFunction<
+  typeof copyTextToClipboard
+>;
+
 jest.mock('@/utils/client/analytics', () => ({
   logEvent: jest.fn(),
 }));
@@ -149,6 +154,37 @@ describe('CopyButton', () => {
       expect.stringContaining('Test Doc 2 (Test Library)'),
       true,
     );
+  });
+
+  it('should include YouTube URL when url field is present for YouTube sources', async () => {
+    const youtubeSource: Document<DocMetadata>[] = [
+      {
+        pageContent: 'test youtube content',
+        metadata: {
+          title: 'The Healing Power of Silence',
+          type: 'video',
+          library: 'Ananda Youtube',
+          url: 'https://www.youtube.com/watch?v=example123',
+        },
+      },
+    ];
+
+    const props = {
+      ...mockProps,
+      sources: youtubeSource,
+    };
+
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    // After implementation, the YouTube URL should be included
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const call = mockedCopyTextToClipboard.mock.calls[0][0];
+    expect(call).toContain('https://www.youtube.com/watch?v=example123');
   });
 
   it('uses "Unknown source" for missing titles', async () => {
