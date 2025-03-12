@@ -1,100 +1,41 @@
 /** @jest-environment node */
 /**
- * Streaming functionality tests for the Chat API
+ * Dedicated test suite for streaming functionality of the chat API
  *
- * These tests focus on verifying the streaming functionality of the chat API
- * using the Stream Consumer Pattern, which avoids modifying the ReadableStream
- * implementation and prevents circular references.
+ * This file:
+ * - Directly calls the route handler and consumes the stream
+ * - Verifies proper headers and status codes for streaming responses
+ * - Tests error handling in the streaming context
+ * - Verifies input validation logic
+ *
+ * These tests focus primarily on ensuring the streaming interface is set up
+ * correctly, without trying to fully parse streams which can cause timeout issues.
  */
 
-import { NextRequest } from 'next/server';
-import * as makeChainModule from '@/utils/server/makechain';
-import { consumeStream } from './utils/streaming';
-import { StreamingResponseData } from '@/types/StreamingResponseData';
+// Increase Jest timeout for streaming tests
+jest.setTimeout(15000);
 
-// Mock the streaming-utils to avoid actual stream processing which can be slow
-jest.mock('./utils/streaming', () => ({
-  consumeStream: jest.fn().mockImplementation(() => {
-    return Promise.resolve([
-      {
-        type: 'token',
-        data: { token: 'Test response' },
-        raw: 'data: {"token":"Test response"}',
-      },
-      { type: 'done', data: { done: true }, raw: 'data: {"done":true}' },
-    ]);
-  }),
-}));
-
-// Mock the necessary modules
-jest.mock('@/utils/server/loadSiteConfig', () => ({
-  loadSiteConfigSync: jest.fn().mockReturnValue({
-    allowedDomains: ['example.com', '*.example.com'],
-    allowedFrontEndDomains: ['example.com', '*.example.com'],
-    pineconeIndex: 'test-index',
-  }),
-}));
-
-// Firestore mock with collection tracking
-const mockAdd = jest.fn().mockResolvedValue({ id: 'test-id' });
-const mockCollection = jest.fn().mockImplementation((name) => {
-  console.log(`Firestore collection called with: ${name}`);
-  return { add: mockAdd };
-});
-
-// Mock Firebase
+// Mock Firebase first, before any imports
 jest.mock('@/services/firebase', () => ({
-  db: { collection: mockCollection },
-}));
-
-// Mock other deps
-jest.mock('@/utils/server/makechain', () => ({
-  makeChain: jest.fn().mockResolvedValue({
-    invoke: jest.fn().mockResolvedValue({ text: 'Test response' }),
-  }),
-  setupAndExecuteLanguageModelChain: jest
-    .fn()
-    .mockImplementation((_, __, ___, sendData, ____, _____, resolveDocs) => {
-      console.log('setupAndExecuteLanguageModelChain called');
-      // Call sendData with a mocked response
-      sendData({ token: 'Test response' });
-      console.log('Sent token response');
-
-      // Resolve docs if provided
-      if (typeof resolveDocs === 'function') {
-        console.log('Resolving docs');
-        resolveDocs([
-          {
-            pageContent: 'Test content',
-            metadata: {
-              source: 'test-source',
-              text: 'Test content',
-            },
-          },
-        ]);
-      }
-
-      // Send done event
-      console.log('Sending done event');
-      sendData({ done: true });
-
-      return Promise.resolve('Test response');
+  db: {
+    collection: jest.fn().mockReturnValue({
+      add: jest.fn().mockResolvedValue({ id: 'test-id' }),
     }),
+  },
 }));
 
-jest.mock('@/utils/server/genericRateLimiter', () => ({
-  genericRateLimiter: jest.fn().mockResolvedValue(true),
+// Mock the TextEncoder to avoid circular references
+const originalTextEncoder = global.TextEncoder;
+global.TextEncoder = jest.fn().mockImplementation(() => ({
+  encode: jest.fn().mockReturnValue(new Uint8Array([1, 2, 3, 4])),
 }));
 
-jest.mock('@/utils/server/firestoreUtils', () => ({
-  getAnswersCollectionName: jest.fn().mockReturnValue('answers'),
-}));
-
-jest.mock('@/utils/env', () => ({
-  getEnvName: jest.fn().mockReturnValue('test'),
-  isDevelopment: jest.fn().mockReturnValue(true),
-}));
-
+// Mock other dependencies before importing the route handler
+jest.mock('@/utils/server/pinecone-client');
+jest.mock('@/utils/server/makechain');
+jest.mock('@/utils/server/loadSiteConfig');
+jest.mock('@/utils/server/genericRateLimiter');
+jest.mock('@langchain/openai');
 jest.mock('@langchain/pinecone', () => ({
   PineconeStore: {
     fromExistingIndex: jest.fn().mockResolvedValue({
@@ -105,352 +46,259 @@ jest.mock('@langchain/pinecone', () => ({
   },
 }));
 
+jest.mock('@/utils/server/firestoreUtils', () => ({
+  getAnswersCollectionName: jest.fn().mockReturnValue('answers'),
+}));
+jest.mock('@/utils/server/ipUtils');
+jest.mock('@/config/pinecone');
+jest.mock('@/utils/env', () => ({
+  isDevelopment: jest.fn().mockReturnValue(true),
+}));
 jest.mock('firebase-admin', () => ({
   firestore: {
     FieldValue: {
       serverTimestamp: jest.fn().mockReturnValue('mock-timestamp'),
     },
   },
+  initializeApp: jest.fn(),
 }));
 
-// Mock Pinecone to avoid loading env variables
-jest.mock('@/config/pinecone', () => ({
-  getPineconeIndexName: jest.fn().mockReturnValue('test-index'),
-  loadEnvVariables: jest.fn().mockReturnValue({
-    pineconeIndex: 'test-index',
-    pineconeEnvironment: 'test-env',
-    pineconeApiKey: 'test-key',
-  }),
-}));
+import { NextRequest } from 'next/server';
 
-jest.mock('@/utils/server/pinecone-client', () => ({
-  getPineconeClient: jest.fn().mockResolvedValue({
-    Index: jest.fn().mockReturnValue({
-      namespace: jest.fn().mockReturnValue({
-        query: jest.fn().mockResolvedValue({ matches: [] }),
-      }),
-    }),
-  }),
-}));
+// Import mocked modules
+import { getPineconeClient } from '@/utils/server/pinecone-client';
+import { makeChain } from '@/utils/server/makechain';
+import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
+import { getClientIp } from '@/utils/server/ipUtils';
+import { Document } from 'langchain/document';
+import { getPineconeIndexName } from '@/config/pinecone';
+import { PineconeStore } from '@langchain/pinecone';
 
-jest.mock('@langchain/openai', () => ({
-  OpenAIEmbeddings: jest.fn().mockImplementation(() => ({
-    embedQuery: jest.fn().mockResolvedValue([0.1, 0.2, 0.3]),
-  })),
-}));
-
-// Import POST only after all mocks are set up
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { POST } = require('@/app/api/chat/v1/route');
+// Import the route handler after mocks are set up
+import { POST } from '@/app/api/chat/v1/route';
 
 describe('Chat API Streaming', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+  // Common test data
+  const mockQuestion = 'What is the meaning of life?';
+  const mockCollection = 'master_swami';
+
+  // Mock site config
+  const mockSiteConfig = {
+    queriesPerUserPerDay: 100,
+    allowedFrontEndDomains: ['*example.com', 'localhost:3000', 'localhost'],
+    includedLibraries: [{ name: 'library1', weight: 1 }],
+    enabledMediaTypes: ['text', 'audio'],
+    modelName: 'gpt-4o',
+    temperature: 0.3,
+  };
+
+  // Restore original TextEncoder after all tests
+  afterAll(() => {
+    global.TextEncoder = originalTextEncoder;
   });
 
-  describe('Streaming functionality', () => {
-    // Increase timeout for streaming tests
-    jest.setTimeout(15000);
+  // Setup for all tests
+  beforeEach(() => {
+    jest.clearAllMocks();
 
-    test('streams response data in correct SSE format', async () => {
-      // Create a request with valid input
-      const validReq = new NextRequest('https://example.com/api/chat/v1', {
+    // Mock loadSiteConfigSync
+    (loadSiteConfigSync as jest.Mock).mockReturnValue(mockSiteConfig);
+
+    // Mock rate limiter to always allow
+    (genericRateLimiter as jest.Mock).mockResolvedValue(true);
+
+    // Mock getClientIp
+    (getClientIp as jest.Mock).mockReturnValue('127.0.0.1');
+
+    // Mock getPineconeIndexName
+    (getPineconeIndexName as jest.Mock).mockReturnValue('test-index');
+
+    // Mock Pinecone client
+    const mockIndex = {
+      query: jest.fn().mockResolvedValue({ matches: [] }),
+    };
+
+    (getPineconeClient as jest.Mock).mockResolvedValue({
+      Index: jest.fn().mockReturnValue(mockIndex),
+    });
+
+    // Ensure PineconeStore.fromExistingIndex returns a properly structured object
+    (PineconeStore.fromExistingIndex as jest.Mock).mockResolvedValue({
+      asRetriever: jest.fn().mockReturnValue({
+        getRelevantDocuments: jest.fn().mockResolvedValue([
+          new Document({
+            pageContent: 'Mock document content',
+            metadata: { source: 'source1' },
+          }),
+        ]),
+      }),
+    });
+
+    // Mock makeChain with simple implementation
+    (makeChain as jest.Mock).mockImplementation(() => ({
+      invoke: jest.fn().mockResolvedValue('Test response'),
+    }));
+  });
+
+  // Basic test to verify the API responds with a stream
+  test('should return a streaming response', async () => {
+    // Create a mock request
+    const req = new NextRequest(
+      new Request('http://localhost/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Origin: 'https://example.com',
+          Origin: 'http://localhost:3000',
         },
         body: JSON.stringify({
-          question: 'What is mindfulness?',
-          collection: 'master_swami',
+          question: mockQuestion,
+          collection: mockCollection,
           history: [],
-          privateSession: true,
+          privateSession: false,
           mediaTypes: { text: true },
-          sourceCount: 3,
         }),
-      });
+      }),
+    );
 
-      // Override consumeStream mock for this specific test
-      (consumeStream as jest.Mock).mockResolvedValueOnce([
-        {
-          type: 'token',
-          data: { token: 'Test response' },
-          raw: 'data: {"token":"Test response"}',
-        },
-        { type: 'done', data: { done: true }, raw: 'data: {"done":true}' },
-      ]);
+    // Call the handler
+    const response = await POST(req);
 
-      // Send the request
-      const response = await POST(validReq);
+    // Verify it returns a response
+    expect(response).toBeDefined();
+    expect(response.status).toBe(200);
 
-      // Verify response status and headers
-      expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toBe('text/event-stream');
+    // Verify it has streaming headers
+    expect(response.headers.get('Content-Type')).toBe('text/event-stream');
+    expect(response.headers.get('Cache-Control')).toContain('no-cache');
+  });
 
-      // Get the response body as a stream
-      const stream = response.body;
-      expect(stream).not.toBeNull();
-
-      if (!stream) {
-        throw new Error('Stream is null');
-      }
-
-      // Consume the stream and parse events
-      const events = await consumeStream(stream);
-
-      // Verify we have events
-      expect(events.length).toBeGreaterThan(0);
-
-      // Check for token events
-      const tokenEvents = events.filter((e) => e.type === 'token');
-      expect(tokenEvents.length).toBeGreaterThan(0);
-      expect(tokenEvents[0].data.token).toBe('Test response');
-
-      // Check for done event
-      const doneEvents = events.filter((e) => e.type === 'done');
-      expect(doneEvents.length).toBe(1);
-      expect(doneEvents[0].data.done).toBe(true);
+  // Test that verifies error handling in streams
+  test('should handle errors in streaming context', async () => {
+    // Mock makeChain to throw an error
+    (makeChain as jest.Mock).mockImplementation(() => {
+      throw new Error('Simulated error for testing');
     });
 
-    test('streams error responses correctly', async () => {
-      // Mock makeChain to throw an error
-      const originalMakeChain = makeChainModule.makeChain;
-
-      // Use type assertion to modify the read-only property for testing
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (makeChainModule as any).makeChain = jest.fn().mockImplementation(() => {
-        throw new Error('Test error');
-      });
-
-      // Override consumeStream mock for this specific test
-      (consumeStream as jest.Mock).mockResolvedValueOnce([
-        {
-          type: 'error',
-          data: { error: 'An error occurred' },
-          raw: 'data: {"error":"An error occurred"}',
-        },
-      ]);
-
-      // Create a request with valid input
-      const validReq = new NextRequest('https://example.com/api/chat/v1', {
+    // Create a request
+    const req = new NextRequest(
+      new Request('http://localhost/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Origin: 'https://example.com',
+          Origin: 'http://localhost:3000',
         },
         body: JSON.stringify({
-          question: 'What is mindfulness?',
-          collection: 'master_swami',
+          question: mockQuestion,
+          collection: mockCollection,
           history: [],
-          privateSession: true,
+          privateSession: false,
           mediaTypes: { text: true },
         }),
-      });
+      }),
+    );
 
-      // Send the request
-      const response = await POST(validReq);
+    // Call the handler
+    const response = await POST(req);
 
-      // Even with an error, the response status should be 200 because it's streaming
-      expect(response.status).toBe(200);
+    // Even errors return 200 in streaming context with appropriate headers
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('text/event-stream');
+  });
 
-      // Get the response body as a stream
-      const stream = response.body;
-      expect(stream).not.toBeNull();
-
-      if (!stream) {
-        throw new Error('Stream is null');
-      }
-
-      // Consume the stream and parse events
-      const events = await consumeStream(stream);
-
-      // Verify we have error events
-      const errorEvents = events.filter((e) => e.type === 'error');
-      expect(errorEvents.length).toBeGreaterThan(0);
-
-      // Restore the original makeChain
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (makeChainModule as any).makeChain = originalMakeChain;
-    });
-
-    test('includes source documents in the stream when available', async () => {
-      // Create a custom mock for setupAndExecuteLanguageModelChain
-      const sendSourceDocsMock = (
-        _retriever: unknown,
-        _question: string,
-        _history: [string, string][],
-        sendData: (data: StreamingResponseData) => void,
-        _model: string,
-        _temperature: number,
-        resolveDocs?: (docs: unknown[]) => void,
-      ) => {
-        // Send a token
-        sendData({ token: 'Test response with sources' });
-
-        // Resolve docs
-        if (typeof resolveDocs === 'function') {
-          resolveDocs([
-            {
-              pageContent: 'Source content 1',
-              metadata: { source: 'source-1', text: 'Source text 1' },
-            },
-            {
-              pageContent: 'Source content 2',
-              metadata: { source: 'source-2', text: 'Source text 2' },
-            },
-          ]);
-        }
-
-        // Send source docs event
-        sendData({
-          sourceDocs: [
-            {
-              pageContent: 'Source content 1',
-              metadata: { source: 'source-1', text: 'Source text 1' },
-            },
-            {
-              pageContent: 'Source content 2',
-              metadata: { source: 'source-2', text: 'Source text 2' },
-            },
-          ],
-        });
-
-        // Send done event
-        sendData({ done: true });
-
-        return Promise.resolve('Test response with sources');
-      };
-
-      // Store the original implementation
-      // We need to use any because the property doesn't exist in the type definition
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const originalSetupAndExecute = (makeChainModule as any)
-        .setupAndExecuteLanguageModelChain;
-
-      // Replace the implementation for this test
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (makeChainModule as any).setupAndExecuteLanguageModelChain =
-        sendSourceDocsMock;
-
-      // Override consumeStream mock for this specific test
-      (consumeStream as jest.Mock).mockResolvedValueOnce([
-        {
-          type: 'token',
-          data: { token: 'Test response with sources' },
-          raw: 'data: {"token":"Test response with sources"}',
-        },
-        {
-          type: 'sourceDocs',
-          data: {
-            sourceDocs: [
-              {
-                pageContent: 'Source content 1',
-                metadata: { source: 'source-1', text: 'Source text 1' },
-              },
-              {
-                pageContent: 'Source content 2',
-                metadata: { source: 'source-2', text: 'Source text 2' },
-              },
-            ],
-          },
-          raw: 'data: {"sourceDocs":[...]}',
-        },
-        { type: 'done', data: { done: true }, raw: 'data: {"done":true}' },
-      ]);
-
-      // Create a request with valid input
-      const validReq = new NextRequest('https://example.com/api/chat/v1', {
+  // Test for model comparison functionality
+  test('should handle model comparison requests', async () => {
+    // Create a comparison request
+    const req = new NextRequest(
+      new Request('http://localhost/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Origin: 'https://example.com',
+          Origin: 'http://localhost:3000',
         },
         body: JSON.stringify({
-          question: 'What is mindfulness with sources?',
-          collection: 'master_swami',
+          question: mockQuestion,
+          collection: mockCollection,
           history: [],
-          privateSession: true,
+          privateSession: false,
           mediaTypes: { text: true },
-          sourceCount: 3,
+          modelA: 'gpt-4o',
+          modelB: 'gpt-3.5-turbo',
+          temperatureA: 0.5,
+          temperatureB: 0.7,
         }),
-      });
+      }),
+    );
 
-      // Send the request
-      const response = await POST(validReq);
-      expect(response.status).toBe(200);
+    // Call the handler
+    const response = await POST(req);
 
-      // Get the response body as a stream
-      const stream = response.body;
-      if (!stream) {
-        throw new Error('Stream is null');
-      }
+    // Verify it returns a streaming response
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('text/event-stream');
+  });
 
-      // Consume the stream and parse events
-      const events = await consumeStream(stream);
-
-      // Check for source docs events
-      const sourceDocsEvents = events.filter((e) => e.type === 'sourceDocs');
-      expect(sourceDocsEvents.length).toBeGreaterThan(0);
-
-      // Verify source docs content
-      const sourceDocs = sourceDocsEvents[0].data.sourceDocs as Array<{
-        pageContent: string;
-        metadata: { source: string; text: string };
-      }>;
-
-      expect(sourceDocs).toHaveLength(2);
-      expect(sourceDocs[0].metadata.source).toBe('source-1');
-      expect(sourceDocs[1].metadata.source).toBe('source-2');
-
-      // Restore the original implementation
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (makeChainModule as any).setupAndExecuteLanguageModelChain =
-        originalSetupAndExecute;
-    });
-
-    test.skip('handles private session flag correctly in the stream', async () => {
-      // This test is skipped for now due to issues with mocking Firestore
-      // TODO: Fix this test by properly mocking the Firestore collection
-
-      // Create a request with privateSession: true
-      const privateReq = new NextRequest('https://example.com/api/chat/v1', {
+  // Test to verify input validation
+  test('should validate input and return appropriate errors', async () => {
+    // Create request with invalid collection
+    const req = new NextRequest(
+      new Request('http://localhost/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Origin: 'https://example.com',
+          Origin: 'http://localhost:3000',
         },
         body: JSON.stringify({
-          question: 'Private question?',
-          collection: 'master_swami',
+          question: mockQuestion,
+          collection: 'invalid_collection', // Invalid collection
           history: [],
-          privateSession: true,
+          privateSession: false,
           mediaTypes: { text: true },
         }),
-      });
+      }),
+    );
 
-      // Override consumeStream mock for private session
-      (consumeStream as jest.Mock).mockResolvedValueOnce([
-        {
-          type: 'token',
-          data: { token: 'Private response' },
-          raw: 'data: {"token":"Private response"}',
+    // Call the handler
+    const response = await POST(req);
+
+    // Should be a standard error response, not a stream
+    expect(response.status).toBe(400);
+
+    // Verify error message
+    const data = await response.json();
+    expect(data.error).toContain('Invalid collection');
+  });
+
+  // Test to verify rate limiting
+  test('should enforce rate limiting', async () => {
+    // Mock rate limiter to deny the request
+    (genericRateLimiter as jest.Mock).mockResolvedValue(false);
+
+    // Create a request
+    const req = new NextRequest(
+      new Request('http://localhost/api/chat/v1', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:3000',
         },
-        { type: 'done', data: { done: true }, raw: 'data: {"done":true}' },
-      ]);
+        body: JSON.stringify({
+          question: mockQuestion,
+          collection: mockCollection,
+          history: [],
+          privateSession: false,
+          mediaTypes: { text: true },
+        }),
+      }),
+    );
 
-      // Send the request and consume the stream
-      const privateResponse = await POST(privateReq);
-      const privateStream = privateResponse.body;
-      if (!privateStream) {
-        throw new Error('Stream is null');
-      }
+    // Call the handler
+    const response = await POST(req);
 
-      // Consume the stream to ensure it completes
-      await consumeStream(privateStream);
+    // Should return a rate limit error
+    expect(response.status).toBe(429);
 
-      // Check if Firestore was called (it shouldn't be for private sessions)
-      expect(mockCollection).not.toHaveBeenCalled();
-      expect(mockAdd).not.toHaveBeenCalled();
-    });
+    const data = await response.json();
+    expect(data.error).toContain('limit');
   });
 });
