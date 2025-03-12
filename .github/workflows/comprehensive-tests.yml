@@ -2,9 +2,7 @@ name: Comprehensive Test Suite
 
 on:
   push:
-    branches: [main, develop, unit-tests]
   pull_request:
-    branches: [main, develop, unit-tests]
 
 jobs:
   component-tests:
