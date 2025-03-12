@@ -1,3 +1,24 @@
+# This script is a web crawler designed to scrape content from a specified domain and store it in a Pinecone index.
+# It uses Playwright for browser automation and BeautifulSoup for HTML parsing.
+# The crawler maintains state across runs using checkpoints and can resume from where it left off.
+# It filters out unwanted URLs and media files, focusing on text content.
+# The script also handles exit signals gracefully, saving its state before shutting down.
+#
+# Command line arguments:
+#   --site: Site ID for environment variables (e.g., ananda-public). Will load from .env.[site]
+#           Default: 'ananda-public'
+#   --max-pages: Maximum number of pages to crawl
+#                Default: 10
+#   --domain: Domain to crawl (e.g., ananda.org)
+#             Default: 'ananda.org'
+#   --continue: Continue from previous checkpoint (if available)
+#               Default: False (start fresh)
+#
+# Example usage:
+#   python ananda_crawler.py --domain ananda.org --max-pages 50
+#   python ananda_crawler.py --site ananda-public --continue
+#   python ananda_crawler.py --domain crystalclarity.com --max-pages 100 --site crystal-clarity
+
 # Standard library imports
 import argparse
 import hashlib
@@ -37,7 +58,7 @@ class PageContent:
     content: str
     metadata: Dict
 
-
+# Function to split content into overlapping chunks by word count
 def chunk_content(content: str, target_words: int = 150, overlap_words: int = 75) -> List[str]:
     """Split content into overlapping chunks by word count"""
     words = content.split()
@@ -557,7 +578,7 @@ def main():
     print(f"\nUsing environment from {env_file}")
 
     # Verify required environment variables
-    required_vars = ['PINECONE_API_KEY', 'PINECONE_INDEX_NAME', 'OPENAI_API_KEY']
+    required_vars = ['PINECONE_API_KEY', 'PINECONE_INGEST_INDEX_NAME', 'OPENAI_API_KEY']
     missing_vars = [var for var in required_vars if not os.getenv(var)]
     if missing_vars:
         print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
@@ -566,9 +587,9 @@ def main():
 
     # Initialize Pinecone with new API
     pc = pinecone.Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
-    index_name = os.getenv('PINECONE_INDEX_NAME')
+    index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
     if not index_name:
-        print("Error: PINECONE_INDEX_NAME environment variable is not set")
+        print("Error: PINECONE_INGEST_INDEX_NAME environment variable is not set")
         return
     
     print(f"Target Pinecone index: {index_name}")
@@ -600,7 +621,7 @@ def main():
                 
                 # Add timeout for the entire crawl process
                 start_time = time.time()
-                max_runtime = 60*60*8  # 8 hour timeout
+                max_runtime = 60*60*24  # 24 hour timeout
                 
                 while crawler.state.pending_urls and pages_processed < args.max_pages:
                     # Check for overall timeout
