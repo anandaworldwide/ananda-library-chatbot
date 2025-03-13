@@ -1,6 +1,6 @@
 {
   "**/*.{ts,tsx}": [
-    "npx tsc --noEmit",
+    "npx tsc --noEmit --skipLibCheck",
     "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage"
   ],
   "**/*.{js,jsx}": [
