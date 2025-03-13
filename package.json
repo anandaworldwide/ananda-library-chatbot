@@ -62,7 +62,7 @@
     "langchain": "^0.3.19",
     "mdast-util-from-markdown": "^2.0.2",
     "micromark-util-symbol": "^2.0.1",
-    "mongodb": "^6.14.2",
+    "mongodb": "^5.9.2",
     "natural": "^8.0.1",
     "next": "14.2.24",
     "nextjs-google-analytics": "^2.3.7",
