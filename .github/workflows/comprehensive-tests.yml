@@ -19,11 +19,14 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Update package-lock.json
+        run: npm install --package-lock-only
+
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
       - name: Run component tests
-        run: npx jest --testPathPattern=__tests__/components/ --no-coverage
+        run: npx jest --testPathPattern=__tests__/components/
         env:
           NODE_ENV: test
 
@@ -48,11 +51,14 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Update package-lock.json
+        run: npm install --package-lock-only
+
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
       - name: Run API tests
-        run: npx jest --config=jest.config.cjs --testPathPattern=__tests__/api/ --no-coverage
+        run: npx jest --config=jest.config.cjs --testPathPattern=__tests__/api/
         env:
           NODE_ENV: test
           # Default to empty JSON object for credentials - Firebase client code will handle missing credentials
@@ -79,6 +85,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Update package-lock.json
+        run: npm install --package-lock-only
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -109,18 +118,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Download all coverage reports
-        uses: actions/download-artifact@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          pattern: '*-coverage'
-          path: coverage-reports
+          node-version: '20'
+          cache: 'npm'
 
-      - name: List coverage reports
-        run: find coverage-reports -type f | sort
+      - name: Update package-lock.json
+        run: npm install --package-lock-only
 
-      - name: Upload combined coverage reports
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run a full test with coverage
+        run: npx jest --config=jest.config.cjs --ci
+        env:
+          NODE_ENV: test
+          GOOGLE_APPLICATION_CREDENTIALS: '{}'
+          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+
+      - name: Upload full coverage report
         uses: actions/upload-artifact@v4
         with:
-          name: all-coverage-reports
-          path: coverage-reports/
+          name: full-coverage
+          path: coverage/
           if-no-files-found: warn
