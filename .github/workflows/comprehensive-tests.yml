@@ -30,13 +30,6 @@ jobs:
         env:
           NODE_ENV: test
 
-      - name: Upload component test coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: component-coverage
-          path: coverage/
-          if-no-files-found: warn
-
   api-tests:
     name: API Tests
     runs-on: ubuntu-latest
@@ -65,13 +58,6 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: '{}'
           NEXT_PUBLIC_BASE_URL: http://localhost:3000
 
-      - name: Upload API test coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-coverage
-          path: coverage/
-          if-no-files-found: warn
-
   utility-tests:
     name: Utility Tests
     runs-on: ubuntu-latest
@@ -93,19 +79,12 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Run utility and other tests
-        run: npx jest --config=jest.config.cjs --testPathPattern='^(?!__tests__/(components|api)/)'
+        run: npx jest --config=jest.config.cjs --testPathPattern='^(?!__tests__/(components|api)/)' --no-coverage
         env:
           NODE_ENV: test
           # Default to empty JSON object for credentials - Firebase client code will handle missing credentials
           GOOGLE_APPLICATION_CREDENTIALS: '{}'
           NEXT_PUBLIC_BASE_URL: http://localhost:3000
-
-      - name: Upload utility test coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: utility-coverage
-          path: coverage/
-          if-no-files-found: warn
 
   # This job just collects artifacts and doesn't re-run tests
   combine-coverage:
