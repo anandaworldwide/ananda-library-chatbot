@@ -10,7 +10,7 @@
       "src": "package.json",
       "use": "@vercel/next",
       "config": {
-        "buildCommand": "npm run build-with-api-tests"
+        "buildCommand": "npm install --legacy-peer-deps && npm run build-with-api-tests"
       }
     }
   ]
