@@ -19,6 +19,7 @@ import {
   getAllowPrivateSessions,
   getAllowAllAnswersPage,
   getEnabledMediaTypes,
+  getCollectionsConfig,
 } from '@/utils/client/siteConfig';
 import { SiteConfig } from '@/types/siteConfig';
 
@@ -84,6 +85,7 @@ describe('siteConfig utils', () => {
       expect(getAllowPrivateSessions(null)).toBe(false);
       expect(getAllowAllAnswersPage(null)).toBe(false);
       expect(getEnabledMediaTypes(null)).toEqual(['text', 'audio', 'youtube']);
+      expect(getCollectionsConfig(null)).toEqual({});
     });
   });
 
@@ -119,6 +121,126 @@ describe('siteConfig utils', () => {
       expect(getAllowPrivateSessions(mockSiteConfig)).toBe(true);
       expect(getAllowAllAnswersPage(mockSiteConfig)).toBe(true);
       expect(getEnabledMediaTypes(mockSiteConfig)).toEqual(['text', 'audio']);
+      expect(getCollectionsConfig(mockSiteConfig)).toEqual({ test: 'test' });
+    });
+  });
+
+  describe('with partial config', () => {
+    it('handles undefined properties gracefully', () => {
+      const partialConfig: Partial<SiteConfig> = {
+        siteId: 'partial-site',
+        name: 'Partial Site',
+      };
+
+      expect(getSiteName(partialConfig as SiteConfig)).toBe('Partial Site');
+      expect(getShortname(partialConfig as SiteConfig)).toBe('AI Chatbot');
+      expect(getTagline(partialConfig as SiteConfig)).toBe(
+        'Explore, Discover, Learn',
+      );
+      expect(getParentSiteUrl(partialConfig as SiteConfig)).toBe('');
+      expect(getParentSiteName(partialConfig as SiteConfig)).toBe('');
+      expect(getGreeting(partialConfig as SiteConfig)).toBe(
+        'Hello! How can I assist you today?',
+      );
+      expect(getLibraryMappings(partialConfig as SiteConfig)).toEqual({});
+      expect(getEnableSuggestedQueries(partialConfig as SiteConfig)).toBe(
+        false,
+      );
+      expect(getEnableMediaTypeSelection(partialConfig as SiteConfig)).toBe(
+        false,
+      );
+      expect(getEnableAuthorSelection(partialConfig as SiteConfig)).toBe(false);
+      expect(getWelcomePopupHeading(partialConfig as SiteConfig)).toBe(
+        'Welcome!',
+      );
+      expect(getOtherVisitorsReference(partialConfig as SiteConfig)).toBe(
+        'other visitors',
+      );
+      expect(getLoginImage(partialConfig as SiteConfig)).toBe(null);
+      expect(getChatPlaceholder(partialConfig as SiteConfig)).toBe('');
+      expect(getHeaderConfig(partialConfig as SiteConfig)).toEqual({
+        logo: '',
+        navItems: [],
+      });
+      expect(getFooterConfig(partialConfig as SiteConfig)).toEqual({
+        links: [],
+      });
+      expect(getRequireLogin(partialConfig as SiteConfig)).toBe(true);
+      expect(getAllowPrivateSessions(partialConfig as SiteConfig)).toBe(false);
+      expect(getAllowAllAnswersPage(partialConfig as SiteConfig)).toBe(false);
+      expect(getEnabledMediaTypes(partialConfig as SiteConfig)).toEqual([
+        'text',
+        'audio',
+        'youtube',
+      ]);
+      expect(getCollectionsConfig(partialConfig as SiteConfig)).toEqual({});
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles empty strings properly', () => {
+      const configWithEmptyStrings: Partial<SiteConfig> = {
+        siteId: 'empty-string-site',
+        name: '',
+        shortname: '',
+        tagline: '',
+        parent_site_url: '',
+        parent_site_name: '',
+        greeting: '',
+        chatPlaceholder: '',
+        welcome_popup_heading: '',
+        other_visitors_reference: '',
+      };
+
+      expect(getSiteName(configWithEmptyStrings as SiteConfig)).toBe('');
+      expect(getShortname(configWithEmptyStrings as SiteConfig)).toBe('');
+      expect(getTagline(configWithEmptyStrings as SiteConfig)).toBe('');
+      expect(getParentSiteUrl(configWithEmptyStrings as SiteConfig)).toBe('');
+      expect(getParentSiteName(configWithEmptyStrings as SiteConfig)).toBe('');
+      expect(getGreeting(configWithEmptyStrings as SiteConfig)).toBe('');
+      expect(getWelcomePopupHeading(configWithEmptyStrings as SiteConfig)).toBe(
+        '',
+      );
+      expect(
+        getOtherVisitorsReference(configWithEmptyStrings as SiteConfig),
+      ).toBe('');
+      expect(getChatPlaceholder(configWithEmptyStrings as SiteConfig)).toBe('');
+    });
+
+    it('handles empty arrays properly', () => {
+      const configWithEmptyArrays: Partial<SiteConfig> = {
+        siteId: 'empty-arrays-site',
+        enabledMediaTypes: [],
+        header: { logo: 'logo.png', navItems: [] },
+        footer: { links: [] },
+      };
+
+      expect(getEnabledMediaTypes(configWithEmptyArrays as SiteConfig)).toEqual(
+        [],
+      );
+      expect(getHeaderConfig(configWithEmptyArrays as SiteConfig)).toEqual({
+        logo: 'logo.png',
+        navItems: [],
+      });
+      expect(getFooterConfig(configWithEmptyArrays as SiteConfig)).toEqual({
+        links: [],
+      });
+    });
+
+    it('handles partial header and footer configs', () => {
+      const partialHeaderFooter: Partial<SiteConfig> = {
+        siteId: 'partial-header-footer',
+        header: { logo: 'only-logo.png', navItems: [] },
+        footer: { links: [] },
+      };
+
+      expect(getHeaderConfig(partialHeaderFooter as SiteConfig)).toEqual({
+        logo: 'only-logo.png',
+        navItems: [],
+      });
+      expect(getFooterConfig(partialHeaderFooter as SiteConfig)).toEqual({
+        links: [],
+      });
     });
   });
 });

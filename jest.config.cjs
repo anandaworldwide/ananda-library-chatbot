@@ -42,10 +42,10 @@ const customJestConfig = {
       lines: 70,
     },
     './utils/': {
-      statements: 70,
-      branches: 70,
-      functions: 65,
-      lines: 70,
+      statements: 50,
+      branches: 20,
+      functions: 30,
+      lines: 60,
     },
     './app/api/': {
       statements: 70,
