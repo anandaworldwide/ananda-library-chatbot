@@ -17,10 +17,13 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage",
+    "test:changed": "jest --bail --findRelatedTests",
     "ingest": "NODE_OPTIONS='--max-old-space-size=6000' tsx -r dotenv/config scripts/ingest-text-data.ts",
     "ingest-trace": "NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' tsx -r dotenv/config scripts/ingest-text-data.ts",
     "emulator": "firebase emulators:start --import ./emulator-data --export-on-exit ./emulator-data --inspect-functions",
-    "prompt": "tsx -r dotenv/config scripts/manage-prompts.ts"
+    "prompt": "tsx -r dotenv/config scripts/manage-prompts.ts",
+    "prepare": "npx husky install",
+    "setup-hooks": "npx husky install && chmod +x .husky/pre-commit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.758.0",
@@ -105,8 +108,10 @@
     "autoprefixer": "^10.4.21",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.24",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
+    "lint-staged": "^15.5.0",
     "node-fetch": "^2.7.0",
     "node-mocks-http": "^1.16.2",
     "postcss": "^8.5.3",

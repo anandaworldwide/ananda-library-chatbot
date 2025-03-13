@@ -1,6 +1,7 @@
 # Test Templates
 
-This directory contains templates for creating standardized tests across the codebase. These templates help ensure consistent test coverage and quality.
+This directory contains templates for creating standardized tests across the codebase. These templates help ensure
+consistent test coverage and quality.
 
 ## Available Templates
 

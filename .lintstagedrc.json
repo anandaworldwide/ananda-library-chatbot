@@ -1,0 +1,9 @@
+{
+  "**/*.{ts,tsx}": [
+    "npx tsc --noEmit",
+    "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage"
+  ],
+  "**/*.{js,jsx}": [
+    "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage"
+  ]
+}
