@@ -23,7 +23,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Run component tests
-        run: npx jest --testPathPattern=__tests__/components/
+        run: npx jest --testPathPattern=__tests__/components/ --no-coverage
         env:
           NODE_ENV: test
 
@@ -52,7 +52,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Run API tests
-        run: npx jest --config=jest.config.cjs --testPathPattern=__tests__/api/
+        run: npx jest --config=jest.config.cjs --testPathPattern=__tests__/api/ --no-coverage
         env:
           NODE_ENV: test
           # Default to empty JSON object for credentials - Firebase client code will handle missing credentials
