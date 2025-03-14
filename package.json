@@ -18,6 +18,7 @@
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage",
     "test:changed": "jest --bail --findRelatedTests",
+    "find-untested": "node scripts/find-untested-files.js",
     "ingest": "NODE_OPTIONS='--max-old-space-size=6000' tsx -r dotenv/config scripts/ingest-text-data.ts",
     "ingest-trace": "NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' tsx -r dotenv/config scripts/ingest-text-data.ts",
     "emulator": "firebase emulators:start --import ./emulator-data --export-on-exit ./emulator-data --inspect-functions",
