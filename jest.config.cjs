@@ -23,6 +23,8 @@ const customJestConfig = {
     '<rootDir>/__tests__/api/chat/v1/utils/',
     '<rootDir>/__tests__/api/chat/v1/streaming-test-utils.ts',
     '<rootDir>/__tests__/.templates/',
+    // Skip server-specific tests when running the default config
+    '<rootDir>/utils/server',
   ],
   collectCoverage: true,
   coverageDirectory: 'coverage',
@@ -63,5 +65,28 @@ const customJestConfig = {
   ],
 };
 
+// Configuration for server-side tests that need Node environment
+const serverConfig = {
+  displayName: 'server',
+  testMatch: ['<rootDir>/utils/server/**/*.test.ts'],
+  testEnvironment: 'node',
+  setupFiles: ['<rootDir>/test/jest.setup.js'],
+  testTimeout: 30000,
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+  },
+  transform: {
+    '^.+\\.(ts|tsx)$': ['ts-jest'],
+  },
+};
+
+// Check if we're running server tests specifically
+const isServerTest = process.argv.some(
+  (arg) =>
+    arg.includes('utils/server') || arg.includes('--selectProjects=server'),
+);
+
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
-module.exports = createJestConfig(customJestConfig);
+module.exports = isServerTest
+  ? serverConfig
+  : createJestConfig(customJestConfig);
