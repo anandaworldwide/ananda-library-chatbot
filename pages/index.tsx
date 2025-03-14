@@ -291,6 +291,12 @@ export default function Home({
 
   const handleStreamingResponse = useCallback(
     (data: StreamingResponseData) => {
+      if (data.siteId && data.siteId !== 'ananda-public') {
+        console.error(
+          `ERROR: Backend is using incorrect site ID: ${data.siteId}. Expected: ananda-public`,
+        );
+      }
+
       if (data.token) {
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
@@ -298,7 +304,11 @@ export default function Home({
 
       if (data.sourceDocs) {
         const immutableSourceDocs = [...data.sourceDocs];
-        //         setSourceCount(immutableSourceDocs.length);
+        if (immutableSourceDocs.length < sourceCount) {
+          console.error(
+            `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
+          );
+        }
         setSourceDocs(immutableSourceDocs);
         updateMessageState(accumulatedResponseRef.current, immutableSourceDocs);
       }
@@ -344,11 +354,12 @@ export default function Home({
       }
     },
     [
+      updateMessageState,
+      sourceCount,
       setLoading,
       setError,
       setMessageState,
       fetchRelatedQuestions,
-      updateMessageState,
     ],
   );
 

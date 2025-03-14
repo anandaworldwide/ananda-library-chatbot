@@ -85,6 +85,7 @@ describe('Chat API Streaming', () => {
 
   // Mock site config
   const mockSiteConfig = {
+    siteId: 'ananda-public',
     queriesPerUserPerDay: 100,
     allowedFrontEndDomains: ['*example.com', 'localhost:3000', 'localhost'],
     includedLibraries: [{ name: 'library1', weight: 1 }],
@@ -300,5 +301,110 @@ describe('Chat API Streaming', () => {
 
     const data = await response.json();
     expect(data.error).toContain('limit');
+  });
+
+  // Test that verifies site ID is sent in the response
+  test('should send site ID in streaming response', async () => {
+    // Create a mock request
+    const req = new NextRequest(
+      new Request('http://localhost/api/chat/v1', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          question: mockQuestion,
+          collection: mockCollection,
+          history: [],
+          privateSession: false,
+          mediaTypes: { text: true },
+        }),
+      }),
+    );
+
+    // Call the handler
+    const response = await POST(req);
+    expect(response.status).toBe(200);
+
+    // Get the stream
+    const stream = response.body;
+    expect(stream).toBeDefined();
+
+    // Read the stream
+    const reader = stream!.getReader();
+    const chunks: string[] = [];
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(new TextDecoder().decode(value));
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // Parse the chunks and look for site ID
+    const events = chunks.flatMap((chunk) =>
+      chunk
+        .split('\n\n')
+        .filter((line) => line.startsWith('data: '))
+        .map((line) => JSON.parse(line.replace('data: ', ''))),
+    );
+
+    // Verify that site ID was sent
+    const siteIdEvent = events.find((event) => event.siteId);
+    expect(siteIdEvent).toBeDefined();
+    expect(siteIdEvent?.siteId).toBe('ananda-public');
+  });
+
+  // Test that verifies warning when fewer sources are returned
+  test('should warn when fewer sources are returned than requested', async () => {
+    // Mock console.warn to track warnings
+    const originalWarn = console.warn;
+    const mockWarn = jest.fn();
+    console.warn = mockWarn;
+
+    // Mock PineconeStore to return fewer documents than requested
+    (PineconeStore.fromExistingIndex as jest.Mock).mockResolvedValue({
+      asRetriever: () => ({
+        getRelevantDocuments: async () => [
+          new Document({ pageContent: 'doc1' }),
+          new Document({ pageContent: 'doc2' }),
+        ],
+      }),
+    });
+
+    // Create a request asking for more sources than will be returned
+    const req = new NextRequest(
+      new Request('http://localhost/api/chat/v1', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          question: mockQuestion,
+          collection: mockCollection,
+          history: [],
+          privateSession: false,
+          mediaTypes: { text: true },
+          sourceCount: 4, // Request 4 sources but mock only returns 2
+        }),
+      }),
+    );
+
+    // Call the handler
+    const response = await POST(req);
+    expect(response.status).toBe(200);
+
+    // Verify warning was logged
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.stringContaining('Retrieved 2 sources, but 4 were requested'),
+    );
+
+    // Restore console.warn
+    console.warn = originalWarn;
   });
 });

@@ -506,6 +506,27 @@ document.addEventListener('DOMContentLoaded', () => {
               try {
                 const jsonData = JSON.parse(line.slice(5));
 
+                // Check site ID and source count
+                if (jsonData.siteId && jsonData.siteId !== 'ananda-public') {
+                  console.error(
+                    '[Ananda-AI-Chatbot]: Backend is using incorrect site ID:',
+                    jsonData.siteId,
+                    'Expected: ananda-public',
+                  );
+                }
+                if (
+                  jsonData.sourceDocs &&
+                  jsonData.sourceDocs.length < sourceCount
+                ) {
+                  console.error(
+                    '[Ananda-AI-Chatbot]: Received',
+                    jsonData.sourceDocs.length,
+                    'sources, but',
+                    sourceCount,
+                    'were requested.',
+                  );
+                }
+
                 // Handle token updates
                 if (jsonData.token) {
                   accumulatedResponse += jsonData.token;

@@ -407,6 +407,10 @@ async function setupVectorStoreAndRetriever(
           resolveWithDocuments([]);
         },
         handleRetrieverEnd(docs: Document[]) {
+          if (docs.length < sourceCount) {
+            const error = `Error: Retrieved ${docs.length} sources, but ${sourceCount} were requested.`;
+            console.error(error);
+          }
           resolveWithDocuments(docs);
           sendData({ sourceDocs: docs });
         },
@@ -432,6 +436,15 @@ async function setupAndExecuteLanguageModelChain(
   try {
     const modelName = siteConfig?.modelName || 'gpt-4o';
     const temperature = siteConfig?.temperature || 0.3;
+
+    // Send site ID immediately and validate
+    if (siteConfig?.siteId) {
+      if (siteConfig.siteId !== 'ananda-public') {
+        const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ananda-public`;
+        console.error(error);
+      }
+      sendData({ siteId: siteConfig.siteId });
+    }
 
     const chain = await makeChain(
       retriever,
