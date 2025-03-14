@@ -20,6 +20,109 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Get DOM elements
+  const bubble = document.getElementById('aichatbot-bubble');
+  const chatWindow = document.getElementById('aichatbot-window');
+  const input = document.getElementById('aichatbot-input');
+  const sendButton = document.getElementById('aichatbot-send');
+  const messages = document.getElementById('aichatbot-messages');
+
+  // Create controls container (to hold both buttons)
+  const controlsContainer = document.createElement('div');
+  controlsContainer.id = 'aichatbot-controls';
+  chatWindow.appendChild(controlsContainer);
+
+  // Add full page chat button
+  const fullPageButton = document.createElement('div');
+  fullPageButton.id = 'aichatbot-fullpage';
+  fullPageButton.innerHTML = `<i class="fas fa-expand-alt"></i> Open full page chat`;
+
+  // Add header with close button to the chat window
+  const header = document.createElement('div');
+  header.id = 'aichatbot-header';
+  header.innerHTML = `
+    <h3>Ananda Assist</h3>
+    <span id="aichatbot-close"><i class="fas fa-chevron-down"></i></span>
+  `;
+  chatWindow.insertBefore(header, chatWindow.firstChild);
+
+  // Initialize chat history
+  let chatHistory = [];
+  let isStreaming = false;
+  let currentAbortController = null;
+
+  // Default collection and settings
+  const defaultCollection = 'whole_library';
+  const privateSession = false;
+  const mediaTypes = { text: true, audio: false, youtube: false };
+  const sourceCount = 6;
+
+  // Add event listeners after all elements are created
+  // Close button functionality
+  document.getElementById('aichatbot-close').addEventListener('click', () => {
+    chatWindow.style.display = 'none';
+    document.body.classList.remove('aichatbot-window-open');
+    saveChatState();
+  });
+
+  // Full page chat button functionality
+  fullPageButton.addEventListener('click', () => {
+    let fullPageUrl = '/chat';
+    if (typeof aichatbotData !== 'undefined' && aichatbotData.fullPageUrl) {
+      fullPageUrl = aichatbotData.fullPageUrl;
+    }
+    window.open(fullPageUrl, '_blank');
+  });
+
+  // Bubble click functionality
+  bubble.addEventListener('click', (e) => {
+    chatWindow.style.display =
+      chatWindow.style.display === 'none' ? 'flex' : 'none';
+    if (chatWindow.style.display === 'flex') {
+      document.body.classList.add('aichatbot-window-open');
+      setTimeout(() => input.focus(), 0);
+      setTimeout(() => {
+        messages.scrollTop = messages.scrollHeight;
+      }, 0);
+      addWelcomeMessage();
+      if (chatHistory.length > 0) {
+        input.placeholder = '';
+      } else {
+        input.placeholder = getRandomPlaceholder();
+      }
+    } else {
+      document.body.classList.remove('aichatbot-window-open');
+    }
+    saveChatState();
+    e.stopPropagation();
+  });
+
+  // Send button functionality
+  sendButton.addEventListener('click', sendMessage);
+
+  // Enter key functionality
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Add click event delegation for Intercom trigger text
+  messages.addEventListener('click', (e) => {
+    const trigger = e.target.closest('.aichatbot-intercom-trigger');
+    if (trigger) {
+      e.preventDefault();
+      showIntercom();
+    }
+  });
+
+  // Now load chat state and initialize UI
+  loadChatState();
+  addWelcomeMessage();
+  updatePlaceholder();
+  updateClearHistoryButton();
+
   // Check if the wand-magic-sparkles icon is available, use fallback if not
   setTimeout(() => {
     const wandIcon = document.querySelector('.fa-wand-magic-sparkles');
@@ -38,12 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }, 500);
-
-  const bubble = document.getElementById('aichatbot-bubble');
-  const chatWindow = document.getElementById('aichatbot-window');
-  const input = document.getElementById('aichatbot-input');
-  const sendButton = document.getElementById('aichatbot-send');
-  const messages = document.getElementById('aichatbot-messages');
 
   // Define initial height constant
   const INITIAL_HEIGHT = '40px';
@@ -205,285 +302,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
-
-  // Add a header with close button to the chat window
-  const header = document.createElement('div');
-  header.id = 'aichatbot-header';
-  header.innerHTML = `
-    <h3>Ananda Assist</h3>
-    <span id="aichatbot-close"><i class="fas fa-chevron-down"></i></span>
-  `;
-  chatWindow.insertBefore(header, chatWindow.firstChild);
-
-  // Add full page chat button but don't append it yet - we'll add it to the controls container
-  const fullPageButton = document.createElement('div');
-  fullPageButton.id = 'aichatbot-fullpage';
-  fullPageButton.innerHTML = `<i class="fas fa-expand-alt"></i> Open full page chat`;
-
-  // Full page chat button functionality
-  fullPageButton.addEventListener('click', () => {
-    // Get the full page chat URL (either from WordPress data or default)
-    let fullPageUrl = '/chat';
-
-    if (typeof aichatbotData !== 'undefined' && aichatbotData.fullPageUrl) {
-      fullPageUrl = aichatbotData.fullPageUrl;
-    }
-
-    // Open the full page chat in a new tab/window
-    window.open(fullPageUrl, '_blank');
-  });
-
-  // Create controls container (to hold both buttons)
-  const controlsContainer = document.createElement('div');
-  controlsContainer.id = 'aichatbot-controls';
-  chatWindow.appendChild(controlsContainer);
-
-  // Chat history storage
-  let chatHistory = [];
-
-  // Add click event delegation for Intercom trigger text
-  messages.addEventListener('click', (e) => {
-    // Check if the clicked element is the intercom trigger or a child of it
-    const trigger = e.target.closest('.aichatbot-intercom-trigger');
-    if (trigger) {
-      // Prevent default link behavior if it's within a link
-      e.preventDefault();
-      // Show Intercom when the trigger text is clicked
-      showIntercom();
-    }
-  });
-
-  // Load chat history and UI state from sessionStorage
-  function loadChatState() {
-    try {
-      // Load chat history
-      const savedHistory = sessionStorage.getItem('aichatbot_history');
-      if (savedHistory) {
-        chatHistory = JSON.parse(savedHistory);
-
-        // Rebuild chat messages from history
-        chatHistory.forEach(([userMsg, botMsg]) => {
-          // Add user message
-          if (userMsg) {
-            const userMessage = document.createElement('div');
-            userMessage.className = 'aichatbot-user-message';
-            userMessage.textContent = userMsg;
-            messages.appendChild(userMessage);
-          }
-
-          // Add bot message
-          if (botMsg) {
-            const botMessage = document.createElement('div');
-            botMessage.className = 'aichatbot-bot-message';
-
-            const messageContent = document.createElement('div');
-            messageContent.className = 'aichatbot-message-content';
-            messageContent.innerHTML = renderMarkdown(botMsg);
-
-            botMessage.appendChild(messageContent);
-            messages.appendChild(botMessage);
-          }
-        });
-
-        // Scroll to the bottom of the chat after loading history
-        setTimeout(() => {
-          messages.scrollTop = messages.scrollHeight;
-        }, 0);
-      }
-
-      // Load UI state (window open/closed)
-      const windowVisible = sessionStorage.getItem('aichatbot_window_visible');
-
-      // Check screen width - only auto-open on larger screens
-      const isLargeScreen = window.innerWidth >= 768; // Typical tablet/desktop breakpoint
-
-      if (windowVisible === 'true') {
-        // If it was visible and screen is large enough, show it
-        // Otherwise leave it minimized on mobile
-        chatWindow.style.display = isLargeScreen ? 'flex' : 'none';
-      } else {
-        // Default to hiding chat window if it was previously closed
-        chatWindow.style.display = 'none';
-      }
-    } catch (e) {
-      console.error('Error loading chat state:', e);
-      // Default to hiding chat window
-      chatWindow.style.display = 'none';
-    }
-
-    // Focus on input field when chat window is shown
-    if (chatWindow.style.display === 'flex') {
-      setTimeout(() => input.focus(), 0);
-    }
-
-    // Show/hide clear history button based on chat history
-    updateClearHistoryButton();
-  }
-
-  // Save chat history and UI state to sessionStorage
-  function saveChatState() {
-    try {
-      sessionStorage.setItem('aichatbot_history', JSON.stringify(chatHistory));
-      sessionStorage.setItem(
-        'aichatbot_window_visible',
-        chatWindow.style.display === 'flex',
-      );
-
-      // Update placeholder whenever chat history is saved
-      if (chatHistory.length > 0) {
-        input.placeholder = '';
-      }
-    } catch (e) {
-      console.error('Error saving chat state:', e);
-    }
-  }
-
-  // Load chat state on page load
-  loadChatState();
-
-  // Add initial welcome message if chat is empty
-  function addWelcomeMessage() {
-    if (chatHistory.length === 0 && messages.children.length === 0) {
-      const welcomeMessage = document.createElement('div');
-      welcomeMessage.className = 'aichatbot-bot-message';
-
-      const messageContent = document.createElement('div');
-      messageContent.className = 'aichatbot-message-content';
-      messageContent.innerHTML = '<p>Hi! Ask me anything.</p>';
-
-      welcomeMessage.appendChild(messageContent);
-      messages.appendChild(welcomeMessage);
-    }
-  }
-
-  // Call once on page load
-  addWelcomeMessage();
-
-  // Set placeholder text for the input field - only when no chat history exists
-  function updatePlaceholder() {
-    if (chatHistory.length === 0 && messages.children.length === 0) {
-      input.placeholder = getRandomPlaceholder();
-    }
-  }
-
-  // Close button functionality
-  document.getElementById('aichatbot-close').addEventListener('click', () => {
-    chatWindow.style.display = 'none';
-    document.body.classList.remove('aichatbot-window-open');
-    saveChatState();
-  });
-
-  // Also call when chat window is opened
-  bubble.addEventListener('click', (e) => {
-    chatWindow.style.display =
-      chatWindow.style.display === 'none' ? 'flex' : 'none';
-    if (chatWindow.style.display === 'flex') {
-      // Add class to body to hide Intercom when our chat is open
-      document.body.classList.add('aichatbot-window-open');
-
-      // Focus on input field when chat window is shown
-      setTimeout(() => input.focus(), 0);
-      // Scroll to bottom when opening chat window
-      setTimeout(() => {
-        messages.scrollTop = messages.scrollHeight;
-      }, 0);
-
-      // Add welcome message if chat is empty
-      addWelcomeMessage();
-
-      // Ensure placeholder is correct when opening chat
-      if (chatHistory.length > 0) {
-        input.placeholder = '';
-      } else {
-        input.placeholder = getRandomPlaceholder();
-      }
-    } else {
-      // Remove class when chat window is closed
-      document.body.classList.remove('aichatbot-window-open');
-    }
-    saveChatState();
-    // Prevent event from bubbling up
-    e.stopPropagation();
-  });
-
-  // Close chat window when clicking outside of it
-  document.addEventListener('click', (e) => {
-    if (
-      chatWindow.style.display === 'flex' &&
-      !chatWindow.contains(e.target) &&
-      e.target !== bubble
-    ) {
-      chatWindow.style.display = 'none';
-      document.body.classList.remove('aichatbot-window-open');
-      saveChatState();
-    }
-  });
-
-  // Handle Escape key to minimize chat window
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && chatWindow.style.display === 'flex') {
-      chatWindow.style.display = 'none';
-      document.body.classList.remove('aichatbot-window-open');
-      saveChatState();
-    }
-  });
-
-  // Send message when button is clicked
-  sendButton.addEventListener('click', sendMessage);
-
-  // Send message when Enter key is pressed, but allow Shift+Enter for newlines
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault(); // Prevent default to avoid adding a newline
-      sendMessage();
-    } else if (e.key === 'Enter' && e.shiftKey) {
-      // Allow Shift+Enter to create a newline
-      // No need to call autoResizeTextarea() as the input event will handle it
-    }
-  });
-
-  // Track current abort controller for canceling requests
-  let currentAbortController = null;
-
-  // Add a flag to track streaming status
-  let isStreaming = false;
-
-  // Default collection and settings
-  const defaultCollection = 'whole_library';
-  const privateSession = false;
-  const mediaTypes = { text: true, audio: false, youtube: false };
-  const sourceCount = 6;
-
-  // Stop the current streaming response
-  function stopStreaming() {
-    if (currentAbortController) {
-      currentAbortController.abort();
-      currentAbortController = null;
-
-      // Reset streaming flag when manually stopped
-      isStreaming = false;
-
-      // Update clear history button state
-      updateClearHistoryButton();
-
-      return true;
-    }
-    return false;
-  }
-
-  // Add stop button to UI
-  const stopButton = document.createElement('button');
-  stopButton.id = 'aichatbot-stop';
-  stopButton.innerHTML = '<i class="fas fa-stop"></i>';
-  stopButton.style.backgroundColor = '#FFF9C4'; // Pale yellow background
-  stopButton.style.color = '#555'; // Darker text for better contrast
-  stopButton.style.display = 'none';
-  stopButton.addEventListener('click', () => {
-    stopStreaming();
-    stopButton.style.display = 'none';
-    sendButton.style.display = 'inline-block';
-  });
-  sendButton.parentNode.insertBefore(stopButton, sendButton.nextSibling);
 
   // Track accumulated response for streaming
   let accumulatedResponse = '';
@@ -940,4 +758,148 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update button visibility
     updateClearHistoryButton();
   }
+
+  // Load chat history and UI state from sessionStorage
+  function loadChatState() {
+    try {
+      // Load chat history
+      const savedHistory = sessionStorage.getItem('aichatbot_history');
+      if (savedHistory) {
+        chatHistory = JSON.parse(savedHistory);
+
+        // Rebuild chat messages from history
+        chatHistory.forEach(([userMsg, botMsg]) => {
+          // Add user message
+          if (userMsg) {
+            const userMessage = document.createElement('div');
+            userMessage.className = 'aichatbot-user-message';
+            userMessage.textContent = userMsg;
+            messages.appendChild(userMessage);
+          }
+
+          // Add bot message
+          if (botMsg) {
+            const botMessage = document.createElement('div');
+            botMessage.className = 'aichatbot-bot-message';
+
+            const messageContent = document.createElement('div');
+            messageContent.className = 'aichatbot-message-content';
+            messageContent.innerHTML = renderMarkdown(botMsg);
+
+            botMessage.appendChild(messageContent);
+            messages.appendChild(botMessage);
+          }
+        });
+
+        // Scroll to the bottom of the chat after loading history
+        setTimeout(() => {
+          messages.scrollTop = messages.scrollHeight;
+        }, 0);
+      }
+
+      // Load UI state (window open/closed)
+      const windowVisible = sessionStorage.getItem('aichatbot_window_visible');
+
+      // Check screen width - only auto-open on larger screens
+      const isLargeScreen = window.innerWidth >= 768; // Typical tablet/desktop breakpoint
+
+      if (windowVisible === 'true') {
+        // If it was visible and screen is large enough, show it
+        // Otherwise leave it minimized on mobile
+        chatWindow.style.display = isLargeScreen ? 'flex' : 'none';
+      } else {
+        // Default to hiding chat window if it was previously closed
+        chatWindow.style.display = 'none';
+      }
+    } catch (e) {
+      console.error('Error loading chat state:', e);
+      // Default to hiding chat window
+      chatWindow.style.display = 'none';
+    }
+
+    // Focus on input field when chat window is shown
+    if (chatWindow.style.display === 'flex') {
+      setTimeout(() => input.focus(), 0);
+    }
+
+    // Show/hide clear history button based on chat history
+    updateClearHistoryButton();
+  }
+
+  // Save chat history and UI state to sessionStorage
+  function saveChatState() {
+    try {
+      sessionStorage.setItem('aichatbot_history', JSON.stringify(chatHistory));
+      sessionStorage.setItem(
+        'aichatbot_window_visible',
+        chatWindow.style.display === 'flex',
+      );
+
+      // Update placeholder whenever chat history is saved
+      if (chatHistory.length > 0) {
+        input.placeholder = '';
+      }
+    } catch (e) {
+      console.error('Error saving chat state:', e);
+    }
+  }
+
+  // Load chat state on page load
+  loadChatState();
+
+  // Add initial welcome message if chat is empty
+  function addWelcomeMessage() {
+    if (chatHistory.length === 0 && messages.children.length === 0) {
+      const welcomeMessage = document.createElement('div');
+      welcomeMessage.className = 'aichatbot-bot-message';
+
+      const messageContent = document.createElement('div');
+      messageContent.className = 'aichatbot-message-content';
+      messageContent.innerHTML = '<p>Hi! Ask me anything.</p>';
+
+      welcomeMessage.appendChild(messageContent);
+      messages.appendChild(welcomeMessage);
+    }
+  }
+
+  // Call once on page load
+  addWelcomeMessage();
+
+  // Set placeholder text for the input field - only when no chat history exists
+  function updatePlaceholder() {
+    if (chatHistory.length === 0 && messages.children.length === 0) {
+      input.placeholder = getRandomPlaceholder();
+    }
+  }
+
+  // Stop the current streaming response
+  function stopStreaming() {
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+
+      // Reset streaming flag when manually stopped
+      isStreaming = false;
+
+      // Update clear history button state
+      updateClearHistoryButton();
+
+      return true;
+    }
+    return false;
+  }
+
+  // Add stop button to UI
+  const stopButton = document.createElement('button');
+  stopButton.id = 'aichatbot-stop';
+  stopButton.innerHTML = '<i class="fas fa-stop"></i>';
+  stopButton.style.backgroundColor = '#FFF9C4'; // Pale yellow background
+  stopButton.style.color = '#555'; // Darker text for better contrast
+  stopButton.style.display = 'none';
+  stopButton.addEventListener('click', () => {
+    stopStreaming();
+    stopButton.style.display = 'none';
+    sendButton.style.display = 'inline-block';
+  });
+  sendButton.parentNode.insertBefore(stopButton, sendButton.nextSibling);
 });
