@@ -950,8 +950,20 @@ function convertChatHistory(
 function normalizeMediaTypes(
   mediaTypes: Partial<MediaTypes> | undefined,
 ): Record<string, boolean> {
-  if (!mediaTypes) return {};
-  return Object.fromEntries(
-    Object.entries(mediaTypes).map(([key, value]) => [key, Boolean(value)]),
+  const defaultTypes = {
+    text: true,
+    image: false,
+    video: false,
+    audio: false,
+  };
+
+  if (!mediaTypes) return defaultTypes;
+
+  return Object.entries(defaultTypes).reduce(
+    (acc, [key, defaultValue]) => ({
+      ...acc,
+      [key]: mediaTypes[key as keyof MediaTypes] ?? defaultValue,
+    }),
+    {} as Record<string, boolean>,
   );
 }
