@@ -27,6 +27,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .json({ error: 'Missing document ID or invalid vote' });
   }
 
+  // Check if db is available
+  if (!db) {
+    return res.status(503).json({ error: 'Database not available' });
+  }
+
   try {
     const docRef = db.collection(getAnswersCollectionName()).doc(docId);
     // Set the vote to 1 for upvote or -1 for downvote

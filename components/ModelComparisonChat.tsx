@@ -24,6 +24,7 @@ export interface SavedState {
     youtube: boolean;
   };
   collection: string;
+  sourceCount: number;
 }
 
 interface ModelComparisonChatProps {
@@ -78,7 +79,9 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
   const [isSudoAdmin, setIsSudoAdmin] = useState(false);
   const [showThankYouMessage, setShowThankYouMessage] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
-  const [sourceCount, setSourceCount] = useState<number>(4);
+  const [sourceCount, setSourceCount] = useState<number>(
+    savedState.sourceCount,
+  );
   const modelOptions = useMemo(
     () => [
       { value: 'gpt-4o', label: 'GPT-4 Optimized' },
@@ -162,6 +165,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
       temperatureB,
       mediaTypes,
       collection,
+      sourceCount,
     });
   }, [
     modelA,
@@ -171,6 +175,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
     mediaTypes,
     collection,
     onStateChange,
+    sourceCount,
   ]);
 
   useEffect(() => {
@@ -250,7 +255,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
 
       console.log('Sending request with:', requestBody); // Debug log
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/chat/v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),

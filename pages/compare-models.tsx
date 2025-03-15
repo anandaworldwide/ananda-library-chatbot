@@ -109,6 +109,7 @@ const ModelComparison: React.FC<ModelComparisonProps> = ({
         youtube: true,
       },
       collection: 'master_swami',
+      sourceCount: siteConfig?.defaultNumSources || 4,
     },
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -144,7 +145,11 @@ const ModelComparison: React.FC<ModelComparisonProps> = ({
             />
             <ModelComparisonChat
               siteConfig={siteConfig}
-              savedState={savedState}
+              savedState={{
+                ...savedState,
+                sourceCount:
+                  siteConfig?.defaultNumSources || savedState.sourceCount,
+              }}
               onStateChange={setSavedState}
             />
           </div>

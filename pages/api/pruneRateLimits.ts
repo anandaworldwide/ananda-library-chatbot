@@ -6,6 +6,11 @@ const PRUNE_OLDER_THAN_DAYS = 90;
 const MS_IN_A_DAY = 24 * 60 * 60 * 1000;
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Check if db is available
+  if (!db) {
+    return res.status(503).json({ error: 'Database not available' });
+  }
+
   const now = Date.now();
   const cutoffTime = now - PRUNE_OLDER_THAN_DAYS * MS_IN_A_DAY;
 

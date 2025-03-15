@@ -14,6 +14,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(403).json({ message: `Forbidden: ${sudo.message}` });
   }
 
+  // Check if db is available
+  if (!db) {
+    return res.status(503).json({ error: 'Database not available' });
+  }
+
   try {
     const answersRef = db.collection(getAnswersCollectionName());
     const downvotedAnswersSnapshot = await answersRef
@@ -33,7 +38,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         collection: data.collection,
         adminAction: data.adminAction,
         adminActionTimestamp: data.adminActionTimestamp,
-        sources: data.sources || []
+        sources: data.sources || [],
       };
     });
 

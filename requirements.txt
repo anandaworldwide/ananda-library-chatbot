@@ -53,6 +53,7 @@ httpcore==1.0.5
 httpx==0.27.0
     # via
     #   -r requirements.in
+    #   langsmith
     #   openai
 idna==3.10
     # via
@@ -63,10 +64,26 @@ imageio==2.37.0
     # via moviepy
 imageio-ffmpeg==0.6.0
     # via moviepy
+jiter==0.8.2
+    # via openai
 jmespath==1.0.1
     # via
     #   boto3
     #   botocore
+jsonpatch==1.33
+    # via langchain-core
+jsonpointer==3.0.0
+    # via jsonpatch
+langchain-core==0.3.37
+    # via
+    #   langchain-openai
+    #   langchain-text-splitters
+langchain-openai==0.3.6
+    # via -r requirements.in
+langchain-text-splitters==0.3.6
+    # via -r requirements.in
+langsmith==0.3.8
+    # via langchain-core
 moviepy==1.0.3
     # via -r requirements.in
 mutagen==1.47.0
@@ -77,10 +94,16 @@ numpy==2.2.3
     # via
     #   imageio
     #   moviepy
-openai==1.35.9
-    # via -r requirements.in
+openai==1.63.2
+    # via
+    #   -r requirements.in
+    #   langchain-openai
 openpyxl==3.1.5
     # via -r requirements.in
+orjson==3.10.15
+    # via langsmith
+packaging==24.2
+    # via langchain-core
 pillow==11.1.0
     # via imageio
 pinecone-client==5.0.1
@@ -99,7 +122,10 @@ proglog==0.1.10
 pycryptodomex==3.21.0
     # via yt-dlp
 pydantic==2.10.6
-    # via openai
+    # via
+    #   langchain-core
+    #   langsmith
+    #   openai
 pydantic-core==2.27.2
     # via pydantic
 pydub==0.25.1
@@ -114,10 +140,19 @@ python-dotenv==1.0.1
     # via -r requirements.in
 pytz==2024.1
     # via -r requirements.in
+pyyaml==6.0.2
+    # via langchain-core
+regex==2024.11.6
+    # via tiktoken
 requests==2.32.3
     # via
+    #   langsmith
     #   moviepy
+    #   requests-toolbelt
+    #   tiktoken
     #   yt-dlp
+requests-toolbelt==1.0.0
+    # via langsmith
 s3transfer==0.10.2
     # via
     #   -r requirements.in
@@ -132,7 +167,11 @@ sniffio==1.3.1
 soupsieve==2.6
     # via beautifulsoup4
 tenacity==8.2.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   langchain-core
+tiktoken==0.9.0
+    # via langchain-openai
 tqdm==4.66.4
     # via
     #   -r requirements.in
@@ -143,6 +182,7 @@ tqdm==4.66.4
 typing-extensions==4.12.2
     # via
     #   anyio
+    #   langchain-core
     #   openai
     #   pinecone-client
     #   pydantic
@@ -159,3 +199,5 @@ websockets==15.0
     # via yt-dlp
 yt-dlp==2024.7.9
     # via -r requirements.in
+zstandard==0.23.0
+    # via langsmith

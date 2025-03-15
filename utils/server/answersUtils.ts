@@ -16,6 +16,11 @@ import { DocMetadata } from '@/types/DocMetadata';
 // Fetches answers from Firestore based on an array of IDs
 // Uses batching to optimize database queries
 export async function getAnswersByIds(ids: string[]): Promise<Answer[]> {
+  // Check if db is available
+  if (!db) {
+    throw new Error('Database not available');
+  }
+
   const answers: Answer[] = [];
   const chunkSize = 10; // Process IDs in batches of 10
   for (let i = 0; i < ids.length; i += chunkSize) {
@@ -106,6 +111,11 @@ export async function getTotalDocuments(): Promise<number> {
   const cachedCount = await getFromCache<string>(cacheKey);
   if (cachedCount !== null) {
     return parseInt(cachedCount, 10);
+  }
+
+  // Check if db is available
+  if (!db) {
+    throw new Error('Database not available');
   }
 
   // If not in cache, count the documents

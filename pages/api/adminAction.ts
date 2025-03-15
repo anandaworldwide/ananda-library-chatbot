@@ -21,6 +21,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: 'Missing document ID' });
   }
 
+  // Check if db is available
+  if (!db) {
+    return res.status(503).json({ error: 'Database not available' });
+  }
+
   try {
     const docRef = db.collection(getAnswersCollectionName()).doc(docId);
     if (action === undefined) {

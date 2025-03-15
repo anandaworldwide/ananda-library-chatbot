@@ -47,6 +47,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .json({ error: 'Unauthorized: Sudo access required' });
   }
 
+  // Check if db is available
+  if (!db) {
+    return res.status(503).json({ error: 'Database not available' });
+  }
+
   const {
     format = 'json',
     startDate,

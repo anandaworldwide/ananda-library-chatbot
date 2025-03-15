@@ -3,8 +3,7 @@ import re
 import sys
 import hashlib
 import logging
-from pinecone import Pinecone, ServerlessSpec
-from pinecone.core.client.exceptions import NotFoundException, PineconeException
+from pinecone import Pinecone, ServerlessSpec, PineconeException, NotFoundException
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +123,10 @@ def store_in_pinecone(
     - 429: Rate limit exceeded
     - Others: Infrastructure issues
     """
+    # Validate input
+    if not chunks or not embeddings:
+        raise PineconeException("No chunks to store")
+
     # Sanitization for vector ID components
     title = title if title is not None else "Unknown Title"
     title = title.replace("'", "'")  # Replace smart quotes for compatibility

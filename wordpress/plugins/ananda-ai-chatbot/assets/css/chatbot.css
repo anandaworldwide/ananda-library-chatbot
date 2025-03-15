@@ -1,0 +1,479 @@
+#aichatbot-bubble {
+  position: fixed;
+  bottom: 20px;
+  left: 20px; /* Changed from right: 20px to left: 20px to position in bottom left */
+  background-color: #4a90e2;
+  color: white;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  z-index: 9998;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Add tooltip for the chatbot bubble */
+#aichatbot-bubble::after {
+  content: 'Ananda Assist (AI)';
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0.3s ease;
+  pointer-events: none;
+}
+
+#aichatbot-bubble:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+#aichatbot-bubble * {
+  pointer-events: none;
+}
+
+#aichatbot-bubble .fa-stack {
+  width: 100%;
+  height: 100%;
+  font-size: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#aichatbot-bubble .fa-circle {
+  color: transparent; /* Make the circle transparent as the bubble already has a background */
+}
+
+#aichatbot-bubble .fa-wand-magic-sparkles {
+  font-size: 22px;
+}
+
+#aichatbot-bubble:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+#aichatbot-window {
+  position: fixed;
+  bottom: 20px;
+  left: 20px; /* Changed from right: 20px to left: 20px to position above the bubble */
+  width: 350px;
+  height: 500px;
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
+  display: none; /* Hidden initially */
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 10000; /* Increased z-index to ensure it covers Intercom */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
+    Cantarell, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+#aichatbot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #4a90e2;
+  color: white;
+}
+
+#aichatbot-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+#aichatbot-close {
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+#aichatbot-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 15px;
+  background-color: #f5f8fb;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100% - 125px); /* Adjusted for single row of controls */
+  scrollbar-width: thin; /* For Firefox */
+  scrollbar-color: #c1c1c1 #f5f8fb; /* For Firefox */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
+    Cantarell, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Custom scrollbar for Webkit browsers (Chrome, Safari, Edge) */
+#aichatbot-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+#aichatbot-messages::-webkit-scrollbar-track {
+  background: #f5f8fb;
+  border-radius: 4px;
+}
+
+#aichatbot-messages::-webkit-scrollbar-thumb {
+  background-color: #c1c1c1;
+  border-radius: 4px;
+  border: 2px solid #f5f8fb;
+}
+
+#aichatbot-messages::-webkit-scrollbar-thumb:hover {
+  background-color: #a8a8a8;
+}
+
+#aichatbot-input-container {
+  display: flex;
+  padding: 0 10px 10px 10px;
+  background-color: white;
+  align-items: flex-end; /* Align items to bottom to accommodate expanding textarea */
+}
+
+#aichatbot-input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  outline: none;
+  font-size: 16px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
+    Cantarell, 'Helvetica Neue', sans-serif;
+  resize: none; /* Disable manual resizing */
+  overflow-y: auto; /* Add scrollbar when content overflow */
+  min-height: 40px; /* Initial height */
+  max-height: 40vh; /* Limit to 40% of viewport height */
+  line-height: 1.5;
+  margin: 0; /* Remove default margin */
+}
+
+#aichatbot-input:focus {
+  border-color: #4a90e2;
+}
+
+#aichatbot-send,
+#aichatbot-stop {
+  margin-left: 10px;
+  padding: 8px 15px;
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 0; /* Remove padding which can affect centering */
+}
+
+#aichatbot-send i,
+#aichatbot-stop i {
+  font-size: 16px;
+  display: flex; /* Make icon a flex container */
+  justify-content: center; /* Center horizontally */
+  align-items: center; /* Center vertically */
+  width: 100%; /* Take full width of the button */
+  height: 100%; /* Take full height of the button */
+}
+
+#aichatbot-stop {
+  background-color: #e25c4a;
+}
+
+#aichatbot-send:hover,
+#aichatbot-stop:hover {
+  background-color: #3a7bc8;
+}
+
+/* Message styles */
+.aichatbot-user-message,
+.aichatbot-bot-message,
+.aichatbot-error-message,
+.aichatbot-typing {
+  max-width: 80%;
+  padding: 10px 15px;
+  border-radius: 18px;
+  font-size: 16px !important;
+  line-height: 1.5;
+}
+
+.aichatbot-user-message {
+  align-self: flex-end;
+  background-color: #4a90e2;
+  color: white;
+  border-bottom-right-radius: 5px;
+}
+
+.aichatbot-bot-message {
+  align-self: flex-start;
+  background-color: white;
+  color: #333;
+  border: 1px solid #e0e0e0;
+  border-bottom-left-radius: 5px;
+  font-weight: 400;
+}
+
+/* Styling for markdown elements in bot messages */
+.aichatbot-message-content {
+  font-size: 16px !important;
+  line-height: 1.5;
+}
+
+.aichatbot-message-content * {
+  font-size: inherit !important;
+}
+
+.aichatbot-message-content p {
+  margin: 0 0 0.5em 0;
+  font-size: inherit !important;
+}
+
+.aichatbot-message-content code {
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  background-color: #f5f5f5;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 14px !important;
+}
+
+.aichatbot-message-content pre {
+  background-color: #f5f5f5;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+
+.aichatbot-message-content pre code {
+  background-color: transparent;
+  padding: 0;
+  font-size: 14px !important;
+}
+
+.aichatbot-message-content a {
+  color: #4a69bd;
+  text-decoration: none;
+}
+
+.aichatbot-message-content a:hover {
+  text-decoration: underline;
+}
+
+.aichatbot-message-content h1,
+.aichatbot-message-content h2,
+.aichatbot-message-content h3 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+}
+
+.aichatbot-message-content ul,
+.aichatbot-message-content ol {
+  padding-left: 20px;
+  margin: 0.5em 0;
+}
+
+.aichatbot-message-content ul *,
+.aichatbot-message-content ol * {
+  font-size: inherit !important;
+}
+
+.aichatbot-error-message {
+  align-self: center;
+  background-color: #ffebee;
+  color: #d32f2f;
+  border: 1px solid #ffcdd2;
+  text-align: center;
+  width: 90%;
+  margin: 10px 0;
+  font-weight: 500;
+}
+
+.aichatbot-typing {
+  align-self: flex-start;
+  background-color: #e0e0e0;
+  color: #666;
+  border-bottom-left-radius: 5px;
+  font-style: italic;
+  min-width: 40px;
+  text-align: center;
+}
+
+/* Animated typing dots */
+.typing-dots::after {
+  content: '';
+  animation: dots 1.5s infinite;
+}
+
+@keyframes dots {
+  0% {
+    content: '.';
+  }
+  33% {
+    content: '..';
+  }
+  66% {
+    content: '...';
+  }
+  100% {
+    content: '.';
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  #aichatbot-window {
+    width: 85%;
+    height: 70vh;
+    bottom: 10px;
+    left: 10px; /* Changed from right: 10px to left: 10px */
+  }
+
+  #aichatbot-input {
+    font-size: 16px; /* Maintain good font size on mobile */
+    max-height: 30vh; /* Slightly smaller max height on mobile */
+  }
+
+  #aichatbot-bubble {
+    width: 42px;
+    height: 42px;
+    bottom: 10px;
+    left: 10px; /* Changed from right: 10px to left: 10px */
+  }
+
+  #aichatbot-bubble .fa-stack {
+    font-size: 20px;
+  }
+
+  #aichatbot-bubble .fa-wand-magic-sparkles {
+    font-size: 18px;
+  }
+
+  #aichatbot-fullpage {
+    padding: 10px 0;
+    font-size: 15px;
+  }
+
+  /* Adjust tooltip position for mobile */
+  #aichatbot-bubble::after {
+    bottom: 50px;
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+}
+
+/* Clear chat history button and full page button container */
+#aichatbot-controls {
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid #eaeaea;
+}
+
+/* When only one button is in the controls (full page button with no chat history) */
+#aichatbot-controls > div:only-child {
+  border-left: none;
+}
+
+#aichatbot-clear-history {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  padding: 8px;
+  cursor: pointer;
+  transition: color 0.2s;
+  flex: 1;
+}
+
+#aichatbot-clear-history:hover {
+  color: #d32f2f;
+  text-decoration: underline;
+}
+
+/* Full Page Chat Button */
+#aichatbot-fullpage {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  padding: 8px;
+  cursor: pointer;
+  transition: color 0.2s;
+  flex: 1;
+  border-left: 1px solid #eaeaea;
+}
+
+#aichatbot-fullpage:hover {
+  color: #4a90e2;
+  text-decoration: underline;
+}
+
+#aichatbot-fullpage i,
+#aichatbot-clear-history i {
+  margin-right: 5px;
+}
+
+/* Disclaimer text */
+#aichatbot-disclaimer {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  padding: 5px 0;
+}
+
+/* Style adjustments when Intercom is active */
+.intercom-enabled #aichatbot-bubble {
+  left: 80px; /* Changed from right: 80px to left: 80px */
+}
+
+/* Ensure proper z-index stacking */
+.intercom-enabled #intercom-container {
+  z-index: 9999 !important;
+}
+
+/* Hidden class for the Intercom launcher when our chat is open */
+.aichatbot-window-open .intercom-lightweight-app {
+  visibility: hidden !important;
+}
+
+/* Force our chatbot window above everything */
+.intercom-enabled #aichatbot-window {
+  z-index: 2147483647 !important; /* Maximum possible z-index value */
+  position: fixed !important;
+}
+
+/* Responsive adjustments when Intercom is present */
+@media (max-width: 480px) {
+  .intercom-enabled #aichatbot-bubble {
+    left: 70px; /* Changed from right: 70px to left: 70px */
+  }
+}

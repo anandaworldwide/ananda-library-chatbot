@@ -240,8 +240,8 @@ export function middleware(req: NextRequest) {
     // The browser will handle this correctly
   }
 
-  // Special handling for /api/chat route
-  if (url.pathname === '/api/chat') {
+  // Special handling for /api/chat/v1 route
+  if (url.pathname === '/api/chat/v1') {
     return NextResponse.next();
   }
 

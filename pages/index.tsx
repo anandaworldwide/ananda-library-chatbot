@@ -248,7 +248,9 @@ export default function Home({
     }
   }, []);
 
-  const [sourceCount, setSourceCount] = useState<number>(4);
+  const [sourceCount, setSourceCount] = useState<number>(
+    siteConfig?.defaultNumSources || 4,
+  );
 
   const updateMessageState = useCallback(
     (newResponse: string, newSourceDocs: Document[] | null) => {
@@ -289,6 +291,12 @@ export default function Home({
 
   const handleStreamingResponse = useCallback(
     (data: StreamingResponseData) => {
+      if (data.siteId && data.siteId !== 'ananda-public') {
+        console.error(
+          `ERROR: Backend is using incorrect site ID: ${data.siteId}. Expected: ananda-public`,
+        );
+      }
+
       if (data.token) {
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
@@ -301,6 +309,13 @@ export default function Home({
             const immutableSourceDocs = Array.isArray(data.sourceDocs) 
               ? [...data.sourceDocs]
               : [];
+            
+            if (immutableSourceDocs.length < sourceCount) {
+              console.error(
+                `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
+              );
+            }
+
             setSourceDocs(immutableSourceDocs);
             updateMessageState(accumulatedResponseRef.current, immutableSourceDocs);
           }, 100);
@@ -352,7 +367,14 @@ export default function Home({
         });
       }
     },
-    [setLoading, setError, setMessageState, fetchRelatedQuestions, updateMessageState],
+    [
+      updateMessageState,
+      sourceCount,
+      setLoading,
+      setError,
+      setMessageState,
+      fetchRelatedQuestions,
+    ],
   );
 
   // Effect to scroll to bottom after related questions are added
@@ -405,7 +427,7 @@ export default function Home({
       const newAbortController = new AbortController();
       setAbortController(newAbortController);
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

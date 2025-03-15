@@ -15,6 +15,15 @@ const likeStatusCache: Record<string, Record<string, boolean>> = {};
 
 const envName = getEnvName();
 
+// Check if db is available
+function checkDbAvailable(res: NextApiResponse): boolean {
+  if (!db) {
+    res.status(503).json({ error: 'Database not available' });
+    return false;
+  }
+  return true;
+}
+
 // Handler for GET requests to check like statuses
 async function handleGet(req: NextApiRequest, res: NextApiResponse) {
   let answerIds = req.query.answerIds;
@@ -32,10 +41,13 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: 'Missing answer IDs or UUID' });
   }
 
+  // Check if db is available
+  if (!checkDbAvailable(res)) return;
+
   try {
     console.log(`Likes GET: UUID: ${uuid}`);
     console.log(`Likes GET: Answer IDs: ${answerIds}`);
-    const likesCollection = db.collection(`${envName}_likes`);
+    const likesCollection = db!.collection(`${envName}_likes`);
     const likesSnapshot = await likesCollection
       .where('uuid', '==', uuid)
       .where('answerId', 'in', answerIds)
@@ -71,6 +83,9 @@ async function handlePostCheck(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: 'Invalid request body' });
   }
 
+  // Check if db is available
+  if (!checkDbAvailable(res)) return;
+
   try {
     // Create a cache key based on the user's UUID
     const cacheKey = `user_${uuid}`;
@@ -93,7 +108,7 @@ async function handlePostCheck(req: NextApiRequest, res: NextApiResponse) {
       }
     }
 
-    const likesCollection = db.collection(`${envName}_likes`);
+    const likesCollection = db!.collection(`${envName}_likes`);
     const likesSnapshot = await likesCollection
       .where('uuid', '==', uuid)
       .where('answerId', 'in', answerIds)
@@ -137,8 +152,11 @@ async function handlePostLikeCounts(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: 'Invalid answerIds format' });
   }
 
+  // Check if db is available
+  if (!checkDbAvailable(res)) return;
+
   try {
-    const likesCollection = db.collection(`${envName}_likes`);
+    const likesCollection = db!.collection(`${envName}_likes`);
     const likesSnapshot = await likesCollection
       .where('answerId', 'in', answerIds)
       .get();
@@ -199,8 +217,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .json({ error: 'Missing answer ID, UUID or invalid like status' });
   }
 
+  // Check if db is available
+  if (!checkDbAvailable(res)) return;
+
   try {
-    const likesCollection = db.collection(`${envName}_likes`);
+    const likesCollection = db!.collection(`${envName}_likes`);
 
     if (like) {
       // Add a new like document
@@ -211,7 +232,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
 
       // Increment the like count in the chat logs
-      const chatLogRef = db
+      const chatLogRef = db!
         .collection(getAnswersCollectionName())
         .doc(answerId);
       await chatLogRef.update({
@@ -236,7 +257,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         await docRef.delete();
 
         // Decrement the like count in the chat logs
-        const chatLogRef = db
+        const chatLogRef = db!
           .collection(getAnswersCollectionName())
           .doc(answerId);
         await chatLogRef.update({
@@ -248,7 +269,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
         res.status(200).json({ message: 'Like removed' });
       } else {
-        res.status(404).json({ message: 'Like not found' });
+        res.status(404).json({ error: 'Like not found' });
       }
     }
   } catch (error: unknown) {

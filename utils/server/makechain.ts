@@ -1,4 +1,29 @@
-// This file sets up and configures the language model chain for processing chat requests
+/**
+ * This file implements a configurable chat system using LangChain, supporting multiple language models,
+ * document retrieval from various sources, and site-specific configurations.
+ *
+ * Key features:
+ * - Flexible document retrieval from multiple "libraries" with configurable weights
+ * - Site-specific configurations loaded from local files or S3
+ * - Template system with variable substitution for customizing prompts
+ * - Support for follow-up questions by maintaining chat history
+ * - Automatic conversion of follow-up questions into standalone queries
+ * - Proportional document retrieval across knowledge bases
+ * - Model comparison capabilities for A/B testing different LLMs
+ * - Streaming support for real-time responses
+ *
+ * The system uses a multi-stage pipeline:
+ * 1. Question processing - Converts follow-ups into standalone questions
+ * 2. Document retrieval - Fetches relevant docs from vector stores
+ * 3. Context preparation - Combines docs and chat history
+ * 4. Answer generation - Uses LLM to generate final response
+ *
+ * Configuration is handled through JSON files that specify:
+ * - Included libraries and their weights
+ * - Custom prompt templates
+ * - Site-specific variables
+ * - Model parameters (temperature, etc)
+ */
 
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
@@ -14,7 +39,9 @@ import path from 'path';
 import { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
+import { StreamingResponseData } from '@/types/StreamingResponseData';
 
+// S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'us-west-1',
 });
@@ -36,8 +63,14 @@ interface SiteConfig {
   variables: Record<string, string>;
   templates: Record<string, TemplateContent>;
 }
+// Add new interface for model config
+interface ModelConfig {
+  model: string;
+  temperature: number;
+  label?: string; // For identifying which model in streaming responses
+}
 
-// Helper function to load text from a file
+// Loads text content from local filesystem with error handling
 async function loadTextFile(filePath: string): Promise<string> {
   try {
     return await fs.readFile(filePath, 'utf8');
@@ -49,6 +82,7 @@ async function loadTextFile(filePath: string): Promise<string> {
   }
 }
 
+// Converts S3 readable stream to string for template loading
 async function streamToString(stream: Readable): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -58,6 +92,7 @@ async function streamToString(stream: Readable): Promise<string> {
   });
 }
 
+// Retrieves template content from S3 bucket with error handling
 async function loadTextFileFromS3(
   bucket: string,
   key: string,
@@ -81,7 +116,8 @@ async function loadTextFileFromS3(
   }
 }
 
-// Process a template by loading content from a file or using provided content
+// Processes a template by either using inline content or loading from file/S3
+// Supports variable substitution using the provided variables map
 async function processTemplate(
   template: TemplateContent,
   variables: Record<string, string>,
@@ -111,7 +147,7 @@ async function processTemplate(
   return substituteVariables(content, variables);
 }
 
-// Replace variables in a template string with their corresponding values
+// Replaces ${variable} syntax in templates with actual values from variables map
 function substituteVariables(
   template: string,
   variables: Record<string, string>,
@@ -122,7 +158,8 @@ function substituteVariables(
   );
 }
 
-// Load site-specific configuration or fall back to default
+// Loads site-specific configuration with fallback to default config
+// Configurations control prompt templates, variables, and model behavior
 async function loadSiteConfig(siteId: string): Promise<SiteConfig> {
   const promptsDir =
     process.env.SITE_PROMPTS_DIR ||
@@ -142,7 +179,7 @@ async function loadSiteConfig(siteId: string): Promise<SiteConfig> {
   }
 }
 
-// Process the site configuration, applying variables and loading templates
+// Processes the entire site configuration, loading all templates and applying variables
 async function processSiteConfig(
   config: SiteConfig,
   basePath: string,
@@ -159,7 +196,8 @@ async function processSiteConfig(
   return result;
 }
 
-// Get the full template for the chat prompt, including site-specific configurations
+// Builds the complete chat prompt template for a specific site, incorporating
+// site-specific variables and configurations
 const getFullTemplate = async (siteId: string) => {
   const promptsDir =
     process.env.SITE_PROMPTS_DIR ||
@@ -181,7 +219,8 @@ const getFullTemplate = async (siteId: string) => {
   return fullTemplate;
 };
 
-// Keep the existing CONDENSE_TEMPLATE for backwards compatibility
+// Template for converting follow-up questions into standalone questions
+// This helps maintain context while allowing effective vector store querying
 const CONDENSE_TEMPLATE = `Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question.
 
 <chat_history>
@@ -191,52 +230,104 @@ const CONDENSE_TEMPLATE = `Given the following conversation and a follow up ques
 Follow Up Input: {question}
 Standalone question:`;
 
-// Function to combine and serialize documents for the language model
+// Serializes retrieved documents into a format suitable for the language model
+// Includes content, metadata, and library information
 const combineDocumentsFn = (docs: Document[]) => {
   const serializedDocs = docs.map((doc) => ({
     content: doc.pageContent,
     metadata: doc.metadata,
-    // 9/4/24 MO: Note this was formerly doc.id before estype checking was added. maybe this is
-    // going to break?
-    id: doc.metadata.id,
+    id: doc.id,
     library: doc.metadata.library,
   }));
   return JSON.stringify(serializedDocs);
 };
 
-// Add new interface for model config
-interface ModelConfig {
-  model: string;
-  temperature: number;
-  label?: string; // For identifying which model in streaming responses
+// Calculates how many sources to retrieve from each library based on configured weights
+// This enables proportional document retrieval across multiple slices of the knowledge base
+const calculateSources = (
+  totalSources: number,
+  libraries: { name: string; weight?: number }[],
+) => {
+  if (!libraries || libraries.length === 0) {
+    return [];
+  }
+
+  const totalWeight = libraries.reduce(
+    (sum, lib) => sum + (lib.weight !== undefined ? lib.weight : 1),
+    0,
+  );
+  return libraries.map((lib) => ({
+    name: lib.name,
+    sources:
+      lib.weight !== undefined
+        ? Math.round(totalSources * (lib.weight / totalWeight))
+        : Math.floor(totalSources / libraries.length),
+  }));
+};
+
+// Retrieves documents from a specific library using vector similarity search
+// Supports additional filtering beyond library selection
+async function retrieveDocumentsByLibrary(
+  retriever: VectorStoreRetriever,
+  libraryName: string,
+  k: number,
+  query: string,
+  baseFilter?: Record<string, unknown>,
+): Promise<Document[]> {
+  const libraryFilter = { library: libraryName };
+
+  let finalFilter: Record<string, unknown>;
+  if (baseFilter) {
+    // Merge baseFilter with libraryFilter using $and
+    finalFilter = {
+      $and: [baseFilter, libraryFilter],
+    };
+  } else {
+    finalFilter = libraryFilter;
+  }
+
+  const documents = await retriever.vectorStore.similaritySearch(
+    query,
+    k,
+    finalFilter,
+  );
+  return documents;
 }
 
-// Main function to create the language model chain
+// Main chain creation function that sets up the complete conversational QA system
+// Supports multiple models, weighted library access, and site-specific configurations
 export const makeChain = async (
   retriever: VectorStoreRetriever,
-  modelConfig: ModelConfig = { model: 'gpt-4o', temperature: 0.3 },
+  modelConfig: ModelConfig,
   sourceCount: number = 4,
+  baseFilter?: Record<string, unknown>,
+  sendData?: (data: StreamingResponseData) => void,
+  resolveDocs?: (docs: Document[]) => void,
 ) => {
-  const { model, temperature: modelTemperature, label } = modelConfig;
   const siteId = process.env.SITE_ID || 'default';
-
-  // Load site config to get temperature
   const configPath = path.join(process.cwd(), 'site-config/config.json');
   const siteConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
-  const temperature = siteConfig[siteId]?.temperature ?? modelTemperature;
 
-  // Initialize the language model with error handling
+  const { model, temperature, label } = modelConfig;
   let languageModel: BaseLanguageModel;
+
+  // Normalizes includedLibraries from site config: converts string library names to objects
+  // with default weight 1, while preserving weighted objects for proportional source retrieval.
+  const rawIncludedLibraries: Array<
+    string | { name: string; weight?: number }
+  > = siteConfig[siteId]?.includedLibraries || [];
+  const includedLibraries = rawIncludedLibraries.map((lib) =>
+    typeof lib === 'string' ? { name: lib, weight: 1 } : lib,
+  );
+  const sourcesDistribution = calculateSources(sourceCount, includedLibraries);
+
   try {
+    // Initialize the language model
     languageModel = new ChatOpenAI({
       temperature,
       modelName: model,
       streaming: true,
     }) as BaseLanguageModel;
-
-    console.log(
-      `Initialized model ${label || model} with temperature ${temperature}`,
-    );
   } catch (error) {
     console.error(`Failed to initialize model ${model}:`, error);
     throw new Error(`Model initialization failed for ${label || model}`);
@@ -244,16 +335,11 @@ export const makeChain = async (
 
   const condenseQuestionPrompt =
     ChatPromptTemplate.fromTemplate(CONDENSE_TEMPLATE);
-
-  // Get the full template for the site
   const fullTemplate = await getFullTemplate(siteId);
-
-  // Replace dynamic variables in the template
   const templateWithReplacedVars = fullTemplate.replace(
     /\${(context|chat_history|question)}/g,
     (match, key) => `{${key}}`,
   );
-
   const answerPrompt = ChatPromptTemplate.fromTemplate(
     templateWithReplacedVars,
   );
@@ -266,15 +352,40 @@ export const makeChain = async (
     new StringOutputParser(),
   ]);
 
-  // Set the number of documents to retrieve
-  retriever.k = sourceCount;
-
-  // Create a chain to retrieve and format documents based on a query
-  const retrievalChain = RunnableSequence.from([
-    (input: string) => {
-      return input;
+  // Runnable sequence for retrieving documents
+  const retrievalSequence = RunnableSequence.from([
+    async (input: AnswerChainInput) => {
+      const allDocuments: Document[] = [];
+      if (!includedLibraries || includedLibraries.length === 0) {
+        const docs = await retriever.vectorStore.similaritySearch(
+          input.question,
+          sourceCount,
+          baseFilter,
+        );
+        allDocuments.push(...docs);
+      } else {
+        for (const { name, sources } of sourcesDistribution) {
+          if (sources > 0) {
+            const docs = await retrieveDocumentsByLibrary(
+              retriever,
+              name,
+              sources,
+              input.question,
+              baseFilter,
+            );
+            allDocuments.push(...docs);
+          }
+        }
+      }
+      // Send the documents as soon as they are retrieved
+      if (sendData) {
+        sendData({ sourceDocs: allDocuments });
+      }
+      if (resolveDocs) {
+        resolveDocs(allDocuments);
+      }
+      return allDocuments;
     },
-    retriever,
     (docs: Document[]) => {
       if (docs.length === 0) {
         console.warn(`Warning: makeChain: No sources returned for query`);
@@ -289,21 +400,29 @@ export const makeChain = async (
   // Generate an answer to the standalone question based on the chat history
   // and retrieved documents. Additionally, we return the source documents directly.
   const answerChain = RunnableSequence.from([
+    // Step 1: Combine retrieval and original input
     {
-      context: RunnableSequence.from([
-        new RunnablePassthrough<AnswerChainInput>(),
-        async (input: AnswerChainInput) =>
-          retrievalChain.invoke(input.question),
-        (output: { combinedContent: string }) => output.combinedContent,
-      ]),
-      chat_history: (input: AnswerChainInput) => input.chat_history,
-      question: (input: AnswerChainInput) => input.question,
-      documents: RunnableSequence.from([
-        new RunnablePassthrough<AnswerChainInput>(),
-        async (input: AnswerChainInput) =>
-          retrievalChain.invoke(input.question),
-        (output: { documents: Document[] }) => output.documents,
-      ]),
+      retrievalOutput: retrievalSequence,
+      originalInput: new RunnablePassthrough<AnswerChainInput>(),
+    },
+    // Step 2: Map to the required fields
+    {
+      context: (input: {
+        retrievalOutput: { combinedContent: string; documents: Document[] };
+        originalInput: AnswerChainInput;
+      }) => input.retrievalOutput.combinedContent,
+      chat_history: (input: {
+        retrievalOutput: { combinedContent: string; documents: Document[] };
+        originalInput: AnswerChainInput;
+      }) => input.originalInput.chat_history,
+      question: (input: {
+        retrievalOutput: { combinedContent: string; documents: Document[] };
+        originalInput: AnswerChainInput;
+      }) => input.originalInput.question,
+      documents: (input: {
+        retrievalOutput: { combinedContent: string; documents: Document[] };
+        originalInput: AnswerChainInput;
+      }) => input.retrievalOutput.documents,
     },
     answerPrompt,
     languageModel,
@@ -324,7 +443,6 @@ export const makeChain = async (
     },
     answerChain,
     (result: string) => {
-      // Add warning logs with model identification
       if (result.includes("I don't have any specific information")) {
         console.warn(
           `Warning: AI response indicates no relevant information found (${label || model})`,
@@ -337,7 +455,8 @@ export const makeChain = async (
   return conversationalRetrievalQAChain;
 };
 
-// Add a helper function for creating comparison chains
+// Creates two parallel chains for comparing responses from different models
+// Useful for testing and evaluating model performance
 export const makeComparisonChains = async (
   retriever: VectorStoreRetriever,
   modelA: ModelConfig,

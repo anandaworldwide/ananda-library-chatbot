@@ -5,6 +5,18 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Python Debugger: process_anandalib_dump.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/bin/process_anandalib_dump.py",
+      "console": "integratedTerminal",
+      "args": [
+        "-u",
+        "michael",
+        "/Volumes/ExtData/Ananda Library Chatbot/anandalib_wp_20250306.sql"
+      ]
+    },
+    {
       "name": "Python: ananda_crawler.py",
       "type": "debugpy",
       "request": "launch",
@@ -48,9 +60,9 @@
       }
     },
     {
-      "name": "npm run dev jairam",
+      "name": "npm run dev ananda-public",
       "request": "launch",
-      "runtimeArgs": ["run", "dev", "jairam"],
+      "runtimeArgs": ["run", "dev", "ananda-public"],
       "runtimeExecutable": "${env:HOME}/.nvm/versions/node/v20.17.0/bin/npm",
       "skipFiles": ["<node_internals>/**"],
       "type": "node",

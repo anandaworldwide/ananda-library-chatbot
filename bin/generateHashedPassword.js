@@ -1,7 +1,7 @@
 // run this via: node bin/generateHashedPassword.js your-password
 // and put output in .env SUDO_PASSWORD var
 
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 async function generateHashedPassword() {
   const password = process.argv[2]; // get password from command-line argument

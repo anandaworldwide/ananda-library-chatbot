@@ -1,5 +1,8 @@
 # The Ananda Chatbot - A RAG Chatbot for Your PDF Files, Audio Files, and YouTube Videos
 
+[![Run All Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml)
+[![Comprehensive Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml)
+
 Build a chatGPT chatbot for multiple Large PDF files, audio files, and YouTube
 videos. Optionally generate the PDF fileset from a Wordpress database.
 Transcribe mp3 files en masse. Download YouTube videos en masse and transcribe
@@ -189,8 +192,29 @@ debugging, and to avoid charges for using the Firebase services.
 If you don't already have PDF files, you can generate them from a Wordpress
 database.
 
+#### Import MySQL database dump into local MySQL
+
 First, you need to import a MySQL data dump from wordpress into local MySQL
 (or set up access to the DB).
+
+You can use the `python/bin/process_anandalib_dump.py` script to process and import an Ananda Library SQL dump:
+
+```bash
+python python/bin/process_anandalib_dump.py -u [mysql_username] [path_to_sql_dump]
+```
+
+This script:
+
+- Creates a new database with name format `anandalib-YYYY-MM-DD`
+- Processes the SQL dump to fix date formats and add necessary columns
+- Imports the processed SQL into the new database
+
+While this script is specifically tuned for the Ananda Library database structure,
+it can be modified to work with other WordPress or MySQL database dumps. The core
+functionality of creating a dated database, processing SQL to fix compatibility
+issues, and importing the data can be adapted to different schema requirements.
+
+#### Convert to PDFs
 
 Second, you run _python db-to-pdfs.py_ from the `python/data-ingestion/db-to-pdf/`
 directory to generate PDF files.
@@ -381,6 +405,10 @@ when making changes as they will affect all environments immediately.
 Note: If you encounter any errors related to Google Sheets API activation, check the backend logs
 for specific instructions and follow the provided link to activate the API for your project.
 
-## Open Source Credits
+## WordPress Plugin Integration
 
-The frontend of this repo is forked from [langchain-chat-nextjs](https://github.com/zahidkhawaja/langchain-chat-nextjs)
+We provide a WordPress plugin in the `wordpress/plugins/ananda-ai-chatbot` directory
+that adds an AI chatbot bubble to your WordPress site. The plugin connects to this
+project's chat backend (deployed on Vercel or locally for development).
+
+For detailed installation instructions, features, and development setup, please refer to the [plugin's README file](wordpress/plugins/ananda-ai-chatbot/README.md).

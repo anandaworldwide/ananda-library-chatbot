@@ -1,0 +1,102 @@
+name: Comprehensive Test Suite
+
+on:
+  push:
+    branches: [main, develop, unit-tests]
+  pull_request:
+    branches: [main, develop, unit-tests]
+
+jobs:
+  component-tests:
+    name: Component Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run component tests
+        run: npx jest --testPathPattern=__tests__/components/
+        env:
+          NODE_ENV: test
+
+      - name: Upload component test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: component-coverage
+          path: coverage/
+          if-no-files-found: warn
+
+  api-tests:
+    name: API Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run API tests
+        run: npx jest --config=jest.config.cjs --testPathPattern=__tests__/api/
+        env:
+          NODE_ENV: test
+          # Add placeholder for Firebase credentials - these should be set as GitHub secrets
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          # Add other environment variables as needed
+          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+
+      - name: Upload API test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: coverage/
+          if-no-files-found: warn
+
+  all-tests:
+    name: All Tests
+    runs-on: ubuntu-latest
+    needs: [component-tests, api-tests]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run all tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+
+      - name: Upload complete test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-coverage
+          path: coverage/
+          if-no-files-found: warn

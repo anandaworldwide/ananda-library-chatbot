@@ -35,8 +35,11 @@ const CopyButton: React.FC<CopyButtonProps> = ({
         const title = doc.metadata.title || 'Unknown source';
         const collection = doc.metadata.library || '';
         const sourceUrl = doc.metadata.source;
+        const youtubeUrl = doc.metadata.url;
 
-        if (sourceUrl) {
+        if (collection.includes('Youtube') && youtubeUrl) {
+          return `- [${title}](${youtubeUrl}) (${collection})`;
+        } else if (sourceUrl) {
           return `- [${title}](${sourceUrl}) (${collection})`;
         } else {
           return `- ${title} (${collection})`;

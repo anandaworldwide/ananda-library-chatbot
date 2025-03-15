@@ -1,0 +1,58 @@
+<?php
+/**
+ * Example stubs file that should be copied to stubs.php for local development and testing.
+ * Note: stubs.php is in .gitignore and should not be committed.
+ * This file contains WordPress function stubs for IDE autocompletion and type hinting.
+ * Do not include this file in the actual plugin.
+ */
+
+// Admin functions
+if (!function_exists('add_options_page')) {
+    function add_options_page($page_title, $menu_title, $capability, $menu_slug, $callback) {}
+}
+
+if (!function_exists('add_action')) {
+    function add_action($hook, $callback, $priority = 10, $accepted_args = 1) {}
+}
+
+if (!function_exists('register_setting')) {
+    function register_setting($option_group, $option_name, $args = array()) {}
+}
+
+if (!function_exists('settings_fields')) {
+    function settings_fields($option_group) {}
+}
+
+if (!function_exists('esc_attr')) {
+    function esc_attr($text) {}
+}
+
+if (!function_exists('get_option')) {
+    function get_option($option, $default = false) {}
+}
+
+if (!function_exists('submit_button')) {
+    function submit_button($text = null, $type = 'primary', $name = 'submit', $wrap = true, $other_attributes = null) {}
+}
+
+// Script and style functions
+if (!function_exists('wp_enqueue_style')) {
+    function wp_enqueue_style($handle, $src = '', $deps = array(), $ver = false, $media = 'all') {}
+}
+
+if (!function_exists('plugins_url')) {
+    function plugins_url($path = '', $plugin = '') {}
+}
+
+if (!function_exists('wp_enqueue_script')) {
+    function wp_enqueue_script($handle, $src = '', $deps = array(), $ver = false, $in_footer = false) {}
+}
+
+if (!function_exists('wp_localize_script')) {
+    function wp_localize_script($handle, $object_name, $l10n) {}
+}
+
+// Constants
+if (!defined('WP_DEBUG')) {
+    define('WP_DEBUG', false);
+}
