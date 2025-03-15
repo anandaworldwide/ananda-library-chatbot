@@ -24,7 +24,7 @@ export interface LLMResult {
 
 // Mock site config
 export const mockSiteConfig = {
-  siteId: 'ananda-public',
+  siteId: 'test-site',
   queriesPerUserPerDay: 100,
   allowedFrontEndDomains: ['*example.com', 'localhost:3000', 'localhost'],
   includedLibraries: [{ name: 'library1', weight: 1 }],
@@ -32,3 +32,8 @@ export const mockSiteConfig = {
   modelName: 'gpt-4',
   temperature: 0.3,
 };
+
+jest.mock('@/utils/server/loadSiteConfig', () => ({
+  loadSiteConfig: jest.fn().mockResolvedValue(mockSiteConfig),
+  loadSiteConfigSync: jest.fn().mockReturnValue(mockSiteConfig),
+}));
