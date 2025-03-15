@@ -25,6 +25,7 @@ const customJestConfig = {
     '<rootDir>/__tests__/.templates/',
     // Skip server-specific tests when running the default config
     '<rootDir>/utils/server',
+    '<rootDir>/__tests__/api/chat/v1/mocks.ts',
   ],
   collectCoverage: true,
   coverageDirectory: 'coverage',
