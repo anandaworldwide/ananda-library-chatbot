@@ -10,6 +10,9 @@
 import { Document } from 'langchain/document';
 import { DocMetadata } from '@/types/DocMetadata';
 
+// Store original env
+const originalEnv = process.env;
+
 // Mock modules first before importing any modules that use them
 // Mock Firebase DB
 jest.mock('@/services/firebase', () => {
@@ -68,6 +71,14 @@ const mockSetInCache = jest.requireMock('@/utils/server/redisUtils').setInCache;
 describe('answersUtils', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset env before each test
+    process.env = { ...originalEnv };
+    process.env.SITE_ID = 'test-site';
+  });
+
+  afterAll(() => {
+    // Restore env after all tests
+    process.env = originalEnv;
   });
 
   describe('getAnswersByIds', () => {
@@ -243,7 +254,7 @@ describe('answersUtils', () => {
 
       expect(result).toBe(42);
       expect(mockGetFromCache).toHaveBeenCalledWith(
-        'test_default_answers_count',
+        'test_test-site_answers_count',
       );
       expect(mockCollection).not.toHaveBeenCalled(); // DB shouldn't be called
     });
@@ -251,30 +262,22 @@ describe('answersUtils', () => {
     it('should count documents and cache result if not in cache', async () => {
       mockGetFromCache.mockResolvedValue(null);
 
-      // Mock stream to emit 3 documents
+      // Mock the stream to yield 3 documents
       const mockStream = {
-        [Symbol.asyncIterator]: jest.fn().mockImplementation(() => {
-          let count = 0;
-          return {
-            next: () => {
-              if (count < 3) {
-                count++;
-                return Promise.resolve({ done: false, value: {} });
-              }
-              return Promise.resolve({ done: true });
-            },
-          };
-        }),
+        async *[Symbol.asyncIterator]() {
+          yield { id: '1' };
+          yield { id: '2' };
+          yield { id: '3' };
+        },
       };
-
-      mockDb.stream.mockReturnValue(mockStream);
+      mockDb.stream = jest.fn().mockReturnValue(mockStream);
 
       const result = await getTotalDocuments();
 
       expect(result).toBe(3);
       expect(mockCollection).toHaveBeenCalledWith('answers');
       expect(mockSetInCache).toHaveBeenCalledWith(
-        'test_default_answers_count',
+        'test_test-site_answers_count',
         '3',
         expect.any(Number),
       );
