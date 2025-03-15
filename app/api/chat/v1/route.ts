@@ -64,13 +64,27 @@ import { isDevelopment } from '@/utils/env';
 export const runtime = 'nodejs';
 export const maxDuration = 240;
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface MediaTypes {
+  text?: boolean;
+  image?: boolean;
+  video?: boolean;
+  audio?: boolean;
+  [key: string]: boolean | undefined;
+}
+
 interface ChatRequestBody {
-  collection: string;
   question: string;
-  history: [string, string][];
-  privateSession: boolean;
-  mediaTypes: Record<string, boolean>;
-  sourceCount: number;
+  history?: ChatMessage[];
+  collection?: string;
+  privateSession?: boolean;
+  mediaTypes?: Partial<MediaTypes>;
+  sourceCount?: number;
+  siteId?: string;
 }
 
 interface ComparisonRequestBody extends ChatRequestBody {
@@ -371,13 +385,7 @@ async function setupPineconeAndFilter(
 async function setupVectorStoreAndRetriever(
   index: Index<RecordMetadata>,
   filter: PineconeFilter | undefined,
-  sendData: (data: {
-    token?: string;
-    sourceDocs?: Document[];
-    done?: boolean;
-    error?: string;
-    docId?: string;
-  }) => void,
+  sendData: (data: StreamingResponseData) => void,
   sourceCount: number = 4,
 ): Promise<{
   vectorStore: PineconeStore;
@@ -406,10 +414,11 @@ async function setupVectorStoreAndRetriever(
           console.error('Retriever error:', error);
           resolveWithDocuments([]);
         },
-        handleRetrieverEnd(docs: Document[]) {
+        handleRetrieverEnd(docs: Document[], runId: string) {
           if (docs.length < sourceCount) {
-            const error = `Error: Retrieved ${docs.length} sources, but ${sourceCount} were requested.`;
+            const error = `Error: Retrieved ${docs.length} sources, but ${sourceCount} were requested. (runId: ${runId})`;
             console.error(error);
+            sendData({ warning: error });
           }
           resolveWithDocuments(docs);
           sendData({ sourceDocs: docs });
@@ -457,7 +466,7 @@ async function setupAndExecuteLanguageModelChain(
 
     // Format chat history for the language model
     const pastMessages = history
-      .map((message: [string, string]) => {
+      .map((message) => {
         return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join('\n');
       })
       .join('\n');
@@ -593,8 +602,8 @@ async function handleComparisonRequest(
       try {
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
-          requestBody.collection,
-          requestBody.mediaTypes,
+          requestBody.collection || 'default',
+          normalizeMediaTypes(requestBody.mediaTypes),
           siteConfig,
         );
 
@@ -637,8 +646,8 @@ async function handleComparisonRequest(
         );
 
         // Format chat history
-        const pastMessages = requestBody.history
-          .map((message: [string, string]) => {
+        const pastMessages = convertChatHistory(requestBody.history)
+          .map((message) => {
             return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join(
               '\n',
             );
@@ -819,15 +828,34 @@ export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let isControllerClosed = false;
       const sendData = (data: StreamingResponseData) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        if (!isControllerClosed) {
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+            );
+          } catch (error) {
+            if (
+              error instanceof TypeError &&
+              error.message.includes('Controller is already closed')
+            ) {
+              isControllerClosed = true;
+            } else {
+              throw error;
+            }
+          }
+        }
       };
 
       try {
+        // Send site ID first
+        sendData({ siteId: siteConfig.siteId });
+
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
-          sanitizedInput.collection,
-          sanitizedInput.mediaTypes || {},
+          sanitizedInput.collection || 'default',
+          normalizeMediaTypes(sanitizedInput.mediaTypes),
           siteConfig,
         );
 
@@ -853,7 +881,7 @@ export async function POST(req: NextRequest) {
         const fullResponse = await setupAndExecuteLanguageModelChain(
           retriever,
           sanitizedInput.question,
-          sanitizedInput.history || [],
+          convertChatHistory(sanitizedInput.history),
           sendData,
           sanitizedInput.sourceCount || 4,
           filter,
@@ -877,19 +905,25 @@ export async function POST(req: NextRequest) {
           const docId = await saveAnswerToFirestore(
             originalQuestion,
             fullResponse,
-            sanitizedInput.collection,
+            sanitizedInput.collection || 'default',
             promiseDocuments,
-            sanitizedInput.history || [],
+            convertChatHistory(sanitizedInput.history),
             clientIP,
           );
           sendData({ docId });
         }
+
+        // Send done event
+        sendData({ done: true });
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
         handleError(error, sendData);
       } finally {
+        if (!isControllerClosed) {
+          controller.close();
+          isControllerClosed = true;
+        }
         console.log('Stream processing ended');
-        controller.close();
       }
     },
   });
@@ -904,4 +938,36 @@ export async function POST(req: NextRequest) {
   });
 
   return addCorsHeaders(response, req, siteConfig);
+}
+
+function convertChatHistory(
+  history: ChatMessage[] | undefined,
+): [string, string][] {
+  if (!history) return [];
+  return history.map((msg) => [
+    msg.role === 'user' ? msg.content : '',
+    msg.role === 'assistant' ? msg.content : '',
+  ]);
+}
+
+// Helper function to convert partial media types to full boolean record
+function normalizeMediaTypes(
+  mediaTypes: Partial<MediaTypes> | undefined,
+): Record<string, boolean> {
+  const defaultTypes = {
+    text: true,
+    image: false,
+    video: false,
+    audio: false,
+  };
+
+  if (!mediaTypes) return defaultTypes;
+
+  return Object.entries(defaultTypes).reduce(
+    (acc, [key, defaultValue]) => ({
+      ...acc,
+      [key]: mediaTypes[key as keyof MediaTypes] ?? defaultValue,
+    }),
+    {} as Record<string, boolean>,
+  );
 }

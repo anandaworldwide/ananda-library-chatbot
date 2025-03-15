@@ -31,26 +31,56 @@ if (isBuildTime) {
       }
     }
 
+    // Parse the service account JSON - let SyntaxError throw for test scenarios
     const serviceAccount = JSON.parse(serviceAccountJson);
-    const app = fbadmin.initializeApp({
-      credential: fbadmin.credential.cert(serviceAccount),
-    });
 
-    // Initialize Firestore with preferRest to improve cold start times
-    initializeFirestore(app, { preferRest: true });
-    db = fbadmin.firestore();
+    // Check if this is just an empty JSON object (e.g., '{}' from GitHub Actions)
+    // Only handle this case specifically for CI environments
+    if (!serviceAccount || Object.keys(serviceAccount).length === 0) {
+      console.warn(
+        'Empty Firebase credentials provided, skipping Firebase initialization',
+      );
+      db = null;
+    }
+    // Check for required fields in the service account - throw if missing
+    else {
+      const requiredFields = [
+        'type',
+        'project_id',
+        'private_key',
+        'client_email',
+      ];
+      const missingFields = requiredFields.filter(
+        (field) => !serviceAccount[field],
+      );
 
-    // if (isDevelopment()) {
-    //   db.settings({
-    //     host: 'localhost:8080',
-    //     ssl: false,
-    //   });
-    // }
-    console.log('Firestore initialized');
+      if (missingFields.length > 0) {
+        throw new Error(
+          `Firebase credentials missing required fields: ${missingFields.join(', ')}`,
+        );
+      } else {
+        const app = fbadmin.initializeApp({
+          credential: fbadmin.credential.cert(serviceAccount),
+        });
+
+        // Initialize Firestore with preferRest to improve cold start times
+        initializeFirestore(app, { preferRest: true });
+        db = fbadmin.firestore();
+
+        // if (isDevelopment()) {
+        //   db.settings({
+        //     host: 'localhost:8080',
+        //     ssl: false,
+        //   });
+        // }
+        console.log('Firestore initialized');
+      }
+    }
   } catch (error) {
     console.error('Error initializing Firebase:', error);
     // Don't throw during build time
     if (!isBuildTime) {
+      // Allow SyntaxError and other errors to propagate for test scenarios
       throw error;
     }
   }

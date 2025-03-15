@@ -1,0 +1,40 @@
+{
+  "extends": "./tsconfig.test.json",
+  "include": [
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/.templates/api-route.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/.templates/component.test.tsx",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/.templates/utility.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/answers.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/audio.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/chat/v1/mocks.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/chat/v1/simple-request.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/chat/v1/streaming.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/contact.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/login.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/logout.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/api/submitNpsSurvey.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/components/ChatInput.test.tsx",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/components/LikeButton.test.tsx",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/components/MessageItem.test.tsx",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/components/NPSSurvey.test.tsx",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/components/SourcesList.test.tsx",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/components/Toast.test.tsx",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/components/TruncatedMarkdown.test.tsx",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/services/firebase.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/client/collectionQueries.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/client/collectionsConfig.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/client/libraryMappings.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/client/siteConfig.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/client/uuid.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/client/voteHandler.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/server/answersUtils.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/server/firestoreUtils.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/server/genericRateLimiter.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/server/ipUtils.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/server/loadSiteConfig.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/server/pinecone-client.test.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "**/*.{ts,tsx}": [
+    "node scripts/typecheck.cjs",
+    "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage"
+  ],
+  "**/*.{js,jsx}": [
+    "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage"
+  ]
+}

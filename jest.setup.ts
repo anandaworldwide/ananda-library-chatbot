@@ -2,6 +2,12 @@
 import '@testing-library/jest-dom';
 import type { TestingLibraryMatchers } from '@testing-library/jest-dom/matchers';
 
+// Polyfill for TextEncoder/TextDecoder
+// @ts-expect-error - importing from a JS module
+import { TextEncoder, TextDecoder } from 'text-encoding';
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
 // Extend Jest matchers using module augmentation
 declare module 'expect' {
   interface Matchers<R>

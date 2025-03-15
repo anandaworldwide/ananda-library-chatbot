@@ -8,4 +8,5 @@ export interface StreamingResponseData {
   docId?: string;
   model?: string;
   siteId?: string;
+  warning?: string;
 }

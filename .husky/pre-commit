@@ -1,0 +1,3 @@
+# Run lint-staged for formatting and linting
+echo "🔍 Running lint-staged for code quality checks..."
+npx lint-staged 

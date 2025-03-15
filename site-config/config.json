@@ -154,7 +154,7 @@
       ]
     },
     "npsSurveyFrequencyDays": 0,
-    "queriesPerUserPerDay": 40,
+    "queriesPerUserPerDay": 100,
     "enableModelComparison": false,
     "showSourceCountSelector": false,
     "hideSources": true,
