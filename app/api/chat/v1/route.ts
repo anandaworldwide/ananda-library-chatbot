@@ -846,8 +846,7 @@ export async function POST(req: NextRequest) {
 
       try {
         // Send site ID first
-        const streamData: StreamingResponseData = { siteId: siteConfig.siteId };
-        sendData(streamData);
+        sendData({ siteId: siteConfig.siteId });
 
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
