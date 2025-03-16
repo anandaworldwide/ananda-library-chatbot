@@ -9,8 +9,7 @@
     "chatPlaceholder": "How can I think of God more?",
     "allowedFrontEndDomains": [
       "ask.anandalibrary.org",
-      "*.ananda-web-services-projects.vercel.app",
-      "ananda-chatbot-*.ananda-web-services-projects.vercel.app",
+      "**-ananda-web-services-projects.vercel.app",
       "localhost:3000",
       "127.0.0.1:3000"
     ],
@@ -100,7 +99,7 @@
       "staging.ananda.org",
       "vayudev.ananda.org",
       "ananda-public-chatbot.vercel.app",
-      "*.ananda-web-services-projects.vercel.app",
+      "**-ananda-web-services-projects.vercel.app",
       "localhost:3000",
       "127.0.0.1:3000",
       "chatbot-test.local/sample-page/"
@@ -176,7 +175,7 @@
     "chatPlaceholder": "Describe 20 facts that tend to establish Joe is innocent",
     "allowedFrontEndDomains": [
       "chat.freejoehunt.com",
-      "*.ananda-web-services-projects.vercel.app",
+      "**-ananda-web-services-projects.vercel.app",
       "localhost:3000",
       "127.0.0.1:3000"
     ],
@@ -229,7 +228,7 @@
     "chatPlaceholder": "Recommendations for developing healthy relationships?",
     "allowedFrontEndDomains": [
       "chat.crystalclarity.com",
-      "*.ananda-web-services-projects.vercel.app",
+      "**-ananda-web-services-projects.vercel.app",
       "localhost:3000",
       "127.0.0.1:3000"
     ],
