@@ -10,6 +10,7 @@
     "allowedFrontEndDomains": [
       "ask.anandalibrary.org",
       "*.ananda-web-services-projects.vercel.app",
+      "ananda-chatbot-*.ananda-web-services-projects.vercel.app",
       "localhost:3000",
       "127.0.0.1:3000"
     ],
