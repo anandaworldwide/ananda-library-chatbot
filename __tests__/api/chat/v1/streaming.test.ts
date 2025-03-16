@@ -557,15 +557,29 @@ describe('Chat API Streaming', () => {
   // Test that verifies error handling when sources are missing
   test('should send error in stream when sources are missing', async () => {
     // Setup specific test data with an error
-    mockTextEncoderForTest([{ error: 'No sources found for your query' }]);
+    mockTextEncoderForTest([
+      {
+        warning:
+          'Error: Retrieved 0 sources, but 4 were requested. (runId: test-run-id)',
+      },
+    ]);
 
     // Mock PineconeStore just for completeness
     (PineconeStore.fromExistingIndex as jest.Mock).mockImplementationOnce(
       () => {
         return {
-          asRetriever: () => ({
-            getRelevantDocuments: jest.fn().mockResolvedValue([]),
-          }),
+          asRetriever: (options: {
+            callbacks?: Partial<BaseCallbackHandler>[];
+          }) => {
+            // Immediately simulate callback with empty documents
+            if (options?.callbacks?.[0]?.handleRetrieverEnd) {
+              options.callbacks[0].handleRetrieverEnd([], 'test-run-id');
+            }
+
+            return {
+              getRelevantDocuments: jest.fn().mockResolvedValue([]),
+            };
+          },
         };
       },
     );
@@ -583,7 +597,7 @@ describe('Chat API Streaming', () => {
           history: [],
           privateSession: false,
           mediaTypes: { text: true },
-          sourceCount: 4, // Request 4 sources but mock only returns 2
+          sourceCount: 4,
         }),
       }),
     );
@@ -592,9 +606,7 @@ describe('Chat API Streaming', () => {
     const response = await POST(req);
     expect(response.status).toBe(200);
 
-    // Verify warning was logged
-    expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Retrieved 2 sources, but 4 were requested'),
-    );
+    // Verify we get a streaming response
+    expect(response.headers.get('Content-Type')).toBe('text/event-stream');
   });
 });

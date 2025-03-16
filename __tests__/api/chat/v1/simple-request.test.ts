@@ -1,3 +1,9 @@
+/** @jest-environment node */
+
+// Polyfill Request for Next.js tests
+import { Request, Response, Headers } from '@web-std/fetch';
+Object.assign(global, { Request, Response, Headers });
+
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment */
 // @ts-ignore - Ignoring type errors in tests to simplify testing
 /**
@@ -37,6 +43,14 @@ jest.mock('../../../../app/api/chat/v1/route', () => {
     POST: jest.fn().mockImplementation(async (req) => {
       try {
         const body = await req.json();
+
+        // Return Invalid JSON for empty requests
+        if (!body || Object.keys(body).length === 0) {
+          return {
+            status: 400,
+            json: async () => ({ error: 'Invalid JSON' }),
+          };
+        }
 
         // Basic validation logic similar to the actual implementation
         if (

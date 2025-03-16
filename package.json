@@ -109,6 +109,7 @@
     "@types/showdown": "^2.0.6",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
+    "@web-std/fetch": "^4.2.1",
     "autoprefixer": "^10.4.21",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.24",
