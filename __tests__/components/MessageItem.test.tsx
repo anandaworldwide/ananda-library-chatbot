@@ -30,15 +30,14 @@ jest.mock('next/image', () => ({
   __esModule: true,
   default: (props: React.ComponentProps<'img'> & { priority?: boolean }) => {
     // Remove priority from props to prevent TypeScript errors
-    const { priority, ...imgProps } = props;
+    const { priority } = props;
 
-    // eslint-disable-next-line @next/next/no-img-element
     return (
-      <img
-        {...imgProps}
-        alt={props.alt}
-        // Add priority as a string attribute if it was true
-        {...(priority ? { priority: 'true' } : {})}
+      <div
+        data-testid="mock-image"
+        data-src={props.src}
+        data-alt={props.alt}
+        data-priority={priority ? 'true' : 'false'}
       />
     );
   },
@@ -169,7 +168,9 @@ describe('MessageItem', () => {
 
     expect(screen.getByText('Test user message')).toBeInTheDocument();
     // User icon should be shown for user messages
-    expect(screen.getByAltText('Me')).toBeInTheDocument();
+    const userIcon = screen.getByTestId('mock-image');
+    expect(userIcon).toBeInTheDocument();
+    expect(userIcon.getAttribute('data-alt')).toBe('Me');
   });
 
   it('renders AI message correctly', () => {
@@ -177,7 +178,9 @@ describe('MessageItem', () => {
 
     expect(screen.getByText('Test AI message')).toBeInTheDocument();
     // AI icon should be shown for AI messages
-    expect(screen.getByAltText('AI')).toBeInTheDocument();
+    const aiIcon = screen.getByTestId('mock-image');
+    expect(aiIcon).toBeInTheDocument();
+    expect(aiIcon.getAttribute('data-alt')).toBe('AI');
 
     // Sources should be rendered
     expect(screen.getByTestId('sources-list')).toBeInTheDocument();

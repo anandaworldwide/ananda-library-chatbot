@@ -39,26 +39,82 @@
 import { NextRequest } from 'next/server';
 import * as makeChainModule from '@/utils/server/makechain';
 
-// Mock the necessary modules
-jest.mock('@/utils/server/loadSiteConfig', () => ({
-  loadSiteConfigSync: jest.fn().mockReturnValue({
-    allowedDomains: ['example.com', '*.example.com'],
-    allowedFrontEndDomains: ['example.com', '*.example.com'],
+// Mocks must be defined first, before imports
+const mockAddFn = jest.fn().mockResolvedValue({ id: 'test-id' });
+const mockCollectionFn = jest.fn().mockImplementation((name) => {
+  console.log(`Firestore collection called with: ${name}`);
+  return { add: mockAddFn };
+});
+
+// Firebase admin must be mocked before importing the route
+jest.mock('firebase-admin', () => ({
+  apps: [{}],
+  firestore: () => ({
+    collection: mockCollectionFn,
+    FieldValue: {
+      serverTimestamp: jest.fn().mockReturnValue('mock-timestamp'),
+    },
+  }),
+  credential: {
+    cert: jest.fn(),
+  },
+  initializeApp: jest.fn(),
+}));
+
+// Mock firebase-admin/firestore
+jest.mock('firebase-admin/firestore', () => ({
+  initializeFirestore: jest.fn(),
+}));
+
+// Mock Firebase service
+jest.mock('@/services/firebase', () => ({
+  db: {
+    collection: jest.fn().mockImplementation((name) => {
+      console.log(`Firebase service collection called with: ${name}`);
+      return { add: jest.fn().mockResolvedValue({ id: 'test-id' }) };
+    }),
+  },
+}));
+
+// Mock Pinecone to avoid loading env variables
+jest.mock('@/config/pinecone', () => ({
+  getPineconeIndexName: jest.fn().mockReturnValue('test-index'),
+  loadEnvVariables: jest.fn().mockReturnValue({
     pineconeIndex: 'test-index',
+    pineconeEnvironment: 'test-env',
+    pineconeApiKey: 'test-key',
   }),
 }));
 
-// Firestore mock with collection tracking
-const mockAdd = jest.fn().mockResolvedValue({ id: 'test-id' });
-const mockCollection = jest.fn().mockImplementation((name) => {
-  console.log(`Firestore collection called with: ${name}`);
-  return { add: mockAdd };
-});
+// Mock the site config
+jest.mock('@/utils/server/loadSiteConfig', () => {
+  const mockConfig = {
+    name: 'Test Chatbot',
+    shortname: 'Test',
+    allowedFrontEndDomains: [
+      'example.com',
+      '**-ananda-web-services-projects.vercel.app',
+      'localhost:3000',
+    ],
+    requireLogin: false,
+    collectionConfig: {
+      master_swami: 'Master and Swami',
+      whole_library: 'All authors',
+    },
+    includedLibraries: ['Ananda Library'],
+    libraryMappings: {},
+    queriesPerUserPerDay: 200,
+    enabledMediaTypes: ['text', 'video'],
+    modelName: 'gpt-4',
+    enableModelComparison: true,
+  };
 
-// Mock Firebase
-jest.mock('@/services/firebase', () => ({
-  db: { collection: mockCollection },
-}));
+  return {
+    parseSiteConfig: jest.fn().mockReturnValue(mockConfig),
+    getSiteConfigForRequest: jest.fn().mockReturnValue(mockConfig),
+    loadSiteConfigSync: jest.fn().mockReturnValue(mockConfig),
+  };
+});
 
 // Mock other deps
 jest.mock('@/utils/server/makechain', () => ({
@@ -118,24 +174,6 @@ jest.mock('@langchain/pinecone', () => ({
   },
 }));
 
-jest.mock('firebase-admin', () => ({
-  firestore: {
-    FieldValue: {
-      serverTimestamp: jest.fn().mockReturnValue('mock-timestamp'),
-    },
-  },
-}));
-
-// Mock Pinecone to avoid loading env variables
-jest.mock('@/config/pinecone', () => ({
-  getPineconeIndexName: jest.fn().mockReturnValue('test-index'),
-  loadEnvVariables: jest.fn().mockReturnValue({
-    pineconeIndex: 'test-index',
-    pineconeEnvironment: 'test-env',
-    pineconeApiKey: 'test-key',
-  }),
-}));
-
 jest.mock('@/utils/server/pinecone-client', () => ({
   getPineconeClient: jest.fn().mockResolvedValue({
     Index: jest.fn().mockReturnValue({
@@ -153,8 +191,7 @@ jest.mock('@langchain/openai', () => ({
 }));
 
 // Import POST only after all mocks are set up
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { POST } = require('@/app/api/chat/v1/route');
+import { POST } from '@/app/api/chat/v1/route';
 
 // Setup for ReadableStream proxying
 const originalReadableStream = global.ReadableStream;
@@ -318,7 +355,7 @@ describe('Chat API Route', () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify Firestore was NOT called for private session
-      expect(mockCollection).not.toHaveBeenCalled();
+      expect(mockCollectionFn).not.toHaveBeenCalled();
     });
 
     test.skip('saves non-private responses to Firestore', async () => {
@@ -346,8 +383,8 @@ describe('Chat API Route', () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify Firestore was called for non-private session
-      expect(mockCollection).toHaveBeenCalledWith('answers');
-      expect(mockAdd).toHaveBeenCalled();
+      expect(mockCollectionFn).toHaveBeenCalledWith('answers');
+      expect(mockAddFn).toHaveBeenCalled();
     });
 
     test('handles chatstream operation failure', async () => {
