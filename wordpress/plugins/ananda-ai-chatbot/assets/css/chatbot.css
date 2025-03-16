@@ -1,7 +1,7 @@
 #aichatbot-bubble {
   position: fixed;
-  bottom: 20px;
-  left: 20px; /* Changed from right: 20px to left: 20px to position in bottom left */
+  bottom: 100px;
+  right: 20px; /* Match Intercom's positioning */
   background-color: #4a90e2;
   color: white;
   border-radius: 50%;
@@ -73,8 +73,8 @@
 
 #aichatbot-window {
   position: fixed;
-  bottom: 20px;
-  left: 20px; /* Changed from right: 20px to left: 20px to position above the bubble */
+  bottom: 100px;
+  right: 20px; /* Match Intercom's positioning */
   width: 350px;
   height: 500px;
   background-color: white;
@@ -357,7 +357,7 @@
     width: 85%;
     height: 70vh;
     bottom: 10px;
-    left: 10px; /* Changed from right: 10px to left: 10px */
+    right: 20px; /* Match Intercom positioning on mobile */
   }
 
   #aichatbot-input {
@@ -369,7 +369,7 @@
     width: 42px;
     height: 42px;
     bottom: 10px;
-    left: 10px; /* Changed from right: 10px to left: 10px */
+    right: 20px; /* Match Intercom positioning on mobile */
   }
 
   #aichatbot-bubble .fa-stack {
@@ -390,6 +390,10 @@
     bottom: 50px;
     font-size: 12px;
     padding: 4px 8px;
+  }
+
+  .intercom-enabled #aichatbot-bubble {
+    right: 20px; /* Keep consistent positioning on mobile */
   }
 }
 
@@ -452,7 +456,8 @@
 
 /* Style adjustments when Intercom is active */
 .intercom-enabled #aichatbot-bubble {
-  left: 80px; /* Changed from right: 80px to left: 80px */
+  right: 20px; /* Keep same position when Intercom is present */
+  bottom: 100px; /* Stack above Intercom */
 }
 
 /* Ensure proper z-index stacking */
@@ -467,6 +472,7 @@
 
 /* Force our chatbot window above everything */
 .intercom-enabled #aichatbot-window {
+  right: 20px; /* Keep same position when Intercom is present */
   z-index: 2147483647 !important; /* Maximum possible z-index value */
   position: fixed !important;
 }
@@ -474,6 +480,6 @@
 /* Responsive adjustments when Intercom is present */
 @media (max-width: 480px) {
   .intercom-enabled #aichatbot-bubble {
-    left: 70px; /* Changed from right: 70px to left: 70px */
+    right: 20px; /* Keep consistent positioning on mobile */
   }
 }
