@@ -9,7 +9,9 @@
     "chatPlaceholder": "How can I think of God more?",
     "allowedFrontEndDomains": [
       "ask.anandalibrary.org",
-      "*-ananda-web-services-projects.vercel.app"
+      "*.ananda-web-services-projects.vercel.app",
+      "localhost:3000",
+      "127.0.0.1:3000"
     ],
     "parent_site_url": "https://www.anandalibrary.org",
     "parent_site_name": "Ananda Library",
@@ -97,7 +99,9 @@
       "staging.ananda.org",
       "vayudev.ananda.org",
       "ananda-public-chatbot.vercel.app",
-      "*-ananda-web-services-projects.vercel.app",
+      "*.ananda-web-services-projects.vercel.app",
+      "localhost:3000",
+      "127.0.0.1:3000",
       "chatbot-test.local/sample-page/"
     ],
     "parent_site_url": "https://www.ananda.org",
@@ -171,7 +175,9 @@
     "chatPlaceholder": "Describe 20 facts that tend to establish Joe is innocent",
     "allowedFrontEndDomains": [
       "chat.freejoehunt.com",
-      "*-ananda-web-services-projects.vercel.app"
+      "*.ananda-web-services-projects.vercel.app",
+      "localhost:3000",
+      "127.0.0.1:3000"
     ],
     "parent_site_url": "https://freejoehunt.com",
     "parent_site_name": "Free Joe Hunt",
@@ -222,7 +228,9 @@
     "chatPlaceholder": "Recommendations for developing healthy relationships?",
     "allowedFrontEndDomains": [
       "chat.crystalclarity.com",
-      "*-ananda-web-services-projects.vercel.app"
+      "*.ananda-web-services-projects.vercel.app",
+      "localhost:3000",
+      "127.0.0.1:3000"
     ],
     "parent_site_url": "https://crystalclarity.com",
     "parent_site_name": "Crystal Clarity",
