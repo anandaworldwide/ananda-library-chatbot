@@ -154,7 +154,7 @@ describe('makeChain', () => {
     // Call makeChain
     const chain = await makeChain(
       mockRetriever,
-      { model: 'gpt-3.5-turbo', temperature: 0.7 },
+      { model: 'gpt-4o-mini', temperature: 0.7 },
       2, // sourceCount
       undefined, // baseFilter
       sendData,
@@ -170,7 +170,7 @@ describe('makeChain', () => {
     // Verify that ChatOpenAI was initialized
     expect(ChatOpenAI).toHaveBeenCalledWith({
       temperature: 0.7,
-      modelName: 'gpt-3.5-turbo',
+      modelName: 'gpt-4o-mini',
       streaming: true,
     });
   });
@@ -188,7 +188,7 @@ describe('makeChain', () => {
     // Call makeChain
     const chain = await makeChain(
       mockRetriever,
-      { model: 'gpt-3.5-turbo', temperature: 0.7 },
+      { model: 'gpt-4o-mini', temperature: 0.7 },
       2, // sourceCount
       undefined, // baseFilter
       sendData,
@@ -230,7 +230,7 @@ describe('makeChain', () => {
     // Call makeChain
     const chain = await makeChain(
       mockLibraryRetriever,
-      { model: 'gpt-3.5-turbo', temperature: 0.7 },
+      { model: 'gpt-4o-mini', temperature: 0.7 },
       2, // sourceCount
       undefined, // baseFilter
       sendData,
@@ -257,7 +257,7 @@ describe('makeChain', () => {
     // Call makeChain
     const chain = await makeChain(
       mockBuggyRetriever,
-      { model: 'gpt-3.5-turbo', temperature: 0.7 },
+      { model: 'gpt-4o-mini', temperature: 0.7 },
       2, // sourceCount
       undefined, // baseFilter
       sendData,
