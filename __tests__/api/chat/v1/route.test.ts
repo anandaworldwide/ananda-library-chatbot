@@ -182,6 +182,11 @@ jest.mock('@/utils/server/pinecone-client', () => ({
       }),
     }),
   }),
+  getCachedPineconeIndex: jest.fn().mockResolvedValue({
+    namespace: jest.fn().mockReturnValue({
+      query: jest.fn().mockResolvedValue({ matches: [] }),
+    }),
+  }),
 }));
 
 jest.mock('@langchain/openai', () => ({

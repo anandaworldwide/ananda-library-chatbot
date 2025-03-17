@@ -97,30 +97,21 @@ import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 // Import the route handler after mocks are set up
 import { POST } from '@/app/api/chat/v1/route';
 
-// Import mocks first
-import './mocks';
-
-// Import the route handler after mocks are set up
-jest.mock('@/utils/server/loadSiteConfig', () => ({
-  loadSiteConfig: jest.fn().mockResolvedValue({
-    siteId: 'ananda-public',
-    queriesPerUserPerDay: 100,
-    allowedFrontEndDomains: ['*example.com', 'localhost:3000', 'localhost'],
-    includedLibraries: [{ name: 'library1', weight: 1 }],
-    enabledMediaTypes: ['text', 'audio'],
-    modelName: 'gpt-4',
-    temperature: 0.3,
+// Setup mock implementations
+const mockPineconeIndex = {
+  namespace: jest.fn().mockReturnValue({
+    query: jest.fn().mockResolvedValue({ matches: [] }),
   }),
-  loadSiteConfigSync: jest.fn().mockReturnValue({
-    siteId: 'ananda-public',
-    queriesPerUserPerDay: 100,
-    allowedFrontEndDomains: ['*example.com', 'localhost:3000', 'localhost'],
-    includedLibraries: [{ name: 'library1', weight: 1 }],
-    enabledMediaTypes: ['text', 'audio'],
-    modelName: 'gpt-4',
-    temperature: 0.3,
-  }),
-}));
+};
+(getPineconeClient as jest.Mock).mockResolvedValue({
+  Index: jest.fn().mockReturnValue(mockPineconeIndex),
+});
+// Add mock for getCachedPineconeIndex
+const mockGetCachedPineconeIndex = jest
+  .fn()
+  .mockResolvedValue(mockPineconeIndex);
+jest.requireMock('@/utils/server/pinecone-client').getCachedPineconeIndex =
+  mockGetCachedPineconeIndex;
 
 describe('Chat API Streaming', () => {
   // Common test data
