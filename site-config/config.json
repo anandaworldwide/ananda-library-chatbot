@@ -270,6 +270,6 @@
     "enableModelComparison": false,
     "showSourceCountSelector": false,
     "temperature": 0.3,
-    "modelName": "gpt-4o"
+    "modelName": "gpt-4o-mini"
   }
 }
