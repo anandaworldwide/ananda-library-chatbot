@@ -544,17 +544,105 @@ async function handleComparisonRequest(
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      // Track timing for both models
+      const timingMetricsA: TimingMetrics = {
+        startTime: Date.now(),
+      };
+      const timingMetricsB: TimingMetrics = {
+        startTime: Date.now(),
+      };
+      const stages = {
+        startTime: Date.now(),
+        pineconeComplete: 0,
+        retrievalComplete: 0,
+      };
+      let tokensStreamedA = 0;
+      let tokensStreamedB = 0;
+      let firstTokenSentA = false;
+      let firstTokenSentB = false;
+
+      // Track when models are done to avoid duplicate logging
+      let modelALogged = false;
+      let modelBLogged = false;
+
       const sendData = (data: StreamingResponseData & { model?: string }) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        try {
+          // Track timing based on model
+          if (data.model === 'A') {
+            // Track first token generation time from LLM
+            if (
+              data.timing?.firstTokenGenerated &&
+              !timingMetricsA.firstTokenGenerated
+            ) {
+              timingMetricsA.firstTokenGenerated =
+                data.timing.firstTokenGenerated;
+            }
+
+            // Track first byte time (when token reaches client)
+            if (!firstTokenSentA && data.token) {
+              firstTokenSentA = true;
+              timingMetricsA.firstByteTime = Date.now();
+
+              // Add timing info to the response
+              data.timing = {
+                ...(data.timing || {}),
+                ttfb: timingMetricsA.firstByteTime - timingMetricsA.startTime,
+              };
+            }
+
+            // Count tokens for calculating streaming rate
+            if (data.token) {
+              tokensStreamedA += data.token.length;
+            }
+          } else if (data.model === 'B') {
+            // Track first token generation time from LLM
+            if (
+              data.timing?.firstTokenGenerated &&
+              !timingMetricsB.firstTokenGenerated
+            ) {
+              timingMetricsB.firstTokenGenerated =
+                data.timing.firstTokenGenerated;
+            }
+
+            // Track first byte time (when token reaches client)
+            if (!firstTokenSentB && data.token) {
+              firstTokenSentB = true;
+              timingMetricsB.firstByteTime = Date.now();
+
+              // Add timing info to the response
+              data.timing = {
+                ...(data.timing || {}),
+                ttfb: timingMetricsB.firstByteTime - timingMetricsB.startTime,
+              };
+            }
+
+            // Count tokens for calculating streaming rate
+            if (data.token) {
+              tokensStreamedB += data.token.length;
+            }
+          }
+
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+          );
+        } catch (error) {
+          console.error('Error in sendData:', error);
+        }
       };
 
       try {
+        // Send site ID first
+        sendData({ siteId: siteConfig.siteId });
+
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
           requestBody.collection || 'default',
           normalizeMediaTypes(requestBody.mediaTypes),
           siteConfig,
         );
+
+        // Track pinecone setup completion time
+        stages.pineconeComplete = Date.now();
 
         // Use the source count directly from the request body
         // The frontend is responsible for using siteConfig.defaultNumSources
@@ -575,6 +663,12 @@ async function handleComparisonRequest(
             },
             sourceCount,
           );
+
+        // Add a callback that will be triggered when documents are ready
+        documentPromise.then(() => {
+          // Set retrieval completion time as soon as documents are resolved
+          stages.retrievalComplete = Date.now();
+        });
 
         // Create chains for both models
         const chainA = await makeChain(
@@ -627,6 +721,34 @@ async function handleComparisonRequest(
                   },
                   handleChainEnd() {
                     modelAComplete = true;
+
+                    // Calculate final metrics for model A
+                    timingMetricsA.totalTime =
+                      Date.now() - timingMetricsA.startTime;
+                    const streamingTime = timingMetricsA.firstByteTime
+                      ? Date.now() - timingMetricsA.firstByteTime
+                      : 0;
+                    timingMetricsA.totalTokens = tokensStreamedA;
+
+                    // Calculate tokens per second if we have streaming time
+                    if (streamingTime > 0) {
+                      timingMetricsA.tokensPerSecond = Math.round(
+                        (tokensStreamedA / streamingTime) * 1000,
+                      );
+                    }
+
+                    // Only log performance metrics once at the end for model A
+                    if (!modelALogged) {
+                      console.log(
+                        `\n📊 MODEL A (${requestBody.modelA}) COMPLETE:`,
+                      );
+                      logPerformanceMetrics(
+                        timingMetricsA,
+                        stages,
+                        requestBody.modelA,
+                      );
+                      modelALogged = true;
+                    }
                   },
                 } as Partial<BaseCallbackHandler>,
               ],
@@ -648,6 +770,34 @@ async function handleComparisonRequest(
                   },
                   handleChainEnd() {
                     modelBComplete = true;
+
+                    // Calculate final metrics for model B
+                    timingMetricsB.totalTime =
+                      Date.now() - timingMetricsB.startTime;
+                    const streamingTime = timingMetricsB.firstByteTime
+                      ? Date.now() - timingMetricsB.firstByteTime
+                      : 0;
+                    timingMetricsB.totalTokens = tokensStreamedB;
+
+                    // Calculate tokens per second if we have streaming time
+                    if (streamingTime > 0) {
+                      timingMetricsB.tokensPerSecond = Math.round(
+                        (tokensStreamedB / streamingTime) * 1000,
+                      );
+                    }
+
+                    // Only log performance metrics once at the end for model B
+                    if (!modelBLogged) {
+                      console.log(
+                        `\n📊 MODEL B (${requestBody.modelB}) COMPLETE:`,
+                      );
+                      logPerformanceMetrics(
+                        timingMetricsB,
+                        stages,
+                        requestBody.modelB,
+                      );
+                      modelBLogged = true;
+                    }
                   },
                 } as Partial<BaseCallbackHandler>,
               ],
@@ -662,6 +812,27 @@ async function handleComparisonRequest(
         // Signal completion only after both models have completed
         if (modelAComplete && modelBComplete) {
           sendData({ done: true });
+
+          // Log a side-by-side comparison of the models
+          console.log('\n📊 MODEL COMPARISON:');
+          console.log(
+            `Model A (${requestBody.modelA}) vs Model B (${requestBody.modelB})`,
+          );
+          console.log(
+            `Time to first token: ${timingMetricsA.firstTokenGenerated ? (timingMetricsA.firstTokenGenerated - timingMetricsA.startTime) / 1000 : 'N/A'}s vs ${timingMetricsB.firstTokenGenerated ? (timingMetricsB.firstTokenGenerated - timingMetricsB.startTime) / 1000 : 'N/A'}s`,
+          );
+          console.log(
+            `Streaming time: ${timingMetricsA.firstByteTime && timingMetricsA.totalTime ? ((timingMetricsA.totalTime - (timingMetricsA.firstByteTime - timingMetricsA.startTime)) / 1000).toFixed(2) : 'N/A'}s vs ${timingMetricsB.firstByteTime && timingMetricsB.totalTime ? ((timingMetricsB.totalTime - (timingMetricsB.firstByteTime - timingMetricsB.startTime)) / 1000).toFixed(2) : 'N/A'}s`,
+          );
+          console.log(
+            `Total tokens: ${timingMetricsA.totalTokens || 0} vs ${timingMetricsB.totalTokens || 0}`,
+          );
+          console.log(
+            `Tokens per second: ${timingMetricsA.tokensPerSecond || 0} vs ${timingMetricsB.tokensPerSecond || 0}`,
+          );
+          console.log(
+            `Total time: ${timingMetricsA.totalTime ? (timingMetricsA.totalTime / 1000).toFixed(2) : 'N/A'}s vs ${timingMetricsB.totalTime ? (timingMetricsB.totalTime / 1000).toFixed(2) : 'N/A'}s`,
+          );
         }
 
         controller.close();
@@ -733,6 +904,7 @@ export async function OPTIONS(req: NextRequest) {
 function logPerformanceMetrics(
   metrics: TimingMetrics,
   stages: Record<string, number>,
+  modelName: string = 'unknown',
 ) {
   const summaryMetrics = {
     setup: stages.pineconeComplete
@@ -761,6 +933,7 @@ function logPerformanceMetrics(
 
   console.log(`
   ⚡️ Chat Performance:
+    Model: ${modelName}
     Setup: ${(summaryMetrics.setup / 1000).toFixed(2)}s
     Retrieval: ${(summaryMetrics.retrieval / 1000).toFixed(2)}s
     LLM think time: ${(summaryMetrics.llmThinkTime / 1000).toFixed(2)}s
@@ -793,6 +966,9 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  // Store the model name for logging
+  const modelName = siteConfig.modelName || 'unknown';
 
   // Validate and preprocess the input
   const validationResult = await validateAndPreprocessInput(req, siteConfig);
@@ -881,7 +1057,7 @@ export async function POST(req: NextRequest) {
               }
 
               // Log consolidated performance metrics
-              logPerformanceMetrics(timingMetrics, stages);
+              logPerformanceMetrics(timingMetrics, stages, modelName);
 
               // Add timing to the final response
               data.timing = {
