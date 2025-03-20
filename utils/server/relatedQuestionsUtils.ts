@@ -34,7 +34,6 @@ async function safeSetInCache(
   expiration?: number,
 ) {
   const serialized = JSON.stringify(value);
-  console.log(`safeSetInCache: serialized length: ${serialized.length}`);
   if (serialized.length > MAX_CHUNK_SIZE) {
     console.warn(
       `Cache value for key ${key} exceeds ${MAX_CHUNK_SIZE} bytes. Splitting into chunks.`,
