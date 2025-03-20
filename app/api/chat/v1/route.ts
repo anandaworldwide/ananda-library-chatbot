@@ -915,6 +915,7 @@ export async function POST(req: NextRequest) {
       let isControllerClosed = false;
       let tokensStreamed = 0;
       let firstTokenSent = false;
+      let performanceLogged = false;
 
       const sendData = (data: StreamingResponseData) => {
         if (!isControllerClosed) {
@@ -946,7 +947,8 @@ export async function POST(req: NextRequest) {
             }
 
             // Add done timing info
-            if (data.done) {
+            if (data.done && !performanceLogged) {
+              performanceLogged = true;
               timingMetrics.totalTime = Date.now() - timingMetrics.startTime;
               const streamingTime = timingMetrics.firstByteTime
                 ? Date.now() - timingMetrics.firstByteTime
