@@ -561,9 +561,9 @@ async function handleComparisonRequest(
       let firstTokenSentA = false;
       let firstTokenSentB = false;
 
-      // Track when models are done to avoid duplicate logging
-      let modelALogged = false;
-      let modelBLogged = false;
+      // Track when models are done
+      let modelAComplete = false;
+      let modelBComplete = false;
 
       const sendData = (data: StreamingResponseData & { model?: string }) => {
         try {
@@ -699,10 +699,6 @@ async function handleComparisonRequest(
           })
           .join('\n');
 
-        // Track completion of both models
-        let modelAComplete = false;
-        let modelBComplete = false;
-
         // Run both chains concurrently
         await Promise.all([
           chainA.invoke(
@@ -735,19 +731,6 @@ async function handleComparisonRequest(
                       timingMetricsA.tokensPerSecond = Math.round(
                         (tokensStreamedA / streamingTime) * 1000,
                       );
-                    }
-
-                    // Only log performance metrics once at the end for model A
-                    if (!modelALogged) {
-                      console.log(
-                        `\n📊 MODEL A (${requestBody.modelA}) COMPLETE:`,
-                      );
-                      logPerformanceMetrics(
-                        timingMetricsA,
-                        stages,
-                        requestBody.modelA,
-                      );
-                      modelALogged = true;
                     }
                   },
                 } as Partial<BaseCallbackHandler>,
@@ -785,19 +768,6 @@ async function handleComparisonRequest(
                         (tokensStreamedB / streamingTime) * 1000,
                       );
                     }
-
-                    // Only log performance metrics once at the end for model B
-                    if (!modelBLogged) {
-                      console.log(
-                        `\n📊 MODEL B (${requestBody.modelB}) COMPLETE:`,
-                      );
-                      logPerformanceMetrics(
-                        timingMetricsB,
-                        stages,
-                        requestBody.modelB,
-                      );
-                      modelBLogged = true;
-                    }
                   },
                 } as Partial<BaseCallbackHandler>,
               ],
@@ -812,27 +782,6 @@ async function handleComparisonRequest(
         // Signal completion only after both models have completed
         if (modelAComplete && modelBComplete) {
           sendData({ done: true });
-
-          // Log a side-by-side comparison of the models
-          console.log('\n📊 MODEL COMPARISON:');
-          console.log(
-            `Model A (${requestBody.modelA}) vs Model B (${requestBody.modelB})`,
-          );
-          console.log(
-            `Time to first token: ${timingMetricsA.firstTokenGenerated ? (timingMetricsA.firstTokenGenerated - timingMetricsA.startTime) / 1000 : 'N/A'}s vs ${timingMetricsB.firstTokenGenerated ? (timingMetricsB.firstTokenGenerated - timingMetricsB.startTime) / 1000 : 'N/A'}s`,
-          );
-          console.log(
-            `Streaming time: ${timingMetricsA.firstByteTime && timingMetricsA.totalTime ? ((timingMetricsA.totalTime - (timingMetricsA.firstByteTime - timingMetricsA.startTime)) / 1000).toFixed(2) : 'N/A'}s vs ${timingMetricsB.firstByteTime && timingMetricsB.totalTime ? ((timingMetricsB.totalTime - (timingMetricsB.firstByteTime - timingMetricsB.startTime)) / 1000).toFixed(2) : 'N/A'}s`,
-          );
-          console.log(
-            `Total tokens: ${timingMetricsA.totalTokens || 0} vs ${timingMetricsB.totalTokens || 0}`,
-          );
-          console.log(
-            `Tokens per second: ${timingMetricsA.tokensPerSecond || 0} vs ${timingMetricsB.tokensPerSecond || 0}`,
-          );
-          console.log(
-            `Total time: ${timingMetricsA.totalTime ? (timingMetricsA.totalTime / 1000).toFixed(2) : 'N/A'}s vs ${timingMetricsB.totalTime ? (timingMetricsB.totalTime / 1000).toFixed(2) : 'N/A'}s`,
-          );
         }
 
         controller.close();
