@@ -319,14 +319,28 @@ export default function Home({
       }
 
       if (data.sourceDocs) {
-        const immutableSourceDocs = [...data.sourceDocs];
-        if (immutableSourceDocs.length < sourceCount) {
-          console.error(
-            `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
-          );
+        console.log('Received sourceDocs:', typeof data.sourceDocs, data.sourceDocs);
+        try {
+          setTimeout(() => {
+            const immutableSourceDocs = Array.isArray(data.sourceDocs) 
+              ? [...data.sourceDocs]
+              : [];
+            
+            if (immutableSourceDocs.length < sourceCount) {
+              console.error(
+                `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
+              );
+            }
+
+            setSourceDocs(immutableSourceDocs);
+            updateMessageState(accumulatedResponseRef.current, immutableSourceDocs);
+          }, 100);
+        } catch (error) {
+          console.error('Error handling sourceDocs:', error);
+          // Fallback to empty array if parsing fails
+          setSourceDocs([]);
+          updateMessageState(accumulatedResponseRef.current, []);
         }
-        setSourceDocs(immutableSourceDocs);
-        updateMessageState(accumulatedResponseRef.current, immutableSourceDocs);
       }
 
       if (data.done) {
