@@ -8,4 +8,12 @@ export interface StreamingResponseData {
   docId?: string;
   model?: string;
   siteId?: string;
+  warning?: string;
+  timing?: {
+    ttfb?: number;
+    total?: number;
+    tokensPerSecond?: number;
+    totalTokens?: number;
+    firstTokenGenerated?: number;
+  };
 }

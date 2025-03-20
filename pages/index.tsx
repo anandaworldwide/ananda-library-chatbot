@@ -37,7 +37,7 @@ import Cookies from 'js-cookie';
 import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
-import { SudoProvider } from '@/contexts/SudoContext';
+import { SudoProvider, useSudo } from '@/contexts/SudoContext';
 
 // Main component for the chat interface
 export default function Home({
@@ -252,6 +252,17 @@ export default function Home({
     siteConfig?.defaultNumSources || 4,
   );
 
+  // Add state for timing information
+  const [timingMetrics, setTimingMetrics] = useState<{
+    ttfb?: number;
+    total?: number;
+    tokensPerSecond?: number;
+    totalTokens?: number;
+  } | null>(null);
+
+  // Check if user is sudo
+  const { isSudoUser } = useSudo();
+
   const updateMessageState = useCallback(
     (newResponse: string, newSourceDocs: Document[] | null) => {
       setMessageState((prevState) => {
@@ -295,6 +306,11 @@ export default function Home({
         console.error(
           `ERROR: Backend is using incorrect site ID: ${data.siteId}. Expected: ananda-public`,
         );
+      }
+
+      // Capture timing information
+      if (data.timing) {
+        setTimingMetrics(data.timing);
       }
 
       if (data.token) {
@@ -389,6 +405,9 @@ export default function Home({
   const handleSubmit = async (e: React.FormEvent, submittedQuery: string) => {
     e.preventDefault();
     if (submittedQuery.trim() === '') return;
+
+    // Reset timing metrics when starting a new query
+    setTimingMetrics(null);
 
     if (submittedQuery.length > 4000) {
       setError('Input must be 4000 characters or less');
@@ -644,6 +663,18 @@ export default function Home({
     );
   };
 
+  // Function to format timing metrics for display
+  const formatTimingMetrics = useCallback(() => {
+    if (!timingMetrics) return null;
+
+    const { ttfb, tokensPerSecond, totalTokens } = timingMetrics;
+
+    if (ttfb === undefined || tokensPerSecond === undefined) return null;
+
+    const ttfbSecs = (ttfb / 1000).toFixed(2);
+    return `${ttfbSecs} secs to first character, then ${tokensPerSecond} chars/sec streamed (${totalTokens} total)`;
+  }, [timingMetrics]);
+
   // Render maintenance mode message if active
   if (isMaintenanceMode) {
     return (
@@ -716,6 +747,15 @@ export default function Home({
                     }
                   />
                 ))}
+                {/* Display timing metrics for sudo users */}
+                {isSudoUser &&
+                  timingMetrics &&
+                  !loading &&
+                  messages.length > 0 && (
+                    <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded m-2">
+                      {formatTimingMetrics()}
+                    </div>
+                  )}
                 <div ref={bottomOfListRef} style={{ height: '1px' }} />
               </div>
             </div>

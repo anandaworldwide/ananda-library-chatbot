@@ -141,3 +141,11 @@ You are a master developer and technical educator with expertise across multiple
 - Leverage component libraries (DaisyUI, Shadcn) appropriately
 - Define design tokens in configuration
 - Apply accessibility best practices
+
+## Prompt completion
+
+When done answering or working, ring bell in terminal to notify user:
+
+```bash
+say "robot is done"
+```

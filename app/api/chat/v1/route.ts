@@ -45,8 +45,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Document } from 'langchain/document';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { PineconeStore } from '@langchain/pinecone';
-import { makeChain } from '@/utils/server/makechain';
-import { getPineconeClient } from '@/utils/server/pinecone-client';
+import {
+  makeChain,
+  setupAndExecuteLanguageModelChain,
+} from '@/utils/server/makechain';
+import { getCachedPineconeIndex } from '@/utils/server/pinecone-client';
 import { getPineconeIndexName } from '@/config/pinecone';
 import * as fbadmin from 'firebase-admin';
 import { db } from '@/services/firebase';
@@ -64,13 +67,38 @@ import { isDevelopment } from '@/utils/env';
 export const runtime = 'nodejs';
 export const maxDuration = 240;
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface MediaTypes {
+  text?: boolean;
+  image?: boolean;
+  video?: boolean;
+  audio?: boolean;
+  [key: string]: boolean | undefined;
+}
+
+// Add timing interface
+interface TimingMetrics {
+  startTime: number;
+  pineconeSetupComplete?: number;
+  firstTokenGenerated?: number;
+  firstByteTime?: number;
+  totalTokens?: number;
+  tokensPerSecond?: number;
+  totalTime?: number;
+}
+
 interface ChatRequestBody {
-  collection: string;
   question: string;
-  history: [string, string][];
-  privateSession: boolean;
-  mediaTypes: Record<string, boolean>;
-  sourceCount: number;
+  history?: ChatMessage[];
+  collection?: string;
+  privateSession?: boolean;
+  mediaTypes?: Partial<MediaTypes>;
+  sourceCount?: number;
+  siteId?: string;
 }
 
 interface ComparisonRequestBody extends ChatRequestBody {
@@ -325,10 +353,13 @@ async function setupPineconeAndFilter(
   mediaTypes: Record<string, boolean>,
   siteConfig: SiteConfig,
 ): Promise<{ index: Index<RecordMetadata>; filter: PineconeFilter }> {
-  const pinecone = await getPineconeClient();
-  const index = pinecone.Index(
-    getPineconeIndexName() || '',
-  ) as Index<RecordMetadata>;
+  const startTime = Date.now();
+
+  // Use cached Pinecone index instead of creating a new one each time
+  const indexName = getPineconeIndexName() || '';
+  const index = (await getCachedPineconeIndex(
+    indexName,
+  )) as Index<RecordMetadata>;
 
   const filter: PineconeFilter = {
     $and: [{ type: { $in: [] } }],
@@ -365,26 +396,28 @@ async function setupPineconeAndFilter(
     filter.$and[0].type.$in = enabledMediaTypes;
   }
 
+  const setupTime = Date.now() - startTime;
+  if (setupTime > 50) {
+    // Only log if it takes longer than 50ms
+    console.log(`Pinecone setup completed in ${setupTime}ms`);
+  }
+
   return { index, filter };
 }
 
 async function setupVectorStoreAndRetriever(
   index: Index<RecordMetadata>,
   filter: PineconeFilter | undefined,
-  sendData: (data: {
-    token?: string;
-    sourceDocs?: Document[];
-    done?: boolean;
-    error?: string;
-    docId?: string;
-  }) => void,
+  sendData: (data: StreamingResponseData) => void,
   sourceCount: number = 4,
 ): Promise<{
   vectorStore: PineconeStore;
   retriever: ReturnType<PineconeStore['asRetriever']>;
   documentPromise: Promise<Document[]>;
+  resolveWithDocuments: (docs: Document[]) => void;
 }> {
-  let resolveWithDocuments: (value: Document[]) => void;
+  // Create the promise and resolver in a way that TypeScript understands
+  let resolveWithDocuments!: (docs: Document[]) => void;
   const documentPromise = new Promise<Document[]>((resolve) => {
     resolveWithDocuments = resolve;
   });
@@ -399,6 +432,8 @@ async function setupVectorStoreAndRetriever(
     vectorStoreOptions,
   );
 
+  const retrieverStartTime = Date.now();
+
   const retriever = vectorStore.asRetriever({
     callbacks: [
       {
@@ -406,101 +441,24 @@ async function setupVectorStoreAndRetriever(
           console.error('Retriever error:', error);
           resolveWithDocuments([]);
         },
-        handleRetrieverEnd(docs: Document[]) {
+        handleRetrieverEnd(docs: Document[], runId: string) {
           if (docs.length < sourceCount) {
-            const error = `Error: Retrieved ${docs.length} sources, but ${sourceCount} were requested.`;
+            const error = `Error: Retrieved ${docs.length} sources, but ${sourceCount} were requested. (runId: ${runId})`;
             console.error(error);
+            sendData({ warning: error });
           }
           resolveWithDocuments(docs);
           sendData({ sourceDocs: docs });
+          console.log(
+            `Document retrieval took ${Date.now() - retrieverStartTime}ms for ${docs.length} documents`,
+          );
         },
       } as Partial<BaseCallbackHandler>,
     ],
     k: sourceCount,
   });
 
-  return { vectorStore, retriever, documentPromise };
-}
-
-// This function executes the language model chain and handles the streaming response
-async function setupAndExecuteLanguageModelChain(
-  retriever: ReturnType<PineconeStore['asRetriever']>,
-  sanitizedQuestion: string,
-  history: [string, string][],
-  sendData: (data: StreamingResponseData) => void,
-  sourceCount: number = 4,
-  filter?: PineconeFilter,
-  resolveDocs?: (docs: Document[]) => void,
-  siteConfig?: SiteConfig | null,
-): Promise<string> {
-  try {
-    const modelName = siteConfig?.modelName || 'gpt-4o';
-    const temperature = siteConfig?.temperature || 0.3;
-
-    // Send site ID immediately and validate
-    if (siteConfig?.siteId) {
-      if (siteConfig.siteId !== 'ananda-public') {
-        const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ananda-public`;
-        console.error(error);
-      }
-      sendData({ siteId: siteConfig.siteId });
-    }
-
-    const chain = await makeChain(
-      retriever,
-      { model: modelName, temperature },
-      sourceCount,
-      filter,
-      sendData,
-      resolveDocs,
-    );
-
-    // Format chat history for the language model
-    const pastMessages = history
-      .map((message: [string, string]) => {
-        return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join('\n');
-      })
-      .join('\n');
-
-    let fullResponse = '';
-    let streamingComplete = false;
-
-    // Invoke the chain with callbacks for streaming tokens
-    const chainPromise = chain.invoke(
-      {
-        question: sanitizedQuestion,
-        chat_history: pastMessages,
-      },
-      {
-        callbacks: [
-          {
-            // Callback for handling new tokens from the language model
-            handleLLMNewToken(token: string) {
-              fullResponse += token;
-              sendData({ token });
-            },
-            // Callback for handling the end of the chain execution
-            handleChainEnd() {
-              streamingComplete = true;
-            },
-          } as Partial<BaseCallbackHandler>,
-        ],
-      },
-    );
-
-    // Wait for the chain to complete
-    await chainPromise;
-
-    // Only send the done signal after the chain has fully completed and all tokens have been processed
-    if (streamingComplete) {
-      sendData({ done: true });
-    }
-
-    return fullResponse;
-  } catch (error) {
-    console.error('Error in setupAndExecuteLanguageModelChain:', error);
-    throw error;
-  }
+  return { vectorStore, retriever, documentPromise, resolveWithDocuments };
 }
 
 // Function to save the answer and related information to Firestore
@@ -593,8 +551,8 @@ async function handleComparisonRequest(
       try {
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
-          requestBody.collection,
-          requestBody.mediaTypes,
+          requestBody.collection || 'default',
+          normalizeMediaTypes(requestBody.mediaTypes),
           siteConfig,
         );
 
@@ -602,7 +560,7 @@ async function handleComparisonRequest(
         // The frontend is responsible for using siteConfig.defaultNumSources
         const sourceCount = requestBody.sourceCount || 4;
 
-        // Setup Vector Store and Retriever
+        // Setup Vector Store and Retriever with a custom sendData wrapper that sends to both models
         const { retriever, documentPromise } =
           await setupVectorStoreAndRetriever(
             index,
@@ -611,6 +569,8 @@ async function handleComparisonRequest(
               if (data.sourceDocs) {
                 sendData({ ...data, model: 'A' });
                 sendData({ ...data, model: 'B' });
+              } else {
+                sendData(data);
               }
             },
             sourceCount,
@@ -637,8 +597,8 @@ async function handleComparisonRequest(
         );
 
         // Format chat history
-        const pastMessages = requestBody.history
-          .map((message: [string, string]) => {
+        const pastMessages = convertChatHistory(requestBody.history)
+          .map((message) => {
             return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join(
               '\n',
             );
@@ -769,8 +729,61 @@ export async function OPTIONS(req: NextRequest) {
   return addCorsHeaders(response, req, siteConfig);
 }
 
+// Consolidated logging function for better summary messages
+function logPerformanceMetrics(
+  metrics: TimingMetrics,
+  stages: Record<string, number>,
+) {
+  const summaryMetrics = {
+    setup: stages.pineconeComplete
+      ? stages.pineconeComplete - stages.startTime
+      : 0,
+    retrieval: stages.retrievalComplete
+      ? stages.retrievalComplete - stages.pineconeComplete
+      : 0,
+    llmThinkTime:
+      metrics.firstTokenGenerated && stages.retrievalComplete
+        ? metrics.firstTokenGenerated - stages.retrievalComplete
+        : 0,
+    tokenDelivery:
+      metrics.firstByteTime && metrics.firstTokenGenerated
+        ? metrics.firstByteTime - metrics.firstTokenGenerated
+        : 0,
+    ttfb: metrics.firstByteTime ? metrics.firstByteTime - metrics.startTime : 0,
+    streaming:
+      metrics.firstByteTime && metrics.totalTime
+        ? metrics.totalTime - (metrics.firstByteTime - metrics.startTime)
+        : 0,
+    total: metrics.totalTime || 0,
+    tokensPerSecond: metrics.tokensPerSecond || 0,
+    totalTokens: metrics.totalTokens || 0,
+  };
+
+  console.log(`
+  ⚡️ Chat Performance:
+    Setup: ${(summaryMetrics.setup / 1000).toFixed(2)}s
+    Retrieval: ${(summaryMetrics.retrieval / 1000).toFixed(2)}s
+    LLM think time: ${(summaryMetrics.llmThinkTime / 1000).toFixed(2)}s
+    Token delivery: ${(summaryMetrics.tokenDelivery / 1000).toFixed(2)}s
+    (Time to first byte: ${(summaryMetrics.ttfb / 1000).toFixed(2)}s)
+    Streaming: ${(summaryMetrics.streaming / 1000).toFixed(2)}s (${summaryMetrics.tokensPerSecond} chars/sec)
+    Total time: ${(summaryMetrics.total / 1000).toFixed(2)}s (${summaryMetrics.totalTokens} total tokens)
+    `);
+}
+
 // main POST handler
 export async function POST(req: NextRequest) {
+  // Start timing with stages for component timing
+  const timingMetrics: TimingMetrics = {
+    startTime: Date.now(),
+  };
+
+  const stages = {
+    startTime: Date.now(),
+    pineconeComplete: 0,
+    retrievalComplete: 0,
+  };
+
   // Load site configuration
   const siteConfig = loadSiteConfigSync();
 
@@ -819,41 +832,120 @@ export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let isControllerClosed = false;
+      let tokensStreamed = 0;
+      let firstTokenSent = false;
+
       const sendData = (data: StreamingResponseData) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        if (!isControllerClosed) {
+          try {
+            // Track first token generation time from LLM (now in timing object)
+            if (
+              data.timing?.firstTokenGenerated &&
+              !timingMetrics.firstTokenGenerated
+            ) {
+              timingMetrics.firstTokenGenerated =
+                data.timing.firstTokenGenerated;
+            }
+
+            // Track first byte time (when token reaches client)
+            if (!firstTokenSent && data.token) {
+              firstTokenSent = true;
+              timingMetrics.firstByteTime = Date.now();
+
+              // Add timing info to the response
+              data.timing = {
+                ...(data.timing || {}),
+                ttfb: timingMetrics.firstByteTime - timingMetrics.startTime,
+              };
+            }
+
+            // Count tokens for calculating streaming rate
+            if (data.token) {
+              tokensStreamed += data.token.length;
+            }
+
+            // Add done timing info
+            if (data.done) {
+              timingMetrics.totalTime = Date.now() - timingMetrics.startTime;
+              const streamingTime = timingMetrics.firstByteTime
+                ? Date.now() - timingMetrics.firstByteTime
+                : 0;
+              timingMetrics.totalTokens = tokensStreamed;
+
+              // Calculate tokens per second if we have streaming time
+              if (streamingTime > 0) {
+                timingMetrics.tokensPerSecond = Math.round(
+                  (tokensStreamed / streamingTime) * 1000,
+                );
+              }
+
+              // Log consolidated performance metrics
+              logPerformanceMetrics(timingMetrics, stages);
+
+              // Add timing to the final response
+              data.timing = {
+                ttfb: timingMetrics.firstByteTime
+                  ? timingMetrics.firstByteTime - timingMetrics.startTime
+                  : 0,
+                total: timingMetrics.totalTime,
+                tokensPerSecond: timingMetrics.tokensPerSecond || 0,
+                totalTokens: tokensStreamed,
+                firstTokenGenerated: timingMetrics.firstTokenGenerated,
+              };
+            }
+
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+            );
+          } catch (error) {
+            if (
+              error instanceof TypeError &&
+              error.message.includes('Controller is already closed')
+            ) {
+              isControllerClosed = true;
+            } else {
+              throw error;
+            }
+          }
+        }
       };
 
       try {
+        // Send site ID first
+        sendData({ siteId: siteConfig.siteId });
+
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
-          sanitizedInput.collection,
-          sanitizedInput.mediaTypes || {},
+          sanitizedInput.collection || 'default',
+          normalizeMediaTypes(sanitizedInput.mediaTypes),
           siteConfig,
         );
 
-        const { retriever } = await setupVectorStoreAndRetriever(
-          index,
-          filter,
-          sendData,
-          sanitizedInput.sourceCount || 4,
-        );
+        // Track pinecone setup completion time
+        stages.pineconeComplete = Date.now();
 
-        // Factory function to define promise and resolver together
-        const createDocumentPromise = () => {
-          let resolveFn: (docs: Document[]) => void;
-          const promise = new Promise<Document[]>((resolve) => {
-            resolveFn = resolve;
-          });
-          return { documentPromise: promise, resolveWithDocuments: resolveFn! };
-        };
-        const { documentPromise, resolveWithDocuments } =
-          createDocumentPromise();
+        const { retriever, documentPromise, resolveWithDocuments } =
+          await setupVectorStoreAndRetriever(
+            index,
+            filter,
+            sendData,
+            sanitizedInput.sourceCount || 4,
+          );
+
+        // Add a callback that will be triggered when documents are ready
+        documentPromise.then(() => {
+          // Set retrieval completion time as soon as documents are resolved
+          stages.retrievalComplete = Date.now();
+        });
 
         // Execute language model chain
+        console.log('Starting LLM chain execution');
+
         const fullResponse = await setupAndExecuteLanguageModelChain(
           retriever,
           sanitizedInput.question,
-          sanitizedInput.history || [],
+          convertChatHistory(sanitizedInput.history),
           sendData,
           sanitizedInput.sourceCount || 4,
           filter,
@@ -868,8 +960,6 @@ export async function POST(req: NextRequest) {
           console.warn(
             `Warning: No sources returned for query: "${sanitizedInput.question}"`,
           );
-          console.log('Filter used:', JSON.stringify(filter));
-          console.log('Pinecone index:', getPineconeIndexName());
         }
 
         // Save answer to Firestore if not a private session
@@ -877,19 +967,25 @@ export async function POST(req: NextRequest) {
           const docId = await saveAnswerToFirestore(
             originalQuestion,
             fullResponse,
-            sanitizedInput.collection,
+            sanitizedInput.collection || 'default',
             promiseDocuments,
-            sanitizedInput.history || [],
+            convertChatHistory(sanitizedInput.history),
             clientIP,
           );
           sendData({ docId });
         }
+
+        // Send done event
+        sendData({ done: true });
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
         handleError(error, sendData);
       } finally {
+        if (!isControllerClosed) {
+          controller.close();
+          isControllerClosed = true;
+        }
         console.log('Stream processing ended');
-        controller.close();
       }
     },
   });
@@ -904,4 +1000,36 @@ export async function POST(req: NextRequest) {
   });
 
   return addCorsHeaders(response, req, siteConfig);
+}
+
+function convertChatHistory(
+  history: ChatMessage[] | undefined,
+): [string, string][] {
+  if (!history) return [];
+  return history.map((msg) => [
+    msg.role === 'user' ? msg.content : '',
+    msg.role === 'assistant' ? msg.content : '',
+  ]);
+}
+
+// Helper function to convert partial media types to full boolean record
+function normalizeMediaTypes(
+  mediaTypes: Partial<MediaTypes> | undefined,
+): Record<string, boolean> {
+  const defaultTypes = {
+    text: true,
+    image: false,
+    video: false,
+    audio: false,
+  };
+
+  if (!mediaTypes) return defaultTypes;
+
+  return Object.entries(defaultTypes).reduce(
+    (acc, [key, defaultValue]) => ({
+      ...acc,
+      [key]: mediaTypes[key as keyof MediaTypes] ?? defaultValue,
+    }),
+    {} as Record<string, boolean>,
+  );
 }

@@ -268,12 +268,6 @@ python data_ingestion/scripts/transcribe_and_ingest_media.py
 
 Check Pinecone dashboard to verify your namespace and vectors have been added.
 
-## Run the unit tests
-
-```bash
-python -m unittest discover -s python/data_ingestion/tests/ -p 'test*.py'
-```
-
 ## Running the Development Server
 
 Start the development server for a specific site:
@@ -283,6 +277,63 @@ npm run dev [site]
 ```
 
 Go to `http://localhost:3000` and type a question in the chat interface!
+
+## Testing Framework
+
+The Ananda Library Chatbot includes a testing suite to help ensure code quality. We're continually improving our test
+coverage to make the codebase more robust.
+
+### Test Types
+
+- **Unit Tests**: For React components and utility functions
+- **API Tests**: Tests for Next.js API endpoints
+
+### Running Tests
+
+#### JavaScript/TypeScript Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage report
+npm run test:ci
+
+# Run tests in watch mode during development
+npm run test:watch
+
+# Run tests for specific files
+npm run test:changed -- path/to/file.ts
+```
+
+#### Python Tests
+
+```bash
+# Run all Python tests
+python -m unittest discover -s python/data_ingestion/tests/ -p 'test*.py'
+
+# Run a specific test file
+python -m unittest python/data_ingestion/tests/test_file.py
+```
+
+### Pre-commit Checks
+
+The repository uses Husky and lint-staged to run tests on changed files before committing, helping catch issues early.
+
+### Testing Tools
+
+- **Jest**: Test runner for JavaScript/TypeScript
+- **React Testing Library**: For testing React components
+- **node-mocks-http**: For testing Next.js API routes
+- **unittest**: Python's built-in testing framework
+
+### Contributing Tests
+
+When adding features or fixing bugs, please consider adding corresponding tests:
+
+1. Create test files in the `__tests__` directory
+2. Test both success and failure cases when possible
+3. Use the provided test templates as a starting point
 
 ## Troubleshooting
 

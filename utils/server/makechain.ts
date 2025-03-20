@@ -40,6 +40,9 @@ import { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
+import { PineconeStore } from '@langchain/pinecone';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import { SiteConfig as AppSiteConfig } from '@/types/siteConfig';
 
 // S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
@@ -59,10 +62,15 @@ interface TemplateContent {
   file?: string;
 }
 
+// Site configuration for makechain
 interface SiteConfig {
   variables: Record<string, string>;
   templates: Record<string, TemplateContent>;
+  modelName?: string;
+  temperature?: number;
+  siteId?: string;
 }
+
 // Add new interface for model config
 interface ModelConfig {
   model: string;
@@ -274,6 +282,7 @@ async function retrieveDocumentsByLibrary(
   query: string,
   baseFilter?: Record<string, unknown>,
 ): Promise<Document[]> {
+  const startTime = Date.now();
   const libraryFilter = { library: libraryName };
 
   let finalFilter: Record<string, unknown>;
@@ -290,6 +299,10 @@ async function retrieveDocumentsByLibrary(
     query,
     k,
     finalFilter,
+  );
+
+  console.log(
+    `Library ${libraryName} retrieval took ${Date.now() - startTime}ms for ${documents.length} documents`,
   );
   return documents;
 }
@@ -352,9 +365,13 @@ export const makeChain = async (
     new StringOutputParser(),
   ]);
 
+  // Track libraries we've already logged to prevent duplicates
+  const loggedLibraries = new Set<string>();
+
   // Runnable sequence for retrieving documents
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
+      const retrievalStartTime = Date.now();
       const allDocuments: Document[] = [];
       if (!includedLibraries || includedLibraries.length === 0) {
         const docs = await retriever.vectorStore.similaritySearch(
@@ -364,8 +381,11 @@ export const makeChain = async (
         );
         allDocuments.push(...docs);
       } else {
-        for (const { name, sources } of sourcesDistribution) {
-          if (sources > 0) {
+        // Create an array of retrieval promises to execute in parallel
+        const retrievalPromises = sourcesDistribution
+          .filter(({ sources }) => sources > 0)
+          .map(async ({ name, sources }) => {
+            const libraryStartTime = Date.now();
             const docs = await retrieveDocumentsByLibrary(
               retriever,
               name,
@@ -373,9 +393,24 @@ export const makeChain = async (
               input.question,
               baseFilter,
             );
-            allDocuments.push(...docs);
-          }
-        }
+
+            // Only log each library once to prevent duplication
+            if (!loggedLibraries.has(name)) {
+              loggedLibraries.add(name);
+              console.log(
+                `Library ${name} retrieval took ${Date.now() - libraryStartTime}ms for ${docs.length} documents`,
+              );
+            }
+            return docs;
+          });
+
+        // Wait for all retrievals to complete in parallel
+        const docsArrays = await Promise.all(retrievalPromises);
+
+        // Combine all document arrays
+        docsArrays.forEach((docs) => {
+          allDocuments.push(...docs);
+        });
       }
       // Send the documents as soon as they are retrieved
       if (sendData) {
@@ -384,6 +419,9 @@ export const makeChain = async (
       if (resolveDocs) {
         resolveDocs(allDocuments);
       }
+      console.log(
+        `Total document retrieval took ${Date.now() - retrievalStartTime}ms for ${allDocuments.length} documents`,
+      );
       return allDocuments;
     },
     (docs: Document[]) => {
@@ -474,3 +512,92 @@ export const makeComparisonChains = async (
     throw new Error('Failed to initialize one or both models for comparison');
   }
 };
+
+// Export the setupAndExecuteLanguageModelChain function
+export async function setupAndExecuteLanguageModelChain(
+  retriever: ReturnType<PineconeStore['asRetriever']>,
+  sanitizedQuestion: string,
+  history: [string, string][],
+  sendData: (data: StreamingResponseData) => void,
+  sourceCount: number = 4,
+  filter?: Record<string, unknown>,
+  resolveDocs?: (docs: Document[]) => void,
+  siteConfig?: AppSiteConfig | null,
+): Promise<string> {
+  try {
+    const modelName = siteConfig?.modelName || 'gpt-4o';
+    const temperature = siteConfig?.temperature || 0.3;
+
+    // Send site ID immediately and validate
+    if (siteConfig?.siteId) {
+      if (siteConfig.siteId !== 'ananda-public') {
+        const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ananda-public`;
+        console.error(error);
+      }
+      sendData({ siteId: siteConfig.siteId });
+    }
+
+    const chainCreationStartTime = Date.now();
+    const chain = await makeChain(
+      retriever,
+      { model: modelName, temperature },
+      sourceCount,
+      filter,
+      sendData,
+      resolveDocs,
+    );
+    console.log(`Chain creation took ${Date.now() - chainCreationStartTime}ms`);
+
+    // Format chat history for the language model
+    const pastMessages = history
+      .map((message) => {
+        return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join('\n');
+      })
+      .join('\n');
+
+    let fullResponse = '';
+    let firstTokenTime: number | null = null;
+
+    // Invoke the chain with callbacks for streaming tokens
+    const chainInvocationStartTime = Date.now();
+    const chainPromise = chain.invoke(
+      {
+        question: sanitizedQuestion,
+        chat_history: pastMessages,
+      },
+      {
+        callbacks: [
+          {
+            // Callback for handling new tokens from the language model
+            handleLLMNewToken(token: string) {
+              if (!firstTokenTime) {
+                firstTokenTime = Date.now();
+                console.log(
+                  `Time to first token: ${firstTokenTime - chainInvocationStartTime}ms`,
+                );
+                // Send the firstTokenGenerated time with the first token in the timing object
+                sendData({
+                  token,
+                  timing: {
+                    firstTokenGenerated: firstTokenTime,
+                  },
+                });
+              } else {
+                sendData({ token });
+              }
+              fullResponse += token;
+            },
+          } as Partial<BaseCallbackHandler>,
+        ],
+      },
+    );
+
+    // Wait for the chain to complete
+    await chainPromise;
+
+    return fullResponse;
+  } catch (error) {
+    console.error('Error in setupAndExecuteLanguageModelChain:', error);
+    throw error;
+  }
+}

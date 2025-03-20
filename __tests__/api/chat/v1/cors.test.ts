@@ -27,6 +27,11 @@ jest.mock('@/utils/server/pinecone-client', () => ({
       }),
     }),
   }),
+  getCachedPineconeIndex: jest.fn().mockResolvedValue({
+    query: jest.fn().mockResolvedValue({
+      matches: [],
+    }),
+  }),
 }));
 
 jest.mock('@/config/pinecone', () => ({

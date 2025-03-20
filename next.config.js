@@ -19,7 +19,6 @@ const configData = fs.readFileSync(configPath, 'utf8');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   webpack: (config, { dev, isServer }) => {
     config.experiments = { ...config.experiments, topLevelAwait: true };
 
