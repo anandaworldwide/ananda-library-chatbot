@@ -544,130 +544,61 @@ async function handleComparisonRequest(
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      // Track timing for both models
-      const timingMetricsA: TimingMetrics = {
-        startTime: Date.now(),
-      };
-      const timingMetricsB: TimingMetrics = {
-        startTime: Date.now(),
-      };
-      const stages = {
-        startTime: Date.now(),
-        pineconeComplete: 0,
-        retrievalComplete: 0,
-      };
-      let tokensStreamedA = 0;
-      let tokensStreamedB = 0;
-      let firstTokenSentA = false;
-      let firstTokenSentB = false;
-
-      // Track when models are done
-      let modelAComplete = false;
-      let modelBComplete = false;
-
-      const sendData = (data: StreamingResponseData & { model?: string }) => {
-        try {
-          // Track timing based on model
-          if (data.model === 'A') {
-            // Track first token generation time from LLM
-            if (
-              data.timing?.firstTokenGenerated &&
-              !timingMetricsA.firstTokenGenerated
-            ) {
-              timingMetricsA.firstTokenGenerated =
-                data.timing.firstTokenGenerated;
-            }
-
-            // Track first byte time (when token reaches client)
-            if (!firstTokenSentA && data.token) {
-              firstTokenSentA = true;
-              timingMetricsA.firstByteTime = Date.now();
-
-              // Add timing info to the response
-              data.timing = {
-                ...(data.timing || {}),
-                ttfb: timingMetricsA.firstByteTime - timingMetricsA.startTime,
-              };
-            }
-
-            // Count tokens for calculating streaming rate
-            if (data.token) {
-              tokensStreamedA += data.token.length;
-            }
-          } else if (data.model === 'B') {
-            // Track first token generation time from LLM
-            if (
-              data.timing?.firstTokenGenerated &&
-              !timingMetricsB.firstTokenGenerated
-            ) {
-              timingMetricsB.firstTokenGenerated =
-                data.timing.firstTokenGenerated;
-            }
-
-            // Track first byte time (when token reaches client)
-            if (!firstTokenSentB && data.token) {
-              firstTokenSentB = true;
-              timingMetricsB.firstByteTime = Date.now();
-
-              // Add timing info to the response
-              data.timing = {
-                ...(data.timing || {}),
-                ttfb: timingMetricsB.firstByteTime - timingMetricsB.startTime,
-              };
-            }
-
-            // Count tokens for calculating streaming rate
-            if (data.token) {
-              tokensStreamedB += data.token.length;
-            }
-          }
-
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
-          );
-        } catch (error) {
-          console.error('Error in sendData:', error);
-        }
-      };
-
       try {
+        console.log('Comparison request starting');
+
         // Send site ID first
-        sendData({ siteId: siteConfig.siteId });
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ siteId: siteConfig.siteId })}\n\n`,
+          ),
+        );
 
         // Set up Pinecone and filter
-        const { index, filter } = await setupPineconeAndFilter(
+        const { index } = await setupPineconeAndFilter(
           requestBody.collection || 'default',
           normalizeMediaTypes(requestBody.mediaTypes),
           siteConfig,
         );
 
-        // Track pinecone setup completion time
-        stages.pineconeComplete = Date.now();
+        // Set up a manual tracking function to signal "done" to the client
+        const signalDone = () => {
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`),
+            );
+          } catch (e) {
+            console.error('Error sending done event:', e);
+          }
+        };
+
+        // Set up function to send data to the client
+        const sendToClient = (data: any) => {
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+            );
+          } catch (e) {
+            console.error('Error sending data to client:', e);
+          }
+        };
 
         // Use the source count directly from the request body
-        // The frontend is responsible for using siteConfig.defaultNumSources
         const sourceCount = requestBody.sourceCount || 4;
 
-        // Setup Vector Store and Retriever with a custom sendData wrapper that sends to both models
-        const { retriever, documentPromise } =
-          await setupVectorStoreAndRetriever(
-            index,
-            filter,
-            (data) => {
-              if (data.sourceDocs) {
-                sendData({ ...data, model: 'A' });
-                sendData({ ...data, model: 'B' });
-              } else {
-                sendData(data);
-              }
-            },
-            sourceCount,
-          );
+        // Create a completely fresh vector store and retriever for this request
+        const vectorStoreOptions = {
+          pineconeIndex: index,
+          textKey: 'text',
+        };
 
-        // Add a callback that will be triggered when documents are ready
-        documentPromise.then(() => {
-          // Set retrieval completion time as soon as documents are resolved
-          stages.retrievalComplete = Date.now();
+        const vectorStore = await PineconeStore.fromExistingIndex(
+          new OpenAIEmbeddings({}),
+          vectorStoreOptions,
+        );
+
+        const retriever = vectorStore.asRetriever({
+          k: sourceCount,
         });
 
         // Create chains for both models
@@ -680,6 +611,7 @@ async function handleComparisonRequest(
           },
           sourceCount,
         );
+
         const chainB = await makeChain(
           retriever,
           {
@@ -699,100 +631,123 @@ async function handleComparisonRequest(
           })
           .join('\n');
 
-        // Run both chains concurrently
-        await Promise.all([
-          chainA.invoke(
-            {
-              question: requestBody.question,
-              chat_history: pastMessages,
-            },
-            {
-              callbacks: [
-                {
-                  handleLLMNewToken(token: string) {
-                    // Only send the token if it's not empty or just whitespace
-                    if (token.trim()) {
-                      sendData({ token, model: 'A' });
-                    }
-                  },
-                  handleChainEnd() {
-                    modelAComplete = true;
+        // Set up a timeout to ensure done is sent even if models hang
+        const doneTimeout = setTimeout(() => {
+          signalDone();
+        }, 60000); // 60 second timeout
 
-                    // Calculate final metrics for model A
-                    timingMetricsA.totalTime =
-                      Date.now() - timingMetricsA.startTime;
-                    const streamingTime = timingMetricsA.firstByteTime
-                      ? Date.now() - timingMetricsA.firstByteTime
-                      : 0;
-                    timingMetricsA.totalTokens = tokensStreamedA;
+        // Flag to track if we've sent the done signal
+        let doneSent = false;
 
-                    // Calculate tokens per second if we have streaming time
-                    if (streamingTime > 0) {
-                      timingMetricsA.tokensPerSecond = Math.round(
-                        (tokensStreamedA / streamingTime) * 1000,
-                      );
-                    }
-                  },
-                } as Partial<BaseCallbackHandler>,
-              ],
-            },
-          ),
-          chainB.invoke(
-            {
-              question: requestBody.question,
-              chat_history: pastMessages,
-            },
-            {
-              callbacks: [
-                {
-                  handleLLMNewToken(token: string) {
-                    // Only send the token if it's not empty or just whitespace
-                    if (token.trim()) {
-                      sendData({ token, model: 'B' });
-                    }
-                  },
-                  handleChainEnd() {
-                    modelBComplete = true;
+        // Execute both models concurrently
+        try {
+          await Promise.all([
+            chainA.invoke(
+              {
+                question: requestBody.question,
+                chat_history: pastMessages,
+              },
+              {
+                callbacks: [
+                  {
+                    handleLLMNewToken(token: string) {
+                      if (token.trim()) {
+                        sendToClient({ token, model: 'A' });
+                      }
+                    },
+                  } as Partial<BaseCallbackHandler>,
+                ],
+              },
+            ),
+            chainB.invoke(
+              {
+                question: requestBody.question,
+                chat_history: pastMessages,
+              },
+              {
+                callbacks: [
+                  {
+                    handleLLMNewToken(token: string) {
+                      if (token.trim()) {
+                        sendToClient({ token, model: 'B' });
+                      }
+                    },
+                  } as Partial<BaseCallbackHandler>,
+                ],
+              },
+            ),
+          ]);
 
-                    // Calculate final metrics for model B
-                    timingMetricsB.totalTime =
-                      Date.now() - timingMetricsB.startTime;
-                    const streamingTime = timingMetricsB.firstByteTime
-                      ? Date.now() - timingMetricsB.firstByteTime
-                      : 0;
-                    timingMetricsB.totalTokens = tokensStreamedB;
+          // Clear the timeout as we don't need it anymore
+          clearTimeout(doneTimeout);
 
-                    // Calculate tokens per second if we have streaming time
-                    if (streamingTime > 0) {
-                      timingMetricsB.tokensPerSecond = Math.round(
-                        (tokensStreamedB / streamingTime) * 1000,
-                      );
-                    }
-                  },
-                } as Partial<BaseCallbackHandler>,
-              ],
-            },
-          ),
-        ]);
+          // Since both models have completed, we can send the done signal
+          if (!doneSent) {
+            doneSent = true;
+            signalDone();
+          }
 
-        // Send source documents once at the end
-        const sourceDocs = await documentPromise;
-        sendData({ sourceDocs });
+          // Wait a moment to ensure the done signal is processed
+          await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Signal completion only after both models have completed
-        if (modelAComplete && modelBComplete) {
-          sendData({ done: true });
+          // Now we can close the controller
+          console.log('Closing controller after both models completed');
+          controller.close();
+        } catch (error) {
+          console.error('Error running model chains:', error);
+
+          // Clear the timeout as we're handling the error
+          clearTimeout(doneTimeout);
+
+          // Send error to client
+          sendToClient({
+            error:
+              'Error running model comparison: ' +
+              (error instanceof Error ? error.message : String(error)),
+          });
+
+          // Send done signal if we haven't already
+          if (!doneSent) {
+            doneSent = true;
+            signalDone();
+          }
+
+          // Wait a moment to ensure the error and done signals are processed
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Close the controller
+          controller.close();
+        }
+      } catch (error) {
+        console.error('Error in comparison handler:', error);
+
+        try {
+          // Try to send error to client
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                error:
+                  'Error in comparison handler: ' +
+                  (error instanceof Error ? error.message : String(error)),
+              })}\n\n`,
+            ),
+          );
+
+          // Signal done
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`),
+          );
+        } catch (e) {
+          console.error('Error sending error to client:', e);
         }
 
-        controller.close();
-      } catch (error) {
-        handleError(error, sendData);
+        // Close the controller
         controller.close();
       }
     },
   });
 
-  // Replace standard response with one that has CORS headers
+  // Return response with CORS headers
   const response = new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/event-stream',

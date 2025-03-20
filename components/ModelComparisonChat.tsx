@@ -288,7 +288,14 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(5));
+
+                // Check for done event
+                if (data.done) {
+                  setLoading(false);
+                }
+
                 if (data.error) {
+                  console.error('❌ Error from server:', data.error);
                   setError(data.error);
                   break;
                 }
@@ -315,10 +322,6 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
                       return newMessages;
                     });
                   }
-                }
-
-                if (data.done) {
-                  setLoading(false);
                 }
 
                 if (data.sourceDocs) {
