@@ -282,7 +282,6 @@ async function retrieveDocumentsByLibrary(
   query: string,
   baseFilter?: Record<string, unknown>,
 ): Promise<Document[]> {
-  const startTime = Date.now();
   const libraryFilter = { library: libraryName };
 
   let finalFilter: Record<string, unknown>;
@@ -301,9 +300,6 @@ async function retrieveDocumentsByLibrary(
     finalFilter,
   );
 
-  console.log(
-    `Library ${libraryName} retrieval took ${Date.now() - startTime}ms for ${documents.length} documents`,
-  );
   return documents;
 }
 
