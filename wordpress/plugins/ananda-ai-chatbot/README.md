@@ -14,7 +14,7 @@ chat backend.
 
 The plugin uses token-based security to communicate with the Vercel backend. To configure this:
 
-### Add to wp-config.php:
+### Add to wp-config.php
 
 ```php
 // Option 1 (Recommended): Use the same SECURE_TOKEN as your Vercel backend
