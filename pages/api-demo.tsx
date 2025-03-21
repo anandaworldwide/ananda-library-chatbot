@@ -42,7 +42,7 @@ const ApiDemoPage = () => {
         <SecureDataFetcher />
       </div>
 
-      {/* Explanatory section detailing the security architecture */}
+      {/* Explanatory section detailing the security architecture. */}
       <div className="mt-12 max-w-3xl mx-auto bg-gray-50 p-6 rounded-lg">
         <h2 className="text-xl font-semibold mb-4">How It Works</h2>
         <ol className="list-decimal pl-5 space-y-2">
