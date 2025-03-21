@@ -15,7 +15,7 @@ The system uses JSON Web Tokens (JWT) to secure API communication between:
 ### Vercel Backend
 
 - **Token Issuance Endpoint** (`/api/get-token`): Verifies shared secrets and issues JWT tokens
-- **Proxy Token Endpoint** (`/api/proxy-token`): Securely obtains tokens for web frontend
+- **Web Token Endpoint** (`/api/web-token`): Securely generates tokens for web frontend
 - **Protected API Endpoint** (`/api/secure-data`): Example endpoint that requires JWT authentication
 - **JWT Utilities** (`utils/server/jwtUtils.ts`): Helper functions for token verification
 

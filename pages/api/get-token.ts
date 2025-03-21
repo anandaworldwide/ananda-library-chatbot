@@ -1,14 +1,18 @@
 /**
- * Token Issuance API Endpoint
+ * External Token Issuance API Endpoint
  *
- * This endpoint is responsible for issuing JWT tokens for authenticated clients.
+ * This endpoint is responsible for issuing JWT tokens for authenticated external clients,
+ * such as the WordPress plugin.
+ *
  * It supports two authentication methods:
- * 1. Web frontend - using the SECURE_TOKEN directly
+ * 1. Direct API calls - using the SECURE_TOKEN directly
  * 2. WordPress plugin - using a derived token from SECURE_TOKEN with a WordPress-specific salt
  *
  * The endpoint issues JWTs with a 15-minute expiration period, identifying the client type
  * in the token payload. This enables secure communication between different clients and
  * the backend without requiring separate authentication systems.
+ *
+ * Note: Web frontend uses the /api/web-token endpoint instead, which creates tokens directly.
  */
 
 import { NextApiRequest, NextApiResponse } from 'next';
@@ -48,48 +52,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // Get the shared secret from headers or body to support different client types
     // - Web frontend sends via headers
     // - WordPress plugin sends via request body
-    let sharedSecret =
+    const sharedSecret =
       (req.headers['x-shared-secret'] as string) || req.body?.secret;
-
-    // Also check for Bearer token in Authorization header
-    if (!sharedSecret && req.headers.authorization) {
-      const authHeader = req.headers.authorization;
-      if (authHeader.startsWith('Bearer ')) {
-        sharedSecret = authHeader.substring(7);
-        console.log('Using Authorization Bearer token');
-      }
-    }
 
     if (!sharedSecret) {
       console.log('No secret provided in request');
-      console.log('Headers received:', Object.keys(req.headers).join(', '));
-      console.log(
-        'Has authorization header:',
-        Boolean(req.headers.authorization),
-      );
       return res.status(403).json({ error: 'No secret provided' });
     }
-
-    // Extra debugging for the shared secret
-    const secretStart = sharedSecret.substring(0, 3);
-    const secretEnd = sharedSecret.substring(sharedSecret.length - 3);
-    console.log(
-      `Secret info - Length: ${sharedSecret.length}, Start: ${secretStart}..., End: ...${secretEnd}`,
-    );
 
     // Retrieve environment variables for token validation
     const secureToken = process.env.SECURE_TOKEN;
     const secureTokenHash = process.env.SECURE_TOKEN_HASH;
-
-    // Debug environment variables (safely)
-    if (secureToken) {
-      const tokenStart = secureToken.substring(0, 3);
-      const tokenEnd = secureToken.substring(secureToken.length - 3);
-      console.log(
-        `SECURE_TOKEN info - Length: ${secureToken.length}, Start: ${tokenStart}..., End: ...${tokenEnd}`,
-      );
-    }
-    console.log(`SECURE_TOKEN_HASH exists: ${Boolean(secureTokenHash)}`);
 
     // Ensure required environment variables are configured
     if (!secureToken || !secureTokenHash) {

@@ -59,14 +59,15 @@ export const SecureDataFetcher = () => {
     setLoading(true);
     setError(null);
     try {
-      // Request a token from the proxy endpoint
-      const response = await fetch('/api/proxy-token');
-      const data = await response.json();
+      // Get a token from the proxy endpoint
+      // This keeps sensitive secrets on the server side
+      const response = await fetch('/api/web-token');
 
-      // Handle unsuccessful responses
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch token');
+        throw new Error('Failed to fetch token');
       }
+
+      const data = await response.json();
 
       // Store and return the token on success
       setToken(data.token);

@@ -48,7 +48,7 @@ const ApiDemoPage = () => {
         <ol className="list-decimal pl-5 space-y-2">
           <li>
             <strong>Token Request</strong>: The frontend calls{' '}
-            <code>/api/proxy-token</code>, which internally uses a secure shared
+            <code>/api/web-token</code>, which internally uses a secure shared
             secret to request a token from <code>/api/get-token</code>.
           </li>
           <li>
