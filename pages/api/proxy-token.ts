@@ -34,17 +34,31 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   try {
     // Determine the base URL for the API request based on environment
-    // This supports both development (localhost) and production environments
-    const baseUrl =
-      process.env.NODE_ENV === 'production'
-        ? `https://${req.headers.host}`
-        : `http://${req.headers.host}`;
+    // This supports development, production, and preview deployments
+    let baseUrl = '';
+
+    // For Vercel deployments (including preview deployments)
+    if (process.env.VERCEL_URL) {
+      baseUrl = `https://${process.env.VERCEL_URL}`;
+      console.log(`Using VERCEL_URL: ${baseUrl}`);
+    }
+    // Fallback to host header for local development and production
+    else {
+      baseUrl =
+        process.env.NODE_ENV === 'production'
+          ? `https://${req.headers.host}`
+          : `http://${req.headers.host}`;
+      console.log(`Using host header: ${baseUrl}`);
+    }
 
     // Verify SECURE_TOKEN is available in environment variables
     if (!process.env.SECURE_TOKEN) {
       console.error('Missing SECURE_TOKEN environment variable');
       return res.status(500).json({ error: 'Server configuration error' });
     }
+
+    // Log the request we're about to make (token hidden for security)
+    console.log(`Making token request to: ${baseUrl}/api/get-token`);
 
     // Make a server-to-server request to the token endpoint
     // This keeps the SECURE_TOKEN on the server side and never exposes it to clients
