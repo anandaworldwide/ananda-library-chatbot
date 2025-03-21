@@ -157,6 +157,8 @@ export function middleware(req: NextRequest) {
     '/robots.txt',
     '/favicon.ico',
     '/contact',
+    '/api/get-token', // Token acquisition endpoint
+    '/api/proxy-token', // Token proxy endpoint
     '/api/',
     '/_next',
     '/survey',
@@ -288,13 +290,13 @@ export function middleware(req: NextRequest) {
 // Configure which routes the middleware should run on
 export const config = {
   matcher: [
-    /*
+    /**
      * Match all request paths except for the ones starting with:
      * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/).*)', // Exclude API and static routes in one pattern
   ],
 };
