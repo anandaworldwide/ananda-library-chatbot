@@ -23,8 +23,20 @@ import { withApiMiddleware } from '@/utils/server/apiMiddleware';
  * @param res The Next.js API response
  */
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  console.log('get-token endpoint called');
+
+  // Log request information for debugging
+  console.log(`Request method: ${req.method}`);
+  console.log(`Content-Type: ${req.headers['content-type']}`);
+  console.log(
+    `Has x-shared-secret header: ${Boolean(req.headers['x-shared-secret'])}`,
+  );
+  console.log(`Has body: ${Boolean(req.body)}`);
+  console.log(`Body has secret: ${Boolean(req.body?.secret)}`);
+
   // Only allow POST requests for security (avoids tokens in URL/query params)
   if (req.method !== 'POST') {
+    console.log('Rejecting non-POST request');
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
@@ -36,12 +48,30 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       (req.headers['x-shared-secret'] as string) || req.body?.secret;
 
     if (!sharedSecret) {
+      console.log('No secret provided in request');
       return res.status(403).json({ error: 'No secret provided' });
     }
+
+    // Extra debugging for the shared secret
+    const secretStart = sharedSecret.substring(0, 3);
+    const secretEnd = sharedSecret.substring(sharedSecret.length - 3);
+    console.log(
+      `Secret info - Length: ${sharedSecret.length}, Start: ${secretStart}..., End: ...${secretEnd}`,
+    );
 
     // Retrieve environment variables for token validation
     const secureToken = process.env.SECURE_TOKEN;
     const secureTokenHash = process.env.SECURE_TOKEN_HASH;
+
+    // Debug environment variables (safely)
+    if (secureToken) {
+      const tokenStart = secureToken.substring(0, 3);
+      const tokenEnd = secureToken.substring(secureToken.length - 3);
+      console.log(
+        `SECURE_TOKEN info - Length: ${secureToken.length}, Start: ${tokenStart}..., End: ...${tokenEnd}`,
+      );
+    }
+    console.log(`SECURE_TOKEN_HASH exists: ${Boolean(secureTokenHash)}`);
 
     // Ensure required environment variables are configured
     if (!secureToken || !secureTokenHash) {
@@ -53,6 +83,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // For web frontend, directly compare with SECURE_TOKEN
     const isWebFrontend = sharedSecret === secureToken;
+    console.log(`Web frontend token match: ${isWebFrontend}`);
 
     // For WordPress, derive a WordPress-specific token by hashing the SECURE_TOKEN
     // with a WordPress-specific salt (prefix) for additional security
@@ -63,9 +94,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .substring(0, 32); // Use first 32 chars of the hash for better usability
 
     const isWordPress = sharedSecret === wordpressToken;
+    console.log(`WordPress token match: ${isWordPress}`);
 
     // If neither secret matches, return forbidden response
     if (!isWebFrontend && !isWordPress) {
+      console.log('Invalid secret provided - no match found');
       return res.status(403).json({ error: 'Invalid secret' });
     }
 

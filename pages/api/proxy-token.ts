@@ -33,6 +33,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
+    // Additional debugging for token
+    // Only log first and last few characters for security reasons
+    const token = process.env.SECURE_TOKEN || '';
+    if (token) {
+      const tokenStart = token.substring(0, 3);
+      const tokenEnd = token.substring(token.length - 3);
+      const tokenLength = token.length;
+      console.log(
+        `Token debug - Length: ${tokenLength}, Start: ${tokenStart}..., End: ...${tokenEnd}`,
+      );
+    }
+
     // Log environment info
     console.log(`Environment: ${process.env.NODE_ENV}`);
     console.log(`VERCEL_URL: ${process.env.VERCEL_URL || 'not set'}`);
@@ -44,6 +56,50 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // Try different URL formation strategies for Vercel environments
     if (process.env.VERCEL_URL) {
+      // Add direct body test without any URL parsing
+      try {
+        console.log('Strategy 4 - Testing different token formats');
+
+        // Create a simple request
+        const directRequest = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ secret: process.env.SECURE_TOKEN }),
+        };
+
+        // Test the request with a known URL
+        const absoluteUrl = `https://${req.headers.host}/api/get-token`;
+        console.log(`Making direct token request to: ${absoluteUrl}`);
+
+        const tokenResponse = await fetch(absoluteUrl, directRequest);
+        console.log(`Direct request status: ${tokenResponse.status}`);
+
+        // If successful, return the token
+        if (tokenResponse.ok) {
+          try {
+            const responseData = await tokenResponse.json();
+            if (responseData.token) {
+              console.log('Successfully got token with direct approach!');
+              return res.status(200).json({ token: responseData.token });
+            }
+          } catch (parseError) {
+            console.error('Error parsing token response:', parseError);
+          }
+        } else {
+          // Try to get error details
+          try {
+            const errorText = await tokenResponse.text();
+            console.log(`Error response: ${errorText.substring(0, 200)}...`);
+          } catch (e) {
+            console.error('Could not read error response', e);
+          }
+        }
+      } catch (directError) {
+        console.error('Error with direct token approach:', directError);
+      }
+
       // Strategy 1: Standard VERCEL_URL approach
       baseUrl = `https://${process.env.VERCEL_URL}`;
       console.log(`Strategy 1 - Using VERCEL_URL: ${baseUrl}`);
@@ -96,13 +152,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         const absoluteUrl = `https://${req.headers.host}/api/get-token`;
         console.log(`Making token request to absolute URL: ${absoluteUrl}`);
 
+        // Send token both in header and in body for maximum compatibility
         const absoluteResponse = await fetch(absoluteUrl, {
           method: 'POST',
           headers: {
             'X-Shared-Secret': process.env.SECURE_TOKEN || '',
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ secret: process.env.SECURE_TOKEN || '' }),
         });
+
+        // Add more detailed logging
+        console.log(
+          `Response headers: ${JSON.stringify(Array.from(absoluteResponse.headers.entries()))}`,
+        );
 
         if (
           absoluteResponse.ok &&
@@ -114,8 +177,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           const data = await absoluteResponse.json();
           return res.status(200).json({ token: data.token });
         } else {
+          // Log full response for debugging
+          const responseText = await absoluteResponse.text();
           console.log(
             `Absolute URL strategy failed with status: ${absoluteResponse.status}`,
+          );
+          console.log(
+            `Response body (first 200 chars): ${responseText.substring(0, 200)}...`,
           );
         }
       } catch (absoluteError) {
@@ -147,9 +215,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const response = await fetch(tokenEndpoint, {
       method: 'POST',
       headers: {
-        'X-Shared-Secret': process.env.SECURE_TOKEN,
+        'X-Shared-Secret': process.env.SECURE_TOKEN || '',
         'Content-Type': 'application/json',
       },
+      // Also include the token in the request body as a fallback
+      body: JSON.stringify({ secret: process.env.SECURE_TOKEN || '' }),
     });
 
     // Log response details before trying to parse JSON
