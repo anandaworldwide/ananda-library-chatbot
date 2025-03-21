@@ -31,6 +31,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   console.log(
     `Has x-shared-secret header: ${Boolean(req.headers['x-shared-secret'])}`,
   );
+  console.log(`Has x-no-auth header: ${Boolean(req.headers['x-no-auth'])}`);
+  console.log(
+    `Has authorization header: ${Boolean(req.headers.authorization)}`,
+  );
   console.log(`Has body: ${Boolean(req.body)}`);
   console.log(`Body has secret: ${Boolean(req.body?.secret)}`);
 
@@ -44,11 +48,25 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // Get the shared secret from headers or body to support different client types
     // - Web frontend sends via headers
     // - WordPress plugin sends via request body
-    const sharedSecret =
+    let sharedSecret =
       (req.headers['x-shared-secret'] as string) || req.body?.secret;
+
+    // Also check for Bearer token in Authorization header
+    if (!sharedSecret && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        sharedSecret = authHeader.substring(7);
+        console.log('Using Authorization Bearer token');
+      }
+    }
 
     if (!sharedSecret) {
       console.log('No secret provided in request');
+      console.log('Headers received:', Object.keys(req.headers).join(', '));
+      console.log(
+        'Has authorization header:',
+        Boolean(req.headers.authorization),
+      );
       return res.status(403).json({ error: 'No secret provided' });
     }
 

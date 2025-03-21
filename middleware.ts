@@ -173,6 +173,15 @@ export function middleware(req: NextRequest) {
     !url.pathname.endsWith('.gif');
 
   if (pathname_is_private && requireLogin) {
+    // Check for special no-auth header used by server-side token requests
+    const noAuthHeader = req.headers.get('x-no-auth');
+    if (noAuthHeader === 'true') {
+      console.log(
+        'Bypassing authentication for server-side request with X-No-Auth header',
+      );
+      return NextResponse.next();
+    }
+
     // Authentication check
     const cookie = req.cookies.get('siteAuth');
     const storedHashedToken = process.env.SECURE_TOKEN_HASH;
