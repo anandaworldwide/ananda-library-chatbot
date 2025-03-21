@@ -2,7 +2,7 @@
  * Web Token API Tests
  *
  * These tests verify that the web token endpoint correctly issues JWT tokens
- * for the web frontend client. The endpoint should:
+ * for the web frontend client.  The endpoint should:
  *
  * 1. Only respond to GET requests
  * 2. Require the SECURE_TOKEN environment variable
