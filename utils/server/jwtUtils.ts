@@ -49,7 +49,15 @@ export function verifyToken(token: string): JwtPayload {
     const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
     return decoded;
   } catch (error) {
-    // Throw a standardized error message regardless of the underlying error
+    // Preserve the error message for 'JWT signing key is not configured'
+    if (
+      error instanceof Error &&
+      error.message === 'JWT signing key is not configured'
+    ) {
+      throw error;
+    }
+
+    // For all other errors, throw a standardized message
     // to avoid leaking information about the verification process
     throw new Error('Invalid or expired token');
   }
