@@ -16,6 +16,31 @@ if (!defined('ABSPATH')) {
 define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://ananda-public-chatbot.vercel.app/api/chat/v1');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
+// Include the secure API client
+require_once plugin_dir_path(__FILE__) . 'secure-api-client.php';
+
+// Include the secure API test page
+require_once plugin_dir_path(__FILE__) . 'secure-api-test.php';
+
+// Define WordPress API secret if not already defined
+if (!defined('ANANDA_WP_API_SECRET')) {
+    // Check if the constant is defined in wp-config.php
+    if (defined('WP_API_SECRET') && !empty(WP_API_SECRET)) {
+        // Use the directly defined secret if available
+        define('ANANDA_WP_API_SECRET', WP_API_SECRET);
+    } else if (defined('CHATBOT_BACKEND_SECURE_TOKEN') && !empty(CHATBOT_BACKEND_SECURE_TOKEN)) {
+        // Derive the WordPress token from CHATBOT_BACKEND_SECURE_TOKEN using the same algorithm as the server
+        // This should be the same value as computed in the Vercel backend
+        $wp_token = hash('sha256', 'wordpress-' . CHATBOT_BACKEND_SECURE_TOKEN);
+        $wp_token = substr($wp_token, 0, 32); // Use first 32 chars of the hash
+        define('ANANDA_WP_API_SECRET', $wp_token);
+    } else {
+        // Use a default value only for development - NOT RECOMMENDED FOR PRODUCTION
+        // In production, define either WP_API_SECRET or CHATBOT_BACKEND_SECURE_TOKEN in wp-config.php
+        define('ANANDA_WP_API_SECRET', '');
+    }
+}
+
 // Add settings page in WordPress admin
 function aichatbot_register_settings() {
     add_options_page('Ananda AI Chatbot Settings', 'Ananda AI Chatbot', 'manage_options', 'aichatbot-settings', 'aichatbot_settings_page');
