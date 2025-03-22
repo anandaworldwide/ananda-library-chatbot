@@ -1,67 +1,105 @@
 #!/usr/bin/env python3
-"""
-cancel-other-deployments.py
+# This script cancels all building or queued Vercel deployments except for a specified project.
+# It includes a safety check for recent commits from other users and provides detailed feedback.
 
-This script cancels the latest deployment for all Vercel projects
-except for the specifically named project you want to keep.
-
-Requirements:
-- Vercel CLI must be installed and logged in
-
-Usage: python cancel-other-deployments.py project-to-skip
-Example: python cancel-other-deployments.py ananda-public-chatbot
-"""
-
-import sys
 import subprocess
 import re
 import datetime
 import getpass
+import argparse
+import os
+import sys
 
+def strip_ansi_codes(text):
+    """Remove ANSI escape codes from text."""
+    return re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
 
-def run_command(cmd):
-    """Run a command and return its output."""
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout, result.stderr, result.returncode
+def run_command(cmd, debug=False):
+    """Run a shell command and return its output."""
+    env = os.environ.copy()
+    env['FORCE_COLOR'] = '1'
+    env['TERM'] = 'xterm-256color'
+    
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, shell=True)
+    output = result.stdout + result.stderr
+    
+    if debug:
+        print(f"DEBUG: Command: {cmd}")
+        print(f"DEBUG: Return code: {result.returncode}")
+    
+    return {
+        'output': output,
+        'stripped_output': strip_ansi_codes(output),
+        'return_code': result.returncode
+    }
 
-
-def check_recent_commits():
-    """Check if other users have committed code in the last hour."""
-    current_user = getpass.getuser()
+def check_recent_commits(force=False, debug=False):
+    """Check if there are recent commits from other users in the last hour."""
+    if force:
+        return True
+    
+    # Get current user info
+    git_user_result = run_command("git config user.name", debug)
+    if git_user_result['return_code'] != 0:
+        print("⚠️  Unable to get Git username. You may not be in a Git repository.")
+        return True
+    
+    git_username = git_user_result['stripped_output'].strip()
+    system_username = getpass.getuser()
+    
+    if debug:
+        print(f"DEBUG: Git username: {git_username}")
+        print(f"DEBUG: System username: {system_username}")
     
     # Get commits from the last hour
     one_hour_ago = (datetime.datetime.now() - datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
-    stdout, _, _ = run_command(["git", "log", "--since", one_hour_ago, "--format=%an"])
+    commit_result = run_command(f'git log --since="{one_hour_ago}" --format=%an', debug)
     
-    # Extract unique committer names
-    committers = set()
-    for line in stdout.splitlines():
-        if line.strip():
-            committers.add(line.strip())
+    if commit_result['return_code'] != 0:
+        print("⚠️  Unable to check recent commits. Continuing...")
+        return True
     
-    # Check if anyone besides the current user has committed
-    other_committers = [c for c in committers if c.lower() != current_user.lower()]
+    # Extract committer names
+    committers = [name.strip() for name in commit_result['stripped_output'].split('\n') if name.strip()]
+    unique_committers = set(committers)
+    
+    # Identify other committers
+    other_committers = []
+    for committer in unique_committers:
+        if committer.lower() != git_username.lower() and committer.lower() != system_username.lower():
+            other_committers.append(committer)
     
     if other_committers:
         print("⚠️  WARNING! Other users have committed code in the last hour:")
         for committer in other_committers:
-            print(f"  - {committer}")
+            print(f"   - {committer}")
         
-        response = input("Do you want to continue anyway? (y/n): ")
-        if response.lower() != 'y':
-            print("Operation canceled by user.")
-            sys.exit(0)
-
-
-def get_vercel_projects():
-    """Get a list of all Vercel projects."""
-    stdout, _, _ = run_command(["vercel", "projects", "ls"])
+        response = input("Do you want to continue anyway? (y/n): ").strip().lower()
+        return response == 'y'
     
-    # Extract project names from output
+    return True
+
+def get_vercel_projects(debug=False):
+    """Get list of Vercel projects."""
+    result = run_command("vercel projects ls", debug)
+    
+    if debug:
+        print("DEBUG: Full vercel projects ls output:")
+        print(result['stripped_output'])
+    
+    # Parse project names
+    lines = result['stripped_output'].split('\n')
     projects = []
-    for line in stdout.splitlines():
-        # Skip header and empty lines
-        if not line.strip() or "Project Name" in line or "Vercel CLI" in line or "----" in line or "Updated" in line or "Projects found" in line:
+    
+    for line in lines:
+        # Skip empty lines and header lines
+        if (not line.strip() or 
+            "Fetching projects" in line or 
+            "Project Name" in line or 
+            "Vercel CLI" in line or 
+            "----" in line or 
+            "Updated" in line or 
+            "Projects found" in line):
             continue
         
         # Extract the project name (first column)
@@ -69,124 +107,105 @@ def get_vercel_projects():
         if parts:
             projects.append(parts[0])
     
+    if not projects:
+        print("❌ Error: Could not detect Vercel projects")
+        sys.exit(1)
+    
     return projects
 
-
-def cancel_deployment(project, skip_project):
-    """Cancel the latest deployment for a project if it's not the skip_project."""
+def cancel_deployment(project, skip_project, debug=False):
+    """Cancel building or queued deployments for a project."""
     if project == skip_project:
         print(f"🟢 Skipping project: {project} (protected)")
         return
+        
+    # List deployments
+    list_result = run_command(f"vercel ls {project}", debug)
     
-    print(f"🔍 Processing project: {project}")
+    if debug:
+        print(f"DEBUG: Full vercel ls output for {project}:")
+        print(list_result['stripped_output'])
     
-    # Get deployments for the project
-    stdout, _, _ = run_command(["vercel", "ls", project])
+    # Parse output to find building/queued deployments
+    lines = list_result['stripped_output'].split('\n')
+    deployments_to_cancel = []
+    latest_deployment_url = None
     
-    # Extract the latest deployment URL and status
-    deployment_url = None
-    deployment_status = None
-    
-    for line in stdout.splitlines():
-        if "https://" in line:
-            # Extract URL - anything that starts with https://
+    for line in lines:
+        # Skip header lines
+        if ("Vercel CLI" in line or "Deployment" in line or "Age" in line or ">" in line):
+            continue
+        
+        # Check if building or queued
+        if "Building" in line or "Queued" in line:
             url_match = re.search(r'(https://[^\s]+)', line)
             if url_match:
-                deployment_url = url_match.group(1)
-                # Extract status - anything after the URL
-                parts = line.strip().split(deployment_url)
-                if len(parts) > 1 and parts[1].strip():
-                    deployment_status = parts[1].strip().split()[0]
-                break
-    
-    if not deployment_url:
-        # Try alternate command
-        print(f"  ⚠️ No deployment URL found with ls, trying projects inspect...")
-        stdout, _, _ = run_command(["vercel", "project", "inspect", project])
+                deployments_to_cancel.append(url_match.group(1))
         
-        # Look for deployment URLs in the inspect output
-        for line in stdout.splitlines():
-            if "https://" in line:
-                url_match = re.search(r'(https://[^\s]+)', line)
-                if url_match:
-                    deployment_url = url_match.group(1)
-                    deployment_status = "Unknown"
-                    break
+        # Save the first URL as the latest deployment
+        if not latest_deployment_url:
+            url_match = re.search(r'(https://[^\s]+)', line)
+            if url_match:
+                latest_deployment_url = url_match.group(1)
     
-    if not deployment_url:
-        print(f"  ⚠️ No deployment URL found for {project}")
-        return
+    # If no building/queued deployments found, check the latest deployment
+    if not deployments_to_cancel and latest_deployment_url:
+        inspect_result = run_command(f"vercel inspect {latest_deployment_url}", debug)
+        
+        if debug:
+            print("DEBUG: Inspect result:")
+            print(inspect_result['stripped_output'])
+        
+        status_text = inspect_result['stripped_output'].lower()
+        if "building" in status_text or "queued" in status_text:
+            deployments_to_cancel.append(latest_deployment_url)
     
-    print(f"  Latest deployment: {deployment_url}")
-    
-    # Check if it's a special status (building or queued)
-    status_lower = str(deployment_status).lower() if deployment_status else ""
-    is_active = any(status in status_lower for status in ["queue", "build"]) or "●" in str(deployment_status)
-    
-    if not is_active:
-        print(f"  🔴 No current deployment building or queued")
-        return
-    
-    # Try to cancel the deployment
-    print(f"  🔶 Attempting to cancel deployment")
-    print(f"  🗑️ Canceling deployment...")
-    _, _, returncode = run_command(["vercel", "remove", "--yes", deployment_url])
-    
-    if returncode == 0:
-        print(f"  ✅ Successfully canceled")
+    # Cancel deployments
+    if deployments_to_cancel:
+        for url in deployments_to_cancel:
+            print(f"🗑️ {project}: Canceling deployment: {url}")
+            
+            # First attempt - cancel by URL
+            cancel_result = run_command(f"vercel remove --yes {url}", debug)
+            
+            if cancel_result['return_code'] == 0:
+                print("✅ Successfully canceled")
+            else:
+                print("⚠️ First attempt failed, trying with project name...")
+                
+                # Second attempt - cancel by project name
+                alt_cancel_result = run_command(f"vercel remove --safe --yes {project}", debug)
+                
+                if alt_cancel_result['return_code'] == 0:
+                    print("✅ Successfully canceled with alternative method")
+                else:
+                    print("❌ Failed to cancel deployment")
     else:
-        # Try another approach
-        print(f"  ⚠️ First attempt failed, trying with project name...")
-        _, _, returncode = run_command(["vercel", "remove", "--safe", "--yes", project])
-        
-        if returncode == 0:
-            print(f"  ✅ Successfully canceled using project name")
-        else:
-            print(f"  ❌ Failed to cancel deployment")
-    
-    print("-------------------------------------")
-
+        print(f"🔴 {project}: No current deployment building or queued")
 
 def main():
-    """Main function."""
-    # Check arguments
-    if len(sys.argv) < 2:
-        print("Error: You must provide a project name to skip.")
-        print(f"Usage: {sys.argv[0]} project-to-skip")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Cancel Vercel deployments except for a specified project")
+    parser.add_argument("project_to_skip", help="Name of the Vercel project to skip (don't cancel its deployments)")
+    parser.add_argument("-f", "--force", action="store_true", help="Skip the check for recent commits from other users")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug mode for verbose output")
+    
+    args = parser.parse_args()
     
     # Check for recent commits from other users
-    check_recent_commits()
+    if not check_recent_commits(args.force, args.debug):
+        print("Operation canceled by user.")
+        sys.exit(0)
     
-    skip_project = sys.argv[1]
-    print(f"🛡️  Will protect project: {skip_project}")
-    
-    # Get all projects
-    projects = get_vercel_projects()
-    
-    # Handle case where no projects are found
-    if not projects:
-        # Fallback to hardcoded projects if automated detection fails
-        projects = [
-            "ananda-chatbot",
-            "crystal-chatbot",
-            "jairam-chatbot",
-            "ananda-public-chatbot",
-        ]
-        print("⚠️ Could not detect projects automatically, using hardcoded list")
-    
-    # Print found projects
-    print(f"📄 Processing {len(projects)} projects:")
-    for project in projects:
-        print(f"  - {project}")
-    print("-------------------------------------")
+    # Get list of Vercel projects
+    projects = get_vercel_projects(args.debug)
+    if args.debug:
+        print(f"📄 Processing {len(projects)} projects: {', '.join(projects)}")
     
     # Process each project
     for project in projects:
-        cancel_deployment(project, skip_project)
+        cancel_deployment(project, args.project_to_skip, args.debug)
+        if args.debug:
+            print("-------------------------------------")
     
-    print(f"✨ Operation complete. Latest deployments canceled for all projects except {skip_project}.")
-
-
 if __name__ == "__main__":
     main() 
