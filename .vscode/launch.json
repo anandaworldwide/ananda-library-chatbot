@@ -5,6 +5,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Python Debugger: cancel-other-deployments.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/cancel-other-deployments.py",
+      "console": "integratedTerminal",
+      "args": ["ananda-public-chatbot"]
+    },
+    {
       "name": "Python Debugger: process_anandalib_dump.py",
       "type": "debugpy",
       "request": "launch",
