@@ -38,6 +38,25 @@
  */
 import { NextRequest } from 'next/server';
 import * as makeChainModule from '@/utils/server/makechain';
+import jwt from 'jsonwebtoken';
+
+// Ensure the SECURE_TOKEN env var is set for JWT tests
+process.env.SECURE_TOKEN = 'test-jwt-secret-key';
+
+/**
+ * Generate a valid test JWT token for authentication
+ *
+ * @param client The client type (web, wordpress)
+ * @returns A valid JWT token for testing
+ */
+function generateTestToken(client = 'web') {
+  // Ensure we have a valid secret key for signing
+  const secretKey = process.env.SECURE_TOKEN || 'test-jwt-secret-key';
+
+  return jwt.sign({ client, iat: Math.floor(Date.now() / 1000) }, secretKey, {
+    expiresIn: '15m',
+  });
+}
 
 // Mocks must be defined first, before imports
 const mockAddFn = jest.fn().mockResolvedValue({ id: 'test-id' });
@@ -195,6 +214,19 @@ jest.mock('@langchain/openai', () => ({
   })),
 }));
 
+// Add after the existing mocks, before importing POST
+jest.mock('@/utils/server/appRouterJwtUtils', () => ({
+  withAppRouterJwtAuth: (
+    handler: (req: any, context: any, token: any) => Promise<any>,
+  ) => {
+    // For tests, return a function that accepts 1 or 2 arguments to handle both calling patterns
+    return function wrappedHandler(req: any, context: any = {}) {
+      // Always pass the token regardless of whether context was provided
+      return handler(req, context, { client: 'web' });
+    };
+  },
+}));
+
 // Import POST only after all mocks are set up
 import { POST } from '@/app/api/chat/v1/route';
 
@@ -253,16 +285,16 @@ describe('Chat API Route', () => {
 
   describe('POST handler', () => {
     test('validates input correctly', async () => {
-      // Test with missing question
+      // Create a request with missing required fields
       const badReq = new NextRequest('https://example.com/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Origin: 'https://example.com',
+          Authorization: `Bearer ${generateTestToken()}`, // Add JWT token
         },
         body: JSON.stringify({
+          // Missing "question" field
           collection: 'master_swami',
-          history: [],
         }),
       });
 

@@ -12,6 +12,7 @@ import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { getOrCreateUUID } from '@/utils/client/uuid';
 import Link from 'next/link';
 import { logEvent } from '@/utils/client/analytics';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 export interface SavedState {
   modelA: string;
@@ -255,7 +256,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
 
       console.log('Sending request with:', requestBody); // Debug log
 
-      const response = await fetch('/api/chat/v1', {
+      const response = await fetchWithAuth('/api/chat/v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),

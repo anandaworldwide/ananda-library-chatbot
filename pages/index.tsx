@@ -38,6 +38,7 @@ import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 import { SudoProvider, useSudo } from '@/contexts/SudoContext';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 // Main component for the chat interface
 export default function Home({
@@ -319,13 +320,17 @@ export default function Home({
       }
 
       if (data.sourceDocs) {
-        console.log('Received sourceDocs:', typeof data.sourceDocs, data.sourceDocs);
+        console.log(
+          'Received sourceDocs:',
+          typeof data.sourceDocs,
+          data.sourceDocs,
+        );
         try {
           setTimeout(() => {
-            const immutableSourceDocs = Array.isArray(data.sourceDocs) 
+            const immutableSourceDocs = Array.isArray(data.sourceDocs)
               ? [...data.sourceDocs]
               : [];
-            
+
             if (immutableSourceDocs.length < sourceCount) {
               console.error(
                 `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
@@ -333,7 +338,10 @@ export default function Home({
             }
 
             setSourceDocs(immutableSourceDocs);
-            updateMessageState(accumulatedResponseRef.current, immutableSourceDocs);
+            updateMessageState(
+              accumulatedResponseRef.current,
+              immutableSourceDocs,
+            );
           }, 100);
         } catch (error) {
           console.error('Error handling sourceDocs:', error);
@@ -446,7 +454,7 @@ export default function Home({
       const newAbortController = new AbortController();
       setAbortController(newAbortController);
 
-      const response = await fetch('/api/chat/v1', {
+      const response = await fetchWithAuth('/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

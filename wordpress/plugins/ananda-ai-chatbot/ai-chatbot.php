@@ -227,7 +227,12 @@ function aichatbot_enqueue_assets() {
     // Enqueue Font Awesome from CDN with a reliable approach
     wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css', array(), null);
     wp_enqueue_style('aichatbot-css', plugins_url('assets/css/chatbot.css', __FILE__));
-    wp_enqueue_script('aichatbot-js', plugins_url('assets/js/chatbot.js', __FILE__), array(), '1.0', true);
+    
+    // Enqueue auth utilities FIRST so they're available to the main script
+    wp_enqueue_script('aichatbot-auth', plugins_url('assets/js/chatbot-auth.js', __FILE__), array('jquery'), '1.0.1', true);
+    
+    // Enqueue main plugin script with dependency on auth script
+    wp_enqueue_script('aichatbot-js', plugins_url('assets/js/chatbot.js', __FILE__), array('jquery', 'aichatbot-auth'), '1.0.1', true);
     
     // Get Vercel URL from settings, with fallbacks
     $saved_url = get_option('aichatbot_vercel_url');
@@ -250,16 +255,21 @@ function aichatbot_enqueue_assets() {
     // Get Intercom integration settings
     $enable_intercom = get_option('aichatbot_enable_intercom', false);
     
-    // Pass data to JavaScript
-    wp_localize_script('aichatbot-js', 'aichatbotData', array(
+    // Pass data to JavaScript - make sure it's available to BOTH scripts
+    $data_array = array(
         'vercelUrl' => $vercel_url,
         'fontSizePx' => $font_size,
         'windowWidthPx' => $window_width,
         'windowHeightPx' => $window_height,
         'fullPageUrl' => $fullpage_url,
         'placeholderQuestionsText' => get_option('aichatbot_placeholder_questions', 'How can I learn to meditate?'),
-        'enableIntercom' => $enable_intercom ? '1' : '0'
-    ));
+        'enableIntercom' => $enable_intercom ? '1' : '0',
+        'ajaxUrl' => admin_url('admin-ajax.php')
+    );
+    
+    // Localize for both scripts to ensure data is available
+    wp_localize_script('aichatbot-auth', 'aichatbotData', $data_array);
+    wp_localize_script('aichatbot-js', 'aichatbotData', $data_array);
 }
 add_action('wp_enqueue_scripts', 'aichatbot_enqueue_assets');
 
@@ -342,3 +352,31 @@ function aichatbot_add_chat_bubble() {
           </div>';
 }
 add_action('wp_footer', 'aichatbot_add_chat_bubble');
+
+// Add this function to handle token requests from the frontend
+function aichatbot_ajax_get_token() {
+    // Security check with nonce would typically go here
+    
+    // Get a token using the secure API client
+    $token = ananda_get_api_token();
+    
+    // Check if we got an error instead of a token
+    if (is_wp_error($token)) {
+        wp_send_json_error(array(
+            'message' => $token->get_error_message()
+        ));
+        return;
+    }
+    
+    // Return the token to the frontend
+    // The response structure should match what chatbot-auth.js expects:
+    // - success: true/false (wp_send_json_success adds this)
+    // - data: { token: "..." } (wp_send_json_success wraps in data object)
+    wp_send_json_success(array(
+        'token' => $token
+    ));
+}
+
+// Register the AJAX handler
+add_action('wp_ajax_aichatbot_get_token', 'aichatbot_ajax_get_token');         // For logged-in users
+add_action('wp_ajax_nopriv_aichatbot_get_token', 'aichatbot_ajax_get_token');  // For non-logged-in users

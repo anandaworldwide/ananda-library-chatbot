@@ -4,6 +4,7 @@ import { Document } from 'langchain/document';
 import { logEvent } from '@/utils/client/analytics';
 import { getGreeting } from '@/utils/client/siteConfig';
 import { SiteConfig } from '@/types/siteConfig';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 export function useChat(
   collection: string,
@@ -59,7 +60,8 @@ export function useChat(
 
     setLoading(true);
     try {
-      const response = await fetch('/api/chat/v1', {
+      // Use fetchWithAuth instead of fetch to automatically include the JWT token
+      const response = await fetchWithAuth('/api/chat/v1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

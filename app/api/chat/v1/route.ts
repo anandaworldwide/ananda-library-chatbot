@@ -25,6 +25,7 @@
  * - Provides detailed error messages for debugging
  *
  * Security features:
+ * - JWT authentication for secure API access
  * - XSS prevention through input sanitization
  * - Rate limiting per IP
  * - Input length restrictions
@@ -63,6 +64,8 @@ import { SiteConfig } from '@/types/siteConfig';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
 import { getClientIp } from '@/utils/server/ipUtils';
 import { isDevelopment } from '@/utils/env';
+import { withAppRouterJwtAuth } from '@/utils/server/appRouterJwtUtils';
+import { JwtPayload } from '@/utils/server/jwtUtils';
 
 export const runtime = 'nodejs';
 export const maxDuration = 240;
@@ -759,8 +762,27 @@ async function handleComparisonRequest(
   return addCorsHeaders(response, req, siteConfig);
 }
 
+// Apply JWT authentication to the POST handler
+export const POST = withAppRouterJwtAuth(
+  async (req: NextRequest, context: any, token: JwtPayload) => {
+    // The token has been verified at this point
+    console.log(`Authenticated request from client: ${token.client}`);
+
+    // Original POST handler implementation starts here
+    return handleChatRequest(req);
+  },
+);
+
 // Handle OPTIONS requests for CORS preflight
 export async function OPTIONS(req: NextRequest) {
+  return handleCorsOptions(req);
+}
+
+/**
+ * Handles CORS preflight requests for the chat API
+ */
+async function handleCorsOptions(req: NextRequest) {
+  // Load site configuration
   const siteConfig = loadSiteConfigSync();
 
   if (!siteConfig) {
@@ -770,21 +792,23 @@ export async function OPTIONS(req: NextRequest) {
     );
   }
 
-  // Create a basic response
+  // Create basic response with CORS headers
   const response = new NextResponse(null, { status: 204 });
-  const origin = req.headers.get('origin');
 
-  // First, ensure critical preflight headers are present
+  // Get origin from request for CORS headers
+  const origin = req.headers.get('origin');
+  const referer = req.headers.get('referer');
+
+  // Set CORS headers based on origin if available
   if (origin) {
-    // Check if origin is allowed
     const allowedDomains = siteConfig.allowedFrontEndDomains || [];
     const isAllowedDomain = allowedDomains.some((pattern) =>
       matchesPattern(origin, pattern),
     );
 
     if (isAllowedDomain || isDevelopment()) {
-      // Add critical CORS headers directly for preflight
       response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
       response.headers.set(
         'Access-Control-Allow-Methods',
         'GET, POST, OPTIONS',
@@ -793,63 +817,29 @@ export async function OPTIONS(req: NextRequest) {
         'Access-Control-Allow-Headers',
         'Content-Type, Authorization',
       );
-
-      console.log(`OPTIONS: Allowing origin: ${origin}`);
-    } else {
-      console.log(`OPTIONS: Rejected origin: ${origin}`);
+      response.headers.set('Access-Control-Max-Age', '86400');
     }
+  } else if (isDevelopment() && referer && referer.includes('wordpress')) {
+    // Special case for WordPress in development
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.headers.set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization',
+    );
+    response.headers.set('Access-Control-Allow-Credentials', 'false');
+    response.headers.set('Access-Control-Max-Age', '86400');
   }
+  // For any other case (no origin, not dev WordPress), don't set CORS headers
 
-  // Then, let addCorsHeaders add any additional headers
-  return addCorsHeaders(response, req, siteConfig);
+  return response;
 }
 
-// Consolidated logging function for better summary messages
-function logPerformanceMetrics(
-  metrics: TimingMetrics,
-  stages: Record<string, number>,
-  modelName: string = 'unknown',
-) {
-  const summaryMetrics = {
-    setup: stages.pineconeComplete
-      ? stages.pineconeComplete - stages.startTime
-      : 0,
-    retrieval: stages.retrievalComplete
-      ? stages.retrievalComplete - stages.pineconeComplete
-      : 0,
-    llmThinkTime:
-      metrics.firstTokenGenerated && stages.retrievalComplete
-        ? metrics.firstTokenGenerated - stages.retrievalComplete
-        : 0,
-    tokenDelivery:
-      metrics.firstByteTime && metrics.firstTokenGenerated
-        ? metrics.firstByteTime - metrics.firstTokenGenerated
-        : 0,
-    ttfb: metrics.firstByteTime ? metrics.firstByteTime - metrics.startTime : 0,
-    streaming:
-      metrics.firstByteTime && metrics.totalTime
-        ? metrics.totalTime - (metrics.firstByteTime - metrics.startTime)
-        : 0,
-    total: metrics.totalTime || 0,
-    tokensPerSecond: metrics.tokensPerSecond || 0,
-    totalTokens: metrics.totalTokens || 0,
-  };
-
-  console.log(`
-  ⚡️ Chat Performance:
-    Model: ${modelName}
-    Setup: ${(summaryMetrics.setup / 1000).toFixed(2)}s
-    Retrieval: ${(summaryMetrics.retrieval / 1000).toFixed(2)}s
-    LLM think time: ${(summaryMetrics.llmThinkTime / 1000).toFixed(2)}s
-    Token delivery: ${(summaryMetrics.tokenDelivery / 1000).toFixed(2)}s
-    (Time to first byte: ${(summaryMetrics.ttfb / 1000).toFixed(2)}s)
-    Streaming: ${(summaryMetrics.streaming / 1000).toFixed(2)}s (${summaryMetrics.tokensPerSecond} chars/sec)
-    Total time: ${(summaryMetrics.total / 1000).toFixed(2)}s (${summaryMetrics.totalTokens} total tokens)
-    `);
-}
-
-// main POST handler
-export async function POST(req: NextRequest) {
+/**
+ * Main handler for chat requests
+ * This contains the original implementation of the POST handler
+ */
+async function handleChatRequest(req: NextRequest) {
   // Start timing with stages for component timing
   const timingMetrics: TimingMetrics = {
     startTime: Date.now(),
@@ -1114,4 +1104,48 @@ function normalizeMediaTypes(
     }),
     {} as Record<string, boolean>,
   );
+}
+
+// Consolidated logging function for better summary messages
+function logPerformanceMetrics(
+  metrics: TimingMetrics,
+  stages: Record<string, number>,
+  modelName: string = 'unknown',
+) {
+  const summaryMetrics = {
+    setup: stages.pineconeComplete
+      ? stages.pineconeComplete - stages.startTime
+      : 0,
+    retrieval: stages.retrievalComplete
+      ? stages.retrievalComplete - stages.pineconeComplete
+      : 0,
+    llmThinkTime:
+      metrics.firstTokenGenerated && stages.retrievalComplete
+        ? metrics.firstTokenGenerated - stages.retrievalComplete
+        : 0,
+    tokenDelivery:
+      metrics.firstByteTime && metrics.firstTokenGenerated
+        ? metrics.firstByteTime - metrics.firstTokenGenerated
+        : 0,
+    ttfb: metrics.firstByteTime ? metrics.firstByteTime - metrics.startTime : 0,
+    streaming:
+      metrics.firstByteTime && metrics.totalTime
+        ? metrics.totalTime - (metrics.firstByteTime - metrics.startTime)
+        : 0,
+    total: metrics.totalTime || 0,
+    tokensPerSecond: metrics.tokensPerSecond || 0,
+    totalTokens: metrics.totalTokens || 0,
+  };
+
+  console.log(`
+  ⚡️ Chat Performance:
+    Model: ${modelName}
+    Setup: ${(summaryMetrics.setup / 1000).toFixed(2)}s
+    Retrieval: ${(summaryMetrics.retrieval / 1000).toFixed(2)}s
+    LLM think time: ${(summaryMetrics.llmThinkTime / 1000).toFixed(2)}s
+    Token delivery: ${(summaryMetrics.tokenDelivery / 1000).toFixed(2)}s
+    (Time to first byte: ${(summaryMetrics.ttfb / 1000).toFixed(2)}s)
+    Streaming: ${(summaryMetrics.streaming / 1000).toFixed(2)}s (${summaryMetrics.tokensPerSecond} chars/sec)
+    Total time: ${(summaryMetrics.total / 1000).toFixed(2)}s (${summaryMetrics.totalTokens} total tokens)
+    `);
 }

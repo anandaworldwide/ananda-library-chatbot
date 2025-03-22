@@ -454,19 +454,22 @@ document.addEventListener('DOMContentLoaded', () => {
       updateClearHistoryButton();
 
       // Send to Vercel with streaming support
-      const response = await fetch(aichatbotData.vercelUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: message,
-          history: chatHistory,
-          collection: defaultCollection,
-          privateSession: privateSession,
-          mediaTypes: mediaTypes,
-          sourceCount: sourceCount,
-        }),
-        signal: currentAbortController.signal,
-      });
+      const response = await window.aichatbotAuth.fetchWithAuth(
+        aichatbotData.vercelUrl,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: message,
+            history: chatHistory,
+            collection: defaultCollection,
+            privateSession: privateSession,
+            mediaTypes: mediaTypes,
+            sourceCount: sourceCount,
+          }),
+          signal: currentAbortController.signal,
+        },
+      );
 
       // Don't remove typing indicator yet - keep it until we get actual content
 

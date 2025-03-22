@@ -81,6 +81,19 @@ jest.mock('firebase-admin', () => ({
   initializeApp: jest.fn(),
 }));
 
+// Add after the existing mocks, before importing POST
+jest.mock('@/utils/server/appRouterJwtUtils', () => ({
+  withAppRouterJwtAuth: (
+    handler: (req: any, context: any, token: any) => Promise<any>,
+  ) => {
+    // For tests, return a function that accepts 1 or 2 arguments to handle both calling patterns
+    return function wrappedHandler(req: any, context: any = {}) {
+      // Always pass the token regardless of whether context was provided
+      return handler(req, context, { client: 'web' });
+    };
+  },
+}));
+
 import { NextRequest } from 'next/server';
 
 // Import mocked modules
