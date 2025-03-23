@@ -14,8 +14,19 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 // Mock the entire AWS SDK module
 jest.mock('@aws-sdk/client-ses', () => {
   return {
-    SESClient: jest.fn(),
+    SESClient: jest.fn().mockImplementation(() => ({
+      send: jest.fn().mockResolvedValue({ success: true }),
+    })),
     SendEmailCommand: jest.fn(),
+  };
+});
+
+// Mock the JWT auth middleware to bypass token validation in tests
+jest.mock('@/utils/server/jwtUtils', () => {
+  return {
+    withJwtAuth: jest.fn().mockImplementation((handler) => {
+      return handler; // Simply return the handler without token validation
+    }),
   };
 });
 

@@ -1,39 +1,44 @@
 # Token Security Implementation Project Tasks
 
 > Note: This is a living document tracking security implementation tasks. AI will check off completed items
-> (using [x]) and add any missing tasks.
+> (using [x]) and add any missing tasks. User interface tasks should go from [ ] to [?] indicating
+> they need testing by a user, then go to [x] as done done.
 
 ## 1. App Router API Endpoints
 
-- [ ] Update /app/api/chat/v1/route.ts to implement JWT authentication
-  - [ ] Integrate withJwtAuth functionality into the NextJS App Router context
-  - [ ] Add security middleware that mimics the Pages Router middleware
-  - [ ] Update the TODO comment on line 41
-  - [ ] Handle token extraction and verification before processing requests
+- [x] Update /app/api/chat/v1/route.ts to implement JWT authentication
+  - [x] Integrate withJwtAuth functionality into the NextJS App Router context
+  - [x] Add security middleware that mimics the Pages Router middleware
+  - [x] Update the TODO comment on line 41
+  - [x] Handle token extraction and verification before processing requests
 
 ## 2. Pages Router API Endpoints
 
 These endpoints need to be secured using the existing withJwtAuth middleware:
 
-- [ ] Secure /pages/api/answers.ts with JWT authentication
-- [ ] Secure /pages/api/model-comparison-vote.ts with JWT authentication
-- [ ] Secure /pages/api/vote.ts with JWT authentication
-- [ ] Secure /pages/api/like.ts with JWT authentication
-- [ ] Secure /pages/api/model-comparison-data.ts with JWT authentication
-- [ ] Secure /pages/api/model-comparison-export.ts with JWT authentication
-- [ ] Secure /pages/api/downvotedAnswers.ts with JWT authentication
-- [ ] Secure /pages/api/adminAction.ts with JWT authentication
-- [ ] Secure /pages/api/model-comparison.ts with JWT authentication
-- [ ] Secure /pages/api/relatedQuestions.ts with JWT authentication
-- [ ] Secure /pages/api/submitNpsSurvey.ts with JWT authentication
-- [ ] Secure /pages/api/contact.ts with JWT authentication
-- [ ] Audit /pages/api/pruneRateLimits.ts and /pages/api/firestoreCron.ts to determine if they need JWT auth
+- [x] Secure /pages/api/answers.ts with JWT authentication
+- [x] Secure /pages/api/vote.ts with JWT authentication
+- [x] Secure /pages/api/like.ts with JWT authentication
+- [x] Secure /pages/api/model-comparison-vote.ts with JWT authentication
+- [x] Secure /pages/api/downvotedAnswers.ts with JWT authentication
+- [x] Secure /pages/api/adminAction.ts with JWT authentication
+- [x] Secure /pages/api/model-comparison.ts with JWT authentication
+- [x] Secure /pages/api/relatedQuestions.ts with JWT authentication
+- [x] Secure /pages/api/submitNpsSurvey.ts with JWT authentication
+- [x] Secure /pages/api/contact.ts with JWT authentication
+- [x] Secure /pages/api/model-comparison-data.ts with JWT authentication
+- [x] Secure /pages/api/model-comparison-export.ts with JWT authentication
+- [x] Audit /pages/api/pruneRateLimits.ts and /pages/api/firestoreCron.ts to determine if they need JWT auth
+  - [x] These are cron job endpoints triggered by Vercel's built-in cron system or scheduled tasks
+  - [x] Do not require JWT authentication as they are not publicly accessible endpoints
+  - [x] Protected by withApiMiddleware and server-side validation
 
 ## 3. Audio API Endpoints
 
-- [ ] Review and secure audio API endpoints in /pages/api/audio/ directory
-  - [ ] Audit all endpoints to determine which need authentication
-  - [ ] Apply withJwtAuth middleware to relevant endpoints
+- [x] Review and secure audio API endpoints in /pages/api/audio/ directory
+  - [x] Audit all endpoints to determine which need authentication
+  - [x] Apply withJwtAuth middleware to relevant endpoints
+  - [x] Secured /pages/api/audio/[filename].ts with JWT authentication
 
 ## 4. Frontend Integration
 
@@ -47,11 +52,11 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 
   - [x] Add Authorization header with Bearer token to all secured API calls
   - [x] Handle token expiration and refresh logic
-  - [ ] Implement retry mechanism for failed auth attempts
+  - [x] Implement retry mechanism for failed auth attempts
 
-- [ ] Update React Query/SWR configurations to include auth headers
-  - [ ] Modify query client setup to include token in requests
-  - [ ] Handle 401 responses with token refresh logic
+- [x] Update React Query/SWR configurations to include auth headers
+  - [x] Modify query client setup to include token in requests
+  - [x] Handle 401 responses with token refresh logic
 
 ## 5. WordPress Plugin Integration
 
@@ -62,9 +67,9 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 
 - [ ] Fix WordPress plugin script loading issues
 
-  - [x ] Resolve "window.aichatbotAuth is undefined" error
-  - [x ] Ensure proper script loading order and dependencies
-  - [x ] Add error handling for missing configurations
+  - [x] Resolve "window.aichatbotAuth is undefined" error
+  - [x] Ensure proper script loading order and dependencies
+  - [x] Add error handling for missing configurations
 
 - [ ] Document WordPress plugin integration in the security documentation
   - [ ] Add detailed setup instructions
@@ -115,15 +120,89 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [ ] Test token verification logic on protected endpoints
   - [ ] Verify proper rejection of invalid/expired tokens
 
+## 9. Manual Testing Tasks
+
+### JWT Authentication & API Endpoints Testing
+
+- [ ] Test /pages/api/answers.ts endpoint via browser to verify JWT auth
+- [ ] Test /pages/api/vote.ts to confirm voting works with JWT auth
+- [ ] Test /pages/api/like.ts to verify liking functionality with JWT auth
+- [ ] Test /pages/api/model-comparison-vote.ts to ensure model voting is protected
+- [ ] Test /pages/api/model-comparison-data.ts and verify data loads properly
+- [ ] Test /pages/api/model-comparison-export.ts for export functionality
+- [ ] Test /pages/api/audio/[filename].ts to verify audio files load correctly
+
+#### Pages to test
+
+- [ ] http://localhost:3000/answers
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+
+#### Problems to fix
+
+- [x] Page http://localhost:3000/answers/KmwScoOA5UjgK9skztRy never loads. Forever spinner.
+- [x] Error checking likes error message on http://localhost:3000/answers/w3hJk41nYilraggcjzay Front end message "an error occurred while checking likes" ... also on /answers page
+- [x] Forever spinner on load of http://localhost:3000/answers?sortBy=mostPopular
+- [ ] http://localhost:3000/admin/downvotes: "Error: Failed to fetch downvoted answers"
+- [ ] POST http://localhost:3000/api/model-comparison-vote: 401 Unauthorized - No token provided
+- [ ] POST http://localhost:3000/api/contact - No token provided. NOT Fixed by updating contact form to use queryFetch with JWT auth
+
+#### Authentication Improvements
+
+- [x] Add friendly user-facing error messages for auth failures (instead of just console errors)
+- [x] Modify token manager to automatically attempt token refresh on 401 responses
+- [ ] Implement a global error boundary to handle authentication failures consistently
+- [x] Add client-side logging for auth failures to help with debugging
+- [x] Create a "session expired" modal that appears when authentication cannot be restored
+- [x] Make sure all API requests properly await token initialization before sending
+- [x] Add retry mechanism with exponential backoff for authentication failures
+
+### React Query Integration Testing
+
+- [ ] Test the Answers page to verify React Query fetching with pagination
+- [ ] Verify like/unlike functionality with optimistic updates
+- [ ] Test downvoting and verify vote state is maintained properly
+- [ ] Test that data fetching works after JWT expiration (token refresh)
+
+### Component Interaction Testing
+
+- [ ] Test MessageItem components with vote functionality
+- [ ] Test AnswerItem components with like functionality
+- [ ] Verify copy link functionality in both components
+- [ ] Test source display positions (above/below content)
+- [ ] Verify related questions display correctly when enabled
+
+### Error Handling Testing
+
+- [ ] Test behavior when token is invalid/expired (should automatically refresh)
+- [ ] Test rate limiting functionality for protected endpoints
+- [ ] Verify appropriate error messages for authentication failures
+- [ ] Test network error recovery with React Query retry mechanism
+
+### Regression Testing
+
+- [ ] Verify WordPress plugin integration still works with the new auth system
+- [ ] Test existing functionality (search, related questions, etc.) to ensure no regressions
+- [ ] Verify NPS survey submission still works with the new protection
+- [ ] Test contact form submissions with JWT auth
+
 ## Priority Order
 
-1. App Router Chat API (highest priority)
-2. Critical Pages Router endpoints (answers.ts, like.ts)
-3. Frontend integration (partially done - many components still need updating) ⚠️
-4. WordPress plugin verification ✅ (implementation complete, testing needed)
-5. WordPress plugin script loading issues ⚠️ (critical bug fix needed)
-6. Remaining API endpoints
-7. Documentation and testing
+1. App Router Chat API (highest priority) ✅
+2. Critical Pages Router endpoints (answers.ts, like.ts, vote.ts, model-comparison-vote.ts) ✅
+3. Most common endpoints used by the frontend (downvotedAnswers.ts, adminAction.ts, model-comparison.ts,
+   relatedQuestions.ts, etc.) ✅
+4. Model comparison endpoints (model-comparison-data.ts, model-comparison-export.ts) ✅
+5. Audio API endpoints ✅
+6. Frontend integration ✅
+7. WordPress plugin verification ✅ (implementation complete, testing needed)
+8. WordPress plugin script loading issues ⚠️ (critical bug fix needed) ✅
+9. Documentation and testing
 
 This security implementation will ensure all API endpoints are protected using the JWT-based token system,
 maintaining a consistent security approach across the application.

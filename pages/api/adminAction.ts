@@ -1,9 +1,13 @@
+// This file handles API requests for updating admin actions on answers.
+// It allows administrators to mark answers as affirmed, ignored, or fixed after review.
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { db } from '@/services/firebase';
 import firebase from 'firebase-admin';
 import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -51,4 +55,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiMiddleware(handler);
+export default withApiMiddleware(withJwtAuth(handler));

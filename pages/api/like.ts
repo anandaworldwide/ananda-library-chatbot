@@ -6,9 +6,10 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { db } from '@/services/firebase';
 import firebase from 'firebase-admin';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
-import { getEnvName } from '@/utils/env';
+import { getEnvName, isDevelopment } from '@/utils/env';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 
 // Cache to store like statuses, improving response times for frequent requests
 const likeStatusCache: Record<string, Record<string, boolean>> = {};
@@ -29,16 +30,9 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
   let answerIds = req.query.answerIds;
   const { uuid } = req.query;
 
-  // Ensure answerIds is an array
-  if (typeof answerIds === 'string') {
-    answerIds = [answerIds];
-  } else if (!Array.isArray(answerIds)) {
-    return res.status(400).json({ error: 'Invalid answerIds format' });
-  }
-
-  // Validate the input
-  if (!answerIds || !uuid) {
-    return res.status(400).json({ error: 'Missing answer IDs or UUID' });
+  // Validate UUID
+  if (!uuid) {
+    return res.status(400).json({ error: 'Missing UUID' });
   }
 
   // Check if db is available
@@ -46,8 +40,32 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
 
   try {
     console.log(`Likes GET: UUID: ${uuid}`);
-    console.log(`Likes GET: Answer IDs: ${answerIds}`);
     const likesCollection = db!.collection(`${envName}_likes`);
+
+    // If no answerIds are provided, return all liked answer IDs for this user
+    if (!answerIds) {
+      const likesSnapshot = await likesCollection
+        .where('uuid', '==', uuid)
+        .get();
+
+      // Create an array of answer IDs that this user has liked
+      const likedAnswerIds: string[] = [];
+      likesSnapshot.forEach((doc) => {
+        likedAnswerIds.push(doc.data().answerId);
+      });
+
+      return res.status(200).json(likedAnswerIds);
+    }
+
+    // Otherwise, handle the normal case with specific answer IDs
+    // Ensure answerIds is an array
+    if (typeof answerIds === 'string') {
+      answerIds = [answerIds];
+    } else if (!Array.isArray(answerIds)) {
+      return res.status(400).json({ error: 'Invalid answerIds format' });
+    }
+
+    console.log(`Likes GET: Answer IDs: ${answerIds}`);
     const likesSnapshot = await likesCollection
       .where('uuid', '==', uuid)
       .where('answerId', 'in', answerIds)
@@ -186,7 +204,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Apply rate limiting to prevent abuse
   const isAllowed = await genericRateLimiter(req, res, {
     windowMs: 60 * 1000 * 10, // 10 minutes
-    max: 30, // 30 likes per 10 minutes
+    max: isDevelopment() ? 3000 : 30, // 3000 likes per 10 minutes in dev, 30 in prod
     name: 'like',
   });
 
@@ -330,5 +348,5 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 //   }
 // }
 
-// Apply API middleware (e.g., error handling, authentication) to the handler
-export default withApiMiddleware(handler);
+// Apply API middleware and JWT authentication for security
+export default withApiMiddleware(withJwtAuth(handler));

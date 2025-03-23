@@ -10,7 +10,11 @@
 
 import { createMocks } from 'node-mocks-http';
 import type { NextApiRequest, NextApiResponse } from 'next';
-import handler from '../../pages/api/submitNpsSurvey';
+
+// Need to mock JWT auth before importing the handler
+jest.mock('@/utils/server/jwtUtils', () => ({
+  withJwtAuth: jest.fn((handler) => handler),
+}));
 
 // Mock the googleapis module using jest.mock
 // The syntax with mock at the top level and outside of the function is required by Jest
@@ -36,6 +40,9 @@ jest.mock('googleapis', () => ({
     })),
   },
 }));
+
+// Import the handler after all mocks are set up
+import handler from '../../pages/api/submitNpsSurvey';
 
 // Mock JSON.parse to handle credentials
 const originalJsonParse = JSON.parse;

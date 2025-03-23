@@ -52,6 +52,15 @@ jest.mock('@/utils/server/apiMiddleware', () => ({
   ) => handler,
 }));
 
+// Mock the JWT auth middleware to bypass token validation in tests
+jest.mock('@/utils/server/jwtUtils', () => {
+  return {
+    withJwtAuth: jest.fn().mockImplementation((handler) => {
+      return handler; // Simply return the handler without token validation
+    }),
+  };
+});
+
 // Import the handler after mocking dependencies
 import handler from '../../pages/api/answers';
 

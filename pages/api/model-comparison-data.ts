@@ -1,6 +1,10 @@
+// This file handles API requests for retrieving model comparison vote data.
+// It returns paginated data of model comparison votes, primarily for admin dashboards.
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { db } from '@/services/firebase';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { isDevelopment } from '@/utils/env';
 import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
 
@@ -59,4 +63,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiMiddleware(handler);
+export default withApiMiddleware(withJwtAuth(handler));

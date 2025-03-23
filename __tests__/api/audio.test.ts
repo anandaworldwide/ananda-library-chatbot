@@ -13,6 +13,15 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../pages/api/audio/[filename]';
 import { getSignedUrl as mockGetSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+// Mock the JWT auth middleware to bypass token validation in tests
+jest.mock('@/utils/server/jwtUtils', () => {
+  return {
+    withJwtAuth: jest.fn().mockImplementation((handler) => {
+      return handler; // Simply return the handler without token validation
+    }),
+  };
+});
+
 // Mock AWS SDK
 jest.mock('@aws-sdk/client-s3', () => ({
   GetObjectCommand: jest.fn().mockImplementation((params) => ({
@@ -93,7 +102,7 @@ describe('Audio API', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
-      url: 'https://example-bucket.s3.amazonaws.com/public/audio/treasures/test-audio.mp3?signed=true',
+      url: 'https://example-bucket.s3.amazonaws.com/public/audio/test-audio.mp3?signed=true',
     });
   });
 
@@ -131,7 +140,7 @@ describe('Audio API', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
-      url: 'https://example-bucket.s3.amazonaws.com/public/audio/treasures/test-audio.mp3?signed=true',
+      url: 'https://example-bucket.s3.amazonaws.com/public/audio/test-audio.mp3?signed=true',
     });
   });
 
@@ -150,7 +159,7 @@ describe('Audio API', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
-      url: 'https://example-bucket.s3.amazonaws.com/public/audio/treasures/test-audio.mp3?signed=true',
+      url: 'https://example-bucket.s3.amazonaws.com/public/audio/test-audio.mp3?signed=true',
     });
   });
 

@@ -13,6 +13,7 @@ import { logEvent } from '@/utils/client/analytics';
 import Head from 'next/head';
 import { getShortname } from '@/utils/client/siteConfig';
 import { useSudo } from '@/contexts/SudoContext';
+import { queryFetch } from '@/utils/client/reactQueryConfig';
 
 interface SingleAnswerProps {
   siteConfig: SiteConfig | null;
@@ -27,17 +28,45 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   const [linkCopied, setLinkCopied] = useState(false);
   const { isSudoUser } = useSudo();
   const [likeError, setLikeError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch the answer data when the component mounts or answerId changes
   useEffect(() => {
     const fetchAnswer = async () => {
-      const response = await fetch(`/api/answers?answerIds=${answerId}`);
-      if (response.status === 404) {
-        setNotFound(true);
-        return;
+      if (!answerId) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Use queryFetch instead of fetch to add JWT authentication
+        const response = await queryFetch(`/api/answers?answerIds=${answerId}`);
+
+        if (response.status === 404) {
+          setNotFound(true);
+          return;
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to fetch answer');
+        }
+
+        const data = await response.json();
+        if (data && data.length > 0) {
+          setAnswer(data[0]);
+        } else {
+          setNotFound(true);
+        }
+      } catch (error) {
+        console.error('Error fetching answer:', error);
+        setError(
+          error instanceof Error ? error.message : 'Failed to load answer',
+        );
+      } finally {
+        setIsLoading(false);
       }
-      const data = await response.json();
-      setAnswer(data[0]);
     };
 
     if (answerId) {
@@ -48,10 +77,14 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   // Fetch like statuses for the answer when it's loaded
   useEffect(() => {
     const fetchLikeStatuses = async (answerIds: string[]) => {
+      if (!answerIds.length) return;
+
       try {
         const uuid = getOrCreateUUID();
         const statuses = await checkUserLikes(answerIds, uuid);
-        setLikeStatuses((prevStatuses) => ({ ...prevStatuses, ...statuses }));
+
+        // Important: completely replace the state, don't merge with previous
+        setLikeStatuses(statuses);
       } catch (error) {
         console.error('Error fetching like statuses:', error);
         setLikeError(
@@ -69,15 +102,36 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   }, [answer]);
 
   // Handle like count changes
-  const handleLikeCountChange = (answerId: string, newLikeCount: number) => {
+  const handleLikeCountChange = (answerId: string) => {
     try {
+      // Update the answer with the new like count - calculate based on current status
       if (answer) {
+        // Calculate new like count based on the new status (inverse of current)
+        const wasLiked = likeStatuses[answerId] || false;
+        const newLikeCount = wasLiked
+          ? Math.max(0, answer.likeCount - 1)
+          : answer.likeCount + 1;
+
         setAnswer({
           ...answer,
           likeCount: newLikeCount,
         });
       }
+
+      // Update the like status immediately (don't wait for server refresh)
+      const newLikeStatus = !likeStatuses[answerId];
+
+      // Create a new object to ensure state update
+      setLikeStatuses({
+        ...likeStatuses,
+        [answerId]: newLikeStatus,
+      });
+
       logEvent('like_answer', 'Engagement', answerId);
+
+      // Don't refresh like statuses immediately - let the component state handle it
+      // The status will be refreshed on the next page load anyway
+      // This avoids the blinking effect
     } catch (error) {
       setLikeError(
         error instanceof Error ? error.message : 'An error occurred',
@@ -100,15 +154,18 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   const handleDelete = async (answerId: string) => {
     if (confirm('Are you sure you want to delete this answer?')) {
       try {
-        const response = await fetch(`/api/answers?answerId=${answerId}`, {
+        // Use queryFetch instead of fetch to add JWT authentication
+        const response = await queryFetch(`/api/answers?answerId=${answerId}`, {
           method: 'DELETE',
         });
-        const responseData = await response.json();
+
         if (!response.ok) {
+          const responseData = await response.json();
           throw new Error(
             'Failed to delete answer (' + responseData.message + ')',
           );
         }
+
         router.push('/answers');
         logEvent('delete_answer', 'Admin', answerId);
       } catch (error) {
@@ -129,8 +186,25 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
     );
   }
 
+  // Show error message if there was an error fetching the answer
+  if (error) {
+    return (
+      <Layout siteConfig={siteConfig}>
+        <div className="flex flex-col justify-center items-center h-screen">
+          <p className="text-lg text-red-600 mb-4">Error: {error}</p>
+          <button
+            onClick={() => router.push('/answers')}
+            className="bg-blue-500 text-white px-4 py-2 rounded-md"
+          >
+            Go Back to All Answers
+          </button>
+        </div>
+      </Layout>
+    );
+  }
+
   // Render loading spinner while fetching the answer
-  if (!answer) {
+  if (isLoading || !answer) {
     return (
       <Layout siteConfig={siteConfig}>
         <div className="flex justify-center items-center h-screen">

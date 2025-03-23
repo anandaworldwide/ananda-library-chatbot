@@ -4,6 +4,7 @@ import {
   updateRelatedQuestions,
 } from '@/utils/server/relatedQuestionsUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 
 /**
@@ -92,5 +93,5 @@ async function handler(
   }
 }
 
-// Apply API middleware for additional processing (e.g., authentication, logging)
-export default withApiMiddleware(handler);
+// Apply API middleware and JWT authentication for security
+export default withApiMiddleware(withJwtAuth(handler));

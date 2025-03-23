@@ -6,6 +6,7 @@
  * - Caches tokens in memory to avoid unnecessary requests
  * - Handles token expiration and refresh
  * - Provides a standard way to include tokens in API requests
+ * - Implements retry mechanism for failed auth attempts
  *
  * Implementation uses in-memory storage instead of localStorage for better security.
  */
@@ -21,6 +22,13 @@ let tokenData: TokenData | null = null;
 
 // Time buffer before expiration to refresh token (30 seconds)
 const EXPIRATION_BUFFER = 30 * 1000;
+
+// Maximum number of retry attempts
+const MAX_RETRY_ATTEMPTS = 3;
+
+// Track initialization state
+let isInitializing = false;
+let initializationPromise: Promise<string> | null = null;
 
 /**
  * Parse JWT token to get expiration time
@@ -54,32 +62,84 @@ function isTokenValid(): boolean {
  * Fetch a new token from the server
  */
 async function fetchNewToken(): Promise<string> {
-  const response = await fetch('/api/web-token');
+  try {
+    const response = await fetch('/api/web-token');
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch token');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch token: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const token = data.token;
+
+    if (!token) {
+      throw new Error('No token received from server');
+    }
+
+    // Store token with expiration time
+    tokenData = {
+      token,
+      expiresAt: parseJwtExpiration(token),
+    };
+
+    return token;
+  } catch (error) {
+    console.error('Error fetching token:', error);
+    throw error;
   }
-
-  const data = await response.json();
-  const token = data.token;
-
-  // Store token with expiration time
-  tokenData = {
-    token,
-    expiresAt: parseJwtExpiration(token),
-  };
-
-  return token;
 }
 
 /**
- * Get a valid token, fetching a new one if necessary
+ * Initialize the token manager and fetch the first token
+ * This should be called early in the app lifecycle
  */
-export async function getToken(): Promise<string> {
+export async function initializeTokenManager(): Promise<string> {
+  // If we're already initializing, return the existing promise
+  if (isInitializing && initializationPromise) {
+    return initializationPromise;
+  }
+
+  // If we already have a valid token, return it
   if (isTokenValid()) {
     return tokenData!.token;
   }
 
+  // Start initialization and create a promise
+  isInitializing = true;
+
+  // Create a new promise to fetch the token
+  initializationPromise = fetchNewToken()
+    .then((token) => {
+      isInitializing = false;
+      return token;
+    })
+    .catch((error) => {
+      isInitializing = false;
+      initializationPromise = null;
+      console.error('Failed to initialize token manager:', error);
+      throw error;
+    });
+
+  // Return the promise
+  return initializationPromise;
+}
+
+/**
+ * Get a valid token, fetching a new one if necessary
+ * This will await the initialization if it's in progress
+ */
+export async function getToken(): Promise<string> {
+  // If initialization is in progress, wait for it
+  if (isInitializing && initializationPromise) {
+    return initializationPromise;
+  }
+
+  // If token is valid, return it
+  if (isTokenValid()) {
+    return tokenData!.token;
+  }
+
+  // Otherwise fetch a new token
   return fetchNewToken();
 }
 
@@ -103,6 +163,7 @@ export async function withAuth(options?: RequestInit): Promise<RequestInit> {
 
 /**
  * Fetch wrapper that automatically adds authentication
+ * and implements retry logic for authentication failures
  *
  * @param url The URL to fetch
  * @param options Fetch options
@@ -112,6 +173,49 @@ export async function fetchWithAuth(
   url: string,
   options?: RequestInit,
 ): Promise<Response> {
-  const authOptions = await withAuth(options);
-  return fetch(url, authOptions);
+  return fetchWithRetry(url, options);
+}
+
+/**
+ * Helper function to implement retry logic for fetch requests
+ * that might fail due to authentication issues
+ */
+async function fetchWithRetry(
+  url: string,
+  options?: RequestInit,
+  retryCount = 0,
+): Promise<Response> {
+  try {
+    const authOptions = await withAuth(options);
+    const response = await fetch(url, authOptions);
+
+    // If we get a 401 Unauthorized, try to refresh the token and retry
+    if (response.status === 401 && retryCount < MAX_RETRY_ATTEMPTS) {
+      console.log(
+        `Auth failed on attempt ${retryCount + 1}, refreshing token...`,
+      );
+
+      // Force token refresh by invalidating the current one
+      tokenData = null;
+
+      // Retry with a new token
+      return fetchWithRetry(url, options, retryCount + 1);
+    }
+
+    return response;
+  } catch (error) {
+    // For network errors, retry if we haven't reached the max attempts
+    if (retryCount < MAX_RETRY_ATTEMPTS) {
+      console.log(`Network error on attempt ${retryCount + 1}, retrying...`);
+
+      // Exponential backoff: 500ms, 1000ms, 2000ms...
+      const delay = Math.min(500 * Math.pow(2, retryCount), 5000);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      return fetchWithRetry(url, options, retryCount + 1);
+    }
+
+    // If we've reached max retries, throw the error
+    throw error;
+  }
 }

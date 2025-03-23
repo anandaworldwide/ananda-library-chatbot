@@ -5,6 +5,7 @@ import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { Document } from 'langchain/document';
 import { DocMetadata } from '@/types/DocMetadata';
 import { SiteConfig } from '@/types/siteConfig';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Add mock for react-markdown at the top of the file
 jest.mock('react-markdown', () => {
@@ -69,6 +70,37 @@ jest.mock('@/components/LikeButton', () => {
       </button>
     ));
 });
+
+// Mock the useVote hook to avoid actual API calls
+jest.mock('@/hooks/useVote', () => ({
+  useVote: () => ({
+    mutate: jest.fn(),
+    isPending: false,
+    isError: false,
+  }),
+}));
+
+// Mock logEvent to prevent analytics during tests
+jest.mock('@/utils/client/analytics', () => ({
+  logEvent: jest.fn(),
+}));
+
+// Create a wrapper with QueryClientProvider for tests
+const createTestQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+const renderWithQueryClient = (ui: React.ReactElement) => {
+  const testQueryClient = createTestQueryClient();
+  return render(
+    <QueryClientProvider client={testQueryClient}>{ui}</QueryClientProvider>,
+  );
+};
 
 describe('MessageItem', () => {
   // Set up mock props
@@ -164,7 +196,7 @@ describe('MessageItem', () => {
       index: 0,
     };
 
-    render(<MessageItem {...props} />);
+    renderWithQueryClient(<MessageItem {...props} />);
 
     expect(screen.getByText('Test user message')).toBeInTheDocument();
     // User icon should be shown for user messages
@@ -174,7 +206,7 @@ describe('MessageItem', () => {
   });
 
   it('renders AI message correctly', () => {
-    render(<MessageItem {...defaultProps} />);
+    renderWithQueryClient(<MessageItem {...defaultProps} />);
 
     expect(screen.getByText('Test AI message')).toBeInTheDocument();
     // AI icon should be shown for AI messages
@@ -190,13 +222,13 @@ describe('MessageItem', () => {
   });
 
   it('shows copy button for AI messages', () => {
-    render(<MessageItem {...defaultProps} />);
+    renderWithQueryClient(<MessageItem {...defaultProps} />);
 
     expect(screen.getByTestId('copy-button')).toBeInTheDocument();
   });
 
   it('handles link copy correctly', () => {
-    render(<MessageItem {...defaultProps} />);
+    renderWithQueryClient(<MessageItem {...defaultProps} />);
 
     const linkButton = screen.getByTitle('Copy link to clipboard');
     fireEvent.click(linkButton);
@@ -205,7 +237,7 @@ describe('MessageItem', () => {
   });
 
   it('handles likes correctly', () => {
-    render(<MessageItem {...defaultProps} />);
+    renderWithQueryClient(<MessageItem {...defaultProps} />);
 
     const likeButton = screen.getByTestId('like-button');
     fireEvent.click(likeButton);
@@ -214,7 +246,7 @@ describe('MessageItem', () => {
   });
 
   it('displays sources above message content when showSourcesBelow is false', () => {
-    const { container } = render(
+    const { container } = renderWithQueryClient(
       <MessageItem {...defaultProps} showSourcesBelow={false} />,
     );
 
@@ -231,7 +263,7 @@ describe('MessageItem', () => {
   });
 
   it('displays sources below message content when showSourcesBelow is true', () => {
-    const { container } = render(
+    const { container } = renderWithQueryClient(
       <MessageItem {...defaultProps} showSourcesBelow={true} />,
     );
 
@@ -262,7 +294,7 @@ describe('MessageItem', () => {
       allowAllAnswersPage: true,
     };
 
-    render(<MessageItem {...props} />);
+    renderWithQueryClient(<MessageItem {...props} />);
 
     expect(screen.getByText('Related Questions')).toBeInTheDocument();
     expect(screen.getByText('Related Question 1')).toBeInTheDocument();
@@ -284,7 +316,7 @@ describe('MessageItem', () => {
       allowAllAnswersPage: false,
     };
 
-    render(<MessageItem {...props} />);
+    renderWithQueryClient(<MessageItem {...props} />);
 
     expect(screen.queryByText('Related Questions')).not.toBeInTheDocument();
   });

@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import Layout from '@/components/layout';
 import Link from 'next/link';
 import validator from 'validator';
+import { queryFetch } from '@/utils/client/reactQueryConfig';
 
 interface ContactProps {
   siteConfig: SiteConfig | null;
@@ -18,6 +19,7 @@ const Contact = ({ siteConfig }: ContactProps) => {
   const [message, setMessage] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Validate form inputs
   const validateInputs = () => {
@@ -40,24 +42,36 @@ const Contact = ({ siteConfig }: ContactProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsSubmitting(true);
 
     if (!validateInputs()) {
+      setIsSubmitting(false);
       return;
     }
 
-    // Send form data to the API
-    const res = await fetch('/api/contact', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name, email, message }),
-    });
-    if (res.ok) {
-      setIsSubmitted(true);
-    } else {
-      const data = await res.json();
-      setError(data.message || 'Failed to send message.');
+    try {
+      // Send form data to the API using queryFetch to include authentication
+      const res = await queryFetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, email, message }),
+      });
+
+      if (res.ok) {
+        setIsSubmitted(true);
+      } else {
+        const data = await res.json();
+        setError(
+          data.message || 'Failed to send message. Please try again later.',
+        );
+      }
+    } catch (error) {
+      console.error('Error submitting contact form:', error);
+      setError('Failed to send message. Please try again later.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -91,7 +105,7 @@ const Contact = ({ siteConfig }: ContactProps) => {
                 onChange={(e) => setName(e.target.value)}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm"
                 required
-                disabled={isSubmitted}
+                disabled={isSubmitted || isSubmitting}
                 maxLength={100}
               />
             </div>
@@ -106,7 +120,7 @@ const Contact = ({ siteConfig }: ContactProps) => {
                 onChange={(e) => setEmail(e.target.value)}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm"
                 required
-                disabled={isSubmitted}
+                disabled={isSubmitted || isSubmitting}
               />
             </div>
           </div>
@@ -120,17 +134,17 @@ const Contact = ({ siteConfig }: ContactProps) => {
               onChange={(e) => setMessage(e.target.value)}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm h-48"
               required
-              disabled={isSubmitted}
+              disabled={isSubmitted || isSubmitting}
               maxLength={1000}
             />
           </div>
           {/* Submit button */}
           <button
             type="submit"
-            className="bg-blue-500 text-white px-4 py-2 rounded-md"
-            disabled={isSubmitted}
+            className="bg-blue-500 text-white px-4 py-2 rounded-md disabled:bg-blue-300"
+            disabled={isSubmitted || isSubmitting}
           >
-            Send
+            {isSubmitting ? 'Sending...' : 'Send'}
           </button>
         </form>
         {/* Success message and homepage link */}

@@ -1,48 +1,66 @@
+// This file handles API requests for submitting NPS survey responses.
+// It validates the input, checks for recent submissions, and saves the data to a Google Sheet.
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
-import validator from 'validator';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 
-async function handler(req: NextApiRequest, res: NextApiResponse) {
+// Handler function for NPS survey submission
+async function handleRequest(
+  req: NextApiRequest,
+  res: NextApiResponse,
+): Promise<void> {
   if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method Not Allowed' });
+    res.status(405).json({ message: 'Method Not Allowed' });
+    return;
   }
 
   const { uuid, score, feedback, additionalComments, timestamp } = req.body;
 
-  // Input validation
-  if (!validator.isUUID(uuid)) {
-    return res.status(400).json({ message: 'Invalid UUID' });
+  // Basic validation
+  if (!uuid || typeof uuid !== 'string' || uuid.length !== 36) {
+    res.status(400).json({ message: 'Invalid UUID' });
+    return;
   }
 
-  if (!validator.isInt(score.toString(), { min: 0, max: 10 })) {
-    return res.status(400).json({ message: 'Score must be between 0 and 10' });
+  if (isNaN(score) || score < 0 || score > 10) {
+    res.status(400).json({ message: 'Score must be between 0 and 10' });
+    return;
   }
 
-  if (feedback && feedback.length > 1000) {
-    return res
+  if (feedback && (typeof feedback !== 'string' || feedback.length > 1000)) {
+    res
       .status(400)
       .json({ message: 'Feedback must be 1000 characters or less' });
+    return;
   }
 
-  if (additionalComments && additionalComments.length > 1000) {
-    return res
-      .status(400)
-      .json({ message: 'Additional comments must be 1000 characters or less' });
+  if (
+    additionalComments &&
+    (typeof additionalComments !== 'string' || additionalComments.length > 1000)
+  ) {
+    res.status(400).json({
+      message: 'Additional comments must be 1000 characters or less',
+    });
+    return;
   }
 
-  if (!validator.isISO8601(timestamp)) {
-    return res.status(400).json({ message: 'Invalid timestamp' });
+  if (!timestamp || isNaN(Date.parse(timestamp))) {
+    res.status(400).json({ message: 'Invalid timestamp' });
+    return;
   }
 
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     console.error('Missing Google credentials');
-    return res.status(500).json({ message: 'Missing Google credentials' });
+    res.status(500).json({ message: 'Missing Google credentials' });
+    return;
   }
 
   if (!process.env.NPS_SURVEY_GOOGLE_SHEET_ID) {
     console.error('Missing Google Sheet ID');
-    return res.status(500).json({ message: 'Missing Google Sheet ID' });
+    res.status(500).json({ message: 'Missing Google Sheet ID' });
+    return;
   }
 
   try {
@@ -70,9 +88,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       );
 
       if (recentSubmission) {
-        return res
+        res
           .status(429)
           .json({ message: 'You can only submit one survey per month' });
+        return;
       }
     }
 
@@ -87,18 +106,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     });
 
     res.status(200).json({ message: 'Survey submitted successfully' });
-  } catch (error) {
-    console.error('Error submitting survey:', error);
-    if (error instanceof Error) {
-      res
-        .status(500)
-        .json({ message: `Error submitting survey: ${error.message}` });
-    } else {
-      res.status(500).json({
-        message: 'An unknown error occurred while submitting the survey',
-      });
-    }
+  } catch (error: any) {
+    console.error('Error submitting NPS survey:', error);
+    res.status(500).json({
+      message: `Error submitting survey: ${error.message || 'Unknown error'}`,
+    });
   }
 }
 
-export default withApiMiddleware(handler);
+// Export with standard JWT auth
+export default withJwtAuth(withApiMiddleware(handleRequest));

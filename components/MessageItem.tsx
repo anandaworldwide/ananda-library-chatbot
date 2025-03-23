@@ -14,6 +14,8 @@ import { SiteConfig } from '@/types/siteConfig';
 import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 import { useSudo } from '@/contexts/SudoContext';
+import { useVote } from '@/hooks/useVote';
+import { logEvent } from '@/utils/client/analytics';
 
 interface MessageItemProps {
   message: ExtendedAIMessage;
@@ -26,14 +28,14 @@ interface MessageItemProps {
   hasMultipleCollections: boolean;
   likeStatuses: Record<string, boolean>;
   linkCopied: string | null;
-  votes: Record<string, number>;
+  votes?: Record<string, number>;
   siteConfig: SiteConfig | null;
   handleLikeCountChange: (answerId: string, liked: boolean) => void;
   handleCopyLink: (answerId: string) => void;
-  handleVote: (docId: string, isUpvote: boolean) => void;
+  handleVote?: (docId: string, isUpvote: boolean) => void;
   lastMessageRef: React.RefObject<HTMLDivElement> | null;
   messageKey: string;
-  voteError: string | null;
+  voteError?: string | null;
   allowAllAnswersPage: boolean;
   showSourcesBelow?: boolean;
 }
@@ -49,19 +51,56 @@ const MessageItem: React.FC<MessageItemProps> = ({
   hasMultipleCollections,
   likeStatuses,
   linkCopied,
-  votes,
+  votes = {},
   siteConfig,
   handleLikeCountChange,
   handleCopyLink,
-  handleVote,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  handleVote: _handleVote,
   lastMessageRef,
   messageKey,
-  voteError,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  voteError: _voteError,
   allowAllAnswersPage,
   showSourcesBelow = false, // Default to showing sources above
 }) => {
   const [likeError, setLikeError] = useState<string | null>(null);
   const { isSudoUser } = useSudo();
+  const voteMutation = useVote();
+
+  // Local state to track current vote status
+  const [currentVotes, setCurrentVotes] =
+    useState<Record<string, number>>(votes);
+
+  // Properly handle voting with our new hook
+  const handleVoteWithHook = (docId: string, isUpvote: boolean) => {
+    // Calculate vote value (1, 0, or -1)
+    const currentVote = currentVotes[docId] || 0;
+    let vote: 0 | 1 | -1;
+
+    if ((isUpvote && currentVote === 1) || (!isUpvote && currentVote === -1)) {
+      vote = 0; // Toggle off if clicked again
+    } else {
+      vote = isUpvote ? 1 : -1;
+    }
+
+    // Update local state immediately for UI feedback
+    setCurrentVotes((prev) => ({
+      ...prev,
+      [docId]: vote,
+    }));
+
+    // Log the event
+    logEvent(
+      isUpvote ? 'upvote_answer' : 'downvote_answer',
+      'Engagement',
+      docId,
+      vote,
+    );
+
+    // Submit to server via mutation
+    voteMutation.mutate({ docId, vote });
+  };
 
   // Handles the like button click, updating the like count and managing errors
   const onLikeButtonClick = (answerId: string, newLikeCount: number) => {
@@ -173,6 +212,37 @@ const MessageItem: React.FC<MessageItemProps> = ({
     return null;
   };
 
+  // Replace the original downvote button implementation
+  const renderDownvoteButton = (docId: string) => {
+    if (!docId) return null;
+
+    const vote = currentVotes[docId] || 0;
+
+    return (
+      <div className="flex items-center">
+        <button
+          onClick={() => handleVoteWithHook(docId, false)}
+          className={`${styles.voteButton} ${
+            vote === -1 ? styles.voteButtonDownActive : ''
+          } hover:bg-gray-200 flex items-center`}
+          title="Downvote (private) for system training"
+          disabled={voteMutation.isPending}
+        >
+          <span className="material-icons text-black">
+            {vote === -1 ? 'thumb_down' : 'thumb_down_off_alt'}
+          </span>
+        </button>
+        {voteMutation.isError && (
+          <span className="text-red-500 text-sm ml-2">
+            {voteMutation.error instanceof Error
+              ? voteMutation.error.message
+              : 'Error voting'}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   return (
     <Fragment key={messageKey}>
       {/* Add a horizontal line between AI messages */}
@@ -261,29 +331,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
                         </span>
                       )}
                     </div>
-                    {/* Downvote button */}
-                    <div className="flex items-center">
-                      <button
-                        onClick={() => handleVote(message.docId ?? '', false)}
-                        className={`${styles.voteButton} ${
-                          votes[message.docId ?? ''] === -1
-                            ? styles.voteButtonDownActive
-                            : ''
-                        } hover:bg-gray-200 flex items-center`}
-                        title="Downvote (private) for system training"
-                      >
-                        <span className="material-icons text-black">
-                          {votes[message.docId ?? ''] === -1
-                            ? 'thumb_down'
-                            : 'thumb_down_off_alt'}
-                        </span>
-                      </button>
-                      {voteError && (
-                        <span className="text-red-500 text-sm ml-2">
-                          {voteError}
-                        </span>
-                      )}
-                    </div>
+                    {/* Use our new downvote button implementation */}
+                    {renderDownvoteButton(message.docId ?? '')}
                   </>
                 )}
             </div>

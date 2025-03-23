@@ -1,7 +1,6 @@
 /**
- * This component renders a paginated list of answers with sorting and filtering options.
- * It handles fetching answers from the API, managing user interactions like liking and deleting answers,
- * and preserving scroll position between page navigations.
+ * This component uses React Query for data fetching with JWT authentication while preserving
+ * scroll position preservation and optimistic updates.
  *
  * Key features:
  * - Pagination with server-side rendering
@@ -10,13 +9,11 @@
  * - Copy link to individual answers
  * - Delete answers (for sudo users only)
  * - Scroll position preservation
- * - Debounced API calls to prevent excessive requests
+ * - JWT authentication with React Query
  */
 
 import Layout from '@/components/layout';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import debounce from 'lodash/debounce';
-import { Answer } from '@/types/answer';
 import { checkUserLikes } from '@/services/likeService';
 import { getOrCreateUUID } from '@/utils/client/uuid';
 import { useRouter } from 'next/router';
@@ -30,6 +27,9 @@ import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { useSudo } from '@/contexts/SudoContext';
 import { SudoProvider } from '@/contexts/SudoContext';
+import { useAnswers } from '@/hooks/useAnswers';
+import { useMutation } from '@tanstack/react-query';
+import { queryFetch } from '@/utils/client/reactQueryConfig';
 
 interface AllAnswersProps {
   siteConfig: SiteConfig | null;
@@ -37,30 +37,92 @@ interface AllAnswersProps {
 
 const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   const router = useRouter();
-  const { sortBy: urlSortBy, page: urlPage } = router.query;
-  const [sortBy, setSortBy] = useState<string>('mostRecent');
-  const [isSortByInitialized, setIsSortByInitialized] = useState(false);
+  const { isSudoUser, checkSudoStatus } = useSudo();
 
-  const [answers, setAnswers] = useState<Answer[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
+  // Parse query parameters
+  const urlPage = router.query.page ? Number(router.query.page) : 1;
+  const urlSortBy = router.query.sortBy || 'mostRecent';
+
+  // UI state
+  const [sortBy, setSortBy] = useState<string>('mostRecent');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [isSortByInitialized, setIsSortByInitialized] = useState(false);
+  const [isChangingPage, setIsChangingPage] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [isRestoringScroll, setIsRestoringScroll] = useState(false);
   const [likeStatuses, setLikeStatuses] = useState<Record<string, boolean>>({});
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
+  const [likeError, setLikeError] = useState<string | null>(null);
 
-  // State to track if the data has been loaded at least once
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  // State to control the delayed spinner visibility
-  const [, setShowDelayedSpinner] = useState(false);
+  // Refs for scroll management
+  const scrollPositionRef = useRef<number>(0);
+  const hasInitiallyFetched = useRef(false);
 
-  const [isRestoringScroll, setIsRestoringScroll] = useState(false);
+  // State for delayed spinner
+  const [showDelayedSpinner, setShowDelayedSpinner] = useState(false);
 
-  const { isSudoUser, checkSudoStatus } = useSudo();
+  // Use React Query for data fetching with JWT authentication
+  const { data, isLoading, error } = useAnswers(currentPage, sortBy, {
+    enabled: isSortByInitialized && router.isReady,
+  });
+
+  // Show delayed spinner for long-running loads
+  useEffect(() => {
+    // Set a timeout to show the spinner after 1.5 seconds
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        setShowDelayedSpinner(true);
+      }
+    }, 1500);
+
+    // Clear the timeout if the component unmounts or isLoading changes to false
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
+  // Set initial load state when data is loaded
+  useEffect(() => {
+    if (data && !hasInitiallyFetched.current) {
+      hasInitiallyFetched.current = true;
+      setInitialLoadComplete(true);
+      setIsRestoringScroll(true);
+
+      // Reset changing page state if needed
+      if (isChangingPage) {
+        setIsChangingPage(false);
+      }
+    }
+  }, [data, isChangingPage]);
+
+  // Extract data from query result
+  const answers = useMemo(() => data?.answers || [], [data?.answers]);
+  const totalPages = useMemo(() => data?.totalPages || 1, [data?.totalPages]);
+
+  // Delete mutation with React Query
+  const deleteMutation = useMutation({
+    mutationFn: async (answerId: string) => {
+      const response = await queryFetch(`/api/answers?answerId=${answerId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const responseData = await response.json();
+        throw new Error(
+          'Failed to delete answer (' + responseData.message + ')',
+        );
+      }
+      return response.json();
+    },
+    onSuccess: (data, answerId) => {
+      logEvent('delete_answer', 'Admin', answerId);
+    },
+    onError: (error) => {
+      console.error('Error deleting answer:', error);
+      alert('Failed to delete answer. Please try again.');
+    },
+  });
 
   // Scroll position management functions
   const saveScrollPosition = () => {
     const scrollY = window.scrollY;
-
     if (scrollY > 0) {
       sessionStorage.setItem('answersScrollPosition', scrollY.toString());
     }
@@ -123,117 +185,19 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     }
   }, [isRestoringScroll, isLoading, initialLoadComplete]);
 
-  // Reset answers when sort order changes
+  // Initialize based on URL parameters
   useEffect(() => {
-    setAnswers([]);
-    setTotalPages(1);
-  }, [sortBy]);
-
-  const currentFetchRef = useRef<(() => void) | null>(null);
-  const hasInitiallyFetched = useRef(false);
-  const hasFetchedLikeStatuses = useRef(false);
-
-  // Function to fetch answers from the API
-  const fetchAnswers = useCallback(
-    async (
-      page: number,
-      currentSortBy: string,
-      isPageChange: boolean = false,
-    ) => {
-      setIsLoading(true);
-      if (isPageChange) {
-        setIsChangingPage(true);
-        setAnswers([]); // Clear answers when changing page
-      }
-
-      try {
-        const answersResponse = await fetch(
-          `/api/answers?page=${page}&limit=10&sortBy=${currentSortBy}`,
-          {
-            method: 'GET',
-          },
-        );
-        if (!answersResponse.ok) {
-          throw new Error(`HTTP error! status: ${answersResponse.status}`);
-        }
-        const data = await answersResponse.json();
-        setAnswers(data.answers);
-        setTotalPages(data.totalPages);
-
-        // Scroll to top after new content is loaded, with a small delay
-        if (isPageChange) {
-          setTimeout(scrollToTop, 100);
-        }
-      } catch (error: Error | unknown) {
-        console.error('Failed to fetch answers:', error);
-        if (error instanceof Error && error.message.includes('429')) {
-          throw new Error('Quota exceeded. Please try again later.');
-        } else {
-          throw new Error('Failed to fetch answers. Please try again.');
-        }
-      } finally {
-        setIsLoading(false);
-        setIsChangingPage(false);
-      }
-    },
-    [],
-  );
-
-  // Debounced version of fetchAnswers to prevent excessive API calls
-  const debouncedFetch = useMemo(
-    () =>
-      debounce(
-        (page: number, sortBy: string, isPageChange: boolean = false) => {
-          if (currentFetchRef.current) {
-            console.log('Fetch already in progress, skipping');
-            return;
-          }
-
-          currentFetchRef.current = () => {
-            return fetchAnswers(page, sortBy, isPageChange).finally(() => {
-              currentFetchRef.current = null;
-              if (!hasInitiallyFetched.current) {
-                hasInitiallyFetched.current = true;
-                setInitialLoadComplete(true);
-                setIsRestoringScroll(true);
-              }
-            });
-          };
-
-          // Execute the fetch
-          if (currentFetchRef.current) {
-            currentFetchRef.current();
-          }
-        },
-        300,
-      ),
-    [fetchAnswers],
-  );
-
-  // Cancel debounced fetch on unmount
-  useEffect(() => {
-    return () => {
-      if (debouncedFetch) {
-        debouncedFetch.cancel();
-      }
-    };
-  }, [debouncedFetch]);
-
-  // Initial fetch when component mounts or URL parameters change
-  useEffect(() => {
-    if (router.isReady && debouncedFetch) {
+    if (router.isReady) {
       const pageFromUrl = Number(urlPage) || 1;
       const sortByFromUrl = (urlSortBy as string) || 'mostRecent';
 
       setSortBy(sortByFromUrl);
       setCurrentPage(pageFromUrl);
       setIsSortByInitialized(true);
-
-      debouncedFetch(pageFromUrl, sortByFromUrl);
     }
-  }, [router.isReady, urlPage, urlSortBy, debouncedFetch]);
+  }, [router.isReady, urlPage, urlSortBy]);
 
-  // Function to update URL with current page and sort order
+  // Update URL with current page and sort order
   const updateUrl = useCallback(
     (page: number, sortBy: string) => {
       if (router.isReady) {
@@ -283,29 +247,18 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     updateUrl,
   ]);
 
-  // Show delayed spinner for long-running loads
-  useEffect(() => {
-    // Set a timeout to show the spinner after 1.5 seconds
-    const timer = setTimeout(() => {
-      if (isLoading) {
-        setShowDelayedSpinner(true);
-      }
-    }, 1500);
-
-    // Clear the timeout if the component unmounts or isLoading changes to false
-    return () => clearTimeout(timer);
-  }, [isLoading]);
-
   // Fetch like statuses for answers
   useEffect(() => {
-    const fetchLikeStatuses = async (answerIds: string[]) => {
-      if (hasFetchedLikeStatuses.current) return;
+    const fetchLikeStatuses = async () => {
+      if (answers.length === 0) return;
 
       try {
         const uuid = getOrCreateUUID();
+        const answerIds = answers.map((answer) => answer.id);
         const statuses = await checkUserLikes(answerIds, uuid);
-        setLikeStatuses((prevStatuses) => ({ ...prevStatuses, ...statuses }));
-        hasFetchedLikeStatuses.current = true;
+
+        // Important: replace the state entirely, don't merge with previous
+        setLikeStatuses(statuses);
       } catch (error) {
         console.error('Error fetching like statuses:', error);
         setLikeError(
@@ -317,26 +270,27 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
       }
     };
 
-    if (answers.length > 0 && !hasFetchedLikeStatuses.current) {
-      fetchLikeStatuses(answers.map((answer) => answer.id));
-    }
+    fetchLikeStatuses();
   }, [answers]);
 
-  const [likeError, setLikeError] = useState<string | null>(null);
-
   // Handle like count changes
-  const handleLikeCountChange = (answerId: string, newLikeCount: number) => {
+  const handleLikeCountChange = (answerId: string) => {
     try {
-      setAnswers((prevAnswers) => {
-        const updatedAnswers = prevAnswers.map((answer) => {
-          if (answer.id === answerId) {
-            return { ...answer, likeCount: newLikeCount };
-          }
-          return answer;
-        });
-        return updatedAnswers;
+      // Update the like status immediately (don't wait for server refresh)
+      const newLikeStatus = !likeStatuses[answerId];
+
+      // Create a new object to ensure React detects the state change
+      setLikeStatuses({
+        ...likeStatuses,
+        [answerId]: newLikeStatus,
       });
+
+      // Log the event
       logEvent('like_answer', 'Engagement', answerId);
+
+      // Don't refresh like statuses immediately - let the component state handle it
+      // The status will be refreshed on the next page load anyway
+      // This avoids the blinking effect
     } catch (error) {
       setLikeError(
         error instanceof Error ? error.message : 'An error occurred',
@@ -346,26 +300,9 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   };
 
   // Handle answer deletion (for sudo users only)
-  const handleDelete = async (answerId: string) => {
+  const handleDelete = (answerId: string) => {
     if (confirm('Are you sure you want to delete this answer?')) {
-      try {
-        const response = await fetch(`/api/answers?answerId=${answerId}`, {
-          method: 'DELETE',
-        });
-        const responseData = await response.json();
-        if (!response.ok) {
-          throw new Error(
-            'Failed to delete answer (' + responseData.message + ')',
-          );
-        }
-        setAnswers((prevAnswers) =>
-          prevAnswers.filter((answer) => answer.id !== answerId),
-        );
-        logEvent('delete_answer', 'Admin', answerId);
-      } catch (error) {
-        console.error('Error deleting answer:', error);
-        alert('Failed to delete answer. Please try again.');
-      }
+      deleteMutation.mutate(answerId);
     }
   };
 
@@ -373,21 +310,17 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   const handleSortChange = (newSortBy: string) => {
     if (newSortBy !== sortBy) {
       scrollToTop(); // Scroll to top immediately
-      setAnswers([]);
-      setCurrentPage(1);
-      setTotalPages(1);
       setSortBy(newSortBy);
+      setCurrentPage(1);
       updateUrl(1, newSortBy);
       setIsChangingPage(true);
-
-      if (debouncedFetch) {
-        debouncedFetch(1, newSortBy, true);
-      } else {
-        console.warn('debouncedFetch is null in handleSortChange');
-        fetchAnswers(1, newSortBy, true);
-      }
-
       logEvent('change_sort', 'UI', newSortBy);
+
+      // With React Query, we don't need to manually call fetch as it will
+      // automatically refetch when dependencies change. However, we need to
+      // reset the UI state to show loading state.
+      setInitialLoadComplete(false);
+      hasInitiallyFetched.current = false;
     }
   };
 
@@ -401,27 +334,24 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     });
   };
 
-  // Track if we're changing pages
-  const [isChangingPage, setIsChangingPage] = useState(false);
-
   // Handle page change
   const handlePageChange = (newPage: number) => {
+    if (newPage === currentPage) return;
+
     scrollToTop();
     setIsChangingPage(true);
-    setAnswers([]);
     setCurrentPage(newPage);
     sessionStorage.removeItem('answersScrollPosition');
     updateUrl(newPage, sortBy);
     logEvent('change_answers_page', 'UI', `page:${newPage}`);
 
-    setTimeout(() => {
-      if (debouncedFetch) {
-        debouncedFetch(newPage, sortBy, true);
-      } else {
-        console.warn('debouncedFetch is null in handlePageChange');
-        fetchAnswers(newPage, sortBy, true);
-      }
-    }, 0);
+    // React Query will handle the data fetching when currentPage changes
+    // We just need to reset some UI state
+    setInitialLoadComplete(false);
+    hasInitiallyFetched.current = false;
+
+    // Save current scroll position
+    scrollPositionRef.current = 0;
   };
 
   // Check sudo status on component mount
@@ -456,10 +386,21 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
           {(isLoading && !initialLoadComplete) || isChangingPage ? (
             <div className="flex justify-center items-center h-screen">
               <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
-              <p className="text-lg text-gray-600 ml-4">Loading...</p>
+              <p className="text-lg text-gray-600 ml-4">
+                {showDelayedSpinner ? 'Still loading...' : 'Loading...'}
+              </p>
             </div>
           ) : (
             <div key={`${currentPage}-${sortBy}`}>
+              {/* Error state */}
+              {error && (
+                <div className="text-red-500 text-center my-6">
+                  {error instanceof Error
+                    ? error.message
+                    : 'Error loading answers'}
+                </div>
+              )}
+
               {/* List of answers */}
               <div>
                 {answers.map((answer) => (
@@ -478,7 +419,14 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
                 ))}
               </div>
 
-              {/* Only render pagination controls when answers are loaded */}
+              {/* Empty state */}
+              {answers.length === 0 && !isLoading && !error && (
+                <div className="text-center py-8">
+                  <p>No answers found.</p>
+                </div>
+              )}
+
+              {/* Pagination controls */}
               {answers.length > 0 && (
                 <div className="flex justify-center mt-4">
                   <button
@@ -503,10 +451,18 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
             </div>
           )}
         </div>
-        {/* Error message display */}
+
+        {/* Error messages */}
         {likeError && (
           <div className="text-red-500 text-sm mt-2 text-center">
             {likeError}
+          </div>
+        )}
+        {deleteMutation.isError && (
+          <div className="text-red-500 text-sm mt-2 text-center">
+            {deleteMutation.error instanceof Error
+              ? deleteMutation.error.message
+              : 'Failed to delete answer'}
           </div>
         )}
       </Layout>

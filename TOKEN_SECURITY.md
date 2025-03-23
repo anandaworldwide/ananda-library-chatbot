@@ -88,3 +88,86 @@ Option 2 is recommended as it automatically derives the WordPress token from the
 
 - Use the WordPress admin "Secure API Test" page to test the WordPress integration
 - Visit the `/api-demo` page to test the web frontend integration
+
+## JWT Authentication Implementation
+
+This project implements JWT authentication for secure API access. This document outlines the key components
+and patterns used.
+
+### Core Components
+
+#### Server-Side
+
+- **JWT Middleware**: `/utils/server/jwtUtils.ts` provides the `withJwtAuth` HOC to secure API endpoints.
+- **Secured Endpoints**: All API endpoints in `/pages/api/` are protected with JWT authentication.
+
+#### Client-Side
+
+- **React Query Configuration**: `/utils/client/reactQueryConfig.ts` includes JWT handling for all API requests.
+- **Auth Hooks**:
+  - `useAnswers`: Fetches paginated answers with authentication
+  - `useLike`: Manages liking answers
+  - `useVote`: Handles voting on messages
+
+### How It Works
+
+1. **Authentication Flow**:
+
+   - JWTs are issued upon login/authentication
+   - Tokens are stored securely and included with each API request
+   - Protected API routes validate tokens before processing requests
+
+2. **Data Fetching Pattern**:
+
+   - React Query handles all data fetching, caching, and error handling
+   - The custom `queryFetch` function automatically adds authentication headers
+   - Hooks provide a clean API for components
+
+3. **Error Handling**:
+   - Auth errors (401/403) are caught and handled appropriately
+   - The system provides feedback for authentication failures
+
+### Using the Auth System
+
+#### Securing API Routes
+
+```typescript
+// Example of securing an API route
+import { withJwtAuth } from '@/utils/server/jwtUtils';
+
+// Your handler function
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Your implementation here
+}
+
+// Export with JWT auth middleware
+export default withJwtAuth(handler);
+```
+
+#### Using Data Hooks in Components
+
+```typescript
+// Example of using hooks in a component
+import { useAnswers, useLike } from '@/hooks';
+
+function MyComponent() {
+  // Fetch data with authentication
+  const { data, isLoading } = useAnswers(1, 'mostRecent');
+
+  // Handle liking
+  const likeMutation = useLike();
+
+  const handleLike = (answerId) => {
+    likeMutation.mutate({ answerId, like: true });
+  };
+
+  // Rest of component...
+}
+```
+
+### JWT Auth Security Considerations
+
+- JWTs are signed with a secret key to prevent tampering
+- Tokens have a limited lifespan to reduce risk from token theft
+- API endpoints verify token validity before processing requests
+- The system implements rate limiting to prevent abuse

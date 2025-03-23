@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { db } from '@/services/firebase';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { isDevelopment } from '@/utils/env';
 
 interface ComparisonVote {
@@ -88,4 +89,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiMiddleware(handler);
+export default withApiMiddleware(withJwtAuth(handler));

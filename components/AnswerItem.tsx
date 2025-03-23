@@ -15,10 +15,11 @@ import { SiteConfig } from '@/types/siteConfig';
 import markdownStyles from '@/styles/MarkdownStyles.module.css';
 import { DocMetadata } from '@/types/DocMetadata';
 import { Document } from 'langchain/document';
+import { logEvent } from '@/utils/client/analytics';
 
 interface AnswerItemProps {
   answer: Answer;
-  handleLikeCountChange: (answerId: string, newLikeCount: number) => void;
+  handleLikeCountChange?: (answerId: string) => void;
   handleCopyLink: (answerId: string) => void;
   handleDelete?: (answerId: string) => void;
   linkCopied: string | null;
@@ -69,10 +70,23 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
     return title.length > maxLength ? `${title.slice(0, maxLength)}...` : title;
   };
 
-  // Handles the like button click, updating the like count and managing errors
-  const onLikeButtonClick = (answerId: string, newLikeCount: number) => {
+  // Handle the like button click
+  const onLikeButtonClick = (
+    answerId: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    likeCount: number,
+  ) => {
     try {
-      handleLikeCountChange(answerId, newLikeCount);
+      // Call the passed handler for parent component updates
+      if (handleLikeCountChange) {
+        handleLikeCountChange(answerId);
+      }
+
+      // Note: likeCount parameter is received but not used in this component
+      // as we only need to update the parent about which answer was liked
+
+      // Log the event
+      logEvent('like_answer', 'Engagement', answerId);
     } catch (error) {
       setLikeError(
         error instanceof Error ? error.message : 'An error occurred',

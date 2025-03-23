@@ -1,9 +1,13 @@
+// This file handles API requests for the contact form.
+// It validates inputs, rate limits submissions, and sends emails via AWS SES.
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 import validator from 'validator';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 
 const ses = new SESClient({
   credentials: {
@@ -86,4 +90,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiMiddleware(handler);
+export default withApiMiddleware(withJwtAuth(handler));

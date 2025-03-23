@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getOrCreateUUID } from '@/utils/client/uuid';
 import { updateLike } from '@/services/likeService';
 
@@ -17,40 +17,85 @@ const LikeButton: React.FC<LikeButtonProps> = ({
   onLikeCountChange,
   showLikeCount = true,
 }) => {
-  const [isLiked, setIsLiked] = useState(initialLiked);
-  const [likes, setLikes] = useState(likeCount);
+  // Use a ref to track if this is the first render
+  const isFirstRender = useRef(true);
+
+  // Add a ref to track if we're in the middle of a like action to prevent flicker
+  const isLikeInProgress = useRef(false);
+
+  // Initialize state from props
+  const [isLiked, setIsLiked] = useState<boolean>(initialLiked);
+  const [likes, setLikes] = useState<number>(likeCount);
   const [animate, setAnimate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // IMPORTANT: Force reset the local state whenever initialLiked changes
+  // BUT ONLY if we're not in the middle of a like action
   useEffect(() => {
-    setIsLiked(initialLiked);
-  }, [initialLiked]);
+    const wasFirstRender = isFirstRender.current;
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+    }
 
+    // Only update if we're not in the middle of a like action
+    if (!isLikeInProgress.current) {
+      // Only update if it's not the first render or initialLiked has changed
+      if (!wasFirstRender && isLiked !== initialLiked) {
+        setIsLiked(initialLiked);
+      }
+    }
+  }, [initialLiked, answerId, isLiked]);
+
+  // Update like count when the prop changes, but only if we're not in the middle of a like action
   useEffect(() => {
-    setLikes(likeCount);
-  }, [likeCount]);
+    if (!isLikeInProgress.current && likeCount !== likes) {
+      setLikes(likeCount);
+    }
+  }, [likeCount, answerId, likes]);
 
   const handleLike = async () => {
-    const uuid = getOrCreateUUID();
+    // Set flag to prevent external prop changes from conflicting with our action
+    isLikeInProgress.current = true;
+
     const newLikedState = !isLiked;
+    const uuid = getOrCreateUUID();
+
+    // Update local state immediately - user needs immediate feedback
     setIsLiked(newLikedState);
     setAnimate(true);
     setTimeout(() => setAnimate(false), 300);
 
+    const newLikeCount = newLikedState ? likes + 1 : Math.max(0, likes - 1);
+    setLikes(newLikeCount);
+
     try {
+      // Notify parent about the change - pass the answerId and the new like count
+      onLikeCountChange(answerId, newLikeCount);
+
+      // Save to the server
       await updateLike(answerId, uuid, newLikedState);
-      onLikeCountChange(answerId, newLikedState ? likes + 1 : likes - 1);
-      setLikes((prevLikes) => (newLikedState ? prevLikes + 1 : prevLikes - 1));
+
+      // Short delay to let the server update complete
+      setTimeout(() => {
+        isLikeInProgress.current = false;
+      }, 500);
     } catch (error) {
       console.error('LikeButton: Like error:', error);
+
+      // Revert local state
       setIsLiked(!newLikedState);
+      setLikes(newLikedState ? likes : likes + 1);
+
+      // Show error
       setError(error instanceof Error ? error.message : 'An error occurred');
       setTimeout(() => setError(null), 3000);
-      // Revert the like count if there's an error
-      setLikes((prevLikes) => (newLikedState ? prevLikes - 1 : prevLikes + 1));
+
+      // Clear in-progress flag
+      isLikeInProgress.current = false;
     }
   };
 
+  // Render the button
   return (
     <div className="like-container flex items-center space-x-1">
       <span className="text-sm text-gray-500">Found this helpful?</span>

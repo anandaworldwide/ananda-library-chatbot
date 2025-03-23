@@ -1,8 +1,14 @@
+// This file handles API requests for recording user votes on answers.
+// It implements rate limiting to prevent abuse and uses JWT authentication for security.
+// The endpoint accepts POST requests with document ID and vote value, updating the vote in Firestore.
+// Vote values can be: 1 (upvote), 0 (neutral), or -1 (downvote).
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { db } from '@/services/firebase';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -43,4 +49,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiMiddleware(handler);
+export default withApiMiddleware(withJwtAuth(handler));

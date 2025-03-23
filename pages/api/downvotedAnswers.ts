@@ -1,8 +1,12 @@
+// This file handles API requests for fetching downvoted answers.
+// It is used by the admin interface to review and manage answers that have been downvoted by users.
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { db } from '@/services/firebase';
 import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -51,4 +55,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiMiddleware(handler);
+export default withApiMiddleware(withJwtAuth(handler));

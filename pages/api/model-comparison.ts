@@ -1,3 +1,6 @@
+// This file handles API requests for comparing responses from different AI models.
+// It receives a query and model configurations, then returns responses from both models.
+
 import { NextApiRequest, NextApiResponse } from 'next';
 import { makeChain } from '@/utils/server/makechain';
 import { getPineconeClient } from '@/utils/server/pinecone-client';
@@ -7,6 +10,8 @@ import { StreamingResponseData } from '@/types/StreamingResponseData';
 import { Document } from 'langchain/document';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
+import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withJwtAuth } from '@/utils/server/jwtUtils';
 
 // Define a type for our filter
 type PineconeFilter = {
@@ -17,10 +22,7 @@ type PineconeFilter = {
   }>;
 };
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
@@ -149,3 +151,5 @@ export default async function handler(
       .json({ message: 'An error occurred during model comparison' });
   }
 }
+
+export default withApiMiddleware(withJwtAuth(handler));
