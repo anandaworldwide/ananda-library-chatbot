@@ -145,12 +145,21 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 
 #### Problems to fix
 
-- [x] Page http://localhost:3000/answers/KmwScoOA5UjgK9skztRy never loads. Forever spinner.
-- [x] Error checking likes error message on http://localhost:3000/answers/w3hJk41nYilraggcjzay Front end message "an error occurred while checking likes" ... also on /answers page
-- [x] Forever spinner on load of http://localhost:3000/answers?sortBy=mostPopular
-- [ ] http://localhost:3000/admin/downvotes: "Error: Failed to fetch downvoted answers"
-- [ ] POST http://localhost:3000/api/model-comparison-vote: 401 Unauthorized - No token provided
-- [ ] POST http://localhost:3000/api/contact - No token provided. NOT Fixed by updating contact form to use queryFetch with JWT auth
+##### These seem to need to use fetchWithAuth instead of fetch
+
+- [ ] ./contexts/SudoContext.tsx
+- [ ] ./components/Navbar.tsx
+- [ ] ./components/AudioPlayer.tsx
+- [ ] ./components/SecureDataFetcher.tsx
+- [ ] ./components/ModelComparisonChat.tsx
+- [ ] ./components/DownvotedAnswerReview.tsx
+- [ ] ./components/NPSSurvey.tsx
+- [ ] ./components/Header/BaseHeader.tsx
+- [ ] ./pages/index.tsx
+- [ ] ./pages/login.tsx
+- [ ] ./pages/bless.tsx
+- [ ] ./pages/admin/model-stats.tsx
+- [ ] ./pages/stats.tsx
 
 #### Authentication Improvements
 

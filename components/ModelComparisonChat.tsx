@@ -404,7 +404,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
   const handleSkipAndNew = async () => {
     logEvent(`${PAGE}_skip`, PAGE, 'Skip and Try New');
     try {
-      await fetch('/api/model-comparison-vote', {
+      await fetchWithAuth('/api/model-comparison-vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -440,7 +440,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
     if (!selectedWinner) return;
 
     try {
-      const response = await fetch('/api/model-comparison-vote', {
+      const response = await fetchWithAuth('/api/model-comparison-vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -482,7 +482,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
 
   const handleExport = async () => {
     try {
-      const response = await fetch('/api/model-comparison-export');
+      const response = await fetchWithAuth('/api/model-comparison-export');
       if (response.status === 403) {
         setError('Unauthorized: Sudo access required');
         return;

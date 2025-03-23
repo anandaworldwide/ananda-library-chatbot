@@ -1,45 +1,16 @@
-import { useState, useEffect } from 'react';
 import Layout from '@/components/layout';
 import DownvotedAnswerReview from '@/components/DownvotedAnswerReview';
-import { Answer } from '@/types/answer';
 import { SiteConfig } from '@/types/siteConfig';
 import { SudoProvider } from '@/contexts/SudoContext';
+import { useDownvotedAnswers } from '@/hooks/useAnswers';
+import { Answer } from '@/types/answer';
 
 interface DownvotesReviewProps {
   siteConfig: SiteConfig | null;
 }
 
 const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
-  const [downvotedAnswers, setDownvotedAnswers] = useState<Answer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchDownvotedAnswers = async () => {
-      try {
-        const response = await fetch('/api/downvotedAnswers');
-        if (response.ok) {
-          const data = await response.json();
-          const answersWithFixedDates = data.map((answer: Answer) => ({
-            ...answer,
-            timestamp: answer.timestamp,
-          }));
-          setDownvotedAnswers(answersWithFixedDates);
-          setError(null);
-        } else {
-          const errorData = await response.json().catch(() => null);
-          setError(errorData?.message || 'Failed to fetch downvoted answers');
-        }
-      } catch (error) {
-        console.error('Error fetching downvoted answers:', error);
-        setError('Failed to fetch downvoted answers');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchDownvotedAnswers();
-  }, []);
+  const { data: downvotedAnswers, isLoading, error } = useDownvotedAnswers();
 
   if (isLoading) {
     return (
@@ -63,7 +34,12 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
     return (
       <SudoProvider>
         <Layout siteConfig={siteConfig}>
-          <div className="text-red-600">Error: {error}</div>
+          <div className="text-red-600">
+            Error:{' '}
+            {error instanceof Error
+              ? error.message
+              : 'Failed to fetch downvoted answers'}
+          </div>
         </Layout>
       </SudoProvider>
     );
@@ -73,11 +49,11 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
     <SudoProvider>
       <Layout siteConfig={siteConfig}>
         <h1 className="text-2xl font-bold mb-4">Review Downvoted Answers</h1>
-        {downvotedAnswers.length === 0 ? (
+        {!downvotedAnswers || downvotedAnswers.length === 0 ? (
           <p>No downvoted answers to review.</p>
         ) : (
           <div className="space-y-6">
-            {downvotedAnswers.map((answer) => (
+            {downvotedAnswers.map((answer: Answer) => (
               <DownvotedAnswerReview
                 key={answer.id}
                 answer={answer}
