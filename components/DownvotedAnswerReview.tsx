@@ -5,6 +5,7 @@ import TruncatedMarkdown from './TruncatedMarkdown';
 import SourcesList from './SourcesList';
 import { useMultipleCollections } from '../hooks/useMultipleCollections';
 import { SiteConfig } from '../types/siteConfig';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 interface DownvotedAnswerReviewProps {
   answer: Answer;
@@ -26,7 +27,7 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
   const handleReview = async (newAction: AdminAction) => {
     try {
       const updatedAction = adminAction === newAction ? undefined : newAction;
-      const response = await fetch('/api/adminAction', {
+      const response = await fetchWithAuth('/api/adminAction', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

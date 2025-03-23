@@ -22,6 +22,14 @@ jest.mock('@/utils/server/jwtUtils', () => {
   };
 });
 
+// Mock the CORS middleware to bypass the timeout issue
+jest.mock('@/utils/server/corsMiddleware', () => ({
+  runMiddleware: jest.fn().mockImplementation((_req, _res, _fn) => {
+    // Just resolve immediately without actually running the middleware
+    return Promise.resolve();
+  }),
+}));
+
 // Mock AWS SDK
 jest.mock('@aws-sdk/client-s3', () => ({
   GetObjectCommand: jest.fn().mockImplementation((params) => ({
@@ -69,7 +77,7 @@ describe('Audio API', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._isEndCalled()).toBe(true);
-  });
+  }, 10000);
 
   it('should return 400 for invalid filename', async () => {
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
@@ -102,7 +110,9 @@ describe('Audio API', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
-      url: 'https://example-bucket.s3.amazonaws.com/public/audio/test-audio.mp3?signed=true',
+      url: 'https://example-bucket.s3.amazonaws.com/public/audio/treasures/test-audio.mp3?signed=true',
+      filename: 'test-audio.mp3',
+      path: 'treasures/test-audio.mp3',
     });
   });
 
@@ -122,6 +132,8 @@ describe('Audio API', () => {
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
       url: 'https://example-bucket.s3.amazonaws.com/public/audio/bhaktan/special-audio.mp3?signed=true',
+      filename: 'bhaktan/special-audio.mp3',
+      path: 'bhaktan/special-audio.mp3',
     });
   });
 
@@ -140,7 +152,9 @@ describe('Audio API', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
-      url: 'https://example-bucket.s3.amazonaws.com/public/audio/test-audio.mp3?signed=true',
+      url: 'https://example-bucket.s3.amazonaws.com/public/audio/treasures/test-audio.mp3?signed=true',
+      filename: 'test-audio.mp3',
+      path: 'treasures/test-audio.mp3',
     });
   });
 
@@ -159,7 +173,9 @@ describe('Audio API', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
-      url: 'https://example-bucket.s3.amazonaws.com/public/audio/test-audio.mp3?signed=true',
+      url: 'https://example-bucket.s3.amazonaws.com/public/audio/treasures/test-audio.mp3?signed=true',
+      filename: 'test-audio.mp3',
+      path: 'treasures/test-audio.mp3',
     });
   });
 

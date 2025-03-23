@@ -13,6 +13,7 @@
  */
 
 import React, { useState } from 'react';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 /**
  * Interface for the secure data response from the API
@@ -61,7 +62,7 @@ export const SecureDataFetcher = () => {
     try {
       // Get a token from the proxy endpoint
       // This keeps sensitive secrets on the server side
-      const response = await fetch('/api/web-token');
+      const response = await fetchWithAuth('/api/web-token');
 
       if (!response.ok) {
         throw new Error('Failed to fetch token');
@@ -98,7 +99,7 @@ export const SecureDataFetcher = () => {
 
     try {
       // Make the authenticated request with the token
-      const response = await fetch('/api/secure-data', {
+      const response = await fetchWithAuth('/api/secure-data', {
         headers: {
           Authorization: `Bearer ${token}`,
         },

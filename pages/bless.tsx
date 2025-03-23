@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useSudo } from '@/contexts/SudoContext';
 import validator from 'validator';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 const SudoPage: React.FC = () => {
   const [password, setPassword] = useState('');
@@ -26,7 +27,7 @@ const SudoPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch('/api/sudoCookie', {
+      const response = await fetchWithAuth('/api/sudoCookie', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -45,7 +46,7 @@ const SudoPage: React.FC = () => {
 
   const handleRemoveBlessed = async () => {
     try {
-      const response = await fetch('/api/sudoCookie', {
+      const response = await fetchWithAuth('/api/sudoCookie', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

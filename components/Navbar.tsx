@@ -1,13 +1,14 @@
 import { useRouter } from 'next/router';
 import Cookies from 'js-cookie';
 import Link from 'next/link';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 const Navbar = () => {
   const router = useRouter();
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
-    await fetch('/api/logout', {
+    await fetchWithAuth('/api/logout', {
       method: 'POST',
     });
     Cookies.remove('siteAuth');
@@ -33,7 +34,9 @@ const Navbar = () => {
           </Link>
         </li>
         <li>
-          <a href="#" onClick={handleLogout}>Logout</a>
+          <a href="#" onClick={handleLogout}>
+            Logout
+          </a>
         </li>
       </ul>
     </nav>

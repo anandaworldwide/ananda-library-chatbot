@@ -56,11 +56,32 @@ export function AudioPlayer({
         throw new Error('Invalid audio source');
       }
 
-      const response = await fetch(`/api/audio/${encodeURIComponent(src)}`);
+      // Clean the src path to ensure proper formatting
+      const cleanSrc = src.replace(/^\/+/, '').replace(/^api\/audio\//, '');
+
+      // Log the API call for debugging
+      console.log(`Fetching audio: /api/audio/${encodeURIComponent(cleanSrc)}`);
+
+      const response = await fetch(
+        `/api/audio/${encodeURIComponent(cleanSrc)}`,
+      );
       if (!response.ok) {
-        throw new Error('Failed to fetch audio URL');
+        console.error('Audio API error:', response.status, response.statusText);
+        throw new Error(`Failed to fetch audio URL: ${response.status}`);
       }
+
       const data = await response.json();
+      console.log('Audio API response:', data);
+
+      if (!data.url) {
+        throw new Error('Audio URL not found in response');
+      }
+
+      // Log the actual path that was used
+      if (data.path) {
+        console.log(`Audio path resolved to: ${data.path}`);
+      }
+
       setAudioUrl(data.url);
       setError(null);
       setIsLoaded(true);

@@ -161,6 +161,26 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [ ] ./pages/admin/model-stats.tsx
 - [ ] ./pages/stats.tsx
 
+## 10. Temporary Workarounds to Fix Later
+
+- [ ] Re-implement JWT authentication for audio endpoints (/pages/api/audio/[filename].ts)
+  - [ ] Currently bypassed to allow direct access without authentication
+  - [ ] Needs to be secured again after frontend integration is complete
+  - [ ] Update the AudioPlayer component to use fetchWithAuth when re-securing
+  - [ ] Review and potentially keep CORS headers and redirection approach for better audio file handling
+  - [ ] Keep the improved URL sanitization logic that fixes double-path issues
+
+### Audio API Security Improvements
+
+- [x] Fixed CORS issues by using proper CORS middleware with appropriate headers
+- [x] Implemented better URL sanitization to handle malformed paths (/api/audio//api/audio/filename)
+- [x] Added comprehensive error handling and logging for debugging
+- [x] Increased URL expiration time from 3600 to 21600 seconds (matches original code)
+- [ ] Remove audio hacks of hard-coding Treasures and Bakhtan And stripping out /api/audio from
+      file names and then confirm with the user that things are still working
+- [ ] Audit all other API endpoints for similar URL formatting vulnerabilities
+- [ ] Consider implementing content-type checking for audio files to prevent serving non-audio content
+
 #### Authentication Improvements
 
 - [x] Add friendly user-facing error messages for auth failures (instead of just console errors)

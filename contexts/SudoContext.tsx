@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 interface SudoContextType {
   isSudoUser: boolean;
@@ -16,7 +17,7 @@ export const SudoProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const checkSudoStatus = async () => {
     try {
-      const response = await fetch('/api/sudoCookie', {
+      const response = await fetchWithAuth('/api/sudoCookie', {
         method: 'GET',
         credentials: 'include',
       });

@@ -8,6 +8,7 @@ import Toast from '@/components/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logEvent } from '@/utils/client/analytics';
 import validator from 'validator';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 interface NPSSurveyProps {
   siteConfig: SiteConfig;
@@ -124,7 +125,7 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({
     };
 
     try {
-      const response = await fetch('/api/submitNpsSurvey', {
+      const response = await fetchWithAuth('/api/submitNpsSurvey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(surveyData),

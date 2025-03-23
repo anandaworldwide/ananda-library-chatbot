@@ -4,6 +4,7 @@ import Cookies from 'js-cookie';
 import { logEvent } from '@/utils/client/analytics';
 import { HeaderConfig } from '@/types/siteConfig';
 import { isDevelopment } from '@/utils/env';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 interface BaseHeaderProps {
   config: HeaderConfig;
@@ -26,7 +27,7 @@ export default function BaseHeader({
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
-    await fetch('/api/logout', { method: 'POST' });
+    await fetchWithAuth('/api/logout', { method: 'POST' });
     Cookies.remove('siteAuth');
     Cookies.remove('isLoggedIn');
     router.push('/');
