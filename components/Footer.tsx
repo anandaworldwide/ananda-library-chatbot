@@ -43,6 +43,13 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
               Manage Blessing
               <span className="material-icons text-sm ml-1">auto_fix_high</span>
             </Link>
+            <Link
+              href="/stats"
+              className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
+            >
+              Statistics
+              <span className="material-icons text-sm ml-1">trending_up</span>
+            </Link>
             {!siteConfig?.enableModelComparison && (
               <Link
                 href="/compare-models"

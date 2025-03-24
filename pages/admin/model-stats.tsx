@@ -5,6 +5,7 @@ import { GetServerSideProps } from 'next';
 import { loadSiteConfig } from '@/utils/server/loadSiteConfig';
 import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
 import { NextApiRequest } from 'next';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 interface ModelComparison {
   id: string;
@@ -62,7 +63,7 @@ const ModelStats = ({ siteConfig }: ModelStatsProps) => {
     const fetchComparisons = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(
+        const response = await fetchWithAuth(
           `/api/model-comparison-data?page=${currentPage}&limit=10`,
         );
         if (!response.ok) throw new Error('Failed to fetch comparisons');

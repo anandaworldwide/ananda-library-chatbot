@@ -4,6 +4,7 @@
 import { SiteConfig } from '@/types/siteConfig';
 import { useState, useEffect } from 'react';
 import Layout from '@/components/layout';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 // Structure for the statistics data
 interface StatsData {
@@ -38,7 +39,7 @@ const Stats = ({ siteConfig }: StatsProps) => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('/api/stats');
+        const response = await fetchWithAuth('/api/stats');
         if (!response.ok) {
           throw new Error('Failed to fetch stats');
         }
