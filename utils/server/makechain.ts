@@ -320,15 +320,10 @@ export const makeChain = async (
   const { model, temperature, label } = modelConfig;
   let languageModel: BaseLanguageModel;
 
-  // Normalizes includedLibraries from site config: converts string library names to objects
-  // with default weight 1, while preserving weighted objects for proportional source retrieval.
-  const rawIncludedLibraries: Array<
-    string | { name: string; weight?: number }
-  > = siteConfig[siteId]?.includedLibraries || [];
-  const includedLibraries = rawIncludedLibraries.map((lib) =>
-    typeof lib === 'string' ? { name: lib, weight: 1 } : lib,
-  );
-  const sourcesDistribution = calculateSources(sourceCount, includedLibraries);
+  // If includedLibraries has weights, then preserves weighted objects for proportional source
+  // retrieval. Otherwise, it
+  const includedLibraries: Array<string | { name: string; weight?: number }> =
+    siteConfig[siteId]?.includedLibraries || [];
 
   try {
     // Initialize the language model
@@ -369,6 +364,8 @@ export const makeChain = async (
     async (input: AnswerChainInput) => {
       const retrievalStartTime = Date.now();
       const allDocuments: Document[] = [];
+
+      // If no libraries specified or they don't have weights, use a single query
       if (!includedLibraries || includedLibraries.length === 0) {
         const docs = await retriever.vectorStore.similaritySearch(
           input.question,
@@ -377,37 +374,78 @@ export const makeChain = async (
         );
         allDocuments.push(...docs);
       } else {
-        // Create an array of retrieval promises to execute in parallel
-        const retrievalPromises = sourcesDistribution
-          .filter(({ sources }) => sources > 0)
-          .map(async ({ name, sources }) => {
-            const libraryStartTime = Date.now();
-            const docs = await retrieveDocumentsByLibrary(
-              retriever,
-              name,
-              sources,
-              input.question,
-              baseFilter,
-            );
+        // Check if we have weights
+        const hasWeights = includedLibraries.some(
+          (lib) => typeof lib === 'object' && lib !== null,
+        );
 
-            // Only log each library once to prevent duplication
-            if (!loggedLibraries.has(name)) {
-              loggedLibraries.add(name);
-              console.log(
-                `Library ${name} retrieval took ${Date.now() - libraryStartTime}ms for ${docs.length} documents`,
+        if (hasWeights) {
+          // Use the weighted distribution with parallel queries only when we have weights
+          // Create an array of retrieval promises to execute in parallel
+          const sourcesDistribution = calculateSources(
+            sourceCount,
+            includedLibraries as { name: string; weight?: number }[],
+          );
+          const retrievalPromises = sourcesDistribution
+            .filter(({ sources }) => sources > 0)
+            .map(async ({ name, sources }) => {
+              const libraryStartTime = Date.now();
+              const docs = await retrieveDocumentsByLibrary(
+                retriever,
+                name,
+                sources,
+                input.question,
+                baseFilter,
               );
-            }
-            return docs;
+
+              // Only log each library once to prevent duplication
+              if (!loggedLibraries.has(name)) {
+                loggedLibraries.add(name);
+                console.log(
+                  `Library ${name} retrieval took ${Date.now() - libraryStartTime}ms for ${docs.length} documents`,
+                );
+              }
+              return docs;
+            });
+
+          // Wait for all retrievals to complete in parallel
+          const docsArrays = await Promise.all(retrievalPromises);
+
+          // Combine all document arrays
+          docsArrays.forEach((docs) => {
+            allDocuments.push(...docs);
           });
+        } else {
+          // If all libraries have equal weight or no weights, we can use a single query with $or filter
+          // This avoids multiple parallel queries when not needed
+          const libraryFilters = includedLibraries.map((lib) => ({
+            library: lib,
+          }));
+          let finalFilter: Record<string, unknown>;
 
-        // Wait for all retrievals to complete in parallel
-        const docsArrays = await Promise.all(retrievalPromises);
+          if (baseFilter) {
+            finalFilter = {
+              $and: [baseFilter, { $or: libraryFilters }],
+            };
+          } else {
+            finalFilter = { $or: libraryFilters };
+          }
 
-        // Combine all document arrays
-        docsArrays.forEach((docs) => {
+          const docs = await retriever.vectorStore.similaritySearch(
+            input.question,
+            sourceCount,
+            finalFilter,
+          );
           allDocuments.push(...docs);
-        });
+
+          // Log library statistics if needed
+          includedLibraries.forEach((lib) => {
+            const name = typeof lib === 'string' ? lib : lib.name;
+            loggedLibraries.add(name);
+          });
+        }
       }
+
       // Send the documents as soon as they are retrieved
       if (sendData) {
         sendData({ sourceDocs: allDocuments });
@@ -526,8 +564,10 @@ export async function setupAndExecuteLanguageModelChain(
 
     // Send site ID immediately and validate
     if (siteConfig?.siteId) {
-      if (siteConfig.siteId !== 'ananda-public') {
-        const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ananda-public`;
+      const expectedSiteId = process.env.SITE_ID || 'default';
+
+      if (siteConfig.siteId !== expectedSiteId) {
+        const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ${expectedSiteId}`;
         console.error(error);
       }
       sendData({ siteId: siteConfig.siteId });
