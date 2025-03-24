@@ -14,6 +14,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/utils/client/reactQueryConfig';
 import { initializeTokenManager } from '@/utils/client/tokenManager';
 import { useEffect, useState } from 'react';
+import AuthErrorBoundary from '@/components/AuthErrorBoundary';
+import SessionExpiredModal from '@/components/SessionExpiredModal';
 
 // Configure Inter font
 const inter = Inter({
@@ -32,6 +34,7 @@ interface CustomAppProps extends AppProps {
 function MyApp({ Component, pageProps }: CustomAppProps) {
   const isDevelopment = process.env.NODE_ENV === 'development';
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // Initialize token manager when the app loads
   useEffect(() => {
@@ -64,15 +67,28 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
   // Listen for 401 errors globally
   useEffect(() => {
     // Custom error handler for 401 errors
-    const handleAuthErrors = (event: any) => {
+    const handleAuthErrors = (
+      event: CustomEvent<{
+        url: string;
+        status: number;
+        statusText: string;
+        method: string;
+      }>,
+    ) => {
       // Check if this is a fetch error response with a 401 status
       if (
         event.detail &&
         event.detail.status === 401 &&
         authInitialized // Only show after initialization to avoid duplicate errors
       ) {
+        console.log('401 error detected in _app.tsx:', event.detail);
+
+        // Show session expired modal instead of toast for better UX
+        setSessionExpired(true);
+
+        // Still show toast for immediate feedback
         toast.warning(
-          'Authentication issue detected. Attempting to reconnect...',
+          'Authentication issue detected. Please restore your session.',
           {
             position: 'top-center',
             autoClose: 3000,
@@ -82,26 +98,63 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
       }
     };
 
-    // Register global error event listener
-    window.addEventListener('fetchError', handleAuthErrors);
+    // Handler for clearing auth errors
+    const handleClearAuthErrors = () => {
+      console.log('Clearing auth errors from _app.tsx');
+      // Close the session expired modal
+      setSessionExpired(false);
+    };
+
+    // Register global error event listeners
+    window.addEventListener('fetchError', handleAuthErrors as EventListener);
+    window.addEventListener(
+      'clearAuthErrors',
+      handleClearAuthErrors as EventListener,
+    );
 
     return () => {
-      window.removeEventListener('fetchError', handleAuthErrors);
+      window.removeEventListener(
+        'fetchError',
+        handleAuthErrors as EventListener,
+      );
+      window.removeEventListener(
+        'clearAuthErrors',
+        handleClearAuthErrors as EventListener,
+      );
     };
   }, [authInitialized]);
 
+  // Handle successful session restoration
+  const handleSessionRestored = () => {
+    // Refresh the current page data
+    if (typeof window !== 'undefined') {
+      // Use router navigation to trigger data refetching
+      const currentPath = window.location.pathname;
+      window.history.pushState({}, '', currentPath);
+    }
+  };
+
   return (
     <QueryClientProvider client={queryClient}>
-      <SudoProvider>
-        <AudioProvider>
-          <main className={inter.className}>
-            {/* Only include Google Analytics in production */}
-            {!isDevelopment && <GoogleAnalytics trackPageViews />}
-            <Component {...pageProps} />
-          </main>
-          <ToastContainer />
-        </AudioProvider>
-      </SudoProvider>
+      <AuthErrorBoundary>
+        <SudoProvider>
+          <AudioProvider>
+            <main className={inter.className}>
+              {/* Only include Google Analytics in production */}
+              {!isDevelopment && <GoogleAnalytics trackPageViews />}
+              <Component {...pageProps} />
+            </main>
+            <ToastContainer />
+          </AudioProvider>
+        </SudoProvider>
+
+        {/* Session expired modal */}
+        <SessionExpiredModal
+          isOpen={sessionExpired}
+          onClose={() => setSessionExpired(false)}
+          onSuccess={handleSessionRestored}
+        />
+      </AuthErrorBoundary>
     </QueryClientProvider>
   );
 }

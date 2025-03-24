@@ -11,6 +11,7 @@
   - [x] Add security middleware that mimics the Pages Router middleware
   - [x] Update the TODO comment on line 41
   - [x] Handle token extraction and verification before processing requests
+  - [ ] Fix bug where route does not fail when siteAuth cookie is missing
 
 ## 2. Pages Router API Endpoints
 
@@ -65,15 +66,16 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [x] Ensure plugin is using the token-based authentication system
   - [x] Verify plugin correctly sends token in Authorization header
 
-- [ ] Fix WordPress plugin script loading issues
+- [x] Fix WordPress plugin script loading issues
 
   - [x] Resolve "window.aichatbotAuth is undefined" error
   - [x] Ensure proper script loading order and dependencies
   - [x] Add error handling for missing configurations
 
-- [ ] Document WordPress plugin integration in the security documentation
-  - [ ] Add detailed setup instructions
-  - [ ] Include error handling guidance
+- [x] Document WordPress plugin integration in the security documentation
+
+  - [x] Add detailed setup instructions
+  - [x] Include error handling guidance
 
 ## 6. Documentation & Testing
 
@@ -124,12 +126,12 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 
 ### JWT Authentication & API Endpoints Testing
 
-- [ ] Test /pages/api/answers.ts endpoint via browser to verify JWT auth
-- [ ] Test /pages/api/vote.ts to confirm voting works with JWT auth
-- [ ] Test /pages/api/like.ts to verify liking functionality with JWT auth
-- [ ] Test /pages/api/model-comparison-vote.ts to ensure model voting is protected
-- [ ] Test /pages/api/model-comparison-data.ts and verify data loads properly
-- [ ] Test /pages/api/model-comparison-export.ts for export functionality
+- [x] Test /pages/api/answers.ts endpoint via browser to verify JWT auth
+- [x] Test /pages/api/vote.ts to confirm voting works with JWT auth
+- [x] Test /pages/api/like.ts to verify liking functionality with JWT auth
+- [x] Test /pages/api/model-comparison-vote.ts to ensure model voting is protected
+- [x] Test /pages/api/model-comparison-data.ts and verify data loads properly
+- [x] Test /pages/api/model-comparison-export.ts for export functionality
 - [x] Test /pages/api/audio/[filename].ts to verify audio files load correctly
 
 #### Problems to fix
@@ -145,10 +147,10 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [x] ./components/NPSSurvey.tsx
 - [x] ./components/Header/BaseHeader.tsx
 - [x] ./pages/index.tsx
-- [ ] ./pages/login.tsx
+- [x] ./pages/login.tsx
 - [x] ./pages/bless.tsx
-- [ ] ./pages/admin/model-stats.tsx
-- [ ] ./pages/stats.tsx
+- [x] ./pages/admin/model-stats.tsx
+- [x] ./pages/stats.tsx
 
 ### Audio API Security Improvements
 
@@ -165,7 +167,7 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 
 - [x] Add friendly user-facing error messages for auth failures (instead of just console errors)
 - [x] Modify token manager to automatically attempt token refresh on 401 responses
-- [ ] Implement a global error boundary to handle authentication failures consistently
+- [x] Implement a global error boundary to handle authentication failures consistently
 - [x] Add client-side logging for auth failures to help with debugging
 - [x] Create a "session expired" modal that appears when authentication cannot be restored
 - [x] Make sure all API requests properly await token initialization before sending
@@ -182,7 +184,7 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 
 - [ ] Test MessageItem components with vote functionality
 - [ ] Test AnswerItem components with like functionality
-- [ ] Verify copy link functionality in both components
+- [x] Verify copy link functionality in both components
 - [ ] Test source display positions (above/below content)
 - [ ] Verify related questions display correctly when enabled
 
@@ -199,19 +201,6 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [ ] Test existing functionality (search, related questions, etc.) to ensure no regressions
 - [ ] Verify NPS survey submission still works with the new protection
 - [ ] Test contact form submissions with JWT auth
-
-## Priority Order
-
-1. App Router Chat API (highest priority) ✅
-2. Critical Pages Router endpoints (answers.ts, like.ts, vote.ts, model-comparison-vote.ts) ✅
-3. Most common endpoints used by the frontend (downvotedAnswers.ts, adminAction.ts, model-comparison.ts,
-   relatedQuestions.ts, etc.) ✅
-4. Model comparison endpoints (model-comparison-data.ts, model-comparison-export.ts) ✅
-5. Audio API endpoints ✅
-6. Frontend integration ✅
-7. WordPress plugin verification ✅ (implementation complete, testing needed)
-8. WordPress plugin script loading issues ⚠️ (critical bug fix needed) ✅
-9. Documentation and testing
 
 This security implementation will ensure all API endpoints are protected using the JWT-based token system,
 maintaining a consistent security approach across the application.
