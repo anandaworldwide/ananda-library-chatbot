@@ -63,9 +63,11 @@ const handleRequest = async (
     // Determine the appropriate path based on the filename structure.
     // Audio files are stored in the 'treasures' folder or other subfolders,
     // but sometimes the request doesn't include the subfolder.
+    // As of 8/2024, the audio files are stored in the 'treasures' folder or bhaktan
+    // folder, but pinecone data still has unqualified filenames for treasures files.
     const filePath = sanitizedFilename.includes('/')
       ? sanitizedFilename
-      : `treasures/${sanitizedFilename}`; // TODO: This is a temporary fix for the audio player
+      : `treasures/${sanitizedFilename}`;
 
     console.log(`Processing audio request for: ${filePath}`);
 

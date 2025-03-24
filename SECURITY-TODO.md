@@ -130,18 +130,7 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [ ] Test /pages/api/model-comparison-vote.ts to ensure model voting is protected
 - [ ] Test /pages/api/model-comparison-data.ts and verify data loads properly
 - [ ] Test /pages/api/model-comparison-export.ts for export functionality
-- [ ] Test /pages/api/audio/[filename].ts to verify audio files load correctly
-
-#### Pages to test
-
-- [ ] http://localhost:3000/answers
-- [ ]
-- [ ]
-- [ ]
-- [ ]
-- [ ]
-- [ ]
-- [ ]
+- [x] Test /pages/api/audio/[filename].ts to verify audio files load correctly
 
 #### Problems to fix
 
@@ -176,8 +165,8 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [x] Implemented better URL sanitization to handle malformed paths (/api/audio//api/audio/filename)
 - [x] Added comprehensive error handling and logging for debugging
 - [x] Increased URL expiration time from 3600 to 21600 seconds (matches original code)
-- [ ] Remove audio hacks of hard-coding Treasures and Bakhtan And stripping out /api/audio from
-      file names and then confirm with the user that things are still working
+- [x] Remove audio hacks of hard-coding Treasures and Bakhtan
+- [ ] stripping out /api/audio from file names and then confirm with the user that things are still working
 - [ ] Audit all other API endpoints for similar URL formatting vulnerabilities
 - [ ] Consider implementing content-type checking for audio files to prevent serving non-audio content
 

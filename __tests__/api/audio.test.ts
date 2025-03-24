@@ -24,7 +24,7 @@ jest.mock('@/utils/server/jwtUtils', () => {
 
 // Mock the CORS middleware to bypass the timeout issue
 jest.mock('@/utils/server/corsMiddleware', () => ({
-  runMiddleware: jest.fn().mockImplementation((_req, _res, _fn) => {
+  runMiddleware: jest.fn().mockImplementation(() => {
     // Just resolve immediately without actually running the middleware
     return Promise.resolve();
   }),
@@ -227,5 +227,30 @@ describe('Audio API', () => {
       error: 'Error accessing file',
       details: 'Unknown error',
     });
+  });
+
+  it('should add treasures/ prefix to filenames without a path', async () => {
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: 'GET',
+      query: {
+        filename: 'simple-audio-file.mp3',
+      },
+      headers: {
+        host: 'example.com',
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    const responseData = res._getJSONData();
+    expect(responseData).toEqual({
+      url: 'https://example-bucket.s3.amazonaws.com/public/audio/treasures/simple-audio-file.mp3?signed=true',
+      filename: 'simple-audio-file.mp3',
+      path: 'treasures/simple-audio-file.mp3',
+    });
+
+    // Additional check to explicitly verify the treasures prefix was added
+    expect(responseData.path.startsWith('treasures/')).toBe(true);
   });
 });

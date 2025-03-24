@@ -12,6 +12,7 @@ interface AudioPlayerProps {
   audioId: string;
   lazyLoad?: boolean;
   isExpanded?: boolean;
+  library?: string; // Add library property for path resolution
 }
 
 // Loading spinner component for visual feedback during audio loading
@@ -27,6 +28,7 @@ export function AudioPlayer({
   audioId,
   lazyLoad = false,
   isExpanded = false,
+  library, // Destructure the library prop
 }: AudioPlayerProps) {
   const [isLoaded, setIsLoaded] = useState(!lazyLoad);
   const { currentlyPlayingId, setCurrentlyPlayingId } = useAudioContext();
@@ -57,7 +59,17 @@ export function AudioPlayer({
       }
 
       // Clean the src path to ensure proper formatting
-      const cleanSrc = src.replace(/^\/+/, '').replace(/^api\/audio\//, '');
+      let cleanSrc = src.replace(/^\/+/, '').replace(/^api\/audio\//, '');
+
+      // If the library is provided and the path doesn't already include a directory,
+      // add the library as a prefix directory (e.g., "treasures/file.mp3").
+      // As of 8/2024, the audio files are stored in the 'treasures' folder or bhaktan
+      // folder, but pinecone data still has unqualified filenames for treasures files.
+      if (library && !cleanSrc.includes('/')) {
+        // Convert library name to match folder structure (e.g., "Treasures" -> "treasures")
+        const libraryPath = library.toLowerCase();
+        cleanSrc = `${libraryPath}/${cleanSrc}`;
+      }
 
       // Log the API call for debugging
       console.log(`Fetching audio: /api/audio/${encodeURIComponent(cleanSrc)}`);
@@ -90,7 +102,7 @@ export function AudioPlayer({
       setError('Failed to load audio. Please try again.');
       setAudioUrl(null);
     }
-  }, [src]);
+  }, [src, library]);
 
   // Load audio when component mounts or when lazyLoad/isExpanded change
   useEffect(() => {
