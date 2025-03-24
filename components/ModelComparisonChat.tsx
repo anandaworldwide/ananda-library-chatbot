@@ -182,7 +182,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
   useEffect(() => {
     const checkSudoStatus = async () => {
       try {
-        const response = await fetch('/api/sudoCookie');
+        const response = await fetchWithAuth('/api/sudoCookie');
         const data = await response.json();
         setIsSudoAdmin(data.sudoCookieValue);
       } catch (error) {

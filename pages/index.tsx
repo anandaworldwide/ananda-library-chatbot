@@ -231,7 +231,7 @@ export default function Home({
 
   const fetchRelatedQuestions = useCallback(async (docId: string) => {
     try {
-      const response = await fetch('/api/relatedQuestions', {
+      const response = await fetchWithAuth('/api/relatedQuestions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ docId }),
@@ -303,9 +303,13 @@ export default function Home({
 
   const handleStreamingResponse = useCallback(
     (data: StreamingResponseData) => {
-      if (data.siteId && data.siteId !== 'ananda-public') {
+      if (
+        data.siteId &&
+        siteConfig?.siteId &&
+        data.siteId !== siteConfig.siteId
+      ) {
         console.error(
-          `ERROR: Backend is using incorrect site ID: ${data.siteId}. Expected: ananda-public`,
+          `ERROR: Backend is using incorrect site ID: ${data.siteId}. Expected: ${siteConfig.siteId}`,
         );
       }
 

@@ -5,6 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useAudioContext } from '@/contexts/AudioContext';
 import { logEvent } from '@/utils/client/analytics';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 interface AudioPlayerProps {
   src: string;
@@ -74,9 +75,11 @@ export function AudioPlayer({
       // Log the API call for debugging
       console.log(`Fetching audio: /api/audio/${encodeURIComponent(cleanSrc)}`);
 
-      const response = await fetch(
+      // Replace fetch with fetchWithAuth
+      const response = await fetchWithAuth(
         `/api/audio/${encodeURIComponent(cleanSrc)}`,
       );
+
       if (!response.ok) {
         console.error('Audio API error:', response.status, response.statusText);
         throw new Error(`Failed to fetch audio URL: ${response.status}`);
