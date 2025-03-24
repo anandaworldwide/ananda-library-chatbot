@@ -136,28 +136,19 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 
 ##### These seem to need to use fetchWithAuth instead of fetch
 
-- [ ] ./contexts/SudoContext.tsx
-- [ ] ./components/Navbar.tsx
-- [ ] ./components/AudioPlayer.tsx
-- [ ] ./components/SecureDataFetcher.tsx
-- [ ] ./components/ModelComparisonChat.tsx
-- [ ] ./components/DownvotedAnswerReview.tsx
-- [ ] ./components/NPSSurvey.tsx
-- [ ] ./components/Header/BaseHeader.tsx
-- [ ] ./pages/index.tsx
+- [x] ./contexts/SudoContext.tsx
+- [x] ./components/Navbar.tsx
+- [x] ./components/AudioPlayer.tsx
+- [x] ./components/SecureDataFetcher.tsx
+- [x] ./components/ModelComparisonChat.tsx
+- [x] ./components/DownvotedAnswerReview.tsx
+- [x] ./components/NPSSurvey.tsx
+- [x] ./components/Header/BaseHeader.tsx
+- [x] ./pages/index.tsx
 - [ ] ./pages/login.tsx
-- [ ] ./pages/bless.tsx
+- [x] ./pages/bless.tsx
 - [ ] ./pages/admin/model-stats.tsx
 - [ ] ./pages/stats.tsx
-
-## 10. Temporary Workarounds to Fix Later
-
-- [ ] Re-implement JWT authentication for audio endpoints (/pages/api/audio/[filename].ts)
-  - [ ] Currently bypassed to allow direct access without authentication
-  - [ ] Needs to be secured again after frontend integration is complete
-  - [ ] Update the AudioPlayer component to use fetchWithAuth when re-securing
-  - [ ] Review and potentially keep CORS headers and redirection approach for better audio file handling
-  - [ ] Keep the improved URL sanitization logic that fixes double-path issues
 
 ### Audio API Security Improvements
 
