@@ -66,6 +66,18 @@ async function fetchNewToken(): Promise<string> {
     const response = await fetch('/api/web-token');
 
     if (!response.ok) {
+      // On login page, a 401 is expected - don't treat it as an error
+      if (response.status === 401 && window.location.pathname === '/login') {
+        console.log('No authentication on login page - this is expected');
+        // Return an empty placeholder token for the login page
+        const placeholderToken = 'login-page-placeholder';
+        tokenData = {
+          token: placeholderToken,
+          expiresAt: Date.now() + 15 * 60 * 1000, // 15 minutes
+        };
+        return placeholderToken;
+      }
+
       throw new Error(`Failed to fetch token: ${response.status}`);
     }
 
@@ -84,6 +96,17 @@ async function fetchNewToken(): Promise<string> {
 
     return token;
   } catch (error) {
+    // Special handling for the login page - don't throw errors
+    if (window.location.pathname === '/login') {
+      console.log('Token fetch failed on login page, using placeholder token');
+      const placeholderToken = 'login-page-placeholder';
+      tokenData = {
+        token: placeholderToken,
+        expiresAt: Date.now() + 15 * 60 * 1000, // 15 minutes
+      };
+      return placeholderToken;
+    }
+
     console.error('Error fetching token:', error);
     throw error;
   }

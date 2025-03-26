@@ -12,11 +12,15 @@
  * - Only accessible via GET for simplicity
  * - Server-side environment variables are never exposed to the client
  * - Error messages are generic to avoid leaking implementation details
+ * - Requires a valid siteAuth cookie for authentication when site config requires login
  */
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import jwt from 'jsonwebtoken';
+import { isTokenValid } from '@/utils/server/passwordUtils';
+import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
+import CryptoJS from 'crypto-js';
 
 /**
  * API handler for the web token endpoint
@@ -31,6 +35,54 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
+    // Get site config to check if login is required
+    const siteConfig = loadSiteConfigSync();
+    const loginRequired = siteConfig?.requireLogin === true;
+
+    // Only check the siteAuth cookie if login is required
+    if (loginRequired) {
+      // Check for siteAuth cookie
+      const siteAuth = req.cookies['siteAuth'];
+      if (!siteAuth) {
+        console.log('[401] Missing siteAuth cookie');
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Cryptographically verify the token using the same method as middleware.ts
+      const storedHashedToken = process.env.SECURE_TOKEN_HASH;
+      if (!storedHashedToken) {
+        console.error('Missing SECURE_TOKEN_HASH environment variable');
+        return res.status(500).json({ error: 'Server configuration error' });
+      }
+
+      // Split token to get hash part and timestamp part
+      const tokenParts = siteAuth.split(':');
+      if (tokenParts.length !== 2) {
+        console.log(
+          '[401] Invalid token format - expected 2 parts separated by ":"',
+        );
+        return res.status(401).json({ error: 'Invalid authentication format' });
+      }
+
+      const [tokenValue] = tokenParts;
+
+      // Verify token hash matches stored hash
+      const calculatedHash = CryptoJS.SHA256(tokenValue).toString();
+      if (calculatedHash !== storedHashedToken) {
+        console.log('[401] Token hash mismatch');
+        console.log(`Expected: ${storedHashedToken}`);
+        console.log(`Received: ${calculatedHash}`);
+        return res.status(401).json({ error: 'Invalid authentication' });
+      }
+
+      // Validate the siteAuth cookie using passwordUtils (timestamp check)
+      if (!isTokenValid(siteAuth)) {
+        console.log('[401] Token timestamp validation failed');
+        console.log(`Token: ${siteAuth}`);
+        return res.status(401).json({ error: 'Expired authentication' });
+      }
+    }
+
     // Log basic debugging information
     const token = process.env.SECURE_TOKEN || '';
     if (token) {

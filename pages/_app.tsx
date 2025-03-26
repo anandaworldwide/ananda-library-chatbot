@@ -47,6 +47,16 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
       .catch((error) => {
         console.error('Failed to initialize token manager:', error);
         setAuthInitialized(false);
+
+        // Don't show error toast on login page
+        if (
+          typeof window !== 'undefined' &&
+          window.location.pathname === '/login'
+        ) {
+          console.log('Suppressing auth error toast on login page');
+          return;
+        }
+
         // Show error toast on initialization failure
         toast.error(
           'Failed to initialize authentication. Some features may not work correctly.',
