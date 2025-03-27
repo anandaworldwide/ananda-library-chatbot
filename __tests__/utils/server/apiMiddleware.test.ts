@@ -214,6 +214,14 @@ describe('API Middleware', () => {
 });
 
 describe('API Middleware Utilities', () => {
+  /**
+   * Tests the security and authentication utilities of the API middleware.
+   * Note: The test "should reject POST requests with invalid referer in production"
+   * was updated to directly mock process.env instead of using jest.spyOn due to
+   * compatibility issues with Node.js process.env (not a getter property) and
+   * Vercel preview environment overrides. This ensures consistent production
+   * behavior for security checks.
+   */
   const mockHandler = jest.fn();
   let mockReq: Partial<NextApiRequest>;
   let mockRes: Partial<NextApiResponse>;
