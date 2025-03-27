@@ -76,17 +76,28 @@ function applySecurityChecks(handler: ApiHandler): ApiHandler {
         );
         // You might want to allow this, or handle it differently based on your security requirements
       } else if (typeof referer === 'string') {
-        // Validate referer against base URL
-        const refererUrl = new URL(referer);
-        const baseUrlObj = new URL(baseUrl);
+        try {
+          // Validate referer against base URL
+          const refererUrl = new URL(referer);
+          // Only compare if we have a base URL
+          if (baseUrl) {
+            const baseUrlObj = new URL(baseUrl);
 
-        if (!isVercelPreview && refererUrl.hostname !== baseUrlObj.hostname) {
-          console.warn(
-            `POST request to ${req.url} with invalid referer. IP: ${req.socket.remoteAddress}, Referer: ${referer}`,
-          );
-          return res
-            .status(403)
-            .json({ message: 'Forbidden: Invalid referer' });
+            if (
+              !isVercelPreview &&
+              refererUrl.hostname !== baseUrlObj.hostname
+            ) {
+              console.warn(
+                `POST request to ${req.url} with invalid referer. IP: ${req.socket.remoteAddress}, Referer: ${referer}`,
+              );
+              return res
+                .status(403)
+                .json({ message: 'Forbidden: Invalid referer' });
+            }
+          }
+        } catch (error) {
+          console.warn(`Error parsing referer URL: ${referer}`, error);
+          return res.status(403).json({ message: 'Invalid referer format' });
         }
       }
     }

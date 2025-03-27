@@ -120,6 +120,43 @@ describe('makeChain', () => {
 
     // Set environment variables
     process.env.AWS_REGION = 'us-west-1';
+    process.env.S3_BUCKET_NAME = 'test-bucket';
+
+    // Mock S3 response
+    mockS3Send.mockImplementation((command) => {
+      if (command && command.input && command.input.Key) {
+        // Return different content based on the requested key
+        const key = command.input.Key;
+        if (key.includes('ananda-public-base.txt')) {
+          return Promise.resolve({
+            Body: {
+              pipe: jest.fn(),
+              on: (event: string, callback: (data?: Buffer) => void) => {
+                if (event === 'data') {
+                  callback(Buffer.from('Mock Ananda Public Template'));
+                } else if (event === 'end') {
+                  callback();
+                }
+                return { on: jest.fn() };
+              },
+            },
+          });
+        }
+      }
+      return Promise.resolve({
+        Body: {
+          pipe: jest.fn(),
+          on: (event: string, callback: (data?: Buffer) => void) => {
+            if (event === 'data') {
+              callback(Buffer.from('Mock S3 Template Content'));
+            } else if (event === 'end') {
+              callback();
+            }
+            return { on: jest.fn() };
+          },
+        },
+      });
+    });
 
     // Mock fs.readFile
     jest.spyOn(fs, 'readFile').mockImplementation((path) => {
@@ -128,6 +165,19 @@ describe('makeChain', () => {
           return Promise.resolve(mockConfigData);
         } else if (path.includes('default.json')) {
           return Promise.resolve(mockTemplateData);
+        } else if (path.includes('ananda-public.json')) {
+          return Promise.resolve(
+            JSON.stringify({
+              variables: {
+                systemPrompt: 'You are the Ananda Public assistant',
+              },
+              templates: {
+                baseTemplate: {
+                  file: 's3:ananda-public-base.txt',
+                },
+              },
+            }),
+          );
         }
       }
       return Promise.resolve('');
