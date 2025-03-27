@@ -136,76 +136,105 @@ function ananda_secure_api_test_page() {
         </div>
         
         <h2>API Configuration</h2>
-        <table class="form-table" role="presentation">
+        <table class="form-table">
             <tr>
                 <th scope="row">Vercel API URL</th>
                 <td>
-                    <?php echo esc_html(get_option('aichatbot_vercel_url', AICHATBOT_DEFAULT_PRODUCTION_URL)); ?>
+                    <?php 
+                    $vercel_url = get_option('aichatbot_vercel_url');
+                    if (empty($vercel_url)) {
+                        if (WP_DEBUG) {
+                            echo '<code>' . esc_html(AICHATBOT_DEFAULT_DEVELOPMENT_URL) . '</code> (Development mode)';
+                        } else {
+                            echo '<code>' . esc_html(AICHATBOT_DEFAULT_PRODUCTION_URL) . '</code> (Production mode)';
+                        }
+                    } else {
+                        echo '<code>' . esc_html($vercel_url) . '</code>';
+                    }
+                    ?>
                 </td>
             </tr>
             <tr>
-                <th scope="row">API Secret Configured</th>
-                <td>
-                    <?php echo defined('ANANDA_WP_API_SECRET') && !empty(ANANDA_WP_API_SECRET) ? '✅ Yes' : '❌ No'; ?>
-                </td>
-            </tr>
-            <tr>
-                <th scope="row">Secret Configuration Method</th>
+                <th scope="row">Expected Backend Site</th>
                 <td>
                     <?php 
-                    if (defined('WP_API_SECRET') && !empty(WP_API_SECRET)) {
-                        echo 'Using direct <code>WP_API_SECRET</code>';
-                    } else if (defined('CHATBOT_BACKEND_SECURE_TOKEN') && !empty(CHATBOT_BACKEND_SECURE_TOKEN)) {
-                        echo 'Using derived token from <code>CHATBOT_BACKEND_SECURE_TOKEN</code>';
+                    $expected_site_id = get_option('aichatbot_expected_site_id', 'ananda-public');
+                    echo '<code>' . esc_html($expected_site_id) . '</code>';
+                    echo '<p class="description">This is the site ID the plugin expects on the backend. If incorrect, you\'ll get a "Site mismatch" error.</p>';
+                    ?>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">Authentication Method</th>
+                <td>
+                    <?php
+                    if (defined('CHATBOT_BACKEND_SECURE_TOKEN') && !empty(CHATBOT_BACKEND_SECURE_TOKEN)) {
+                        echo 'Using <code>CHATBOT_BACKEND_SECURE_TOKEN</code> (Recommended)';
+                    } elseif (defined('WP_API_SECRET') && !empty(WP_API_SECRET)) {
+                        echo 'Using <code>WP_API_SECRET</code>';
                     } else {
-                        echo '❌ No configuration method detected';
+                        echo '<span style="color: red;">No API secret configured.</span>';
                     }
                     ?>
                 </td>
             </tr>
         </table>
         
-        <!-- Test form - submits to the same page -->
-        <form method="post">
-            <p>
-                <input type="submit" name="test_api" class="button button-primary" value="Test API Connection" <?php echo $has_error ? 'disabled' : ''; ?>>
-            </p>
-        </form>
+        <h2>API Test</h2>
+        <p>Click the "Test API Connection" button to verify that your WordPress plugin can communicate with the Vercel backend.</p>
         
-        <?php if (!empty($test_results)): ?>
-            <h2>Test Results</h2>
-            <table class="widefat">
-                <thead>
-                    <tr>
-                        <th>Test</th>
-                        <th>Status</th>
-                        <th>Message</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($test_results as $result): ?>
-                        <tr>
-                            <td><?php echo esc_html($result['name']); ?></td>
-                            <td>
-                                <?php if ($result['status'] === 'success'): ?>
-                                    <span style="color: green;">✅ Success</span>
-                                <?php else: ?>
-                                    <span style="color: red;">❌ Error</span>
-                                <?php endif; ?>
-                            </td>
-                            <td><?php echo wp_kses_post($result['message']); ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php endif; ?>
+        <div id="api-test-results" style="display: none; margin-top: 20px;"></div>
         
-        <?php if (isset($api_response)): ?>
-            <h2>API Response</h2>
-            <div class="api-response" style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow: auto;">
-                <pre><?php echo esc_html(json_encode($api_response, JSON_PRETTY_PRINT)); ?></pre>
-            </div>
-        <?php endif; ?>
+        <button id="test-api-connection" class="button button-primary">Test API Connection</button>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('#test-api-connection').on('click', function() {
+                var resultsDiv = $('#api-test-results');
+                resultsDiv.html('<div class="notice notice-info"><p>Testing API connection...</p></div>');
+                resultsDiv.show();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    method: 'POST',
+                    data: {
+                        action: 'aichatbot_test_api'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            resultsDiv.html('<div class="notice notice-success"><p><strong>Success!</strong> Connected to the Vercel backend successfully.</p>' +
+                                '<p>Token received and validated. Your WordPress plugin is properly configured to communicate with the Vercel backend.</p>' +
+                                '<p>Token client type: <code>' + response.data.client + '</code></p>' +
+                                '</div>');
+                        } else {
+                            var errorMessage = response.data.message || 'Unknown error';
+                            
+                            // Special handling for site mismatch errors
+                            if (errorMessage.includes('Site mismatch')) {
+                                resultsDiv.html('<div class="notice notice-error"><p><strong>Site Mismatch Error!</strong></p>' +
+                                    '<p>' + errorMessage + '</p>' +
+                                    '<p><strong>How to fix:</strong></p>' +
+                                    '<ol>' +
+                                    '<li>Go to <a href="options-general.php?page=aichatbot-settings">Ananda AI Chatbot Settings</a></li>' +
+                                    '<li>Update the "Expected Site ID" field to match the actual backend site ID</li>' +
+                                    '<li>Or connect to a different backend by changing the Vercel API URL</li>' +
+                                    '</ol>' +
+                                    '</div>');
+                            } else {
+                                resultsDiv.html('<div class="notice notice-error"><p><strong>Error!</strong> Failed to connect to the Vercel backend.</p>' +
+                                    '<p>Error message: ' + errorMessage + '</p>' +
+                                    '</div>');
+                            }
+                        }
+                    },
+                    error: function() {
+                        resultsDiv.html('<div class="notice notice-error"><p><strong>Error!</strong> AJAX request failed.</p>' +
+                            '<p>Check your browser console for more details.</p></div>');
+                    }
+                });
+            });
+        });
+        </script>
     </div>
     <?php
 } 

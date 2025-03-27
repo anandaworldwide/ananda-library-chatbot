@@ -82,13 +82,30 @@ async function fetchNewToken() {
     // WordPress's wp_send_json_success wraps the data in a 'data' property
     // and sets 'success' to true
     if (!data.success) {
+      // Extract detailed error information if available
+      const errorMessage = data.data?.message || 'Unknown error';
+      const errorCode = data.data?.code || 'unknown_error';
+      const errorDetails = data.data?.details || '';
+
       console.error(
-        'WordPress token API returned an error:',
-        data.message || 'Unknown error',
+        `WordPress token API error (${errorCode}): ${errorMessage}`,
+        errorDetails ? `\nDetails: ${errorDetails}` : '',
       );
-      throw new Error(
-        data.message || 'Invalid token response: API reported failure',
-      );
+
+      // Format a user-friendly error message based on error code
+      let userMessage = errorMessage;
+
+      if (errorCode === 'site_mismatch') {
+        userMessage = `Site mismatch: ${errorMessage}. Check the Expected Site ID in plugin settings.`;
+      } else if (errorCode === 'token_fetch_failed') {
+        userMessage = `Backend connection failed: ${errorMessage}. Verify API URL and security settings.`;
+      } else if (errorCode === 'configuration_error') {
+        userMessage = `Configuration error: ${errorMessage}`;
+      } else if (errorCode === 'internal_error') {
+        userMessage = `Internal error: ${errorMessage}`;
+      }
+
+      throw new Error(userMessage);
     }
 
     // Access the token from the 'data' property where WordPress puts it
@@ -117,8 +134,32 @@ async function fetchNewToken() {
     console.log('Token successfully retrieved and stored');
     return token;
   } catch (error) {
+    // Add more context to the error message
     console.error('Token fetch error:', error);
-    throw error;
+
+    // Provide user-friendly error messages based on common error patterns
+    let userFriendlyError = error;
+
+    if (error.message.includes('Failed to fetch')) {
+      userFriendlyError = new Error(
+        'Network error: Unable to connect to WordPress backend. Check your internet connection.',
+      );
+    } else if (error.message.includes('HTTP 403')) {
+      userFriendlyError = new Error(
+        'Access denied: The server rejected the request. Check your WordPress API URL and security settings.',
+      );
+    } else if (error.message.includes('HTTP 404')) {
+      userFriendlyError = new Error(
+        'API not found: The token endpoint URL is incorrect or not accessible.',
+      );
+    } else if (error.message.includes('HTTP 500')) {
+      userFriendlyError = new Error(
+        'Server error: The WordPress backend encountered an internal error. Check your server logs.',
+      );
+    }
+
+    // Preserve original error but with improved message
+    throw userFriendlyError;
   }
 }
 

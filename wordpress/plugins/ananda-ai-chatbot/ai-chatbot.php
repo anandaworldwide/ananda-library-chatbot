@@ -50,6 +50,13 @@ add_action('admin_menu', 'aichatbot_register_settings');
 function aichatbot_register_options() {
     register_setting('aichatbot_settings_group', 'aichatbot_vercel_url');
     
+    // Register new setting for the expected site ID
+    register_setting('aichatbot_settings_group', 'aichatbot_expected_site_id', array(
+        'type' => 'string',
+        'default' => 'ananda-public',
+        'sanitize_callback' => 'sanitize_text_field',
+    ));
+    
     // Register new settings for font size and window dimensions
     register_setting('aichatbot_settings_group', 'aichatbot_font_size', array(
         'type' => 'integer',
@@ -123,6 +130,19 @@ function aichatbot_settings_page() {
                             <br>
                             <small>In debug mode (WP_DEBUG=true), the local URL 
                             <code><?php echo htmlspecialchars(AICHATBOT_DEFAULT_DEVELOPMENT_URL, ENT_QUOTES, 'UTF-8'); ?></code> will be used.</small>
+                        </p>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <th><label for="aichatbot_expected_site_id">Expected Site ID</label></th>
+                    <td>
+                        <input type="text" id="aichatbot_expected_site_id" name="aichatbot_expected_site_id" 
+                               value="<?php echo esc_attr(get_option('aichatbot_expected_site_id', 'ananda-public')); ?>" size="30" />
+                        <p class="description">
+                            The Site ID this plugin expects to connect to. Must match the SITE_ID configured on the Vercel backend.
+                            <br>
+                            <small>Default: <code>ananda-public</code> - only change this if connecting to a different backend site.</small>
                         </p>
                     </td>
                 </tr>
@@ -355,28 +375,143 @@ add_action('wp_footer', 'aichatbot_add_chat_bubble');
 
 // Add this function to handle token requests from the frontend
 function aichatbot_ajax_get_token() {
+    // For debugging: Log that the AJAX handler was called
+    error_log('aichatbot_ajax_get_token called');
+    
     // Security check with nonce would typically go here
+    
+    try {
+        // Get a token using the secure API client
+        $token = ananda_get_api_token();
+        
+        // Check if we got an error instead of a token
+        if (is_wp_error($token)) {
+            $error_message = $token->get_error_message();
+            $error_code = $token->get_error_code();
+            $error_data = $token->get_error_data();
+            
+            // Log the error for debugging
+            error_log("WordPress token error: {$error_code} - {$error_message}");
+            if ($error_data) {
+                error_log("Error data: " . json_encode($error_data));
+            }
+            
+            // Format specific error messages for common issues
+            if ($error_code === 'site_mismatch') {
+                wp_send_json_error(array(
+                    'message' => $error_message,
+                    'code' => 'site_mismatch',
+                    'details' => 'The WordPress plugin is trying to connect to the wrong backend site. Check your Expected Site ID in the plugin settings.'
+                ));
+                return;
+            } else if ($error_code === 'token_fetch_failed') {
+                wp_send_json_error(array(
+                    'message' => $error_message,
+                    'code' => 'token_fetch_failed',
+                    'details' => 'Failed to get a token from the backend server. Verify your API URL and security settings.'
+                ));
+                return;
+            } else if ($error_code === 'missing_secret') {
+                wp_send_json_error(array(
+                    'message' => $error_message,
+                    'code' => 'configuration_error',
+                    'details' => 'The WordPress API secret is not configured. Please add CHATBOT_BACKEND_SECURE_TOKEN to your wp-config.php file.'
+                ));
+                return;
+            }
+            
+            // Generic error response for other errors
+            wp_send_json_error(array(
+                'message' => $error_message,
+                'code' => $error_code
+            ));
+            return;
+        }
+        
+        // Log success for debugging
+        error_log("Token successfully retrieved from backend (length: " . strlen($token) . ")");
+        
+        // Return the token to the frontend
+        // The response structure should match what chatbot-auth.js expects:
+        // - success: true/false (wp_send_json_success adds this)
+        // - data: { token: "..." } (wp_send_json_success wraps in data object)
+        wp_send_json_success(array(
+            'token' => $token
+        ));
+    } catch (Exception $e) {
+        // Catch any unexpected PHP exceptions
+        error_log("Unexpected exception in token handler: " . $e->getMessage());
+        wp_send_json_error(array(
+            'message' => 'Internal server error: ' . $e->getMessage(),
+            'code' => 'internal_error'
+        ));
+    }
+}
+
+// Register the AJAX handler
+add_action('wp_ajax_aichatbot_get_token', 'aichatbot_ajax_get_token');         // For logged-in users
+add_action('wp_ajax_nopriv_aichatbot_get_token', 'aichatbot_ajax_get_token');  // For non-logged-in users
+
+// Add AJAX handler for API testing
+add_action('wp_ajax_aichatbot_test_api', 'aichatbot_ajax_test_api');
+
+/**
+ * AJAX handler for testing the secure API connection
+ * This handler is used by the admin test page to verify that the WordPress plugin
+ * can communicate with the Vercel backend using token-based authentication.
+ */
+function aichatbot_ajax_test_api() {
+    // Security check - only allow admin users
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array(
+            'message' => 'Unauthorized access'
+        ));
+        return;
+    }
     
     // Get a token using the secure API client
     $token = ananda_get_api_token();
     
     // Check if we got an error instead of a token
     if (is_wp_error($token)) {
+        $error_message = $token->get_error_message();
+        
+        // Special handling for site mismatch errors
+        if (strpos($error_message, 'Site mismatch') !== false) {
+            wp_send_json_error(array(
+                'message' => $error_message,
+                'code' => 'site_mismatch'
+            ));
+            return;
+        }
+        
+        // General error handling
         wp_send_json_error(array(
-            'message' => $token->get_error_message()
+            'message' => $error_message
         ));
         return;
     }
     
-    // Return the token to the frontend
-    // The response structure should match what chatbot-auth.js expects:
-    // - success: true/false (wp_send_json_success adds this)
-    // - data: { token: "..." } (wp_send_json_success wraps in data object)
-    wp_send_json_success(array(
-        'token' => $token
-    ));
+    // If we get here, we have a valid token - try to decode it to show some info
+    $token_parts = explode('.', $token);
+    if (count($token_parts) === 3) {
+        $payload = json_decode(base64_decode(str_replace(
+            array('-', '_'), 
+            array('+', '/'), 
+            $token_parts[1]
+        )), true);
+        
+        wp_send_json_success(array(
+            'token_type' => 'JWT',
+            'client' => isset($payload['client']) ? $payload['client'] : 'unknown',
+            'expires' => isset($payload['exp']) ? date('Y-m-d H:i:s', $payload['exp']) : 'unknown',
+            'message' => 'Successfully authenticated with the Vercel backend'
+        ));
+    } else {
+        // We got a token but it's not in the expected JWT format
+        wp_send_json_success(array(
+            'token_type' => 'unknown',
+            'message' => 'Received a token from the backend, but it\'s not in the expected JWT format'
+        ));
+    }
 }
-
-// Register the AJAX handler
-add_action('wp_ajax_aichatbot_get_token', 'aichatbot_ajax_get_token');         // For logged-in users
-add_action('wp_ajax_nopriv_aichatbot_get_token', 'aichatbot_ajax_get_token');  // For non-logged-in users

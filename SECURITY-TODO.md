@@ -4,18 +4,97 @@
 > (using [x]) and add any missing tasks. User interface tasks should go from [ ] to [?] indicating
 > they need testing by a user, then go to [x] as done done.
 
-## 1. App Router API Endpoints
+## Remaining Tasks
+
+### Security Improvements
+
+- [ ] Fix bug where route does not fail when siteAuth cookie is missing
+- [ ] Strip out /api/audio from file names and confirm with the user that things are still working
+- [ ] Audit all other API endpoints for similar URL formatting vulnerabilities
+- [ ] Consider implementing content-type checking for audio files to prevent serving non-audio content
+
+### Testing
+
+- [ ] Develop test suite for token authentication
+
+  - [ ] Unit tests for token verification logic
+  - [ ] Integration tests for secured endpoints
+  - [ ] Tests for token refresh mechanism
+
+- [ ] Test WordPress plugin token implementation in staging env
+
+  - [ ] Verify that AJAX endpoint returns valid tokens
+  - [ ] Test authentication flow with the Vercel backend
+  - [ ] Check token refresh behavior on expiration
+  - [x] Test site ID validation by connecting to different environments
+
+- [ ] Add backend endpoint security testing
+  - [ ] Test token verification logic on protected endpoints
+  - [ ] Verify proper rejection of invalid/expired tokens
+
+### React Query Integration Testing
+
+- [ ] Test the Answers page to verify React Query fetching with pagination
+- [ ] Verify like/unlike functionality with optimistic updates
+- [ ] Test downvoting and verify vote state is maintained properly
+- [ ] Test that data fetching works after JWT expiration (token refresh)
+
+### Component Interaction Testing
+
+- [ ] Test MessageItem components with vote functionality
+- [ ] Test AnswerItem components with like functionality
+- [ ] Test source display positions (above/below content)
+- [ ] Verify related questions display correctly when enabled
+
+### Error Handling Testing
+
+- [ ] Test behavior when token is invalid/expired (should automatically refresh)
+- [ ] Test rate limiting functionality for protected endpoints
+- [ ] Verify appropriate error messages for authentication failures
+- [ ] Test network error recovery with React Query retry mechanism
+
+### Regression Testing
+
+- [ ] Verify WordPress plugin integration still works with the new auth system
+- [ ] Test existing functionality (search, related questions, etc.) to ensure no regressions
+- [ ] Verify NPS survey submission still works with the new protection
+- [ ] Test contact form submissions with JWT auth
+
+### Documentation
+
+- [ ] Create comprehensive documentation about the token security system
+
+  - [ ] Update existing security documentation
+  - [ ] Add examples of securing different types of endpoints
+
+- [ ] Create security audit checklist
+  - [ ] List of all endpoints and their security status
+  - [ ] Process for reviewing new endpoints
+
+### DevOps & Environment
+
+- [ ] Verify environment variables are properly set across all environments
+
+  - [ ] Ensure SECURE_TOKEN and SECURE_TOKEN_HASH are available
+  - [ ] Check for any hardcoded test values
+
+- [ ] Update deployment scripts if needed
+  - [ ] Include security checks in CI/CD pipeline
+  - [ ] Add token validation to pre-deployment tests
+
+---
+
+## Done
+
+### App Router API Endpoints
 
 - [x] Update /app/api/chat/v1/route.ts to implement JWT authentication
   - [x] Integrate withJwtAuth functionality into the NextJS App Router context
   - [x] Add security middleware that mimics the Pages Router middleware
   - [x] Update the TODO comment on line 41
   - [x] Handle token extraction and verification before processing requests
-  - [ ] Fix bug where route does not fail when siteAuth cookie is missing
 
-## 2. Pages Router API Endpoints
-
-These endpoints need to be secured using the existing withJwtAuth middleware:
+### Pages Router API Endpoints
 
 - [x] Secure /pages/api/answers.ts with JWT authentication
 - [x] Secure /pages/api/vote.ts with JWT authentication
@@ -34,7 +113,7 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [x] Do not require JWT authentication as they are not publicly accessible endpoints
   - [x] Protected by withApiMiddleware and server-side validation
 
-## 3. Audio API Endpoints
+### Audio API Endpoints
 
 - [x] Review and secure audio API endpoints in /pages/api/audio/ directory
   - [x] Audit all endpoints to determine which need authentication
@@ -43,7 +122,7 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [x] Implemented conditional authentication based on site configuration
   - [x] Audio API now only requires authentication when site config has requireLogin set to true
 
-## 4. Frontend Integration
+### Frontend Integration
 
 - [x] Create a utility function in the frontend to get and manage tokens
 
@@ -70,7 +149,7 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [x] Fixed by updating SudoContext to properly handle 401 responses for unauthenticated users
 - [x] Verify that SUDO status security is secure by looking at how we do the BLESS process.
 
-## 5. WordPress Plugin Integration
+### WordPress Plugin Integration
 
 - [x] Review WordPress plugin code for token usage
 
@@ -88,54 +167,13 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [x] Add detailed setup instructions
   - [x] Include error handling guidance
 
-## 6. Documentation & Testing
+- [x] Add Site ID validation to prevent connecting to wrong backend
+  - [x] WordPress plugin sends expected site ID with token requests
+  - [x] Backend verifies site ID matches before issuing tokens
+  - [x] User-friendly error messages for site mismatches
+  - [x] Admin settings page for configuring expected site ID
 
-- [ ] Create comprehensive documentation about the token security system
-
-  - [ ] Update existing security documentation
-  - [ ] Add examples of securing different types of endpoints
-
-- [ ] Develop test suite for token authentication
-
-  - [ ] Unit tests for token verification logic
-  - [ ] Integration tests for secured endpoints
-  - [ ] Tests for token refresh mechanism
-
-- [ ] Create security audit checklist
-  - [ ] List of all endpoints and their security status
-  - [ ] Process for reviewing new endpoints
-
-## 7. DevOps & Environment
-
-- [ ] Verify environment variables are properly set across all environments
-
-  - [ ] Ensure SECURE_TOKEN and SECURE_TOKEN_HASH are available
-  - [ ] Check for any hardcoded test values
-
-- [ ] Update deployment scripts if needed
-  - [ ] Include security checks in CI/CD pipeline
-  - [ ] Add token validation to pre-deployment tests
-
-## 8. Additional Tasks
-
-- [ ] Test WordPress plugin token implementation in staging env
-
-  - [ ] Verify that AJAX endpoint returns valid tokens
-  - [ ] Test authentication flow with the Vercel backend
-  - [ ] Check token refresh behavior on expiration
-
-- [ ] Secure any missing frontend components
-
-  - [ ] Check for any remaining direct fetch calls in components
-  - [ ] Verify all form submissions use authentication
-
-- [ ] Add backend endpoint security testing
-  - [ ] Test token verification logic on protected endpoints
-  - [ ] Verify proper rejection of invalid/expired tokens
-
-## 9. Manual Testing Tasks
-
-### JWT Authentication & API Endpoints Testing
+### Manual Testing Tasks
 
 - [x] Test /pages/api/answers.ts endpoint via browser to verify JWT auth
 - [x] Test /pages/api/vote.ts to confirm voting works with JWT auth
@@ -144,10 +182,9 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [x] Test /pages/api/model-comparison-data.ts and verify data loads properly
 - [x] Test /pages/api/model-comparison-export.ts for export functionality
 - [x] Test /pages/api/audio/[filename].ts to verify audio files load correctly
+- [x] Verify copy link functionality in both components
 
-#### Problems to fix
-
-##### These seem to need to use fetchWithAuth instead of fetch
+### Components Fixed to Use fetchWithAuth
 
 - [x] ./contexts/SudoContext.tsx
 - [x] ./components/Navbar.tsx
@@ -172,11 +209,8 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [x] Remove audio hacks of hard-coding Treasures and Bakhtan
 - [x] Added conditional authentication based on site configuration for audio endpoints
 - [x] Only require authentication for audio files when the site has requireLogin set to true
-- [ ] stripping out /api/audio from file names and then confirm with the user that things are still working
-- [ ] Audit all other API endpoints for similar URL formatting vulnerabilities
-- [ ] Consider implementing content-type checking for audio files to prevent serving non-audio content
 
-#### Authentication Improvements
+### Authentication Improvements
 
 - [x] Add friendly user-facing error messages for auth failures (instead of just console errors)
 - [x] Modify token manager to automatically attempt token refresh on 401 responses
@@ -185,35 +219,3 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [x] Create a "session expired" modal that appears when authentication cannot be restored
 - [x] Make sure all API requests properly await token initialization before sending
 - [x] Add retry mechanism with exponential backoff for authentication failures
-
-### React Query Integration Testing
-
-- [ ] Test the Answers page to verify React Query fetching with pagination
-- [ ] Verify like/unlike functionality with optimistic updates
-- [ ] Test downvoting and verify vote state is maintained properly
-- [ ] Test that data fetching works after JWT expiration (token refresh)
-
-### Component Interaction Testing
-
-- [ ] Test MessageItem components with vote functionality
-- [ ] Test AnswerItem components with like functionality
-- [x] Verify copy link functionality in both components
-- [ ] Test source display positions (above/below content)
-- [ ] Verify related questions display correctly when enabled
-
-### Error Handling Testing
-
-- [ ] Test behavior when token is invalid/expired (should automatically refresh)
-- [ ] Test rate limiting functionality for protected endpoints
-- [ ] Verify appropriate error messages for authentication failures
-- [ ] Test network error recovery with React Query retry mechanism
-
-### Regression Testing
-
-- [ ] Verify WordPress plugin integration still works with the new auth system
-- [ ] Test existing functionality (search, related questions, etc.) to ensure no regressions
-- [ ] Verify NPS survey submission still works with the new protection
-- [ ] Test contact form submissions with JWT auth
-
-This security implementation will ensure all API endpoints are protected using the JWT-based token system,
-maintaining a consistent security approach across the application.

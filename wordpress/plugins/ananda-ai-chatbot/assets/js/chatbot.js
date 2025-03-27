@@ -663,11 +663,41 @@ document.addEventListener('DOMContentLoaded', () => {
       ) {
         errorMessage.textContent =
           'Connection to chatbot server failed. Please try again later.';
+      } else if (error.message.includes('Site mismatch')) {
+        // Handle site mismatch errors specifically
+        errorMessage.innerHTML = `
+          <strong>Configuration Error:</strong> ${error.message}<br>
+          <small>Please contact the site administrator to update the chatbot settings.</small>
+        `;
+      } else if (error.message.includes('Invalid token')) {
+        // Handle authentication errors
+        errorMessage.innerHTML = `
+          <strong>Authentication Error:</strong> Unable to connect to the chat backend.<br>
+          <small>Please check your internet connection and try again, or contact the site administrator.</small>
+        `;
+        console.error('Token error details:', error.message);
       } else {
-        errorMessage.textContent = `Error: ${error.message}`;
+        // Format other errors to be more readable
+        const cleanErrorMessage = error.message
+          .replace(/Server error \((.*)\)/, '$1') // Remove "Server error" wrapper
+          .replace(/Error: /, ''); // Remove "Error:" prefix if present
+
+        errorMessage.innerHTML = `
+          <strong>Error:</strong> ${cleanErrorMessage}<br>
+          <small>If this problem persists, please contact the site administrator.</small>
+        `;
       }
 
       messages.appendChild(errorMessage);
+
+      // Additional error logging for site administrators
+      console.error('Chatbot error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+        chatHistory: chatHistory.length, // Just the count for privacy
+        vercelUrl: aichatbotData.vercelUrl,
+      });
     } finally {
       // Reset UI state
       sendButton.style.display = 'inline-block';

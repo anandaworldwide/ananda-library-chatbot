@@ -44,10 +44,20 @@ function ananda_get_api_token() {
         return new WP_Error('missing_secret', 'WordPress API secret is not configured');
     }
     
+    // Get the expected site ID from settings
+    $expected_site_id = get_option('aichatbot_expected_site_id', 'ananda-public');
+    
+    // Basic logging for debugging
+    error_log("Connecting to backend URL: $base_url");
+    error_log("Expected site ID: $expected_site_id");
+    
     // Make the API request to get a token
     // We use wp_remote_post to handle the HTTP request securely
     $response = wp_remote_post("$base_url/api/get-token", [
-        'body' => json_encode(['secret' => ANANDA_WP_API_SECRET]),
+        'body' => json_encode([
+            'secret' => ANANDA_WP_API_SECRET,
+            'expectedSiteId' => $expected_site_id
+        ]),
         'headers' => [
             'Content-Type' => 'application/json'
         ],
@@ -66,6 +76,18 @@ function ananda_get_api_token() {
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
         $error_message = isset($data['error']) ? $data['error'] : 'Unknown error';
+        $error_code = isset($data['code']) ? $data['code'] : '';
+        
+        // Special handling for site mismatch errors - make these user friendly
+        if ($error_code === 'SITE_MISMATCH') {
+            error_log("SITE MISMATCH ERROR: " . $error_message);
+            
+            // Return a user-friendly error
+            return new WP_Error('site_mismatch', $error_message, [
+                'status' => $response_code,
+                'code' => 'site_mismatch'
+            ]);
+        }
         
         return new WP_Error('token_fetch_failed', "Failed to fetch token: $error_message", [
             'status' => $response_code
@@ -165,4 +187,11 @@ function ananda_call_secure_api($endpoint, $args = []) {
  */
 function ananda_get_secure_data() {
     return ananda_call_secure_api('secure-data');
+}
+
+if (defined('CHATBOT_BACKEND_SECURE_TOKEN')) {
+  $wp_token = hash('sha256', 'wordpress-' . CHATBOT_BACKEND_SECURE_TOKEN);
+  $wp_token = substr($wp_token, 0, 32);
+  error_log('WP Token (first 6 chars): ' . substr($wp_token, 0, 6));
+  error_log('Token source (first 6 chars): ' . substr(CHATBOT_BACKEND_SECURE_TOKEN, 0, 6));
 } 

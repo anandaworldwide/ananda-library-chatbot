@@ -29,6 +29,7 @@ The system uses JSON Web Tokens (JWT) to secure API communication between:
 
 - **Secure API Client** (`secure-api-client.php`): Handles token-based authentication for WordPress
 - **Secure API Test Page**: Admin interface for testing the secure API connection
+- **Site ID Validation**: Prevents accidental connections to wrong backend environments
 
 ## Authentication Types
 
@@ -156,16 +157,41 @@ For WordPress integration, you have two options in wp-config.php:
 
 Option 2 is recommended as it automatically derives the WordPress token from the same SECURE_TOKEN used in the Vercel backend.
 
+### Site ID Validation
+
+The system includes site ID validation to prevent accidental connections to the wrong backend environment:
+
+1. **WordPress Plugin Configuration**:
+
+   - Each WordPress installation specifies an expected site ID (defaults to "ananda-public")
+   - This is configurable in the plugin settings page
+   - The setting is stored in WordPress options as `aichatbot_expected_site_id`
+
+2. **Token Request Process**:
+
+   - The WordPress plugin sends the expected site ID with each token request
+   - The backend checks if this ID matches its actual SITE_ID environment variable
+   - If there's a mismatch, the backend returns a clear error message
+
+3. **Error Handling**:
+   - Site mismatch errors include specific information about which site was expected vs. actual
+   - The WordPress admin interface shows a user-friendly error with instructions on how to fix it
+
+This feature prevents common development errors when multiple environments exist (staging, production, etc.)
+and helps users quickly identify and fix configuration issues.
+
 ### Setup Instructions
 
 1. **Vercel Project**:
 
    - Ensure SECURE_TOKEN and SECURE_TOKEN_HASH are set in your environment variables
+   - Set the SITE_ID environment variable to uniquely identify your site/environment
    - No additional environment variables needed
 
 2. **WordPress Plugin**:
    - Add `define('CHATBOT_BACKEND_SECURE_TOKEN', 'your-secure-token-value');` to `wp-config.php`
    - The value should match the SECURE_TOKEN in your Vercel project
+   - Configure the Expected Site ID in the plugin settings to match your target environment
    - Activate the plugin in WordPress admin
 
 ## Security Considerations
@@ -181,6 +207,16 @@ Option 2 is recommended as it automatically derives the WordPress token from the
 2. Server validates the secret and issues a short-lived JWT
 3. Client includes the JWT in the Authorization header for API requests
 4. Server verifies the JWT before processing protected API requests
+
+### WordPress Authentication Flow
+
+1. WordPress plugin reads the configured `aichatbot_expected_site_id` and `ANANDA_WP_API_SECRET`
+2. Plugin sends both values to the `/api/get-token` endpoint on the configured Vercel backend
+3. Backend validates:
+   - That the site ID matches its own SITE_ID environment variable
+   - That the secret matches either the direct SECURE_TOKEN or the WordPress-specific derived token
+4. If validation passes, a JWT token is issued; otherwise, an appropriate error is returned
+5. The plugin uses the JWT token for subsequent API calls until it expires
 
 ### Special Case: Public JWT-Only Endpoints
 

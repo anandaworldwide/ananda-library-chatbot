@@ -41,6 +41,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   );
   console.log(`Has body: ${Boolean(req.body)}`);
   console.log(`Body has secret: ${Boolean(req.body?.secret)}`);
+  console.log(`Body has expectedSiteId: ${Boolean(req.body?.expectedSiteId)}`);
 
   // Only allow POST requests for security (avoids tokens in URL/query params)
   if (req.method !== 'POST') {
@@ -49,6 +50,30 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
+    // Get the current site ID from environment variables
+    const actualSiteId = process.env.SITE_ID || 'unknown';
+
+    // Get the expected site ID from the request if available
+    const expectedSiteId = req.body?.expectedSiteId;
+
+    if (expectedSiteId) {
+      console.log(`Expected site ID from request: ${expectedSiteId}`);
+      console.log(`Actual site ID: ${actualSiteId}`);
+
+      // Check if site IDs match
+      if (expectedSiteId !== actualSiteId) {
+        console.error(
+          `Site ID mismatch: expected "${expectedSiteId}" but this is "${actualSiteId}"`,
+        );
+
+        // Return a specific error for site ID mismatch - this is safe to expose to the client
+        return res.status(403).json({
+          error: `Site mismatch: You're trying to connect to "${expectedSiteId}" but this is "${actualSiteId}"`,
+          code: 'SITE_MISMATCH',
+        });
+      }
+    }
+
     // Get the shared secret from headers or body to support different client types
     // - Web frontend sends via headers
     // - WordPress plugin sends via request body
@@ -89,7 +114,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // If neither secret matches, return forbidden response
     if (!isWebFrontend && !isWordPress) {
-      console.log('Invalid secret provided - no match found');
+      console.warn('Invalid secret provided - no match found');
+
+      // If there was an expected site ID, add a hint about site mismatch
+      if (expectedSiteId) {
+        console.error(`⚠️ TOKEN VALIDATION FAILED WITH SITE MISMATCH ⚠️`);
+        console.error(
+          `Request expected site "${expectedSiteId}" but this is "${actualSiteId}"`,
+        );
+        console.error(
+          `Check WordPress plugin configuration and Vercel URL setting`,
+        );
+      }
+
       return res.status(403).json({ error: 'Invalid secret' });
     }
 

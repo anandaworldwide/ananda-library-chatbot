@@ -54,6 +54,7 @@ describe('Get Token API', () => {
     process.env = { ...originalEnv };
     process.env.SECURE_TOKEN = 'test-secure-token';
     process.env.SECURE_TOKEN_HASH = 'test-secure-token-hash';
+    process.env.SITE_ID = 'test-site';
 
     // Reset mock return values if needed
     jest.mocked(crypto.createHash).mockClear();
@@ -185,5 +186,105 @@ describe('Get Token API', () => {
     expect(res.statusCode).toBe(500);
     expect(res._getJSONData()).toEqual({ error: 'Internal Server Error' });
     expect(console.error).toHaveBeenCalled();
+  });
+
+  // New tests for site ID validation
+
+  it('should validate site ID when expectedSiteId is provided', async () => {
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: 'POST',
+      body: {
+        secret: 'test-secure-token',
+        expectedSiteId: 'test-site',
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res._getJSONData()).toEqual({ token: 'mock-jwt-token' });
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ client: 'web' }),
+      'test-secure-token',
+      expect.objectContaining({ expiresIn: '15m' }),
+    );
+  });
+
+  it('should return 403 when expectedSiteId does not match actual site ID', async () => {
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: 'POST',
+      body: {
+        secret: 'test-secure-token',
+        expectedSiteId: 'wrong-site',
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res._getJSONData()).toEqual({
+      error:
+        'Site mismatch: You\'re trying to connect to "wrong-site" but this is "test-site"',
+      code: 'SITE_MISMATCH',
+    });
+  });
+
+  it('should handle WordPress token with correct expectedSiteId', async () => {
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: 'POST',
+      body: {
+        secret: 'wordpress-token',
+        expectedSiteId: 'test-site',
+      },
+    });
+
+    await handler(req, res);
+
+    expect(crypto.createHash).toHaveBeenCalledWith('sha256');
+    expect(res.statusCode).toBe(200);
+    expect(res._getJSONData()).toEqual({ token: 'mock-jwt-token' });
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ client: 'wordpress' }),
+      'test-secure-token',
+      expect.objectContaining({ expiresIn: '15m' }),
+    );
+  });
+
+  it('should work without expectedSiteId if site validation is not needed', async () => {
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: 'POST',
+      body: {
+        secret: 'test-secure-token',
+        // No expectedSiteId provided
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res._getJSONData()).toEqual({ token: 'mock-jwt-token' });
+  });
+
+  it('should handle missing SITE_ID environment variable gracefully', async () => {
+    // Delete the SITE_ID environment variable
+    delete process.env.SITE_ID;
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: 'POST',
+      body: {
+        secret: 'test-secure-token',
+        expectedSiteId: 'any-site', // This should still work as SITE_ID defaults to 'unknown'
+      },
+    });
+
+    await handler(req, res);
+
+    // Since SITE_ID is 'unknown' and expectedSiteId is 'any-site', it should mismatch
+    expect(res.statusCode).toBe(403);
+    expect(res._getJSONData()).toEqual({
+      error:
+        'Site mismatch: You\'re trying to connect to "any-site" but this is "unknown"',
+      code: 'SITE_MISMATCH',
+    });
   });
 });
