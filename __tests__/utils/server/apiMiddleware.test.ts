@@ -66,6 +66,14 @@ describe('API Middleware', () => {
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: false,
     });
+
+    // Mock process.env with default values
+    process.env = {
+      ...originalEnv,
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_BASE_URL: 'https://example.com',
+      VERCEL_ENV: 'production',
+    };
   });
 
   afterEach(() => {
@@ -356,20 +364,16 @@ describe('API Middleware Utilities', () => {
         referer: 'https://malicious-site.com/test',
       };
 
-      // Set environment variables using object assignment
+      // Ensure production environment
       process.env = {
         ...originalEnv,
         NODE_ENV: 'production',
         NEXT_PUBLIC_BASE_URL: 'https://example.com',
+        VERCEL_ENV: 'production',
       };
 
-      // Create wrapped handler
       const wrappedHandler = withApiMiddleware(mockHandler);
-
-      // Log the VERCEL_ENV value to verify it
       console.log('VERCEL_ENV value:', process.env.VERCEL_ENV);
-
-      // Call the handler
       await wrappedHandler(
         mockReq as NextApiRequest,
         mockRes as NextApiResponse,
