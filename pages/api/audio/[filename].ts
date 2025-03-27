@@ -4,8 +4,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-// Temporarily commenting out the JWT auth import while bypassing authentication
-// import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { runMiddleware } from '@/utils/server/corsMiddleware';
 import Cors from 'cors';
@@ -126,7 +124,6 @@ const handleRequest = async (
   }
 };
 
-// TODO: Temporarily bypassing JWT auth for audio endpoints
-// This is a temporary workaround and should be re-secured in the future
-// See SECURITY-TODO.md for tracking this item
+// Apply API middleware with conditional authentication
+// Authentication will be handled automatically based on site configuration
 export default withApiMiddleware(handleRequest);

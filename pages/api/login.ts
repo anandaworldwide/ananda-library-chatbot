@@ -125,4 +125,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiMiddleware(handler);
+export default withApiMiddleware(handler, { skipAuth: true });

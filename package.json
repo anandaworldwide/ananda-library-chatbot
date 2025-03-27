@@ -16,7 +16,7 @@
     "format": "prettier --ignore-path .gitignore \"**/*.+(ts|js|tsx)\" --write",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:ci": "jest --ci --coverage",
+    "test:ci": "jest --ci --coverage && jest --selectProjects=server --ci --coverage",
     "test:changed": "jest --bail --findRelatedTests",
     "find-untested": "node scripts/find-untested-files.js",
     "ingest": "NODE_OPTIONS='--max-old-space-size=6000' tsx -r dotenv/config scripts/ingest-text-data.ts",

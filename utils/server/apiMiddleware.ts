@@ -1,9 +1,50 @@
-// API middleware for handling POST requests and security checks
+// API middleware for handling POST requests, security checks, and conditional authentication
 import { NextApiRequest, NextApiResponse } from 'next';
+import { withJwtAuth } from './jwtUtils';
+import { loadSiteConfigSync } from './loadSiteConfig';
 
 type ApiHandler = (req: NextApiRequest, res: NextApiResponse) => Promise<void>;
 
-export function withApiMiddleware(handler: ApiHandler): ApiHandler {
+type ApiMiddlewareOptions = {
+  // Force authentication regardless of site configuration
+  forceAuth?: boolean;
+  // Skip authentication even if site configuration requires it
+  skipAuth?: boolean;
+};
+
+/**
+ * Middleware that applies common API functionality:
+ * 1. Security checks for POST requests
+ * 2. Conditional authentication based on site configuration
+ *
+ * @param handler The API route handler to wrap
+ * @param options Configuration options for the middleware
+ * @returns A wrapped handler with security and conditional auth applied
+ */
+export function withApiMiddleware(
+  handler: ApiHandler,
+  options: ApiMiddlewareOptions = {},
+): ApiHandler {
+  // Get the base handler with security checks
+  const securityHandler = applySecurityChecks(handler);
+
+  // Apply conditional authentication if not explicitly skipped
+  if (options.skipAuth !== true) {
+    // Either force auth or check site config
+    const siteConfig = loadSiteConfigSync();
+    if (options.forceAuth || (siteConfig && siteConfig.requireLogin)) {
+      return withJwtAuth(securityHandler);
+    }
+  }
+
+  // Return the handler with just security checks
+  return securityHandler;
+}
+
+/**
+ * Applies security checks for POST requests
+ */
+function applySecurityChecks(handler: ApiHandler): ApiHandler {
   return async (req: NextApiRequest, res: NextApiResponse) => {
     const referer = req.headers.referer || req.headers.referrer;
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';

@@ -12,6 +12,7 @@ import { createMocks } from 'node-mocks-http';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../pages/api/audio/[filename]';
 import { getSignedUrl as mockGetSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 
 // Mock the JWT auth middleware to bypass token validation in tests
 jest.mock('@/utils/server/jwtUtils', () => {
@@ -21,6 +22,13 @@ jest.mock('@/utils/server/jwtUtils', () => {
     }),
   };
 });
+
+// Mock site config loading
+jest.mock('@/utils/server/loadSiteConfig', () => ({
+  loadSiteConfigSync: jest.fn().mockImplementation(() => ({
+    requireLogin: false, // Default to no login required
+  })),
+}));
 
 // Mock the CORS middleware to bypass the timeout issue
 jest.mock('@/utils/server/corsMiddleware', () => ({
@@ -59,6 +67,10 @@ describe('Audio API', () => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
     process.env.S3_BUCKET_NAME = 'test-bucket';
+    // Default to not requiring login
+    (loadSiteConfigSync as jest.Mock).mockImplementation(() => ({
+      requireLogin: false,
+    }));
   });
 
   afterEach(() => {
@@ -249,8 +261,5 @@ describe('Audio API', () => {
       filename: 'simple-audio-file.mp3',
       path: 'treasures/simple-audio-file.mp3',
     });
-
-    // Additional check to explicitly verify the treasures prefix was added
-    expect(responseData.path.startsWith('treasures/')).toBe(true);
   });
 });

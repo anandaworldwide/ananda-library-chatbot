@@ -40,6 +40,8 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [x] Audit all endpoints to determine which need authentication
   - [x] Apply withJwtAuth middleware to relevant endpoints
   - [x] Secured /pages/api/audio/[filename].ts with JWT authentication
+  - [x] Implemented conditional authentication based on site configuration
+  - [x] Audio API now only requires authentication when site config has requireLogin set to true
 
 ## 4. Frontend Integration
 
@@ -56,8 +58,12 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [x] Implement retry mechanism for failed auth attempts
 
 - [x] Update React Query/SWR configurations to include auth headers
+
   - [x] Modify query client setup to include token in requests
   - [x] Handle 401 responses with token refresh logic
+
+- [ ] Answer item page is requiring authentication, but it should not.
+- [ ] Contact page is requiring authentication, but it should not.
 
 ## 5. WordPress Plugin Integration
 
@@ -159,6 +165,8 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
 - [x] Added comprehensive error handling and logging for debugging
 - [x] Increased URL expiration time from 3600 to 21600 seconds (matches original code)
 - [x] Remove audio hacks of hard-coding Treasures and Bakhtan
+- [x] Added conditional authentication based on site configuration for audio endpoints
+- [x] Only require authentication for audio files when the site has requireLogin set to true
 - [ ] stripping out /api/audio from file names and then confirm with the user that things are still working
 - [ ] Audit all other API endpoints for similar URL formatting vulnerabilities
 - [ ] Consider implementing content-type checking for audio files to prevent serving non-audio content
