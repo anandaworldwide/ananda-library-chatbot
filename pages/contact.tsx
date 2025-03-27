@@ -6,7 +6,6 @@ import React, { useState } from 'react';
 import Layout from '@/components/layout';
 import Link from 'next/link';
 import validator from 'validator';
-import { queryFetch } from '@/utils/client/reactQueryConfig';
 
 interface ContactProps {
   siteConfig: SiteConfig | null;
@@ -50,8 +49,8 @@ const Contact = ({ siteConfig }: ContactProps) => {
     }
 
     try {
-      // Send form data to the API using queryFetch to include authentication
-      const res = await queryFetch('/api/contact', {
+      // Use regular fetch instead of queryFetch since the contact endpoint doesn't require authentication
+      const res = await fetch('/api/contact', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

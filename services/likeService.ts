@@ -1,4 +1,6 @@
 import { queryFetch } from '@/utils/client/reactQueryConfig';
+import { isLikesPublic } from '@/utils/client/authConfig';
+import { SiteConfig } from '@/types/siteConfig';
 
 // Overloaded function signatures for backward compatibility
 export async function checkUserLikes(uuid: string): Promise<string[]>;
@@ -6,69 +8,169 @@ export async function checkUserLikes(
   answerIds: string[],
   uuid: string,
 ): Promise<Record<string, boolean>>;
+export async function checkUserLikes(
+  answerIds: string[],
+  uuid: string,
+  siteConfig: SiteConfig | null,
+): Promise<Record<string, boolean>>;
 
 // Implementation supporting both signatures
 export async function checkUserLikes(
   uuidOrAnswerIds: string | string[],
   uuid?: string,
+  siteConfig?: SiteConfig | null,
 ): Promise<Record<string, boolean> | string[]> {
+  // Determine if we should use authenticated requests
+  const useLikesAuth = !isLikesPublic(siteConfig || null);
+
+  // Choose the appropriate fetch function based on auth requirements
+  const fetchFn = useLikesAuth ? queryFetch : fetch;
+
   try {
     // First signature: checkUserLikes(uuid)
     if (typeof uuidOrAnswerIds === 'string' && !uuid) {
-      // Fetch all liked answer IDs for this user
-      const response = await queryFetch(`/api/like?uuid=${uuidOrAnswerIds}`);
+      try {
+        // Fetch all liked answer IDs for this user
+        const response = await fetchFn(`/api/like?uuid=${uuidOrAnswerIds}`);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error in checkUserLikes GET:', errorData);
-        throw new Error(errorData.message || 'Failed to check likes');
+        if (!response.ok) {
+          // For 401 Unauthorized in public mode, return empty array
+          // In auth mode, let the error propagate as authentication is required
+          if (response.status === 401 && !useLikesAuth) {
+            console.log(
+              'User is not authenticated on public site, returning empty likes array',
+            );
+            return [];
+          }
+
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Error in checkUserLikes GET:', errorData);
+          throw new Error(errorData.message || 'Failed to check likes');
+        }
+
+        const data = await response.json();
+        return data || [];
+      } catch (error) {
+        // Only handle auth errors gracefully if we're NOT requiring auth
+        if (
+          !useLikesAuth &&
+          error instanceof Error &&
+          (error.message.includes('401') ||
+            error.message.includes('token') ||
+            error.message.includes('auth'))
+        ) {
+          console.log(
+            'Authentication error on public site, returning empty array',
+          );
+          return [];
+        }
+        throw error;
       }
-
-      const data = await response.json();
-      return data || [];
     }
 
     // Second signature: checkUserLikes(answerIds, uuid)
     if (Array.isArray(uuidOrAnswerIds) && typeof uuid === 'string') {
-      const response = await queryFetch('/api/like?action=check', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          answerIds: uuidOrAnswerIds,
-          uuid,
-        }),
-      });
+      try {
+        const response = await fetchFn('/api/like?action=check', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            answerIds: uuidOrAnswerIds,
+            uuid,
+          }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error in checkUserLikes POST:', errorData);
-        throw new Error(
-          errorData.message ||
-            errorData.error ||
-            'An error occurred while checking likes.',
-        );
+        if (!response.ok) {
+          // For 401 Unauthorized in public mode, return all false
+          // In auth mode, let the error propagate as authentication is required
+          if (response.status === 401 && !useLikesAuth) {
+            console.log(
+              'User is not authenticated on public site, returning all false likes',
+            );
+            const emptyStatuses: Record<string, boolean> = {};
+            uuidOrAnswerIds.forEach((id) => {
+              emptyStatuses[id] = false;
+            });
+            return emptyStatuses;
+          }
+
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Error in checkUserLikes POST:', errorData);
+          throw new Error(
+            errorData.message ||
+              errorData.error ||
+              'An error occurred while checking likes.',
+          );
+        }
+
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        // Only handle auth errors gracefully if we're NOT requiring auth
+        if (
+          !useLikesAuth &&
+          error instanceof Error &&
+          (error.message.includes('401') ||
+            error.message.includes('token') ||
+            error.message.includes('auth'))
+        ) {
+          console.log(
+            'Authentication error on public site, returning all false',
+          );
+          const emptyStatuses: Record<string, boolean> = {};
+          uuidOrAnswerIds.forEach((id) => {
+            emptyStatuses[id] = false;
+          });
+          return emptyStatuses;
+        }
+        throw error;
       }
-
-      const data = await response.json();
-      return data;
     }
 
     // Invalid usage
     console.error('Invalid parameters to checkUserLikes');
     return [];
   } catch (error) {
+    // Catch and log any unexpected errors
     console.error('Error checking likes:', error);
-    throw error; // Re-throw to allow proper handling by the component
+
+    // Only handle auth errors gracefully if we're NOT requiring auth
+    if (
+      !useLikesAuth &&
+      ((error instanceof Error && error.message.includes('token')) ||
+        (error instanceof Error && error.message.includes('auth')))
+    ) {
+      console.warn(
+        'Authentication related error on public site, returning empty result',
+      );
+      if (Array.isArray(uuidOrAnswerIds)) {
+        const emptyStatuses: Record<string, boolean> = {};
+        uuidOrAnswerIds.forEach((id) => {
+          emptyStatuses[id] = false;
+        });
+        return emptyStatuses;
+      }
+      return [];
+    }
+
+    throw error; // Re-throw non-auth errors or auth errors when auth is required
   }
 }
 
 export const getLikeCounts = async (
   answerIds: string[],
+  siteConfig?: SiteConfig | null,
 ): Promise<Record<string, number>> => {
+  // Determine if we should use authenticated requests
+  const useLikesAuth = !isLikesPublic(siteConfig || null);
+
+  // Choose the appropriate fetch function based on auth requirements
+  const fetchFn = useLikesAuth ? queryFetch : fetch;
+
   try {
-    const response = await queryFetch('/api/like?action=counts', {
+    const response = await fetchFn('/api/like?action=counts', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -77,6 +179,19 @@ export const getLikeCounts = async (
     });
 
     if (!response.ok) {
+      // For 401 Unauthorized in public mode, return empty counts
+      // In auth mode, let the error propagate as authentication is required
+      if (response.status === 401 && !useLikesAuth) {
+        console.log(
+          'User is not authenticated on public site, returning empty like counts',
+        );
+        const emptyCounts: Record<string, number> = {};
+        answerIds.forEach((id) => {
+          emptyCounts[id] = 0;
+        });
+        return emptyCounts;
+      }
+
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
         errorData.error || 'An error occurred while fetching like counts.',
@@ -86,6 +201,23 @@ export const getLikeCounts = async (
     return await response.json();
   } catch (error) {
     console.error('Error fetching like counts:', error);
+
+    // Only handle auth errors gracefully if we're NOT requiring auth
+    if (
+      !useLikesAuth &&
+      error instanceof Error &&
+      (error.message.includes('token') ||
+        error.message.includes('auth') ||
+        error.message.includes('401'))
+    ) {
+      console.warn('Authentication error on public site, returning zeros');
+      const emptyCounts: Record<string, number> = {};
+      answerIds.forEach((id) => {
+        emptyCounts[id] = 0;
+      });
+      return emptyCounts;
+    }
+
     throw error;
   }
 };
@@ -94,9 +226,16 @@ export const updateLike = async (
   answerId: string,
   uuid: string,
   like: boolean,
+  siteConfig?: SiteConfig | null,
 ): Promise<void> => {
+  // Determine if we should use authenticated requests
+  const useLikesAuth = !isLikesPublic(siteConfig || null);
+
+  // Choose the appropriate fetch function based on auth requirements
+  const fetchFn = useLikesAuth ? queryFetch : fetch;
+
   try {
-    const response = await queryFetch('/api/like', {
+    const response = await fetchFn('/api/like', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -105,6 +244,18 @@ export const updateLike = async (
     });
 
     if (!response.ok) {
+      // Handle authentication errors based on site configuration
+      if (response.status === 401) {
+        if (useLikesAuth) {
+          // For sites that require auth, make it clear auth is required
+          console.warn('Authentication required to like answers on this site');
+          throw new Error('Authentication required to like answers');
+        } else {
+          // For public sites, should be a different error (since we're using fetch, not queryFetch)
+          console.warn('Unexpected auth error on public site');
+        }
+      }
+
       const errorData = await response.json().catch(() => ({}));
       console.error('Error in updateLike:', errorData);
       throw new Error(

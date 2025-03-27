@@ -62,8 +62,13 @@ These endpoints need to be secured using the existing withJwtAuth middleware:
   - [x] Modify query client setup to include token in requests
   - [x] Handle 401 responses with token refresh logic
 
-- [ ] Answer item page is requiring authentication, but it should not.
-- [ ] Contact page is requiring authentication, but it should not.
+- [x] Answer item page is requiring authentication, but it should not.
+  - [x] Fixed by updating SingleAnswer component to use regular fetch instead of queryFetch
+- [x] Contact page is requiring authentication, but it should not.
+  - [x] Fixed by updating Contact component to use regular fetch instead of queryFetch
+- [x] Error checking sudo status message on incognito view of answer ID page
+  - [x] Fixed by updating SudoContext to properly handle 401 responses for unauthenticated users
+- [x] Verify that SUDO status security is secure by looking at how we do the BLESS process.
 
 ## 5. WordPress Plugin Integration
 

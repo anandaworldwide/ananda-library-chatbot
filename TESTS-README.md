@@ -6,6 +6,7 @@ This project uses Jest for testing and has a dual test configuration approach:
 
 1. **Standard Tests**: Run with `npm test` or `jest`
 2. **Server Tests**: Run with `jest --selectProjects=server`
+3. **API Security Tests**: Run with `bin/test_api_security.sh` script
 
 > **Note**: See @TESTS-TODO.md for known issues and planned improvements to the testing setup.
 
@@ -34,6 +35,20 @@ Both sets of tests are valid but test different aspects of the server utilities:
 
 - Co-located tests focus on unit testing in a Node.js environment
 - Tests in `__tests__/utils/server/` may include more integration-focused tests
+
+## API Security Testing
+
+The `bin/test_api_security.sh` script provides comprehensive security testing for the API endpoints. It tests:
+
+- Authentication requirements
+- Token validation
+- Cookie validation
+- Protected endpoint access
+- Admin endpoint restrictions
+- Token expiration
+- Combined token and cookie authentication
+
+Run it with: `./bin/test_api_security.sh <password> <site_auth_cookie>`
 
 ## Running Tests
 

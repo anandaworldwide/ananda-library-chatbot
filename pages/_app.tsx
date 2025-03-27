@@ -16,6 +16,7 @@ import { initializeTokenManager } from '@/utils/client/tokenManager';
 import { useEffect, useState } from 'react';
 import AuthErrorBoundary from '@/components/AuthErrorBoundary';
 import SessionExpiredModal from '@/components/SessionExpiredModal';
+import { isPublicEndpoint, isPublicPage } from '@/utils/client/authConfig';
 
 // Configure Inter font
 const inter = Inter({
@@ -35,6 +36,7 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
   const isDevelopment = process.env.NODE_ENV === 'development';
   const [authInitialized, setAuthInitialized] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const { siteConfig } = pageProps;
 
   // Initialize token manager when the app loads
   useEffect(() => {
@@ -48,16 +50,19 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
         console.error('Failed to initialize token manager:', error);
         setAuthInitialized(false);
 
-        // Don't show error toast on login page
+        // Don't show error toast on public pages
         if (
           typeof window !== 'undefined' &&
-          window.location.pathname === '/login'
+          isPublicPage(window.location.pathname, siteConfig)
         ) {
-          console.log('Suppressing auth error toast on login page');
+          console.log(
+            'Suppressing auth error toast on public page:',
+            window.location.pathname,
+          );
           return;
         }
 
-        // Show error toast on initialization failure
+        // Show error toast on initialization failure only for protected pages
         toast.error(
           'Failed to initialize authentication. Some features may not work correctly.',
           {
@@ -72,7 +77,7 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
         // We don't want to block rendering if this fails,
         // the token manager will retry when needed
       });
-  }, []);
+  }, [siteConfig]);
 
   // Listen for 401 errors globally
   useEffect(() => {
@@ -92,6 +97,17 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
         authInitialized // Only show after initialization to avoid duplicate errors
       ) {
         console.log('401 error detected in _app.tsx:', event.detail);
+
+        // Don't show errors for public endpoints
+        if (
+          isPublicEndpoint(event.detail.url, event.detail.method, siteConfig)
+        ) {
+          console.log(
+            'Ignoring expected 401 for public endpoint:',
+            event.detail.url,
+          );
+          return;
+        }
 
         // Show session expired modal instead of toast for better UX
         setSessionExpired(true);
@@ -132,7 +148,7 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
         handleClearAuthErrors as EventListener,
       );
     };
-  }, [authInitialized]);
+  }, [authInitialized, siteConfig]);
 
   // Handle successful session restoration
   const handleSessionRestored = () => {

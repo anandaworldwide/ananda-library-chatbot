@@ -159,6 +159,7 @@ export function middleware(req: NextRequest) {
     '/contact',
     '/api/get-token', // Token acquisition endpoint for external clients
     '/api/web-token', // Token endpoint for web frontend
+    '/api/answers', // Allow viewing answers without authentication
     '/api/',
     '/_next',
     '/survey',

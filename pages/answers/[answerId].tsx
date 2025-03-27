@@ -7,13 +7,14 @@ import { useEffect, useState } from 'react';
 import Layout from '@/components/layout';
 import AnswerItem from '@/components/AnswerItem';
 import { Answer } from '@/types/answer';
-import { checkUserLikes } from '@/services/likeService';
+import { checkUserLikes, updateLike } from '@/services/likeService';
 import { getOrCreateUUID } from '@/utils/client/uuid';
 import { logEvent } from '@/utils/client/analytics';
 import Head from 'next/head';
 import { getShortname } from '@/utils/client/siteConfig';
 import { useSudo } from '@/contexts/SudoContext';
 import { queryFetch } from '@/utils/client/reactQueryConfig';
+import { isAuthenticated } from '@/utils/client/tokenManager';
 
 interface SingleAnswerProps {
   siteConfig: SiteConfig | null;
@@ -27,9 +28,14 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   const [notFound, setNotFound] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const { isSudoUser } = useSudo();
-  const [likeError, setLikeError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if the user is authenticated
+  const userIsAuthenticated = isAuthenticated();
+
+  // For sites requiring login, only allow likes if authenticated
+  const allowLikes = siteConfig?.requireLogin === false || userIsAuthenticated;
 
   // Fetch the answer data when the component mounts or answerId changes
   useEffect(() => {
@@ -40,8 +46,8 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
       setError(null);
 
       try {
-        // Use queryFetch instead of fetch to add JWT authentication
-        const response = await queryFetch(`/api/answers?answerIds=${answerId}`);
+        // Use regular fetch since viewing answers doesn't require authentication
+        const response = await fetch(`/api/answers?answerIds=${answerId}`);
 
         if (response.status === 404) {
           setNotFound(true);
@@ -76,38 +82,57 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
 
   // Fetch like statuses for the answer when it's loaded
   useEffect(() => {
+    // Skip fetching like statuses if likes are not allowed for unauthenticated users
+    if (!allowLikes) {
+      console.log('User not authenticated - skipping like status fetch');
+      return;
+    }
+
     const fetchLikeStatuses = async (answerIds: string[]) => {
       if (!answerIds.length) return;
 
       try {
         const uuid = getOrCreateUUID();
-        const statuses = await checkUserLikes(answerIds, uuid);
+        // Pass the site config to determine appropriate auth handling
+        const statuses = await checkUserLikes(answerIds, uuid, siteConfig);
 
         // Important: completely replace the state, don't merge with previous
         setLikeStatuses(statuses);
       } catch (error) {
+        // Just log errors, don't display them to users
         console.error('Error fetching like statuses:', error);
-        setLikeError(
-          error instanceof Error
-            ? error.message
-            : 'An error occurred while checking likes.',
-        );
-        setTimeout(() => setLikeError(null), 5000); // Clear error after 5 seconds
+        // Set default like status to false for errors
+        if (answerIds.length > 0) {
+          const defaultStatuses: Record<string, boolean> = {};
+          answerIds.forEach((id) => {
+            defaultStatuses[id] = false;
+          });
+          setLikeStatuses(defaultStatuses);
+        }
       }
     };
 
     if (answer) {
       fetchLikeStatuses([answer.id]);
     }
-  }, [answer]);
+  }, [answer, siteConfig, allowLikes]);
 
   // Handle like count changes
-  const handleLikeCountChange = (answerId: string) => {
+  const handleLikeCountChange = async (answerId: string) => {
+    // Security check - don't allow likes for unauthenticated users
+    if (!allowLikes) {
+      console.log('User not authenticated - like action prevented');
+      return;
+    }
+
     try {
-      // Update the answer with the new like count - calculate based on current status
+      // Get the current like status
+      const wasLiked = likeStatuses[answerId] || false;
+      const newLikeStatus = !wasLiked;
+
+      // Update the answer with the new like count
       if (answer) {
-        // Calculate new like count based on the new status (inverse of current)
-        const wasLiked = likeStatuses[answerId] || false;
+        // Calculate new like count based on the new status
         const newLikeCount = wasLiked
           ? Math.max(0, answer.likeCount - 1)
           : answer.likeCount + 1;
@@ -118,25 +143,45 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
         });
       }
 
-      // Update the like status immediately (don't wait for server refresh)
-      const newLikeStatus = !likeStatuses[answerId];
-
-      // Create a new object to ensure state update
+      // Update the like status immediately in UI
       setLikeStatuses({
         ...likeStatuses,
         [answerId]: newLikeStatus,
       });
 
+      // Log the event
       logEvent('like_answer', 'Engagement', answerId);
 
-      // Don't refresh like statuses immediately - let the component state handle it
-      // The status will be refreshed on the next page load anyway
-      // This avoids the blinking effect
+      // Update the like status on the server
+      const uuid = getOrCreateUUID();
+      await updateLike(answerId, uuid, newLikeStatus, siteConfig);
     } catch (error) {
-      setLikeError(
-        error instanceof Error ? error.message : 'An error occurred',
-      );
-      setTimeout(() => setLikeError(null), 3000);
+      // Just log the error, don't display any UI error messages
+      console.error('Error updating like status:', error);
+
+      // Revert the UI state on error
+      if (
+        answer &&
+        error instanceof Error &&
+        error.message.includes('Authentication required')
+      ) {
+        // Revert the like count
+        const wasLiked = likeStatuses[answerId] || false;
+        const originalLikeCount = wasLiked
+          ? answer.likeCount + 1 // if it was liked and we "unliked" it, add 1 back
+          : Math.max(0, answer.likeCount - 1); // if it wasn't liked and we "liked" it, subtract 1
+
+        setAnswer({
+          ...answer,
+          likeCount: originalLikeCount,
+        });
+
+        // Revert the like status
+        setLikeStatuses({
+          ...likeStatuses,
+          [answerId]: wasLiked,
+        });
+      }
     }
   };
 
@@ -220,23 +265,25 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
     <Layout siteConfig={siteConfig}>
       <Head>
         <title>
-          {getShortname(siteConfig)}: {answer.question.substring(0, 150)}
+          {getShortname(siteConfig)}: {answer?.question?.substring(0, 150)}
         </title>
       </Head>
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-        <AnswerItem
-          answer={answer}
-          siteConfig={siteConfig}
-          handleLikeCountChange={handleLikeCountChange}
-          handleCopyLink={handleCopyLink}
-          handleDelete={handleDelete}
-          linkCopied={linkCopied ? answer.id : null}
-          likeStatuses={likeStatuses}
-          isSudoUser={isSudoUser}
-          isFullPage={true}
-        />
-        {likeError && (
-          <div className="text-red-500 text-sm mt-2">{likeError}</div>
+        {answer && (
+          <AnswerItem
+            answer={answer}
+            // Only pass handleLikeCountChange if likes are allowed for this user
+            handleLikeCountChange={
+              allowLikes ? handleLikeCountChange : undefined
+            }
+            handleCopyLink={handleCopyLink}
+            handleDelete={handleDelete}
+            linkCopied={linkCopied ? answer.id : null}
+            likeStatuses={likeStatuses}
+            isSudoUser={isSudoUser}
+            isFullPage={true}
+            siteConfig={siteConfig}
+          />
         )}
       </div>
     </Layout>

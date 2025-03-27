@@ -249,18 +249,20 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
               </span>
             </button>
 
-            {/* Like button */}
-            <div className="ml-2 sm:ml-4">
-              <LikeButton
-                answerId={answer.id}
-                initialLiked={likeStatuses[answer.id] || false}
-                likeCount={answer.likeCount}
-                onLikeCountChange={onLikeButtonClick}
-              />
-              {likeError && (
-                <span className="text-red-500 text-sm ml-2">{likeError}</span>
-              )}
-            </div>
+            {/* Like button - only show if handleLikeCountChange is provided (controlled by parent) */}
+            {handleLikeCountChange && (
+              <div className="ml-2 sm:ml-4">
+                <LikeButton
+                  answerId={answer.id}
+                  initialLiked={likeStatuses[answer.id] || false}
+                  likeCount={answer.likeCount}
+                  onLikeCountChange={onLikeButtonClick}
+                />
+                {likeError && (
+                  <span className="text-red-500 text-sm ml-2">{likeError}</span>
+                )}
+              </div>
+            )}
 
             {/* Admin-only actions */}
             {isSudoUser && (

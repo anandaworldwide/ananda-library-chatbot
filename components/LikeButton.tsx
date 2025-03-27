@@ -6,7 +6,7 @@ interface LikeButtonProps {
   answerId: string;
   initialLiked: boolean;
   likeCount: number;
-  onLikeCountChange: (answerId: string, newLikeCount: number) => void;
+  onLikeCountChange?: (answerId: string, newLikeCount: number) => void;
   showLikeCount?: boolean;
 }
 
@@ -54,6 +54,9 @@ const LikeButton: React.FC<LikeButtonProps> = ({
   }, [likeCount, answerId, likes]);
 
   const handleLike = async () => {
+    // Safety check - don't proceed if no callback is provided
+    if (!onLikeCountChange) return;
+
     // Set flag to prevent external prop changes from conflicting with our action
     isLikeInProgress.current = true;
 
@@ -94,6 +97,12 @@ const LikeButton: React.FC<LikeButtonProps> = ({
       isLikeInProgress.current = false;
     }
   };
+
+  // If no like change handler is provided, don't render the button
+  // This happens when the user is not authenticated on sites requiring login
+  if (!onLikeCountChange) {
+    return null;
+  }
 
   // Render the button
   return (

@@ -148,6 +148,26 @@ export async function initializeTokenManager(): Promise<string> {
 }
 
 /**
+ * Check if the user is currently authenticated
+ * This doesn't attempt to fetch a new token - it only checks the current state
+ *
+ * @returns True if the user has a valid authentication token
+ */
+export function isAuthenticated(): boolean {
+  // First check if we have a token and it's valid
+  if (
+    isTokenValid() &&
+    tokenData &&
+    tokenData.token !== 'login-page-placeholder'
+  ) {
+    return true;
+  }
+
+  // We have no token or an invalid one - user is not authenticated
+  return false;
+}
+
+/**
  * Get a valid token, fetching a new one if necessary
  * This will await the initialization if it's in progress
  */

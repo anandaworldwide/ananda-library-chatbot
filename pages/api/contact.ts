@@ -7,7 +7,6 @@ import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 import validator from 'validator';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
-import { withJwtAuth } from '@/utils/server/jwtUtils';
 
 const ses = new SESClient({
   credentials: {
@@ -90,4 +89,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiMiddleware(withJwtAuth(handler));
+export default withApiMiddleware(handler, { skipAuth: true });

@@ -109,27 +109,45 @@ async function deleteAnswerById(id: string): Promise<void> {
   }
 }
 
-// Export with standard JWT auth
-export default withJwtAuth(withApiMiddleware(handleRequest));
-
-// The main request handler function - moved to bottom for clarity
-async function handleRequest(
-  req: NextApiRequest,
-  res: NextApiResponse,
-): Promise<void> {
+// Create a custom handler that applies different auth requirements based on the method
+async function apiHandler(req: NextApiRequest, res: NextApiResponse) {
   const { method } = req;
 
-  switch (method) {
-    case 'GET':
-      await handleGetRequest(req, res);
-      break;
-    case 'DELETE':
-      await handleDeleteRequest(req, res);
-      break;
-    default:
-      res.setHeader('Allow', ['GET', 'DELETE']);
-      res.status(405).json({ error: 'Method not allowed' });
+  // For GET requests, no authentication is required
+  if (method === 'GET') {
+    return await handleGetRequest(req, res);
   }
+
+  // For DELETE requests, authentication is required - will be handled by withJwtAuth
+  if (method === 'DELETE') {
+    return await handleDeleteRequest(req, res);
+  }
+
+  // For unsupported methods
+  res.setHeader('Allow', ['GET', 'DELETE']);
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+// For GET requests, don't require authentication
+const getHandler = withApiMiddleware(apiHandler, { skipAuth: true });
+
+// For DELETE requests, require authentication
+const deleteHandler = withApiMiddleware(withJwtAuth(apiHandler));
+
+// Export the main handler that routes based on method
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { method } = req;
+
+  if (method === 'GET') {
+    return getHandler(req, res);
+  }
+
+  if (method === 'DELETE') {
+    return deleteHandler(req, res);
+  }
+
+  // For other methods, use the unauthenticated handler to return 405
+  return getHandler(req, res);
 }
 
 // Main handler function for the API endpoint
@@ -196,11 +214,14 @@ async function handleDeleteRequest(req: NextApiRequest, res: NextApiResponse) {
         .status(400)
         .json({ message: 'answerId parameter is required.' });
     }
+
     // Check for sudo permissions before allowing deletion
+    // This is sufficient for deleting answers; siteAuth cookie is not required
     const sudo = getSudoCookie(req, res);
     if (!sudo.sudoCookieValue) {
       return res.status(403).json({ message: `Forbidden: ${sudo.message}` });
     }
+
     await deleteAnswerById(answerId);
     res.status(200).json({ message: 'Answer deleted successfully.' });
   } catch (error: unknown) {
