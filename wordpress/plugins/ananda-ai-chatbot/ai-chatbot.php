@@ -16,6 +16,15 @@ if (!defined('ABSPATH')) {
 define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://ananda-public-chatbot.vercel.app/api/chat/v1');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
+// Function to get the API URL - prioritizing user settings
+function aichatbot_get_api_url() {
+    $configured_url = get_option('aichatbot_vercel_url');
+    if (!empty($configured_url)) {
+        return $configured_url;
+    }
+    return AICHATBOT_DEFAULT_PRODUCTION_URL;
+}
+
 // Include the secure API client
 require_once plugin_dir_path(__FILE__) . 'secure-api-client.php';
 
@@ -127,9 +136,6 @@ function aichatbot_settings_page() {
                         <p class="description">
                             Enter the full URL to your Vercel API endpoint. If left empty, the plugin will use
                             <code><?php echo htmlspecialchars(AICHATBOT_DEFAULT_PRODUCTION_URL, ENT_QUOTES, 'UTF-8'); ?></code> by default.
-                            <br>
-                            <small>In debug mode (WP_DEBUG=true), the local URL 
-                            <code><?php echo htmlspecialchars(AICHATBOT_DEFAULT_DEVELOPMENT_URL, ENT_QUOTES, 'UTF-8'); ?></code> will be used.</small>
                         </p>
                     </td>
                 </tr>

@@ -31,8 +31,8 @@ if (!defined('ABSPATH')) {
  * @return string|WP_Error Token string on success, WP_Error object on failure
  */
 function ananda_get_api_token() {
-    // Get the Vercel URL from settings or use default
-    $vercel_url = get_option('aichatbot_vercel_url', AICHATBOT_DEFAULT_PRODUCTION_URL);
+    // Get the Vercel URL using the centralized function
+    $vercel_url = aichatbot_get_api_url();
     
     // Extract the base URL (remove /api/chat/v1 or similar endpoints)
     // This uses regex to find and remove API path components
@@ -122,8 +122,8 @@ function ananda_get_api_token() {
  * @return array|WP_Error Response data on success, WP_Error object on failure
  */
 function ananda_call_secure_api($endpoint, $args = []) {
-    // Get the Vercel URL from settings or use default
-    $vercel_url = get_option('aichatbot_vercel_url', AICHATBOT_DEFAULT_PRODUCTION_URL);
+    // Get the Vercel URL using the centralized function
+    $vercel_url = aichatbot_get_api_url();
     
     // Extract the base URL (remove /api/chat/v1 or similar endpoints)
     $base_url = preg_replace('/(\/api\/.*$)/', '', $vercel_url);

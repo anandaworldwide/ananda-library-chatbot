@@ -143,11 +143,7 @@ function ananda_secure_api_test_page() {
                     <?php 
                     $vercel_url = get_option('aichatbot_vercel_url');
                     if (empty($vercel_url)) {
-                        if (WP_DEBUG) {
-                            echo '<code>' . esc_html(AICHATBOT_DEFAULT_DEVELOPMENT_URL) . '</code> (Development mode)';
-                        } else {
-                            echo '<code>' . esc_html(AICHATBOT_DEFAULT_PRODUCTION_URL) . '</code> (Production mode)';
-                        }
+                        echo '<code>' . esc_html(AICHATBOT_DEFAULT_PRODUCTION_URL) . '</code> (Default)';
                     } else {
                         echo '<code>' . esc_html($vercel_url) . '</code>';
                     }
