@@ -94,6 +94,14 @@ function applySecurityChecks(handler: ApiHandler): ApiHandler {
                 .status(403)
                 .json({ message: 'Forbidden: Invalid referer' });
             }
+          } else {
+            // If no base URL is set, reject all POST requests with referers
+            console.warn(
+              `POST request to ${req.url} with referer but no base URL set. IP: ${req.socket.remoteAddress}, Referer: ${referer}`,
+            );
+            return res
+              .status(403)
+              .json({ message: 'Forbidden: Invalid referer' });
           }
         } catch (error) {
           console.warn(`Error parsing referer URL: ${referer}`, error);
