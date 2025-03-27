@@ -9,11 +9,14 @@ jest.mock('@/utils/client/analytics', () => ({
   logEvent: jest.fn(),
 }));
 
+// Mock the tokenManager module
+jest.mock('@/utils/client/tokenManager', () => ({
+  fetchWithAuth: jest.fn(),
+}));
+
 // Import after mocking
 import * as analytics from '@/utils/client/analytics';
-
-// Mock the fetch function
-global.fetch = jest.fn() as jest.Mock;
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 describe('voteHandler', () => {
   let setVotes: jest.Mock;
@@ -30,8 +33,8 @@ describe('voteHandler', () => {
     setVoteError = jest.fn();
     consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-    // Default fetch mock implementation
-    (fetch as jest.Mock).mockResolvedValue({
+    // Default fetchWithAuth mock implementation
+    (fetchWithAuth as jest.Mock).mockResolvedValue({
       ok: true,
       json: async () => ({ success: true }),
     });
@@ -58,7 +61,7 @@ describe('voteHandler', () => {
     );
 
     // Check API was called correctly
-    expect(fetch).toHaveBeenCalledWith('/api/vote', {
+    expect(fetchWithAuth).toHaveBeenCalledWith('/api/vote', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -85,7 +88,7 @@ describe('voteHandler', () => {
     );
 
     // Check API was called correctly
-    expect(fetch).toHaveBeenCalledWith('/api/vote', {
+    expect(fetchWithAuth).toHaveBeenCalledWith('/api/vote', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -109,7 +112,7 @@ describe('voteHandler', () => {
     );
 
     // Check API was called correctly to reset vote
-    expect(fetch).toHaveBeenCalledWith('/api/vote', {
+    expect(fetchWithAuth).toHaveBeenCalledWith('/api/vote', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -122,7 +125,7 @@ describe('voteHandler', () => {
     await handleVote('', true, {}, setVotes, setVoteError);
 
     expect(consoleSpy).toHaveBeenCalledWith('Vote error: Missing document ID');
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetchWithAuth).not.toHaveBeenCalled();
     expect(setVotes).not.toHaveBeenCalled();
   });
 
@@ -131,8 +134,8 @@ describe('voteHandler', () => {
     const votes = {};
     const errorMessage = 'Failed to update vote';
 
-    // Mock fetch to return an error
-    (fetch as jest.Mock).mockResolvedValue({
+    // Mock fetchWithAuth to return an error
+    (fetchWithAuth as jest.Mock).mockResolvedValue({
       ok: false,
       json: async () => ({ message: errorMessage }),
     });
@@ -151,8 +154,8 @@ describe('voteHandler', () => {
     const votes = {};
     const networkError = new Error('Network failure');
 
-    // Mock fetch to throw an error
-    (fetch as jest.Mock).mockRejectedValue(networkError);
+    // Mock fetchWithAuth to throw a network error
+    (fetchWithAuth as jest.Mock).mockRejectedValue(networkError);
 
     await handleVote(docId, true, votes, setVotes, setVoteError);
 

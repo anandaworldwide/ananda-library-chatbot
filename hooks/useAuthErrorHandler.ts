@@ -1,7 +1,10 @@
 import { useCallback, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/router';
-import { initializeTokenManager } from '@/utils/client/tokenManager';
+import {
+  initializeTokenManager,
+  fetchWithAuth,
+} from '@/utils/client/tokenManager';
 
 /**
  * Custom hook for handling authentication errors consistently across the application.
@@ -135,8 +138,8 @@ export function useAuthErrorHandler(onSessionExpired?: () => void) {
    * Force logout and redirect to login page
    */
   const handleForceLogout = useCallback(() => {
-    // Make logout API call
-    fetch('/api/logout', {
+    // Make logout API call with authentication
+    fetchWithAuth('/api/logout', {
       method: 'POST',
       credentials: 'include',
     })

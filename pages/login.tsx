@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { SiteConfig } from '@/types/siteConfig';
 import { getSiteName, getTagline } from '@/utils/client/siteConfig';
 import Image from 'next/image';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 interface LoginProps {
   siteConfig: SiteConfig | null;
@@ -32,7 +33,7 @@ export default function Login({ siteConfig }: LoginProps) {
     }
 
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetchWithAuth('/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

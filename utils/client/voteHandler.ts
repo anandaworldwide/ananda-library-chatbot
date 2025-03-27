@@ -1,4 +1,5 @@
 import { logEvent } from '@/utils/client/analytics';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 export const handleVote = async (
   docId: string,
@@ -34,7 +35,7 @@ export const handleVote = async (
   );
 
   try {
-    const response = await fetch('/api/vote', {
+    const response = await fetchWithAuth('/api/vote', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

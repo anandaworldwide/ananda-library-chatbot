@@ -23,6 +23,7 @@ The system uses JSON Web Tokens (JWT) to secure API communication between:
 
 - **SecureDataFetcher Component**: React component demonstrating the secure API flow
 - **API Demo Page**: Example page that showcases the secure token-based API integration
+- **Token Manager** (`utils/client/tokenManager.ts`): Utility for obtaining and managing JWT tokens in the frontend
 
 ### WordPress Plugin
 
@@ -35,7 +36,8 @@ The system supports two types of authentication which can be used independently 
 
 1. **JWT Token Authentication**
 
-   - Required for ALL frontend-to-backend API calls
+   - **REQUIRED for ALL frontend-to-backend API calls without exception**
+   - This includes login, logout, and all other API endpoints
    - Ensures only our frontend can access our backend APIs
    - JWT tokens are short-lived (15 minutes) and signed with the SECURE_TOKEN
 
@@ -51,12 +53,79 @@ Some endpoints require JWT authentication but not siteAuth cookies, such as:
 - `/api/audio/[filename]`: Allows audio playback for non-logged-in users
 - `/api/contact`: Allows contact form submissions from non-logged-in users
 - `/api/answers/[id]`: Allows access to publicly shared answers
+- `/api/login`: Handles user authentication (still requires JWT for frontend verification)
+- `/api/logout`: Handles user logout (still requires JWT for frontend verification)
 
 These endpoints use the `withJwtOnlyAuth` middleware which:
 
 - Enforces JWT authentication for frontend-to-backend security
 - Does not require the siteAuth cookie
 - Applies common security checks (CSRF, rate limiting, etc.)
+
+## Best Practices for JWT Implementation
+
+### Frontend Implementation
+
+- **Always use JWT tokens**: All API calls from the frontend to backend must include a valid JWT token in
+  the Authorization header
+- **Use helper functions**: Prefer using the helper functions (`fetchWithAuth`, `withAuth`, `queryFetch`)
+  over manually adding tokens
+- **Avoid duplication**: Don't duplicate token fetching and header construction logic across the codebase
+- **Consistent approach**: Use the provided utilities in `tokenManager.ts` and `reactQueryConfig.ts`
+- **Handle token errors**: Let the helper functions handle token failures and retries
+
+### Correct Usage Examples
+
+```typescript
+// Example 1: PREFERRED - Using fetchWithAuth (simplest approach)
+import { fetchWithAuth } from '@/utils/client/tokenManager';
+
+async function makeApiCall() {
+  const response = await fetchWithAuth('/api/endpoint', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ data: 'example' }),
+  });
+}
+
+// Example 2: Using withAuth helper for custom fetch scenarios
+import { withAuth } from '@/utils/client/tokenManager';
+
+async function makeCustomApiCall() {
+  const options = await withAuth({
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  const response = await fetch('/api/endpoint', options);
+}
+
+// Example 3: Using queryFetch for React Query
+import { queryFetch } from '@/utils/client/reactQueryConfig';
+
+async function makeQueryApiCall() {
+  const response = await queryFetch('/api/endpoint', {
+    method: 'POST',
+    body: JSON.stringify({ data: 'example' }),
+  });
+}
+
+// Example 4: NOT RECOMMENDED - Manual token handling
+import { getToken } from '@/utils/client/tokenManager';
+
+async function manualTokenHandling() {
+  // Avoid this approach - it duplicates logic and is error-prone
+  const token = await getToken();
+  const response = await fetch('/api/endpoint', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+```
 
 ## Configuration
 
