@@ -181,7 +181,7 @@ def cancel_deployment(project, skip_project, debug=False):
                 else:
                     print("❌ Failed to cancel deployment")
     else:
-        print(f"🔴 {project}: No current deployment building or queued")
+        print(f"⚪ {project}: No current deployment building or queued")
 
 def main():
     parser = argparse.ArgumentParser(description="Cancel Vercel deployments except for a specified project")
