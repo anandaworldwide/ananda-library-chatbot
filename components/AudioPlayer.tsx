@@ -75,7 +75,6 @@ export function AudioPlayer({
       // Log the API call for debugging
       console.log(`Fetching audio: /api/audio/${encodeURIComponent(cleanSrc)}`);
 
-      // Replace fetch with fetchWithAuth
       const response = await fetchWithAuth(
         `/api/audio/${encodeURIComponent(cleanSrc)}`,
       );

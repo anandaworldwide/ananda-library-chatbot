@@ -190,7 +190,7 @@ export function middleware(req: NextRequest) {
         const response = new NextResponse(
           JSON.stringify({
             success: false,
-            message: 'Authentication required',
+            message: 'Authentication required (1)',
           }),
           {
             status: 401,

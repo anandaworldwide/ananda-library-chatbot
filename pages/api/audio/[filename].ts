@@ -4,18 +4,27 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { runMiddleware } from '@/utils/server/corsMiddleware';
 import Cors from 'cors';
+import { withJwtOnlyAuth } from '@/utils/server/apiMiddleware';
 
 // Configure CORS specifically for audio files
 const audioCors = Cors({
   methods: ['GET', 'HEAD', 'OPTIONS'],
-  origin: '*', // Allow from any origin temporarily
-  credentials: false,
+  origin: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000', // Only allow our frontend domain
+  credentials: true, // Required for Authorization header
+  allowedHeaders: ['Authorization', 'Content-Type'], // Explicitly allow Authorization header
 });
 
-// Define the handler function
+/**
+ * Audio API endpoint that requires JWT authentication for frontend-to-backend security.
+ * Unlike most endpoints, this does NOT require the siteAuth cookie (user login).
+ *
+ * Authentication Flow:
+ * 1. JWT token is REQUIRED - This ensures only our frontend can access the audio files
+ * 2. siteAuth cookie is NOT required - This allows non-logged-in users to play audio
+ * 3. CORS is configured to only allow requests from our frontend domain
+ */
 const handleRequest = async (
   req: NextApiRequest,
   res: NextApiResponse,
@@ -23,20 +32,20 @@ const handleRequest = async (
   // Apply CORS middleware first
   await runMiddleware(req, res, audioCors);
 
-  // Process the request directly
+  // Handle preflight OPTIONS request for CORS
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  // Only allow GET requests
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  // Process the request
   try {
-    // Handle preflight OPTIONS request for CORS
-    if (req.method === 'OPTIONS') {
-      res.status(200).end();
-      return;
-    }
-
-    // Only allow GET requests
-    if (req.method !== 'GET') {
-      res.status(405).json({ error: 'Method not allowed' });
-      return;
-    }
-
     // Get the filename from the request
     const { filename } = req.query;
 
@@ -124,6 +133,5 @@ const handleRequest = async (
   }
 };
 
-// Apply API middleware with conditional authentication
-// Authentication will be handled automatically based on site configuration
-export default withApiMiddleware(handleRequest);
+// Apply JWT-only authentication middleware
+export default withJwtOnlyAuth(handleRequest);

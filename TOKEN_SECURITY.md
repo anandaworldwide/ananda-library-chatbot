@@ -29,6 +29,35 @@ The system uses JSON Web Tokens (JWT) to secure API communication between:
 - **Secure API Client** (`secure-api-client.php`): Handles token-based authentication for WordPress
 - **Secure API Test Page**: Admin interface for testing the secure API connection
 
+## Authentication Types
+
+The system supports two types of authentication which can be used independently or together:
+
+1. **JWT Token Authentication**
+
+   - Required for ALL frontend-to-backend API calls
+   - Ensures only our frontend can access our backend APIs
+   - JWT tokens are short-lived (15 minutes) and signed with the SECURE_TOKEN
+
+2. **siteAuth Cookie Authentication**
+   - Required only for logged-in user features
+   - Managed by the login/logout system
+   - Not required for public endpoints that still need frontend-to-backend security
+
+### Public JWT-Only Endpoints
+
+Some endpoints require JWT authentication but not siteAuth cookies, such as:
+
+- `/api/audio/[filename]`: Allows audio playback for non-logged-in users
+- `/api/contact`: Allows contact form submissions from non-logged-in users
+- `/api/answers/[id]`: Allows access to publicly shared answers
+
+These endpoints use the `withJwtOnlyAuth` middleware which:
+
+- Enforces JWT authentication for frontend-to-backend security
+- Does not require the siteAuth cookie
+- Applies common security checks (CSRF, rate limiting, etc.)
+
 ## Configuration
 
 ### Environment Variables
@@ -84,6 +113,15 @@ Option 2 is recommended as it automatically derives the WordPress token from the
 3. Client includes the JWT in the Authorization header for API requests
 4. Server verifies the JWT before processing protected API requests
 
+### Special Case: Public JWT-Only Endpoints
+
+For public endpoints that need API security but not user login:
+
+1. Client requests a token from `/api/web-token` with the appropriate referer header
+2. Server identifies the request is for a public endpoint and issues a JWT without checking siteAuth
+3. Client includes the JWT in API requests to the public endpoint
+4. Server verifies the JWT using the `withJwtOnlyAuth` middleware
+
 ## Testing
 
 - Use the WordPress admin "Secure API Test" page to test the WordPress integration
@@ -99,10 +137,12 @@ and patterns used.
 #### Server-Side
 
 - **JWT Middleware**: `/utils/server/jwtUtils.ts` provides the `withJwtAuth` HOC to secure API endpoints.
-- **Secured Endpoints**: All API endpoints in `/pages/api/` are protected with JWT authentication.
+- **JWT-Only Middleware**: `/utils/server/apiMiddleware.ts` provides the `withJwtOnlyAuth` HOC for public endpoints.
+- **Secured Endpoints**: All API endpoints in `/pages/api/` are protected with appropriate JWT authentication.
 
 #### Client-Side
 
+- **Token Manager**: `/utils/client/tokenManager.ts` manages JWT token lifecycle and includes them in requests.
 - **React Query Configuration**: `/utils/client/reactQueryConfig.ts` includes JWT handling for all API requests.
 - **Auth Hooks**:
   - `useAnswers`: Fetches paginated answers with authentication
@@ -113,8 +153,8 @@ and patterns used.
 
 1. **Authentication Flow**:
 
-   - JWTs are issued upon login/authentication
-   - Tokens are stored securely and included with each API request
+   - JWTs are issued upon login/authentication or for public endpoint access
+   - Tokens are stored securely in memory and included with each API request
    - Protected API routes validate tokens before processing requests
 
 2. **Data Fetching Pattern**:
@@ -131,17 +171,28 @@ and patterns used.
 
 #### Securing API Routes
 
+For routes that require both JWT and siteAuth (logged-in users):
+
 ```typescript
-// Example of securing an API route
 import { withJwtAuth } from '@/utils/server/jwtUtils';
 
-// Your handler function
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Your implementation here
 }
 
-// Export with JWT auth middleware
 export default withJwtAuth(handler);
+```
+
+For public routes that require JWT but not siteAuth:
+
+```typescript
+import { withJwtOnlyAuth } from '@/utils/server/apiMiddleware';
+
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Your implementation here
+}
+
+export default withJwtOnlyAuth(handler);
 ```
 
 #### Using Data Hooks in Components
@@ -171,3 +222,4 @@ function MyComponent() {
 - Tokens have a limited lifespan to reduce risk from token theft
 - API endpoints verify token validity before processing requests
 - The system implements rate limiting to prevent abuse
+- Public JWT-only endpoints still require valid JWT tokens

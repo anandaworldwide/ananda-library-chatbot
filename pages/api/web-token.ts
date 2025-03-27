@@ -13,6 +13,8 @@
  * - Server-side environment variables are never exposed to the client
  * - Error messages are generic to avoid leaking implementation details
  * - Requires a valid siteAuth cookie for authentication when site config requires login
+ *   EXCEPT for certain public endpoints (contact form, audio files) that need JWT auth
+ *   but don't require user login
  */
 
 import { NextApiRequest, NextApiResponse } from 'next';
@@ -39,13 +41,29 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const siteConfig = loadSiteConfigSync();
     const loginRequired = siteConfig?.requireLogin === true;
 
-    // Only check the siteAuth cookie if login is required
-    if (loginRequired) {
+    // Get referer to check if it's a special case
+    const referer = req.headers.referer || '';
+
+    // Define paths that should receive tokens without login (siteAuth cookie)
+    // These are pages that use withJwtOnlyAuth middleware
+    const publicJwtPaths = [
+      '/contact', // Contact form
+      '/api/audio/', // Audio files
+      '/answers/', // Public answers
+    ];
+
+    // Check if this is a request from a public JWT-only path
+    const isPublicJwtPath =
+      typeof referer === 'string' &&
+      publicJwtPaths.some((path) => referer.includes(path));
+
+    // Either check the siteAuth cookie if login is required, or skip if it's a public JWT path
+    if (loginRequired && !isPublicJwtPath) {
       // Check for siteAuth cookie
       const siteAuth = req.cookies['siteAuth'];
       if (!siteAuth) {
         console.log('[401] Missing siteAuth cookie');
-        return res.status(401).json({ error: 'Authentication required' });
+        return res.status(401).json({ error: 'Authentication required (2)' });
       }
 
       // Cryptographically verify the token using the same method as middleware.ts
@@ -81,6 +99,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         console.log(`Token: ${siteAuth}`);
         return res.status(401).json({ error: 'Expired authentication' });
       }
+    } else if (isPublicJwtPath) {
+      // This is a request from a public JWT path - log it but continue without siteAuth
+      console.log(
+        `Issuing JWT token for public path (no siteAuth required): ${referer}`,
+      );
     }
 
     // Log basic debugging information

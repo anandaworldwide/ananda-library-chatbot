@@ -9,7 +9,10 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Socket } from 'net';
-import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import {
+  withApiMiddleware,
+  withJwtOnlyAuth,
+} from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 
@@ -199,5 +202,192 @@ describe('API Middleware', () => {
 
     // Verify that the handler was not called
     expect(mockHandler).not.toHaveBeenCalled();
+  });
+});
+
+describe('API Middleware Utilities', () => {
+  const mockHandler = jest.fn();
+  let mockReq: Partial<NextApiRequest>;
+  let mockRes: Partial<NextApiResponse>;
+  let originalEnv: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    // Save original env
+    originalEnv = { ...process.env };
+
+    jest.clearAllMocks();
+    mockHandler.mockReset();
+
+    mockReq = {
+      method: 'GET',
+      url: '/api/test',
+      headers: {},
+      socket: {
+        remoteAddress: '127.0.0.1',
+      } as Partial<Socket> as Socket,
+    };
+
+    mockRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    // Set environment variables using object assignment to avoid direct property mutation
+    process.env = {
+      ...originalEnv,
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_BASE_URL: 'https://example.com',
+    };
+  });
+
+  afterEach(() => {
+    // Restore original env
+    process.env = originalEnv;
+  });
+
+  describe('withApiMiddleware', () => {
+    it('should apply withJwtAuth when site config requires login', async () => {
+      (loadSiteConfigSync as jest.Mock).mockReturnValue({
+        requireLogin: true,
+      });
+
+      const wrappedHandler = withApiMiddleware(mockHandler);
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(withJwtAuth).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockHandler).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+
+    it('should not apply withJwtAuth when site config does not require login', async () => {
+      (loadSiteConfigSync as jest.Mock).mockReturnValue({
+        requireLogin: false,
+      });
+
+      const wrappedHandler = withApiMiddleware(mockHandler);
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(withJwtAuth).not.toHaveBeenCalled();
+      expect(mockHandler).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+
+    it('should not apply withJwtAuth when skipAuth option is true', async () => {
+      (loadSiteConfigSync as jest.Mock).mockReturnValue({
+        requireLogin: true,
+      });
+
+      const wrappedHandler = withApiMiddleware(mockHandler, { skipAuth: true });
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(withJwtAuth).not.toHaveBeenCalled();
+      expect(mockHandler).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+
+    it('should apply withJwtAuth when forceAuth option is true', async () => {
+      (loadSiteConfigSync as jest.Mock).mockReturnValue({
+        requireLogin: false,
+      });
+
+      const wrappedHandler = withApiMiddleware(mockHandler, {
+        forceAuth: true,
+      });
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(withJwtAuth).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockHandler).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+  });
+
+  describe('withJwtOnlyAuth', () => {
+    it('should apply security checks and JWT auth', async () => {
+      const wrappedHandler = withJwtOnlyAuth(mockHandler);
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(withJwtAuth).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockHandler).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+
+    it('should apply JWT auth without checking siteAuth cookie', async () => {
+      // Implementation is in withJwtAuth, but we can test that it's called
+      const wrappedHandler = withJwtOnlyAuth(mockHandler);
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(withJwtAuth).toHaveBeenCalled();
+      expect(mockHandler).toHaveBeenCalled();
+    });
+  });
+
+  describe('Security checks', () => {
+    it('should validate referer for POST requests in production', async () => {
+      mockReq.method = 'POST';
+      mockReq.headers = {
+        referer: 'https://example.com/test',
+      };
+
+      const wrappedHandler = withApiMiddleware(mockHandler);
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(mockHandler).toHaveBeenCalled();
+    });
+
+    it('should reject POST requests with invalid referer in production', async () => {
+      mockReq.method = 'POST';
+      mockReq.headers = {
+        referer: 'https://malicious-site.com/test',
+      };
+
+      const wrappedHandler = withApiMiddleware(mockHandler);
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        message: 'Forbidden: Invalid referer',
+      });
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('should allow POST requests without referer validation in development', async () => {
+      // Set environment variables using object assignment
+      process.env = {
+        ...originalEnv,
+        NODE_ENV: 'development',
+      };
+
+      mockReq.method = 'POST';
+      mockReq.headers = {
+        referer: 'https://malicious-site.com/test',
+      };
+
+      const wrappedHandler = withApiMiddleware(mockHandler);
+      await wrappedHandler(
+        mockReq as NextApiRequest,
+        mockRes as NextApiResponse,
+      );
+
+      expect(mockHandler).toHaveBeenCalled();
+    });
   });
 });

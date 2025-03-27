@@ -24,6 +24,7 @@ import CryptoJS from 'crypto-js';
 jest.mock('../../utils/server/loadSiteConfig');
 jest.mock('../../utils/server/passwordUtils');
 jest.mock('crypto-js');
+jest.mock('jsonwebtoken');
 
 describe('/api/web-token', () => {
   // Mock request and response objects
@@ -68,6 +69,9 @@ describe('/api/web-token', () => {
       toString: () => 'hashed-secure-token',
     });
 
+    // Set up jwt.sign mock
+    (jwt.sign as jest.Mock).mockImplementation(() => 'test-jwt-token');
+
     jest.clearAllMocks();
   });
 
@@ -88,14 +92,11 @@ describe('/api/web-token', () => {
   });
 
   it('should create and return a valid JWT token', async () => {
-    const verifyMock = jest.spyOn(jwt, 'sign');
-    verifyMock.mockImplementation(() => 'test-jwt-token');
-
     await handler(req as NextApiRequest, res as NextApiResponse);
 
     expect(statusMock).toHaveBeenCalledWith(200);
     expect(jsonMock).toHaveBeenCalledWith({ token: 'test-jwt-token' });
-    expect(verifyMock).toHaveBeenCalledWith(
+    expect(jwt.sign).toHaveBeenCalledWith(
       {
         client: 'web',
         iat: expect.any(Number),
@@ -103,13 +104,10 @@ describe('/api/web-token', () => {
       'test-secure-token',
       { expiresIn: '15m' },
     );
-
-    verifyMock.mockRestore();
   });
 
   it('should handle JWT signing errors', async () => {
-    const verifyMock = jest.spyOn(jwt, 'sign');
-    verifyMock.mockImplementation(() => {
+    (jwt.sign as jest.Mock).mockImplementationOnce(() => {
       throw new Error('JWT signing failed');
     });
 
@@ -117,8 +115,6 @@ describe('/api/web-token', () => {
 
     expect(statusMock).toHaveBeenCalledWith(500);
     expect(jsonMock).toHaveBeenCalledWith({ error: 'Failed to create token' });
-
-    verifyMock.mockRestore();
   });
 
   // New tests for authentication validation
@@ -149,7 +145,9 @@ describe('/api/web-token', () => {
 
     // Should fail with authentication required
     expect(statusMock).toHaveBeenCalledWith(401);
-    expect(jsonMock).toHaveBeenCalledWith({ error: 'Authentication required' });
+    expect(jsonMock).toHaveBeenCalledWith({
+      error: 'Authentication required (2)',
+    });
   });
 
   it('should validate siteAuth cookie format when login is required', async () => {
@@ -261,5 +259,89 @@ describe('/api/web-token', () => {
     expect(jsonMock).toHaveBeenCalledWith({
       error: 'Server configuration error',
     });
+  });
+
+  // Tests for public JWT-only endpoints
+
+  it('should issue token for audio API requests without siteAuth cookie', async () => {
+    // Set site config to require login
+    (loadSiteConfigSync as jest.Mock).mockReturnValue({
+      requireLogin: true,
+    });
+
+    // Setup request from audio player
+    req.cookies = {}; // No siteAuth cookie
+    req.headers = {
+      referer: 'https://example.com/api/audio/test-audio.mp3',
+    };
+
+    await handler(req as NextApiRequest, res as NextApiResponse);
+
+    // Should succeed despite missing siteAuth cookie because it's from an audio page
+    expect(statusMock).toHaveBeenCalledWith(200);
+    expect(jsonMock).toHaveBeenCalledWith({ token: 'test-jwt-token' });
+    expect(jwt.sign).toHaveBeenCalled();
+  });
+
+  it('should issue token for contact form requests without siteAuth cookie', async () => {
+    // Set site config to require login
+    (loadSiteConfigSync as jest.Mock).mockReturnValue({
+      requireLogin: true,
+    });
+
+    // Setup request from contact form
+    req.cookies = {}; // No siteAuth cookie
+    req.headers = {
+      referer: 'https://example.com/contact',
+    };
+
+    await handler(req as NextApiRequest, res as NextApiResponse);
+
+    // Should succeed despite missing siteAuth cookie because it's from contact page
+    expect(statusMock).toHaveBeenCalledWith(200);
+    expect(jsonMock).toHaveBeenCalledWith({ token: 'test-jwt-token' });
+    expect(jwt.sign).toHaveBeenCalled();
+  });
+
+  it('should issue token for public answers page without siteAuth cookie', async () => {
+    // Set site config to require login
+    (loadSiteConfigSync as jest.Mock).mockReturnValue({
+      requireLogin: true,
+    });
+
+    // Setup request from public answers page
+    req.cookies = {}; // No siteAuth cookie
+    req.headers = {
+      referer: 'https://example.com/answers/abc123',
+    };
+
+    await handler(req as NextApiRequest, res as NextApiResponse);
+
+    // Should succeed despite missing siteAuth cookie because it's from public answers page
+    expect(statusMock).toHaveBeenCalledWith(200);
+    expect(jsonMock).toHaveBeenCalledWith({ token: 'test-jwt-token' });
+    expect(jwt.sign).toHaveBeenCalled();
+  });
+
+  it('should still require siteAuth cookie for regular protected pages', async () => {
+    // Set site config to require login
+    (loadSiteConfigSync as jest.Mock).mockReturnValue({
+      requireLogin: true,
+    });
+
+    // Setup request from a protected page
+    req.cookies = {}; // No siteAuth cookie
+    req.headers = {
+      referer: 'https://example.com/protected-page',
+    };
+
+    await handler(req as NextApiRequest, res as NextApiResponse);
+
+    // Should fail because it's missing siteAuth cookie and not from a public JWT-only endpoint
+    expect(statusMock).toHaveBeenCalledWith(401);
+    expect(jsonMock).toHaveBeenCalledWith({
+      error: 'Authentication required (2)',
+    });
+    expect(jwt.sign).not.toHaveBeenCalled();
   });
 });

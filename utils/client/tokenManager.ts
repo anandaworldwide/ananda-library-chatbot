@@ -1,12 +1,21 @@
 /**
  * Token Manager
  *
- * This utility manages JWT tokens for secure API access:
+ * This utility manages JWT tokens for secure frontend-to-backend API access:
  * - Fetches tokens from the web-token endpoint
  * - Caches tokens in memory to avoid unnecessary requests
  * - Handles token expiration and refresh
  * - Provides a standard way to include tokens in API requests
  * - Implements retry mechanism for failed auth attempts
+ *
+ * AUTHENTICATION TYPES:
+ * 1. JWT token - Required for ALL frontend-to-backend API calls
+ *    - This is a security measure to ensure only our frontend can access our backend
+ *    - Required regardless of whether the user is logged in
+ *    - Examples: Contact form, audio playback, etc.
+ * 2. siteAuth cookie - Optional, only for logged-in user features
+ *    - This is separate from JWT auth and only needed for logged-in features
+ *    - Examples: User profile, saved content, etc.
  *
  * Implementation uses in-memory storage instead of localStorage for better security.
  */
@@ -63,7 +72,14 @@ function isTokenValid(): boolean {
  */
 async function fetchNewToken(): Promise<string> {
   try {
-    const response = await fetch('/api/web-token');
+    // Include the full URL as Referer so web-token endpoint can identify special cases
+    // like audio files and contact form that need JWT but not siteAuth
+    const response = await fetch('/api/web-token', {
+      headers: {
+        // Use the current URL as the referer - this tells the server which page is requesting the token
+        Referer: window.location.href,
+      },
+    });
 
     if (!response.ok) {
       // On login page, a 401 is expected - don't treat it as an error
@@ -216,6 +232,7 @@ export async function fetchWithAuth(
   url: string,
   options?: RequestInit,
 ): Promise<Response> {
+  // Standard authenticated request with retry logic
   return fetchWithRetry(url, options);
 }
 

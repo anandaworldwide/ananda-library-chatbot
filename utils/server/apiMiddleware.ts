@@ -42,6 +42,22 @@ export function withApiMiddleware(
 }
 
 /**
+ * Middleware for endpoints that require JWT authentication but not siteAuth cookie.
+ * This is used for endpoints that need frontend-to-backend security but should be
+ * accessible to non-logged-in users (e.g., contact form, audio playback).
+ *
+ * @param handler The API route handler to wrap
+ * @returns A wrapped handler with JWT auth applied
+ */
+export function withJwtOnlyAuth(handler: ApiHandler): ApiHandler {
+  // Apply security checks first
+  const securityHandler = applySecurityChecks(handler);
+
+  // Then apply JWT auth without checking siteAuth cookie
+  return withJwtAuth(securityHandler);
+}
+
+/**
  * Applies security checks for POST requests
  */
 function applySecurityChecks(handler: ApiHandler): ApiHandler {

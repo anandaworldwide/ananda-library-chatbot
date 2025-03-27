@@ -78,7 +78,7 @@ describe('Contact API', () => {
 
     expect(res.statusCode).toBe(405);
     expect(res._getJSONData()).toEqual({
-      message: 'Method not allowed',
+      error: 'Method not allowed',
     });
   });
 

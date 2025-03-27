@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import Layout from '@/components/layout';
 import Link from 'next/link';
 import validator from 'validator';
+import { getToken } from '@/utils/client/tokenManager';
 
 interface ContactProps {
   siteConfig: SiteConfig | null;
@@ -49,11 +50,14 @@ const Contact = ({ siteConfig }: ContactProps) => {
     }
 
     try {
-      // Use regular fetch instead of queryFetch since the contact endpoint doesn't require authentication
+      // Get a token first
+      const token = await getToken();
+
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name, email, message }),
       });

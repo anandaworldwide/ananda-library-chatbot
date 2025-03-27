@@ -1,33 +1,71 @@
 // This file handles API requests for the contact form.
 // It validates inputs, rate limits submissions, and sends emails via AWS SES.
 
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
+import { NextApiRequest, NextApiResponse } from 'next';
+import { withJwtOnlyAuth } from '@/utils/server/apiMiddleware';
+import { runMiddleware } from '@/utils/server/corsMiddleware';
+import Cors from 'cors';
 import validator from 'validator';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
-import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 
 const ses = new SESClient({
+  region: process.env.AWS_REGION || 'us-east-1',
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
   },
-  region: process.env.AWS_REGION,
 });
 
-async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'POST') {
-    const isAllowed = await genericRateLimiter(req, res, {
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 3, // 3 requests per 15 minutes
-      name: 'contact_form',
-    });
+// Configure CORS for contact form
+const contactCors = Cors({
+  methods: ['POST', 'OPTIONS'],
+  origin: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000', // Only allow our frontend domain
+  credentials: true, // Required for Authorization header
+  allowedHeaders: ['Authorization', 'Content-Type'], // Explicitly allow Authorization header
+});
 
-    if (!isAllowed) {
-      return; // Rate limiter already sent the response
-    }
+/**
+ * Contact form API endpoint that requires JWT authentication for frontend-to-backend security.
+ * Unlike most endpoints, this does NOT require the siteAuth cookie (user login).
+ *
+ * Authentication Flow:
+ * 1. JWT token is REQUIRED - This ensures only our frontend can submit contact forms
+ * 2. siteAuth cookie is NOT required - This allows non-logged-in users to contact us
+ * 3. CORS is configured to only allow requests from our frontend domain
+ */
+const handleRequest = async (
+  req: NextApiRequest,
+  res: NextApiResponse,
+): Promise<void> => {
+  // Apply CORS middleware first
+  await runMiddleware(req, res, contactCors);
 
+  // Handle preflight OPTIONS request for CORS
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 3, // 3 requests per 15 minutes
+    name: 'contact_form',
+  });
+
+  if (!isAllowed) {
+    return; // Rate limiter already sent the response
+  }
+
+  try {
     const { name, email, message } = req.body;
 
     // Input validation
@@ -77,16 +115,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       },
     };
 
-    try {
-      await ses.send(new SendEmailCommand(params));
-      res.status(200).json({ message: 'Message sent successfully' });
-    } catch (error) {
-      console.error('Error sending email:', error);
-      res.status(500).json({ message: 'Failed to send message', error });
-    }
-  } else {
-    res.status(405).json({ message: 'Method not allowed' });
+    await ses.send(new SendEmailCommand(params));
+    res.status(200).json({ message: 'Message sent successfully' });
+  } catch (error) {
+    console.error('Error processing contact form:', error);
+    res.status(500).json({ error: 'Failed to process contact form' });
   }
-}
+};
 
-export default withApiMiddleware(handler, { skipAuth: true });
+// Apply JWT-only authentication middleware
+export default withJwtOnlyAuth(handleRequest);
