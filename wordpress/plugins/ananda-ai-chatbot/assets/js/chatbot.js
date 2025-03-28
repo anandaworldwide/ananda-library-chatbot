@@ -461,7 +461,12 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             question: message,
-            history: chatHistory,
+            history: chatHistory
+              .map(([userMsg, botMsg]) => [
+                { role: 'user', content: userMsg },
+                { role: 'assistant', content: botMsg },
+              ])
+              .flat(), // Convert to role-based format for API compatibility
             collection: defaultCollection,
             privateSession: privateSession,
             mediaTypes: mediaTypes,

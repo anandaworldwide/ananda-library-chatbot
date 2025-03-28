@@ -43,6 +43,7 @@ import { StreamingResponseData } from '@/types/StreamingResponseData';
 import { PineconeStore } from '@langchain/pinecone';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { SiteConfig as AppSiteConfig } from '@/types/siteConfig';
+import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
 
 // S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
@@ -551,7 +552,7 @@ export const makeComparisonChains = async (
 export async function setupAndExecuteLanguageModelChain(
   retriever: ReturnType<PineconeStore['asRetriever']>,
   sanitizedQuestion: string,
-  history: [string, string][],
+  history: ChatMessage[],
   sendData: (data: StreamingResponseData) => void,
   sourceCount: number = 4,
   filter?: Record<string, unknown>,
@@ -585,11 +586,7 @@ export async function setupAndExecuteLanguageModelChain(
     console.log(`Chain creation took ${Date.now() - chainCreationStartTime}ms`);
 
     // Format chat history for the language model
-    const pastMessages = history
-      .map((message) => {
-        return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join('\n');
-      })
-      .join('\n');
+    const pastMessages = convertChatHistory(history);
 
     let fullResponse = '';
     let firstTokenTime: number | null = null;

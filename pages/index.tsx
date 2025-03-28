@@ -286,13 +286,23 @@ export default function Home({
           } as ExtendedAIMessage);
         }
 
+        // Update the last assistant message in the history
+        const updatedHistory = [...prevState.history];
+        if (updatedHistory.length > 0) {
+          // Last item should be an assistant message (role === 'assistant')
+          const lastIndex = updatedHistory.length - 1;
+          if (updatedHistory[lastIndex].role === 'assistant') {
+            updatedHistory[lastIndex] = {
+              role: 'assistant',
+              content: newResponse,
+            };
+          }
+        }
+
         return {
           ...prevState,
           messages: updatedMessages,
-          history: [
-            ...prevState.history.slice(0, -1),
-            [prevState.history[prevState.history.length - 1][0], newResponse],
-          ],
+          history: updatedHistory,
         };
       });
 
@@ -445,7 +455,11 @@ export default function Home({
         ...prevState.messages,
         { type: 'userMessage', message: submittedQuery } as ExtendedAIMessage,
       ],
-      history: [...prevState.history, [submittedQuery, '']],
+      history: [
+        ...prevState.history,
+        { role: 'user', content: submittedQuery },
+        { role: 'assistant', content: '' },
+      ],
     }));
 
     // Clear the input

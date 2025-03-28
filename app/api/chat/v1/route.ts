@@ -49,6 +49,7 @@ import { PineconeStore } from '@langchain/pinecone';
 import {
   makeChain,
   setupAndExecuteLanguageModelChain,
+  makeComparisonChains,
 } from '@/utils/server/makechain';
 import { getCachedPineconeIndex } from '@/utils/server/pinecone-client';
 import { getPineconeIndexName } from '@/config/pinecone';
@@ -66,14 +67,10 @@ import { getClientIp } from '@/utils/server/ipUtils';
 import { isDevelopment } from '@/utils/env';
 import { withAppRouterJwtAuth } from '@/utils/server/appRouterJwtUtils';
 import { JwtPayload } from '@/utils/server/jwtUtils';
+import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
 
 export const runtime = 'nodejs';
 export const maxDuration = 240;
-
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
 
 interface MediaTypes {
   text?: boolean;
@@ -470,7 +467,7 @@ async function saveAnswerToFirestore(
   fullResponse: string,
   collection: string,
   promiseDocuments: Document[],
-  history: [string, string][],
+  history: ChatMessage[],
   clientIP: string,
 ): Promise<string> {
   // Check if db is available
@@ -487,10 +484,7 @@ async function saveAnswerToFirestore(
       collection: collection,
       sources: JSON.stringify(promiseDocuments),
       likeCount: 0,
-      history: history.map((messagePair: [string, string]) => ({
-        question: messagePair[0],
-        answer: messagePair[1],
-      })),
+      history: history,
       ip: clientIP,
       timestamp: fbadmin.firestore.FieldValue.serverTimestamp(),
     };
@@ -626,13 +620,7 @@ async function handleComparisonRequest(
         );
 
         // Format chat history
-        const pastMessages = convertChatHistory(requestBody.history)
-          .map((message) => {
-            return [`Human: ${message[0]}`, `Assistant: ${message[1]}`].join(
-              '\n',
-            );
-          })
-          .join('\n');
+        const pastMessages = convertChatHistory(requestBody.history);
 
         // Set up a timeout to ensure done is sent even if models hang
         const doneTimeout = setTimeout(() => {
@@ -838,6 +826,8 @@ async function handleCorsOptions(req: NextRequest) {
 /**
  * Main handler for chat requests
  * This contains the original implementation of the POST handler
+ *
+ * TODO: remove comparison functionality here if it is not needed. confirm it is not needed.
  */
 async function handleChatRequest(req: NextRequest) {
   // Start timing with stages for component timing
@@ -871,6 +861,7 @@ async function handleChatRequest(req: NextRequest) {
   }
 
   const { sanitizedInput, originalQuestion } = validationResult;
+  const convertedHistory = convertChatHistory(sanitizedInput.history);
 
   // Check if this is a comparison request
   const isComparison = 'modelA' in sanitizedInput;
@@ -1017,7 +1008,7 @@ async function handleChatRequest(req: NextRequest) {
         const fullResponse = await setupAndExecuteLanguageModelChain(
           retriever,
           sanitizedInput.question,
-          convertChatHistory(sanitizedInput.history),
+          sanitizedInput.history || [],
           sendData,
           sanitizedInput.sourceCount || 4,
           filter,
@@ -1041,7 +1032,7 @@ async function handleChatRequest(req: NextRequest) {
             fullResponse,
             sanitizedInput.collection || 'default',
             promiseDocuments,
-            convertChatHistory(sanitizedInput.history),
+            sanitizedInput.history || [],
             clientIP,
           );
           sendData({ docId });
@@ -1074,17 +1065,6 @@ async function handleChatRequest(req: NextRequest) {
   return addCorsHeaders(response, req, siteConfig);
 }
 
-function convertChatHistory(
-  history: ChatMessage[] | undefined,
-): [string, string][] {
-  if (!history) return [];
-  return history.map((msg) => [
-    msg.role === 'user' ? msg.content : '',
-    msg.role === 'assistant' ? msg.content : '',
-  ]);
-}
-
-// Helper function to convert partial media types to full boolean record
 function normalizeMediaTypes(
   mediaTypes: Partial<MediaTypes> | undefined,
 ): Record<string, boolean> {

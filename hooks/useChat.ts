@@ -5,6 +5,7 @@ import { logEvent } from '@/utils/client/analytics';
 import { getGreeting } from '@/utils/client/siteConfig';
 import { SiteConfig } from '@/types/siteConfig';
 import { fetchWithAuth } from '@/utils/client/tokenManager';
+import { ChatMessage, createChatMessages } from '@/utils/shared/chatHistory';
 
 export function useChat(
   collection: string,
@@ -17,7 +18,7 @@ export function useChat(
   const [messageState, setMessageState] = useState<{
     messages: Message[];
     pending?: string;
-    history: [string, string][];
+    history: ChatMessage[];
     pendingSourceDocs?: Document[];
   }>({
     messages: [
@@ -28,6 +29,11 @@ export function useChat(
     ],
     history: [],
   });
+
+  // Function to update the chat history with new messages
+  const updateHistory = (query: string, response: string) => {
+    return [...messageState.history, ...createChatMessages(query, response)];
+  };
 
   const handleSubmit = async (e: React.FormEvent, query: string) => {
     e.preventDefault();
@@ -103,7 +109,7 @@ export function useChat(
               collection: collection,
             },
           ],
-          history: [...state.history, [query, data.text]],
+          history: updateHistory(query, data.text),
         }));
       }
 
