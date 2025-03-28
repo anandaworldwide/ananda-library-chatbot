@@ -99,28 +99,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         console.log(`Token: ${siteAuth}`);
         return res.status(401).json({ error: 'Expired authentication' });
       }
-    } else if (isPublicJwtPath) {
-      // This is a request from a public JWT path - log it but continue without siteAuth
-      console.log(
-        `Issuing JWT token for public path (no siteAuth required): ${referer}`,
-      );
     }
-
-    // Log basic debugging information
-    const token = process.env.SECURE_TOKEN || '';
-    if (token) {
-      const tokenStart = token.substring(0, 3);
-      const tokenEnd = token.substring(token.length - 3);
-      const tokenLength = token.length;
-      console.log(
-        `Token debug - Length: ${tokenLength}, Start: ${tokenStart}..., End: ...${tokenEnd}`,
-      );
-    }
-
-    // Log environment info
-    console.log(`Environment: ${process.env.NODE_ENV}`);
-    console.log(`Host header: ${req.headers.host}`);
-    console.log(`SECURE_TOKEN exists: ${Boolean(process.env.SECURE_TOKEN)}`);
 
     // Verify SECURE_TOKEN is available in environment variables
     if (!process.env.SECURE_TOKEN) {
@@ -139,7 +118,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         { expiresIn: '15m' },
       );
 
-      console.log('Successfully created web token');
       return res.status(200).json({ token: webToken });
     } catch (tokenError) {
       console.error('Error creating web token:', tokenError);

@@ -44,7 +44,6 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
     initializeTokenManager()
       .then(() => {
         setAuthInitialized(true);
-        console.log('Authentication initialized successfully');
       })
       .catch((error) => {
         console.error('Failed to initialize token manager:', error);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { SiteConfig } from '@/types/siteConfig';
 import { getSiteName, getTagline } from '@/utils/client/siteConfig';
@@ -16,16 +16,9 @@ export default function Login({ siteConfig }: LoginProps) {
   const router = useRouter();
   const { redirect } = router.query;
 
-  useEffect(() => {
-    if (redirect) {
-      console.log('Redirect query parameter:', redirect);
-    }
-  }, [redirect]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    console.log('Submitting login with redirect:', redirect);
 
     if (!password.trim()) {
       setError('Password cannot be empty');
@@ -43,7 +36,6 @@ export default function Login({ siteConfig }: LoginProps) {
 
       if (res.ok) {
         const data = await res.json();
-        console.log('Login successful, redirecting to:', data.redirect);
         router.push(data.redirect || '/');
       } else if (res.status === 429) {
         setError('Too many login attempts. Please try again later.');
