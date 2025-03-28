@@ -49,7 +49,6 @@ import { PineconeStore } from '@langchain/pinecone';
 import {
   makeChain,
   setupAndExecuteLanguageModelChain,
-  makeComparisonChains,
 } from '@/utils/server/makechain';
 import { getCachedPineconeIndex } from '@/utils/server/pinecone-client';
 import { getPineconeIndexName } from '@/config/pinecone';
@@ -108,6 +107,8 @@ interface ComparisonRequestBody extends ChatRequestBody {
   temperatureB: number;
   useExtraSources: boolean;
   sourceCount: number;
+  historyA?: ChatMessage[];
+  historyB?: ChatMessage[];
 }
 
 // Define a minimal type that matches PineconeStore.fromExistingIndex expectations
@@ -619,8 +620,14 @@ async function handleComparisonRequest(
           sourceCount,
         );
 
-        // Format chat history
-        const pastMessages = convertChatHistory(requestBody.history);
+        // Format chat history for each model
+        const pastMessagesA = convertChatHistory(requestBody.historyA || []);
+        const pastMessagesB = convertChatHistory(requestBody.historyB || []);
+
+        // Log history sizes for debugging
+        console.log(
+          `Model A history size: ${pastMessagesA.length}, Model B history size: ${pastMessagesB.length}`,
+        );
 
         // Set up a timeout to ensure done is sent even if models hang
         const doneTimeout = setTimeout(() => {
@@ -636,7 +643,7 @@ async function handleComparisonRequest(
             chainA.invoke(
               {
                 question: requestBody.question,
-                chat_history: pastMessages,
+                chat_history: pastMessagesA,
               },
               {
                 callbacks: [
@@ -653,7 +660,7 @@ async function handleComparisonRequest(
             chainB.invoke(
               {
                 question: requestBody.question,
-                chat_history: pastMessages,
+                chat_history: pastMessagesB,
               },
               {
                 callbacks: [
@@ -861,7 +868,6 @@ async function handleChatRequest(req: NextRequest) {
   }
 
   const { sanitizedInput, originalQuestion } = validationResult;
-  const convertedHistory = convertChatHistory(sanitizedInput.history);
 
   // Check if this is a comparison request
   const isComparison = 'modelA' in sanitizedInput;

@@ -168,6 +168,14 @@ jest.mock('@/utils/server/makechain', () => ({
 
       return Promise.resolve('Test response');
     }),
+  makeComparisonChains: jest.fn().mockResolvedValue({
+    chainA: {
+      invoke: jest.fn().mockResolvedValue('Test response A'),
+    },
+    chainB: {
+      invoke: jest.fn().mockResolvedValue('Test response B'),
+    },
+  }),
 }));
 
 jest.mock('@/utils/server/genericRateLimiter', () => ({
@@ -755,6 +763,45 @@ describe('Chat API Route', () => {
       const data = await res.json();
       expect(data.error).not.toContain('compare');
       expect(data.error).toContain('Invalid collection');
+    });
+
+    test('handles separate histories for model comparison', async () => {
+      // Create a request with separate histories for models A and B
+      const req = new NextRequest('http://localhost:3000/api/chat/v1', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://example.com',
+          Authorization: `Bearer ${generateTestToken()}`,
+        },
+        body: JSON.stringify({
+          question: 'Test question',
+          collection: 'master_swami',
+          privateSession: false,
+          mediaTypes: { text: true },
+          modelA: 'gpt-4o',
+          modelB: 'gpt-3.5-turbo',
+          temperatureA: 0.7,
+          temperatureB: 0.5,
+          sourceCount: 3,
+          historyA: [
+            { role: 'user', content: 'Previous question A' },
+            { role: 'assistant', content: 'Previous answer A' },
+          ],
+          historyB: [
+            { role: 'user', content: 'Previous question B' },
+            { role: 'assistant', content: 'Previous answer B' },
+          ],
+        }),
+      });
+
+      // Call the POST handler
+      const res = await POST(req);
+
+      // Verify we get a streaming response
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Content-Type')).toBe('text/event-stream');
+      expect(res.headers.get('Cache-Control')).toContain('no-cache');
     });
 
     // Instead of testing the entire streaming functionality, we'll mark these as skipped

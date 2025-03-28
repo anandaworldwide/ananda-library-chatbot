@@ -412,6 +412,7 @@ export default function Home({
       setError,
       setMessageState,
       fetchRelatedQuestions,
+      siteConfig?.siteId,
     ],
   );
 

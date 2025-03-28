@@ -343,7 +343,15 @@ describe('Chat API Streaming', () => {
         body: JSON.stringify({
           question: mockQuestion,
           collection: mockCollection,
-          history: [],
+          history: [], // This should be ignored for model comparison
+          historyA: [
+            { role: 'user', content: 'Previous question A' },
+            { role: 'assistant', content: 'Previous answer A' },
+          ],
+          historyB: [
+            { role: 'user', content: 'Previous question B' },
+            { role: 'assistant', content: 'Previous answer B' },
+          ],
           privateSession: false,
           mediaTypes: { text: true },
           modelA: 'gpt-4o',

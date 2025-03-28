@@ -1,8 +1,4 @@
-import {
-  convertChatHistory,
-  ChatHistory,
-  ChatMessage,
-} from '@/utils/shared/chatHistory';
+import { convertChatHistory, ChatMessage } from '@/utils/shared/chatHistory';
 
 describe('convertChatHistory', () => {
   it('should correctly convert chat history with role-based messages', () => {

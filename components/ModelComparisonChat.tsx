@@ -233,6 +233,14 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
     accumulatedResponseB.current = '';
     setHasVoted(false);
 
+    // Log the current conversation state
+    console.log(
+      'Current message count before adding new message - A:',
+      messagesA.length,
+      'B:',
+      messagesB.length,
+    );
+
     // Add user message immediately
     const userMessage: ExtendedAIMessage = {
       type: 'userMessage',
@@ -241,7 +249,21 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
     setMessagesA((prev) => [...prev, userMessage]);
     setMessagesB((prev) => [...prev, userMessage]);
 
+    // Clear input immediately after submitting
+    setInput('');
+
     try {
+      // Convert previous messages to chat history format for both models
+      const historyA = convertToHistoryFormat(messagesA);
+      const historyB = convertToHistoryFormat(messagesB);
+
+      console.log(
+        'Chat history A length:',
+        historyA.length,
+        'B length:',
+        historyB.length,
+      );
+
       const requestBody = {
         question: query,
         modelA,
@@ -250,8 +272,10 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
         temperatureB,
         mediaTypes,
         collection,
-        history: [], // Empty for comparison mode
+        historyA: historyA, // Separate history for model A
+        historyB: historyB, // Separate history for model B
         sourceCount,
+        useExtraSources: false,
       };
 
       console.log('Sending request with:', requestBody); // Debug log
@@ -361,8 +385,51 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
-      setInput('');
     }
+  };
+
+  // Helper function to convert messages to history format for the API
+  const convertToHistoryFormat = (messages: ExtendedAIMessage[]) => {
+    console.log(`Converting messages array with ${messages.length} items`);
+
+    // Skip the latest message if it's the current query being processed
+    // This is only needed when we're in the middle of processing a request
+    // When we're sending history during voting, we should include all messages
+    const messagesToConvert = loading ? messages.slice(0, -1) : messages;
+
+    // No history for first message
+    if (messagesToConvert.length === 0) {
+      console.log('No messages to convert (first query in conversation)');
+      return [];
+    }
+
+    console.log(
+      'Converting these messages to history format:',
+      messagesToConvert.map((m) => ({
+        type: m.type,
+        preview: m.message.substring(0, 30),
+      })),
+    );
+
+    const history = [];
+
+    for (let i = 0; i < messagesToConvert.length; i++) {
+      const message = messagesToConvert[i];
+      if (message.type === 'userMessage') {
+        history.push({
+          role: 'user',
+          content: message.message,
+        });
+      } else if (message.type === 'apiMessage') {
+        history.push({
+          role: 'assistant',
+          content: message.message,
+        });
+      }
+    }
+
+    console.log(`Converted ${history.length} messages to chat history format`);
+    return history;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -404,6 +471,10 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
   const handleSkipAndNew = async () => {
     logEvent(`${PAGE}_skip`, PAGE, 'Skip and Try New');
     try {
+      // Convert messages to history format for both models
+      const historyA = convertToHistoryFormat(messagesA);
+      const historyB = convertToHistoryFormat(messagesB);
+
       await fetchWithAuth('/api/model-comparison-vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -423,6 +494,8 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
           question: messagesA[messagesA.length - 2]?.message || '',
           collection,
           mediaTypes,
+          historyA,
+          historyB,
         }),
       });
     } catch (error) {
@@ -440,6 +513,10 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
     if (!selectedWinner) return;
 
     try {
+      // Convert messages to history format for both models
+      const historyA = convertToHistoryFormat(messagesA);
+      const historyB = convertToHistoryFormat(messagesB);
+
       const response = await fetchWithAuth('/api/model-comparison-vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -461,6 +538,8 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
           userComments: comments,
           collection,
           mediaTypes,
+          historyA,
+          historyB,
         }),
       });
 
