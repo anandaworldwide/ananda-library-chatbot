@@ -83,7 +83,7 @@
     "queriesPerUserPerDay": 200,
     "enableModelComparison": true,
     "showSourceCountSelector": true,
-    "temperature": 0.5,
+    "temperature": 0.4,
     "modelName": "gpt-4o"
   },
   "ananda-public": {
@@ -215,7 +215,7 @@
     "queriesPerUserPerDay": 100,
     "enableModelComparison": true,
     "showSourceCountSelector": true,
-    "temperature": 0.5,
+    "temperature": 0.2,
     "modelName": "gpt-4o"
   },
   "crystal": {
@@ -269,7 +269,7 @@
     "queriesPerUserPerDay": 40,
     "enableModelComparison": false,
     "showSourceCountSelector": false,
-    "temperature": 0.3,
+    "temperature": 0.2,
     "modelName": "gpt-4o-mini"
   }
 }
