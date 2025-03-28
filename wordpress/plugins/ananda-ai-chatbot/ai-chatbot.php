@@ -16,6 +16,9 @@ if (!defined('ABSPATH')) {
 define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://ananda-public-chatbot.vercel.app/api/chat/v1');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
+// Define plugin version at the top with other constants
+define('AICHATBOT_VERSION', '1.0.4'); // Increment this when you make CSS changes
+
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
     $configured_url = get_option('aichatbot_vercel_url');
@@ -76,7 +79,7 @@ function aichatbot_register_options() {
     register_setting('aichatbot_settings_group', 'aichatbot_window_width', array(
         'type' => 'integer',
         'sanitize_callback' => 'aichatbot_validate_window_width',
-        'default' => 375,
+        'default' => 560,
     ));
     
     register_setting('aichatbot_settings_group', 'aichatbot_window_height', array(
@@ -113,7 +116,7 @@ function aichatbot_validate_font_size($input) {
 
 function aichatbot_validate_window_width($input) {
     $input = intval($input);
-    return max(300, min(600, $input)); // Limit width between 300px and 600px
+    return max(300, min(700, $input)); // Increased max width to accommodate 560px
 }
 
 function aichatbot_validate_window_height($input) {
@@ -173,9 +176,9 @@ function aichatbot_settings_page() {
                     <th><label for="aichatbot_window_width">Window Width (px)</label></th>
                     <td>
                         <input type="number" id="aichatbot_window_width" name="aichatbot_window_width" 
-                               value="<?php echo esc_attr(get_option('aichatbot_window_width', 375)); ?>" min="300" max="600" step="10" />
+                               value="<?php echo esc_attr(get_option('aichatbot_window_width', 560)); ?>" min="300" max="700" step="10" />
                         <p class="description">
-                            Set the width of the chat window (300px to 600px).
+                            Set the width of the chat window (300px to 700px).
                         </p>
                     </td>
                 </tr>
@@ -252,7 +255,13 @@ function aichatbot_settings_page() {
 function aichatbot_enqueue_assets() {
     // Enqueue Font Awesome from CDN with a reliable approach
     wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css', array(), null);
-    wp_enqueue_style('aichatbot-css', plugins_url('assets/css/chatbot.css', __FILE__));
+    
+    // Enqueue our CSS with version for cache busting
+    wp_enqueue_style('aichatbot-css', 
+        plugins_url('assets/css/chatbot.css', __FILE__), 
+        array(), 
+        AICHATBOT_VERSION
+    );
     
     // Enqueue auth utilities FIRST so they're available to the main script
     wp_enqueue_script('aichatbot-auth', plugins_url('assets/js/chatbot-auth.js', __FILE__), array('jquery'), '1.0.1', true);
@@ -274,7 +283,7 @@ function aichatbot_enqueue_assets() {
     
     // Get appearance settings with defaults
     $font_size = get_option('aichatbot_font_size', 16);
-    $window_width = get_option('aichatbot_window_width', 375);
+    $window_width = get_option('aichatbot_window_width', 560);
     $window_height = get_option('aichatbot_window_height', 600);
     $fullpage_url = get_option('aichatbot_fullpage_url', '/chat');
     
@@ -303,7 +312,7 @@ add_action('wp_enqueue_scripts', 'aichatbot_enqueue_assets');
 function aichatbot_add_custom_css() {
     // Get appearance settings with defaults
     $font_size = get_option('aichatbot_font_size', 16);
-    $window_width = get_option('aichatbot_window_width', 375);
+    $window_width = get_option('aichatbot_window_width', 560);
     $window_height = get_option('aichatbot_window_height', 600);
     
     // Add Font Awesome directly to ensure it loads

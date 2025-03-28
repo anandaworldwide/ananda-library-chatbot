@@ -217,30 +217,32 @@
 }
 
 /* Message styles */
-.aichatbot-user-message,
-.aichatbot-bot-message,
-.aichatbot-error-message,
-.aichatbot-typing {
-  max-width: 80%;
+#aichatbot-window .aichatbot-user-message,
+#aichatbot-window .aichatbot-bot-message,
+#aichatbot-window .aichatbot-error-message,
+#aichatbot-window .aichatbot-typing {
+  max-width: 90% !important;
   padding: 10px 15px;
   border-radius: 18px;
   font-size: 16px !important;
   line-height: 1.5;
 }
 
-.aichatbot-user-message {
+#aichatbot-window .aichatbot-user-message {
   align-self: flex-end;
   background-color: #4a90e2;
   color: white;
   border-bottom-right-radius: 5px;
+  margin-left: 5%;
 }
 
-.aichatbot-bot-message {
+#aichatbot-window .aichatbot-bot-message {
   align-self: flex-start;
   background-color: white;
   color: #333;
   border: 1px solid #e0e0e0;
   border-bottom-left-radius: 5px;
+  margin-right: 5%;
   font-weight: 400;
 }
 
