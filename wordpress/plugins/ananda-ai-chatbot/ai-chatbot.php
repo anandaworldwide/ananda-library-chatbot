@@ -17,7 +17,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://ananda-public-chatbot.vercel
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.4'); // Increment this when you make CSS changes
+define('AICHATBOT_VERSION', '1.0.5'); // Increment this when you make CSS or JS changes
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -264,10 +264,10 @@ function aichatbot_enqueue_assets() {
     );
     
     // Enqueue auth utilities FIRST so they're available to the main script
-    wp_enqueue_script('aichatbot-auth', plugins_url('assets/js/chatbot-auth.js', __FILE__), array('jquery'), '1.0.1', true);
+    wp_enqueue_script('aichatbot-auth', plugins_url('assets/js/chatbot-auth.js', __FILE__), array('jquery'), AICHATBOT_VERSION, true);
     
     // Enqueue main plugin script with dependency on auth script
-    wp_enqueue_script('aichatbot-js', plugins_url('assets/js/chatbot.js', __FILE__), array('jquery', 'aichatbot-auth'), '1.0.1', true);
+    wp_enqueue_script('aichatbot-js', plugins_url('assets/js/chatbot.js', __FILE__), array('jquery', 'aichatbot-auth'), AICHATBOT_VERSION, true);
     
     // Get Vercel URL from settings, with fallbacks
     $saved_url = get_option('aichatbot_vercel_url');
