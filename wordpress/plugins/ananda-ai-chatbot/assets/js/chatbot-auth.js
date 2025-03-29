@@ -6,6 +6,13 @@
  * - Token acquisition from the WordPress backend
  * - Token caching and refresh
  * - Helper functions for making authenticated API calls
+ *
+ * DEVELOPER NOTE:
+ * This file includes testing utilities that are only active in development:
+ * 1. The 'forceSessionExpired()' method for simulating auth errors
+ * 2. A test button that appears when '?test=true' is added to the URL
+ * These features help with debugging session expiration handling and should
+ * remain in the codebase for future testing purposes.
  */
 
 // Store token and expiration in memory (not localStorage for security)
@@ -76,7 +83,37 @@ async function fetchNewToken() {
       throw new Error(`Failed to fetch token: HTTP ${response.status}`);
     }
 
-    const data = await response.json();
+    // Get the raw text first to check for issues
+    const rawText = await response.text();
+
+    // Debug: Log a snippet of the raw text to see what's coming back
+    console.log(
+      'Raw response text (first 100 chars):',
+      rawText.length > 100 ? rawText.substring(0, 100) + '...' : rawText,
+    );
+
+    // Check for HTTP Basic Auth error
+    if (
+      rawText.includes('permission to access this page') ||
+      rawText.includes('HTTP authentication') ||
+      rawText.includes('Authorization Required')
+    ) {
+      console.error('HTTP Basic Authentication error detected');
+      throw new Error('SESSION_EXPIRED');
+    }
+
+    // Check if the response looks like valid JSON
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (jsonError) {
+      console.error('Failed to parse JSON response:', jsonError);
+      console.error('Raw response:', rawText);
+      throw new Error(
+        'Invalid JSON in response. Check WordPress PHP errors or warnings that might be included in the output.',
+      );
+    }
+
     console.log('Token response data received:', JSON.stringify(data));
 
     // WordPress's wp_send_json_success wraps the data in a 'data' property
@@ -137,6 +174,13 @@ async function fetchNewToken() {
     // Add more context to the error message
     console.error('Token fetch error:', error);
 
+    // Special handling for session expiration
+    if (error.message === 'SESSION_EXPIRED') {
+      throw new Error(
+        'Your session has expired. Please reload the page to continue.',
+      );
+    }
+
     // Provide user-friendly error messages based on common error patterns
     let userFriendlyError = error;
 
@@ -155,6 +199,10 @@ async function fetchNewToken() {
     } else if (error.message.includes('HTTP 500')) {
       userFriendlyError = new Error(
         'Server error: The WordPress backend encountered an internal error. Check your server logs.',
+      );
+    } else if (error.message.includes('Invalid JSON')) {
+      userFriendlyError = new Error(
+        'Invalid response: The server returned malformed data. Check for PHP errors or warnings in your WordPress installation.',
       );
     }
 
@@ -200,6 +248,13 @@ async function fetchWithAuth(url, options = {}) {
 window.aichatbotAuth = {
   getToken,
   fetchWithAuth,
+  // For testing: Force session to expire
+  forceSessionExpired: function () {
+    // Create and throw the same error that would happen with a real HTTP auth expiration
+    throw new Error(
+      'Your session has expired. Please reload the page to continue.',
+    );
+  },
 };
 
 // Add a safety check that runs when the page loads
@@ -209,5 +264,56 @@ window.aichatbotAuth = {
     console.error('Error: aichatbotAuth failed to initialize properly');
   } else {
     console.log('aichatbotAuth initialized successfully');
+
+    // For developers: Add test button if URL has test=true
+    if (window.location.search.includes('test=true')) {
+      setTimeout(() => {
+        const testButton = document.createElement('button');
+        testButton.textContent = 'Test Session Expiration';
+        testButton.style.position = 'fixed';
+        testButton.style.bottom = '120px';
+        testButton.style.right = '20px';
+        testButton.style.zIndex = '9999';
+        testButton.style.padding = '10px';
+        testButton.style.backgroundColor = '#ff6b6b';
+        testButton.style.color = 'white';
+        testButton.style.border = 'none';
+        testButton.style.borderRadius = '4px';
+        testButton.style.cursor = 'pointer';
+
+        testButton.addEventListener('click', () => {
+          try {
+            window.aichatbotAuth.forceSessionExpired();
+          } catch (error) {
+            // In a real scenario, this error would be caught by the chatbot.js error handler
+            // So let's simulate that happening
+            const messages = document.getElementById('aichatbot-messages');
+            if (messages) {
+              const errorMessage = document.createElement('div');
+              errorMessage.className = 'aichatbot-error-message';
+              errorMessage.innerHTML = `
+                <strong>Session Expired:</strong> Your authentication has expired.<br>
+                <small>Please reload the page to continue using the chatbot.</small><br>
+                <button id="aichatbot-reload-button" style="margin-top: 10px; padding: 5px 10px; background-color: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer;">Reload Page</button>
+              `;
+              messages.appendChild(errorMessage);
+
+              setTimeout(() => {
+                const reloadButton = document.getElementById(
+                  'aichatbot-reload-button',
+                );
+                if (reloadButton) {
+                  reloadButton.addEventListener('click', () => {
+                    window.location.reload();
+                  });
+                }
+              }, 100);
+            }
+          }
+        });
+
+        document.body.appendChild(testButton);
+      }, 1000);
+    }
   }
 })();

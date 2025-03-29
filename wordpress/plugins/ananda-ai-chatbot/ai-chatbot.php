@@ -17,7 +17,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://ananda-public-chatbot.vercel
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.5'); // Increment this when you make CSS or JS changes
+define('AICHATBOT_VERSION', '1.0.9'); // Increment this when you make CSS or JS changes
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -390,6 +390,10 @@ add_action('wp_footer', 'aichatbot_add_chat_bubble');
 
 // Add this function to handle token requests from the frontend
 function aichatbot_ajax_get_token() {
+    // Prevent any output before our JSON response
+    // This catches PHP notices, warnings, etc. that could break JSON
+    ob_start();
+    
     // For debugging: Log that the AJAX handler was called
     error_log('aichatbot_ajax_get_token called');
     
@@ -410,6 +414,9 @@ function aichatbot_ajax_get_token() {
             if ($error_data) {
                 error_log("Error data: " . json_encode($error_data));
             }
+            
+            // Clear any previous output
+            ob_clean();
             
             // Format specific error messages for common issues
             if ($error_code === 'site_mismatch') {
@@ -446,6 +453,9 @@ function aichatbot_ajax_get_token() {
         // Log success for debugging
         error_log("Token successfully retrieved from backend (length: " . strlen($token) . ")");
         
+        // Clear any previous output that might corrupt our JSON
+        ob_clean();
+        
         // Return the token to the frontend
         // The response structure should match what chatbot-auth.js expects:
         // - success: true/false (wp_send_json_success adds this)
@@ -454,6 +464,9 @@ function aichatbot_ajax_get_token() {
             'token' => $token
         ));
     } catch (Exception $e) {
+        // Clear any buffered output to ensure clean JSON response
+        ob_clean();
+        
         // Catch any unexpected PHP exceptions
         error_log("Unexpected exception in token handler: " . $e->getMessage());
         wp_send_json_error(array(
@@ -461,6 +474,10 @@ function aichatbot_ajax_get_token() {
             'code' => 'internal_error'
         ));
     }
+    
+    // Clean up output buffer if we somehow get here
+    ob_end_clean();
+    exit;
 }
 
 // Register the AJAX handler

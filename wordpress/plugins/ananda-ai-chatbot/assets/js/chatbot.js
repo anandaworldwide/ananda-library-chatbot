@@ -453,6 +453,24 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update clear history button visibility
       updateClearHistoryButton();
 
+      // Add this right before sending the request
+      console.log(
+        'Request payload:',
+        JSON.stringify({
+          question: message,
+          history: chatHistory
+            .map(([userMsg, botMsg]) => [
+              { role: 'user', content: userMsg },
+              { role: 'assistant', content: botMsg },
+            ])
+            .flat(),
+          collection: defaultCollection,
+          privateSession: privateSession,
+          mediaTypes: mediaTypes,
+          sourceCount: sourceCount,
+        }),
+      );
+
       // Send to Vercel with streaming support
       const response = await window.aichatbotAuth.fetchWithAuth(
         aichatbotData.vercelUrl,
@@ -479,16 +497,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Don't remove typing indicator yet - keep it until we get actual content
 
       if (!response.ok) {
-        // Try to get the error payload from the response
-        let errorPayload = '';
         try {
           const errorData = await response.json();
-          errorPayload = errorData.error || JSON.stringify(errorData);
-        } catch (error) {
-          console.error('Error parsing error response:', error);
-          errorPayload = `Status: ${response.status}`;
+          console.error('API Error:', errorData);
+          const errorMessage = errorData.error || JSON.stringify(errorData);
+          throw new Error(`${errorMessage}`); // This will show the actual API error
+        } catch (e) {
+          throw new Error(`Server error (${response.status}): ${e.message}`);
         }
-        throw new Error(`Server error (${errorPayload})`);
       }
 
       // Check if the response is a stream
@@ -681,6 +697,25 @@ document.addEventListener('DOMContentLoaded', () => {
           <small>Please check your internet connection and try again, or contact the site administrator.</small>
         `;
         console.error('Token error details:', error.message);
+      } else if (error.message.includes('session has expired')) {
+        // Handle session expiration with reload button
+        errorMessage.innerHTML = `
+          <strong>Session Expired:</strong> Your authentication has expired.<br>
+          <small>Please reload the page to continue using the chatbot.</small><br>
+          <button id="aichatbot-reload-button" style="margin-top: 10px; padding: 5px 10px; background-color: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer;">Reload Page</button>
+        `;
+
+        // Add reload functionality after the message is added to DOM
+        setTimeout(() => {
+          const reloadButton = document.getElementById(
+            'aichatbot-reload-button',
+          );
+          if (reloadButton) {
+            reloadButton.addEventListener('click', () => {
+              window.location.reload();
+            });
+          }
+        }, 100);
       } else {
         // Format other errors to be more readable
         const cleanErrorMessage = error.message

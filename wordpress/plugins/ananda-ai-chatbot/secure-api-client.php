@@ -71,6 +71,11 @@ function ananda_get_api_token() {
     
     // Check HTTP response code for API errors
     $response_code = wp_remote_retrieve_response_code($response);
+    
+    // Debug: Log raw response body to check for non-JSON content
+    $raw_body = wp_remote_retrieve_body($response);
+    error_log("Raw API response body: " . substr($raw_body, 0, 500)); // Log first 500 chars to avoid huge logs
+    
     if ($response_code !== 200) {
         // Extract error details from the response if available
         $body = wp_remote_retrieve_body($response);
