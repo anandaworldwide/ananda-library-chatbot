@@ -37,7 +37,7 @@ See TESTS-README.md for details on current setup.
 - [x] Test genericRateLimiter across different API endpoints:
 
   - [x] Test that rate limiter blocks requests after limit is reached
-  - [ ] Test that rate limiter resets after window period
+  - [x] Test that rate limiter resets after window period
   - [ ] Test that different IPs have separate rate limits
   - [ ] Test that different endpoints have separate rate limit counters
   - [x] Test proper error response when rate limit is exceeded (429 status code)

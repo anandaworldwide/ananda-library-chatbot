@@ -239,6 +239,67 @@ describe('genericRateLimiter', () => {
     expect(firebase.mockDoc).toHaveBeenCalledWith('192_168_1_1');
     expect(ipUtils.getClientIp).not.toHaveBeenCalled();
   });
+
+  it('should reset rate limit after window period', async () => {
+    // Mock time for the beginning of the test
+    const initialTime = 1000000;
+    jest.spyOn(Date, 'now').mockReturnValue(initialTime);
+
+    // Setup - rate limit is at maximum
+    firebase.mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        count: 10, // Maximum limit reached
+        firstRequestTime: initialTime - 30000, // 30 seconds ago (still within window)
+      }),
+    });
+
+    // First attempt - should be blocked (rate limited)
+    const firstResult = await genericRateLimiter(mockReq, mockRes, {
+      windowMs: 60000, // 60 second window
+      max: 10,
+      name: 'test',
+    });
+
+    expect(firstResult).toBe(false);
+    expect(mockRes.status).toHaveBeenCalledWith(429);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      message: 'Too many test requests, please try again later.',
+    });
+
+    // Reset mocks for second attempt
+    jest.clearAllMocks();
+
+    // Advance time past the window period
+    const laterTime = initialTime + 61000; // 61 seconds later (past the window)
+    jest.spyOn(Date, 'now').mockReturnValue(laterTime);
+
+    // Setup - existing rate limit entry but now outside the window
+    firebase.mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        count: 10,
+        firstRequestTime: initialTime - 30000, // This is now 91 seconds ago
+      }),
+    });
+
+    // Second attempt - should succeed with reset counter
+    const secondResult = await genericRateLimiter(mockReq, mockRes, {
+      windowMs: 60000,
+      max: 10,
+      name: 'test',
+    });
+
+    expect(secondResult).toBe(true);
+    expect(firebase.mockSet).toHaveBeenCalledWith({
+      count: 1, // Counter reset to 1
+      firstRequestTime: laterTime, // Time updated to current
+    });
+
+    // Verify we didn't get any 429 response on the second attempt
+    expect(mockRes.status).not.toHaveBeenCalled();
+    expect(mockRes.json).not.toHaveBeenCalled();
+  });
 });
 
 describe('deleteRateLimitCounter', () => {
