@@ -8,6 +8,33 @@
  * - Error handling
  */
 
+// Mock Firebase directly before anything else is imported
+jest.mock('@/services/firebase', () => {
+  const mockCollection = jest.fn().mockReturnThis();
+  const mockDoc = jest.fn().mockReturnThis();
+  const mockGet = jest
+    .fn()
+    .mockResolvedValue({ exists: false, data: () => null });
+
+  return {
+    db: {
+      collection: mockCollection,
+      doc: mockDoc,
+      get: mockGet,
+    },
+  };
+});
+
+// Mock genericRateLimiter before it gets imported
+jest.mock('@/utils/server/genericRateLimiter', () => ({
+  genericRateLimiter: jest.fn().mockResolvedValue(true),
+  deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Import and setup our test environment
+import { setupPageApiMocks } from '../../utils/mocks/apiTestMocks';
+setupPageApiMocks();
+
 // Need to tell Jest to mock these modules before any imports
 jest.mock('@aws-sdk/s3-request-presigner');
 jest.mock('@aws-sdk/client-s3');

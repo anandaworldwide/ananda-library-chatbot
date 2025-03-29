@@ -14,6 +14,7 @@ import { Answer } from '@/types/answer';
 import { Document } from 'langchain/document';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 // 6/23/24: likedOnly filtering not being used in UI but leaving here for potential future use
 
@@ -152,6 +153,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
 // Main handler function for the API endpoint
 async function handleGetRequest(req: NextApiRequest, res: NextApiResponse) {
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 100, // 100 requests per 5 minutes
+    name: 'answers-api',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
+
   try {
     const { answerIds } = req.query;
 

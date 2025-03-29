@@ -23,6 +23,7 @@ import jwt from 'jsonwebtoken';
 import { isTokenValid } from '@/utils/server/passwordUtils';
 import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 import CryptoJS from 'crypto-js';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 /**
  * API handler for the web token endpoint
@@ -31,6 +32,17 @@ import CryptoJS from 'crypto-js';
  * @param res The Next.js API response
  */
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 100, // 100 requests per 5 minutes per IP
+    name: 'web-token-requests',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
+
   // Only allow GET requests to simplify client usage
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method Not Allowed' });

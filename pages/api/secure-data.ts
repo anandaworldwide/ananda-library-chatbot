@@ -18,6 +18,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import jwt from 'jsonwebtoken';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 /**
  * API handler for the secure data endpoint
@@ -30,6 +31,17 @@ import { withJwtAuth } from '@/utils/server/jwtUtils';
  * @param res The Next.js API response
  */
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 20, // 20 requests per 5 minutes
+    name: 'secure-data-api',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
+
   // The JWT verification is handled by the withJwtAuth middleware
   // Here we just handle the authenticated API logic
   try {

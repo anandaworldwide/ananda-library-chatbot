@@ -8,6 +8,39 @@
  * - Authentication for protected operations (delete)
  */
 
+// Mock global Request class
+global.Request = class MockRequest {
+  constructor(input: RequestInfo | URL, init?: RequestInit) {
+    // Simple implementation for testing
+    return {} as any;
+  }
+} as any;
+
+// Mock Next.js server
+jest.mock('next/server', () => ({
+  NextRequest: jest.fn().mockImplementation(() => ({
+    url: 'http://localhost:3000',
+    method: 'GET',
+    headers: new Headers(),
+    ip: '127.0.0.1',
+    json: jest.fn(),
+    nextUrl: new URL('http://localhost:3000'),
+  })),
+  NextResponse: {
+    json: jest.fn().mockImplementation((body, init) => ({
+      status: init?.status || 200,
+      body,
+      headers: new Headers(init?.headers),
+    })),
+  },
+}));
+
+// Mock the genericRateLimiter before it gets imported
+jest.mock('@/utils/server/genericRateLimiter', () => ({
+  genericRateLimiter: jest.fn().mockResolvedValue(true),
+  deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { createMocks } from 'node-mocks-http';
 import type { NextApiRequest, NextApiResponse } from 'next';
 

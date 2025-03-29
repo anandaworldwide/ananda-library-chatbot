@@ -7,6 +7,29 @@
  * - Response handling
  */
 
+// Mock Firebase directly before anything else is imported
+jest.mock('@/services/firebase', () => {
+  const mockCollection = jest.fn().mockReturnThis();
+  const mockDoc = jest.fn().mockReturnThis();
+  const mockGet = jest
+    .fn()
+    .mockResolvedValue({ exists: false, data: () => null });
+
+  return {
+    db: {
+      collection: mockCollection,
+      doc: mockDoc,
+      get: mockGet,
+    },
+  };
+});
+
+// Mock genericRateLimiter before it gets imported
+jest.mock('@/utils/server/genericRateLimiter', () => ({
+  genericRateLimiter: jest.fn().mockResolvedValue(true),
+  deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { createMocks } from 'node-mocks-http';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../pages/api/logout';

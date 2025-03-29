@@ -8,8 +8,20 @@ import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 100, // 100 requests per 5 minutes
+    name: 'admin-action-api',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

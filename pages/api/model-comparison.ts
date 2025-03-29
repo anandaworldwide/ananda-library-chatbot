@@ -12,6 +12,7 @@ import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 // Define a type for our filter
 type PineconeFilter = {
@@ -23,6 +24,17 @@ type PineconeFilter = {
 };
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 50, // 50 requests per 5 minutes
+    name: 'model-comparison-api',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }

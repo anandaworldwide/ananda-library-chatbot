@@ -19,6 +19,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 /**
  * API handler for the token issuance endpoint
@@ -28,6 +29,17 @@ import { withApiMiddleware } from '@/utils/server/apiMiddleware';
  */
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   console.log('get-token endpoint called');
+
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 100, // 100 requests per 5 minutes
+    name: 'token-requests',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
 
   // Log request information for debugging
   console.log(`Request method: ${req.method}`);

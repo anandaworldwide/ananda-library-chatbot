@@ -5,12 +5,24 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 // Handler function for NPS survey submission
 async function handleRequest(
   req: NextApiRequest,
   res: NextApiResponse,
 ): Promise<void> {
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 10, // 10 requests per 5 minutes
+    name: 'nps-survey-api',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
+
   if (req.method !== 'POST') {
     res.status(405).json({ message: 'Method Not Allowed' });
     return;

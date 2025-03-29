@@ -7,6 +7,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { runMiddleware } from '@/utils/server/corsMiddleware';
 import Cors from 'cors';
 import { withJwtOnlyAuth } from '@/utils/server/apiMiddleware';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 // Configure CORS specifically for audio files
 const audioCors = Cors({
@@ -36,6 +37,17 @@ const handleRequest = async (
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
+  }
+
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 200, // 200 requests per 5 minutes
+    name: 'audio-api',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
   }
 
   // Only allow GET requests

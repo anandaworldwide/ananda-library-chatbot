@@ -1,0 +1,474 @@
+/**
+ * API Test Mocks
+ *
+ * This file contains common mock functions and objects used across API tests.
+ * Provides helpers for both Page Router and App Router API endpoints.
+ */
+
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { createMocks, RequestMethod } from 'node-mocks-http';
+import { SiteConfig } from '@/types/siteConfig';
+
+/**
+ * Default mock site configuration for tests
+ */
+export const mockSiteConfig: SiteConfig = {
+  siteId: 'test-site',
+  shortname: 'test',
+  name: 'Test Site',
+  tagline: 'Test Tagline',
+  greeting: 'Welcome to Test Site',
+  parent_site_url: 'https://example.com',
+  parent_site_name: 'Example',
+  help_url: 'https://example.com/help',
+  help_text: 'Need help?',
+  allowedFrontEndDomains: ['example.com', '*.example.com'],
+  collectionConfig: {
+    master_swami: 'Master and Swami Collection',
+    whole_library: 'Whole Library',
+  },
+  libraryMappings: {
+    'test-library': {
+      displayName: 'Test Library',
+      url: 'https://example.com/library',
+    },
+  },
+  enableSuggestedQueries: true,
+  enableMediaTypeSelection: true,
+  enableAuthorSelection: true,
+  welcome_popup_heading: 'Welcome!',
+  other_visitors_reference: 'Other visitors also asked...',
+  loginImage: null,
+  chatPlaceholder: 'Ask a question...',
+  header: {
+    logo: 'logo.png',
+    navItems: [{ label: 'Home', path: '/' }],
+  },
+  footer: {
+    links: [{ label: 'About', url: '/about' }],
+  },
+  requireLogin: false,
+  allowPrivateSessions: true,
+  allowAllAnswersPage: true,
+  npsSurveyFrequencyDays: 30,
+  queriesPerUserPerDay: 100,
+  includedLibraries: ['test-library'],
+  enabledMediaTypes: ['text', 'audio', 'youtube'],
+  enableModelComparison: true,
+  showSourceCountSelector: true,
+  hideSources: false,
+};
+
+/**
+ * Setup mocks for Next.js API tests
+ * Sets up a more robust mock for Request and next/server to avoid "Request is not defined" errors
+ */
+export function setupApiTest() {
+  // Mock global Request
+  if (typeof global.Request === 'undefined') {
+    global.Request = class MockRequest {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        // Simple implementation for testing
+        return {} as any;
+      }
+    } as any;
+  }
+
+  // Mock Next server modules
+  jest.mock('next/server', () => ({
+    NextRequest: jest.fn().mockImplementation((url, init) => {
+      return {
+        url:
+          typeof url === 'string'
+            ? url
+            : url?.toString() || 'http://localhost:3000',
+        method: init?.method || 'GET',
+        headers: new Headers(init?.headers),
+        ip: '127.0.0.1',
+        json: jest.fn(),
+        nextUrl: new URL(
+          typeof url === 'string'
+            ? url
+            : url?.toString() || 'http://localhost:3000',
+        ),
+      };
+    }),
+    NextResponse: {
+      json: jest.fn().mockImplementation((body, init) => ({
+        status: init?.status || 200,
+        body,
+        headers: new Headers(init?.headers),
+      })),
+    },
+  }));
+
+  // Also mock genericRateLimiter to prevent import issues
+  jest.mock('@/utils/server/genericRateLimiter', () => ({
+    genericRateLimiter: jest.fn().mockResolvedValue(true),
+    deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+  }));
+}
+
+/**
+ * Setup mocks for Firebase
+ *
+ * IMPORTANT: For tests that import modules using Firebase, this function needs to be called
+ * via jest.mock() BEFORE any imports to prevent Firebase initialization errors.
+ *
+ * Example usage at the top of a test file:
+ *
+ * ```
+ * // Mock Firebase before any imports
+ * jest.mock('@/services/firebase', () => {
+ *   const mockCollection = jest.fn().mockReturnThis();
+ *   const mockDoc = jest.fn().mockReturnThis();
+ *   const mockGet = jest.fn().mockResolvedValue({ exists: false, data: () => null });
+ *
+ *   return {
+ *     db: {
+ *       collection: mockCollection,
+ *       doc: mockDoc,
+ *       get: mockGet,
+ *     },
+ *   };
+ * });
+ *
+ * // Also mock genericRateLimiter which imports Firebase
+ * jest.mock('@/utils/server/genericRateLimiter', () => ({
+ *   genericRateLimiter: jest.fn().mockResolvedValue(true),
+ *   deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+ * }));
+ * ```
+ */
+export function setupFirebaseMocks() {
+  // This function is useful for mocking Firebase in tests that don't import modules
+  // that directly initialize Firebase. For tests that do, see the example in the function
+  // comment above.
+
+  // Directly mock the Firebase service to avoid initialization issues
+  jest.mock('@/services/firebase', () => {
+    const mockWhere = jest.fn().mockReturnThis();
+    const mockOrderBy = jest.fn().mockReturnThis();
+    const mockLimit = jest.fn().mockReturnThis();
+    const mockOffset = jest.fn().mockReturnThis();
+    const mockGet = jest.fn().mockResolvedValue({
+      docs: [],
+      empty: true,
+      exists: false,
+      data: () => null,
+    });
+    const mockAdd = jest.fn().mockResolvedValue({ id: 'mock-doc-id' });
+    const mockUpdate = jest.fn().mockResolvedValue({});
+    const mockDelete = jest.fn().mockResolvedValue({});
+
+    const mockDoc = jest.fn().mockReturnValue({
+      get: mockGet,
+      set: jest.fn().mockResolvedValue({}),
+      update: mockUpdate,
+      delete: mockDelete,
+    });
+
+    const mockCollection = jest.fn().mockReturnValue({
+      doc: mockDoc,
+      where: mockWhere,
+      orderBy: mockOrderBy,
+      limit: mockLimit,
+      offset: mockOffset,
+      get: mockGet,
+      add: mockAdd,
+    });
+
+    return {
+      db: {
+        collection: mockCollection,
+      },
+      mockCollection,
+      mockDoc,
+      mockWhere,
+      mockOrderBy,
+      mockLimit,
+      mockOffset,
+      mockGet,
+      mockAdd,
+      mockUpdate,
+      mockDelete,
+    };
+  });
+
+  // Also mock firebase-admin to handle any direct imports
+  jest.mock('firebase-admin', () => {
+    const mockFirestore = {
+      FieldValue: {
+        serverTimestamp: jest.fn().mockReturnValue('mock-timestamp'),
+        delete: jest.fn().mockReturnValue('mock-delete-field'),
+      },
+    };
+
+    return {
+      firestore: jest.fn().mockReturnValue(mockFirestore),
+      apps: [],
+      initializeApp: jest.fn(),
+      credential: {
+        cert: jest.fn(),
+      },
+    };
+  });
+
+  jest.mock('firebase-admin/firestore', () => ({
+    initializeFirestore: jest.fn(),
+    FieldValue: {
+      serverTimestamp: jest.fn().mockReturnValue('mock-timestamp'),
+      delete: jest.fn().mockReturnValue('mock-delete-field'),
+    },
+  }));
+}
+
+/**
+ * Setup mocks for environment utilities
+ */
+export function setupEnvMocks(isDev = false) {
+  jest.mock('@/utils/env', () => ({
+    isDevelopment: jest.fn().mockReturnValue(isDev),
+    getEnvName: jest.fn().mockReturnValue(isDev ? 'development' : 'production'),
+  }));
+}
+
+/**
+ * Setup mocks for rate limiting
+ */
+export function setupRateLimitMocks(shouldAllowRequests = true) {
+  if (shouldAllowRequests) {
+    jest.mock('@/utils/server/genericRateLimiter', () => ({
+      genericRateLimiter: jest.fn().mockResolvedValue(true),
+      deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+    }));
+  } else {
+    jest.mock('@/utils/server/genericRateLimiter', () => ({
+      genericRateLimiter: jest.fn().mockImplementation((req, res) => {
+        res.status(429).json({
+          message: 'Too many requests, please try again later.',
+        });
+        return Promise.resolve(false);
+      }),
+      deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+    }));
+  }
+}
+
+/**
+ * Setup mocks for site configuration
+ */
+export function setupSiteConfigMocks(config: Partial<SiteConfig> = {}) {
+  const mergedConfig = { ...mockSiteConfig, ...config };
+
+  jest.mock('@/utils/server/loadSiteConfig', () => ({
+    loadSiteConfigSync: jest.fn().mockReturnValue(mergedConfig),
+  }));
+}
+
+/**
+ * Setup mocks for JWT authentication
+ */
+export function setupAuthMocks() {
+  jest.mock('@/utils/server/jwtUtils', () => ({
+    withJwtAuth: jest.fn((handler) => handler),
+  }));
+
+  jest.mock('@/utils/server/apiMiddleware', () => ({
+    withApiMiddleware: jest.fn((handler) => handler),
+  }));
+
+  jest.mock('@/utils/server/sudoCookieUtils', () => ({
+    getSudoCookie: jest
+      .fn()
+      .mockReturnValue({ sudoCookieValue: 'valid-sudo-token' }),
+  }));
+}
+
+/**
+ * Create mock request/response for Page Router API tests
+ */
+export function createPageApiMocks(options: {
+  method?: RequestMethod;
+  body?: any;
+  query?: Record<string, string>;
+  headers?: Record<string, string>;
+}) {
+  const { method = 'GET', body = {}, query = {}, headers = {} } = options;
+
+  return createMocks<NextApiRequest, NextApiResponse>({
+    method,
+    body,
+    query,
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+  });
+}
+
+/**
+ * Setup all necessary mocks for Page Router API tests
+ */
+export function setupPageApiMocks(
+  options: {
+    allowRateLimited?: boolean;
+    isDevelopment?: boolean;
+    siteConfig?: Partial<SiteConfig>;
+  } = {},
+) {
+  const {
+    allowRateLimited = true,
+    isDevelopment = false,
+    siteConfig = {},
+  } = options;
+
+  // Setup Next.js API test environment
+  setupApiTest();
+
+  // Setup all other mock dependencies
+  setupFirebaseMocks();
+  setupEnvMocks(isDevelopment);
+  setupRateLimitMocks(allowRateLimited);
+  setupSiteConfigMocks(siteConfig);
+  setupAuthMocks();
+}
+
+/**
+ * A simple test to make this file pass Jest's requirement
+ * that all test files contain at least one test
+ */
+describe('API Test Mocks', () => {
+  test('should export mock utilities', () => {
+    expect(mockSiteConfig).toBeDefined();
+    expect(setupFirebaseMocks).toBeDefined();
+    expect(setupEnvMocks).toBeDefined();
+    expect(setupRateLimitMocks).toBeDefined();
+    expect(setupSiteConfigMocks).toBeDefined();
+    expect(setupAuthMocks).toBeDefined();
+    expect(createPageApiMocks).toBeDefined();
+    expect(setupPageApiMocks).toBeDefined();
+  });
+});
+
+/**
+ * IMPORTANT: Understanding Firebase Initialization Issues in Tests
+ *
+ * The #1 test failure pattern in this codebase is related to Firebase initialization.
+ * Here's what happens and how to fix it:
+ *
+ * Problem:
+ * 1. When any file imports Firebase services directly or indirectly, Firebase tries to initialize
+ * 2. During tests, the GOOGLE_APPLICATION_CREDENTIALS environment variable is not set
+ * 3. This causes tests to fail with: "The GOOGLE_APPLICATION_CREDENTIALS environment variable is not set"
+ *
+ * Critical Solution Pattern:
+ * - Mock Firebase BEFORE any imports happen in the test file
+ * - This prevents the real Firebase initialization code from ever executing
+ * - Use jest.mock() at the top of the file before any import statements
+ *
+ * Why this works:
+ * - Jest hoists jest.mock() calls to the top of the file execution
+ * - This means Firebase imports will use our mock instead of trying to initialize real Firebase
+ * - Order matters: if you import a module that uses Firebase before mocking, the test will fail
+ *
+ * Common issues:
+ * 1. Importing modules that use Firebase before mocking
+ * 2. Forgetting to mock genericRateLimiter (which itself imports Firebase)
+ * 3. Using setupFirebaseMocks() function after imports (too late!)
+ *
+ * Example of correct pattern (copy this to the top of test files that test Firebase-dependent APIs):
+ *
+ * ```typescript
+ * // Mock Firebase BEFORE any imports - this runs before anything else due to Jest hoisting
+ * jest.mock('@/services/firebase', () => {
+ *   const mockCollection = jest.fn().mockReturnThis();
+ *   const mockDoc = jest.fn().mockReturnThis();
+ *   const mockGet = jest.fn().mockResolvedValue({ exists: false, data: () => null });
+ *
+ *   return {
+ *     db: {
+ *       collection: mockCollection,
+ *       doc: mockDoc,
+ *       get: mockGet,
+ *     },
+ *   };
+ * });
+ *
+ * // Also mock genericRateLimiter because it imports Firebase
+ * jest.mock('@/utils/server/genericRateLimiter', () => ({
+ *   genericRateLimiter: jest.fn().mockResolvedValue(true),
+ *   deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+ * }));
+ *
+ * // Now you can safely import your modules
+ * import ... from '...';
+ * ```
+ */
+
+/**
+ * Comprehensive setup for test files with Firebase dependencies
+ *
+ * This code should be placed at the top of any test file that tests API routes
+ * which import Firebase or genericRateLimiter. Copy and paste this code block
+ * to avoid "GOOGLE_APPLICATION_CREDENTIALS environment variable is not set" errors.
+ *
+ * @example
+ * ```typescript
+ * // ======= Copy the code below to the top of your test file =======
+ *
+ * // Mock Firebase BEFORE any imports
+ * jest.mock('@/services/firebase', () => {
+ *   const mockCollection = jest.fn().mockReturnThis();
+ *   const mockDoc = jest.fn().mockReturnThis();
+ *   const mockGet = jest.fn().mockResolvedValue({ exists: false, data: () => null });
+ *
+ *   return {
+ *     db: {
+ *       collection: mockCollection,
+ *       doc: mockDoc,
+ *       get: mockGet,
+ *     },
+ *   };
+ * });
+ *
+ * // Mock genericRateLimiter to avoid Firebase import issues
+ * jest.mock('@/utils/server/genericRateLimiter', () => ({
+ *   genericRateLimiter: jest.fn().mockResolvedValue(true),
+ *   deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
+ * }));
+ *
+ * // Mock Next.js server for Request errors
+ * jest.mock('next/server', () => ({
+ *   NextRequest: jest.fn().mockImplementation(() => ({
+ *     url: 'http://localhost:3000',
+ *     method: 'GET',
+ *     headers: new Headers(),
+ *     ip: '127.0.0.1',
+ *     json: jest.fn(),
+ *     nextUrl: new URL('http://localhost:3000'),
+ *   })),
+ *   NextResponse: {
+ *     json: jest.fn().mockImplementation((body, init) => ({
+ *       status: init?.status || 200,
+ *       body,
+ *       headers: new Headers(init?.headers),
+ *     })),
+ *   },
+ * }));
+ *
+ * // Now import apiTestMocks and set up other mocks
+ * import { setupPageApiMocks } from '../utils/mocks/apiTestMocks';
+ * setupPageApiMocks();
+ *
+ * // ======= End of required mock setup code =======
+ * ```
+ */
+export function setupTestFile() {
+  // This function exists for documentation purposes only
+  // The code in the function comment should be copied to test files
+  console.warn(
+    'This function is for documentation only. Please copy the example code from ' +
+      'the function comment to your test file.',
+  );
+}

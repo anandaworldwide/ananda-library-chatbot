@@ -6,6 +6,7 @@ import {
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 /**
  * API handler for managing related questions.
@@ -19,6 +20,17 @@ async function handler(
     error?: string;
   }>,
 ) {
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 500, // 500 requests per 5 minutes
+    name: 'related-questions-api',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
+
   if (req.method === 'GET') {
     // Handle batch update of related questions
     const { updateBatch } = req.query;

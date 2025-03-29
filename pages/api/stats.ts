@@ -3,10 +3,22 @@ import { db } from '@/services/firebase';
 import NodeCache from 'node-cache';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 const cache = new NodeCache({ stdTTL: 300 }); // Cache for 5 minutes
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Apply rate limiting
+  const isAllowed = await genericRateLimiter(req, res, {
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 20, // 20 requests per 5 minutes
+    name: 'stats-api',
+  });
+
+  if (!isAllowed) {
+    return; // Response is already sent by the rate limiter
+  }
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
