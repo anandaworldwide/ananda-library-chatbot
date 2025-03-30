@@ -300,6 +300,125 @@ describe('genericRateLimiter', () => {
     expect(mockRes.status).not.toHaveBeenCalled();
     expect(mockRes.json).not.toHaveBeenCalled();
   });
+
+  it('should maintain separate rate limits for different IPs', async () => {
+    const now = Date.now();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+
+    // First IP (127.0.0.1) - Already at limit
+    firebase.mockGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        count: 10, // Maximum limit reached
+        firstRequestTime: now - 30000, // 30 seconds ago (within window)
+      }),
+    });
+
+    // First IP should be rate limited
+    const firstIpResult = await genericRateLimiter(mockReq, mockRes, {
+      windowMs: 60000,
+      max: 10,
+      name: 'test',
+    });
+
+    expect(firstIpResult).toBe(false);
+    expect(mockRes.status).toHaveBeenCalledWith(429);
+    expect(firebase.mockDoc).toHaveBeenCalledWith('127_0_0_1');
+
+    // Reset mocks for second IP attempt
+    jest.clearAllMocks();
+
+    // Setup a different IP address
+    const secondIp = '192.168.1.1';
+
+    // Second IP - New rate limit record
+    firebase.mockGet.mockResolvedValueOnce({
+      exists: false,
+    });
+
+    // Second IP should not be rate limited
+    const secondIpResult = await genericRateLimiter(
+      mockReq,
+      mockRes,
+      {
+        windowMs: 60000,
+        max: 10,
+        name: 'test',
+      },
+      secondIp,
+    );
+
+    expect(secondIpResult).toBe(true);
+    expect(mockRes.status).not.toHaveBeenCalled();
+    expect(firebase.mockDoc).toHaveBeenCalledWith('192_168_1_1');
+    expect(firebase.mockSet).toHaveBeenCalledWith({
+      count: 1,
+      firstRequestTime: now,
+    });
+  });
+
+  it('should maintain separate rate limits for different endpoints', async () => {
+    const now = Date.now();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+
+    // First endpoint (login) - Already at limit
+    firebase.mockCollection.mockImplementationOnce(() => ({
+      doc: firebase.mockDoc,
+    }));
+
+    firebase.mockGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        count: 5, // Maximum limit reached for login endpoint
+        firstRequestTime: now - 30000, // 30 seconds ago (within window)
+      }),
+    });
+
+    // First endpoint should be rate limited
+    const firstEndpointResult = await genericRateLimiter(mockReq, mockRes, {
+      windowMs: 60000,
+      max: 5, // Lower limit for sensitive endpoint
+      name: 'login', // First endpoint name
+    });
+
+    expect(firstEndpointResult).toBe(false);
+    expect(mockRes.status).toHaveBeenCalledWith(429);
+    expect(firebase.mockCollection).toHaveBeenCalledWith(
+      'prod_login_rateLimits',
+    );
+
+    // Reset mocks for second endpoint attempt
+    jest.clearAllMocks();
+
+    // Second endpoint (search) - Same IP but different collection
+    firebase.mockCollection.mockImplementationOnce(() => ({
+      doc: firebase.mockDoc,
+    }));
+
+    firebase.mockGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        count: 3, // Under limit for search endpoint
+        firstRequestTime: now - 30000, // 30 seconds ago (within window)
+      }),
+    });
+
+    // Second endpoint should not be rate limited despite same IP
+    const secondEndpointResult = await genericRateLimiter(mockReq, mockRes, {
+      windowMs: 60000,
+      max: 10, // Higher limit for search endpoint
+      name: 'search', // Second endpoint name
+    });
+
+    expect(secondEndpointResult).toBe(true);
+    expect(mockRes.status).not.toHaveBeenCalled();
+    expect(firebase.mockCollection).toHaveBeenCalledWith(
+      'prod_search_rateLimits',
+    );
+    expect(firebase.mockUpdate).toHaveBeenCalledWith({
+      count: 4,
+    });
+  });
 });
 
 describe('deleteRateLimitCounter', () => {

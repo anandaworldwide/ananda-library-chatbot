@@ -10,6 +10,7 @@ const createJestConfig = nextJest({
 // Add any custom config to be passed to Jest
 const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  setupFiles: ['<rootDir>/test/jest.setup.js'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
@@ -25,6 +26,7 @@ const customJestConfig = {
     '<rootDir>/__tests__/.templates/',
     // Skip server-specific tests when running the default config
     '<rootDir>/utils/server',
+    '<rootDir>/__tests__/utils/server',
     '<rootDir>/__tests__/api/chat/v1/mocks.ts',
   ],
   collectCoverage: true,
@@ -69,10 +71,12 @@ const customJestConfig = {
 // Configuration for server-side tests that need Node environment
 const serverConfig = {
   displayName: 'server',
-  testMatch: ['<rootDir>/utils/server/**/*.test.ts'],
+  testMatch: ['<rootDir>/__tests__/utils/server/**/*.test.ts'],
   testEnvironment: 'node',
   setupFiles: ['<rootDir>/test/jest.setup.js'],
-  testTimeout: 30000,
+  testTimeout: 10000,
+  forceExit: true,
+  detectOpenHandles: true,
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },

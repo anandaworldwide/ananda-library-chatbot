@@ -2,39 +2,67 @@
 
 ## Overview
 
-This project uses Jest for testing and has a dual test configuration approach:
+This project uses Jest for testing with a dual configuration approach:
 
-1. **Standard Tests**: Run with `npm test` or `jest`
-2. **Server Tests**: Run with `jest --selectProjects=server`
+1. **Standard Tests**: Run with `npm test` or `jest` (JSDOM environment)
+2. **Server Tests**: Run with `npm run test:server` or `jest --selectProjects=server` (Node environment)
 3. **API Security Tests**: Run with `bin/test_api_security.sh` script
 
 > **Note**: See @TESTS-TODO.md for known issues and planned improvements to the testing setup.
 
 ## Test Directory Structure
 
-Tests are organized in two parallel structures:
+Tests are organized as follows:
 
-1. **`__tests__/` Directory**: Contains most tests including components, API, and some utils tests
+1. **`__tests__/` Directory**: Contains all tests
+   - `__tests__/components/` - React component tests (JSDOM environment)
+   - `__tests__/api/` - API endpoint tests (JSDOM environment)
+   - `__tests__/utils/` - Utility function tests (JSDOM environment)
+   - `__tests__/utils/server/` - Server utility tests (Node.js environment)
 
-   - `__tests__/components/` - React component tests
-   - `__tests__/api/` - API endpoint tests
-   - `__tests__/utils/` - Utility function tests
-   - `__tests__/utils/server/` - **Server utility tests running in JSDOM environment**
+## Why Server Tests Are Separate
 
-2. **Co-located Tests**: Server utilities have tests alongside their implementation
-   - `utils/server/` - Contains both implementations and tests (`.test.ts` files)
+Server tests require a specific environment setup:
 
-## Important Note About Server Tests
+1. **Node.js vs JSDOM** - Server code uses Node.js APIs not available in JSDOM
+2. **Firebase/Database Mocking** - Server tests need Firebase mocks set up before imports
+3. **Environment Variables** - Server tests require specific environment variables
+4. **Timeouts & Cleanup** - Server tests need different timeouts and force exit settings
 
-Server utility tests exist in **TWO** locations:
+We intentionally run server tests with a separate Jest configuration to prevent environment conflicts and
+ensure reliable testing.
 
-- `utils/server/*.test.ts` - Run with `--selectProjects=server` flag (Node.js environment)
-- `__tests__/utils/server/*.test.ts` - Run with standard Jest (JSDOM environment)
+## Running Tests
 
-Both sets of tests are valid but test different aspects of the server utilities:
+### Running Standard Tests Only (recommended for component/client work)
 
-- Co-located tests focus on unit testing in a Node.js environment
-- Tests in `__tests__/utils/server/` may include more integration-focused tests
+```bash
+npm test
+# or
+npx jest
+```
+
+### Running Server Tests Only (recommended for server-side work)
+
+```bash
+npm run test:server
+# or
+npm run test:server:coverage  # includes coverage report for server code
+# or
+npx jest --selectProjects=server
+```
+
+### Running All Tests
+
+To run both standard and server tests:
+
+```bash
+npm run test:all
+# or
+npm run test:ci  # includes coverage reports
+# or manually:
+npm test && npm run test:server
+```
 
 ## API Security Testing
 
@@ -49,9 +77,3 @@ The `bin/test_api_security.sh` script provides comprehensive security testing fo
 - Combined token and cookie authentication
 
 Run it with: `./bin/test_api_security.sh <password> <site_auth_cookie>`
-
-## Running Tests
-
-### Running All Tests
-
-To run both standard and server tests:

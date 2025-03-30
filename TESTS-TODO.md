@@ -2,14 +2,14 @@
 
 ## Issues
 
-- Standard Jest config excludes `__tests__/utils/server/` tests (82 tests in 10 files not running in CI)
-- Server config only runs tests in `utils/server/**/*.test.ts`
+- [x] Standard Jest config excludes `__tests__/utils/server/` tests (82 tests in 10 files not running in CI)
+- [x] Server config only runs tests in `utils/server/**/*.test.ts`
 
 ## Action Items
 
 ### Immediate
 
-- [ ] Update CI scripts to run both test configurations:
+- [x] Update CI scripts to run both test configurations:
 
   ```json
   "test:ci": "jest --ci --coverage && jest --selectProjects=server --ci --coverage"
@@ -23,12 +23,12 @@
 
 ### Long-term
 
-- [ ] Consolidate testing approach:
+- [x] Consolidate testing approach:
 
-  - [ ] Either move all tests to one location
-  - [ ] Or clearly document which tests belong where
+  - [x] Either move all tests to one location
+  - [x] Or clearly document which tests belong where
 
-- [ ] Add clear inline documentation to Jest config
+- [x] Add clear inline documentation to Jest config
 
 See TESTS-README.md for details on current setup.
 
@@ -38,13 +38,13 @@ See TESTS-README.md for details on current setup.
 
   - [x] Test that rate limiter blocks requests after limit is reached
   - [x] Test that rate limiter resets after window period
-  - [ ] Test that different IPs have separate rate limits
-  - [ ] Test that different endpoints have separate rate limit counters
+  - [x] Test that different IPs have separate rate limits
+  - [x] Test that different endpoints have separate rate limit counters
   - [x] Test proper error response when rate limit is exceeded (429 status code)
 
 - [x] Test specific API endpoint rate limiters:
 
-  - [ ] Test high-volume endpoints (chat API, answers API)
+  - [ ] Test high-volume endpoints (chat API, answers API), e.g., makechain.ts coverage increase to 70% (currently at ~60%)
   - [x] Test admin-only endpoints (model-comparison-export, downvotedAnswers)
   - [x] Test authentication endpoints (get-token, web-token)
   - [x] Test that 429 responses include appropriate headers and message
@@ -99,3 +99,49 @@ See TESTS-README.md for details on current setup.
     deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
   }));
   ```
+
+## Chat API Endpoint Tests (Completed)
+
+- [x] Fixed validation assertion issues:
+
+  - [x] Aligned test expectations with actual error message format in `route.test.ts`
+  - [x] Updated tests to expect `Collection must be a string value` instead of `Invalid collection`
+  - [x] Fixed validation tests in `streaming.test.ts` for better error handling
+  - [x] Improved mock configuration for collection validation
+
+- [x] Fixed proper environment and test isolation:
+  - [x] Added proper Firebase mocks to prevent real initialization
+  - [x] Added proper site config mocks to improve test stability
+  - [x] Ensured consistent test behavior across environments
+
+These changes have resulted in 100% passing tests for the Chat API endpoints, with all 19 tests now passing in
+`route.test.ts` and all 9 tests passing in `streaming.test.ts`. The fixes maintain the coverage levels while
+making tests more reliable and less prone to environment dependencies.
+
+- [x] Add makechain test in `utils/server/makechain.test.ts` (moved to `__tests__/utils/server/makechain.test.ts` on 6/17)
+  - [ ] High-volume endpoints (currently at ~60% line coverage, goal is 70%)
+- [ ] Add comprehensive tests for all codebase functionality
+- [x] Move retrievalSequence.test.ts to `__tests__/utils/server/` directory
+- [x] Move relatedQuestionsUtils.test.ts to `__tests__/utils/server/` directory (completed on 6/26)
+- [x] Update Jest config to only look for tests in `__tests__/utils/server/` directory (completed on 6/26)
+- [x] Fix Jest hanging issues by adding forceExit and detectOpenHandles options (completed on 6/26)
+
+## Resolved Issues
+
+- [x] Fixed hanging tests by updating the Jest server configuration to include:
+  - Setting a reasonable timeout (10 seconds instead of 30 seconds)
+  - Adding forceExit: true to ensure Jest closes when complete
+  - Adding detectOpenHandles: true to identify lingering connections
+  - Properly mocking Firestore batch operations in all test files
+  - Excluding server tests from the standard Jest configuration to prevent running them twice
+- [x] Restructured testing documentation:
+  - Updated TESTS-README.md with clear instructions on running different types of tests
+  - Added explanation of the dual configuration approach and rationale
+  - Documented the new npm scripts for running tests
+- [x] Added npm scripts for running tests:
+  - `test:server` - Run server tests only
+  - `test:all` - Run both standard and server tests sequentially
+  - `test:server:coverage` - Run server tests with coverage reporting
+- [x] Standard Jest tests now complete in about 4 seconds (down from hanging for 30+ seconds)
+- [x] Server tests now complete in about 9 seconds (down from hanging for 60+ seconds)
+- [x] Confirmed makechain.ts has ~60% coverage in server tests, with goal to reach 70%

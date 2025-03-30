@@ -372,33 +372,53 @@ describe('Chat API Streaming', () => {
 
   // Test to verify input validation
   test('should validate input and return appropriate errors', async () => {
-    // Create request with invalid collection
-    const req = new NextRequest(
-      new Request('http://localhost/api/chat/v1', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'http://localhost:3000',
+    // Mock loadSiteConfigSync with multiple collections to trigger validation
+    const originalLoadSiteConfig = jest.requireMock(
+      '@/utils/server/loadSiteConfig',
+    ).loadSiteConfigSync;
+    jest.requireMock('@/utils/server/loadSiteConfig').loadSiteConfigSync = jest
+      .fn()
+      .mockReturnValueOnce({
+        collectionConfig: {
+          valid_collection1: 'Valid Collection 1',
+          valid_collection2: 'Valid Collection 2',
         },
-        body: JSON.stringify({
-          question: mockQuestion,
-          collection: 'invalid_collection', // Invalid collection
-          history: [],
-          privateSession: false,
-          mediaTypes: { text: true },
+        allowedFrontEndDomains: ['localhost'],
+      });
+
+    try {
+      // Create request with invalid collection
+      const req = new NextRequest(
+        new Request('http://localhost/api/chat/v1', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: 'http://localhost:3000',
+          },
+          body: JSON.stringify({
+            question: mockQuestion,
+            collection: 'invalid_collection', // Invalid collection
+            history: [],
+            privateSession: false,
+            mediaTypes: { text: true },
+          }),
         }),
-      }),
-    );
+      );
 
-    // Call the handler
-    const response = await POST(req);
+      // Call the handler
+      const response = await POST(req);
 
-    // Should be a standard error response, not a stream
-    expect(response.status).toBe(400);
+      // Should be a standard error response, not a stream
+      expect(response.status).toBe(400);
 
-    // Verify error message
-    const data = await response.json();
-    expect(data.error).toContain('Invalid collection');
+      // Verify error message
+      const data = await response.json();
+      expect(data.error).toContain('Invalid collection');
+    } finally {
+      // Restore the original mock
+      jest.requireMock('@/utils/server/loadSiteConfig').loadSiteConfigSync =
+        originalLoadSiteConfig;
+    }
   });
 
   // Test to verify rate limiting

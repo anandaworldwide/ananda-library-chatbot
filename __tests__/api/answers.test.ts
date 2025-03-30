@@ -10,6 +10,7 @@
 
 // Mock global Request class
 global.Request = class MockRequest {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(input: RequestInfo | URL, init?: RequestInit) {
     // Simple implementation for testing
     return {} as any;

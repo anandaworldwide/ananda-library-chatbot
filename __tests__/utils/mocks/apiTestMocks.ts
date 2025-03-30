@@ -67,7 +67,8 @@ export function setupApiTest() {
   // Mock global Request
   if (typeof global.Request === 'undefined') {
     global.Request = class MockRequest {
-      constructor(input: RequestInfo | URL, init?: RequestInit) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      constructor(_input: RequestInfo | URL, _init?: RequestInit) {
         // Simple implementation for testing
         return {} as any;
       }
@@ -224,6 +225,57 @@ export function setupFirebaseMocks() {
 }
 
 /**
+ * Testing Chat API Endpoints
+ *
+ * The Chat API routes require special attention for proper testing due to:
+ * 1. Complex validation logic for collections and input parameters
+ * 2. Streaming response handling
+ * 3. Multiple nested dependencies on Firebase, site config, and other services
+ *
+ * Common issues encountered when testing Chat API routes:
+ *
+ * 1. Input validation messages - Tests may expect specific error messages that change over time.
+ *    Always update test expectations when validation error messages are modified.
+ *
+ *    Example fix:
+ *    ```
+ *    // Instead of:
+ *    expect(data.error).toContain('Invalid collection');
+ *
+ *    // Use the actual error message:
+ *    expect(data.error).toContain('Collection must be a string value');
+ *    ```
+ *
+ * 2. Collection validation - Site config needs to be properly mocked to test collection validation
+ *
+ *    Example:
+ *    ```
+ *    jest.mock('@/utils/server/loadSiteConfig', () => ({
+ *      loadSiteConfigSync: jest.fn().mockReturnValue({
+ *        ...mockSiteConfig,
+ *        collectionConfig: {
+ *          valid_collection1: 'Collection 1',
+ *          valid_collection2: 'Collection 2',
+ *        }
+ *      }),
+ *    }));
+ *    ```
+ *
+ * 3. Firebase initialization - Both route.ts and streaming.test.ts rely on Firebase,
+ *    which must be mocked before any imports. Failure to do so will cause real Firebase
+ *    initialization attempts and test failures.
+ *
+ * 4. Rate limiting - Properly mock genericRateLimiter to avoid dependency on Firebase
+ *
+ * Best practices for testing Chat API routes:
+ *
+ * 1. Always mock Firebase before any imports (see Firebase mocking section above)
+ * 2. Use the mock stream controllers provided in the test files for streaming responses
+ * 3. Test validation error messages by comparing with the actual implementation
+ * 4. Use the appropriate test utilities for NextRequest/NextResponse in App Router tests
+ */
+
+/**
  * Setup mocks for environment utilities
  */
 export function setupEnvMocks(isDev = false) {
@@ -350,61 +402,6 @@ describe('API Test Mocks', () => {
     expect(setupPageApiMocks).toBeDefined();
   });
 });
-
-/**
- * IMPORTANT: Understanding Firebase Initialization Issues in Tests
- *
- * The #1 test failure pattern in this codebase is related to Firebase initialization.
- * Here's what happens and how to fix it:
- *
- * Problem:
- * 1. When any file imports Firebase services directly or indirectly, Firebase tries to initialize
- * 2. During tests, the GOOGLE_APPLICATION_CREDENTIALS environment variable is not set
- * 3. This causes tests to fail with: "The GOOGLE_APPLICATION_CREDENTIALS environment variable is not set"
- *
- * Critical Solution Pattern:
- * - Mock Firebase BEFORE any imports happen in the test file
- * - This prevents the real Firebase initialization code from ever executing
- * - Use jest.mock() at the top of the file before any import statements
- *
- * Why this works:
- * - Jest hoists jest.mock() calls to the top of the file execution
- * - This means Firebase imports will use our mock instead of trying to initialize real Firebase
- * - Order matters: if you import a module that uses Firebase before mocking, the test will fail
- *
- * Common issues:
- * 1. Importing modules that use Firebase before mocking
- * 2. Forgetting to mock genericRateLimiter (which itself imports Firebase)
- * 3. Using setupFirebaseMocks() function after imports (too late!)
- *
- * Example of correct pattern (copy this to the top of test files that test Firebase-dependent APIs):
- *
- * ```typescript
- * // Mock Firebase BEFORE any imports - this runs before anything else due to Jest hoisting
- * jest.mock('@/services/firebase', () => {
- *   const mockCollection = jest.fn().mockReturnThis();
- *   const mockDoc = jest.fn().mockReturnThis();
- *   const mockGet = jest.fn().mockResolvedValue({ exists: false, data: () => null });
- *
- *   return {
- *     db: {
- *       collection: mockCollection,
- *       doc: mockDoc,
- *       get: mockGet,
- *     },
- *   };
- * });
- *
- * // Also mock genericRateLimiter because it imports Firebase
- * jest.mock('@/utils/server/genericRateLimiter', () => ({
- *   genericRateLimiter: jest.fn().mockResolvedValue(true),
- *   deleteRateLimitCounter: jest.fn().mockResolvedValue(undefined),
- * }));
- *
- * // Now you can safely import your modules
- * import ... from '...';
- * ```
- */
 
 /**
  * Comprehensive setup for test files with Firebase dependencies

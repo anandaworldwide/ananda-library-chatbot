@@ -6,8 +6,8 @@
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "jsxImportSource": "react",
-    "types": ["jest", "node", "@testing-library/jest-dom"]
+    "types": ["jest", "node"]
   },
-  "include": ["__tests__/**/*"],
+  "include": ["__tests__/**/*", "types/**/*.d.ts"],
   "exclude": ["node_modules"]
 }

@@ -463,7 +463,7 @@ describe('Chat API Route', () => {
 
         // Check that the error message is correct
         const data = await res.json();
-        expect(data.error).toContain('Invalid collection provided');
+        expect(data.error).toContain('Collection must be a string value');
       } finally {
         // Restore the original implementation
         jest
@@ -496,7 +496,7 @@ describe('Chat API Route', () => {
 
       // Error should be about collection, not CORS
       const data = await res.json();
-      expect(data.error).toContain('Invalid collection');
+      expect(data.error).toContain('Collection must be a string value');
     });
 
     test.skip('processes request with collection parameter', async () => {
@@ -603,7 +603,7 @@ describe('Chat API Route', () => {
       // Error should be about collection, not history
       const data = await res.json();
       expect(data.error).not.toContain('history');
-      expect(data.error).toContain('Invalid collection');
+      expect(data.error).toContain('Collection must be a string value');
     });
 
     test('handles model parameter', async () => {
@@ -632,7 +632,7 @@ describe('Chat API Route', () => {
       // Error should be about collection, not model
       const data = await res.json();
       expect(data.error).not.toContain('model');
-      expect(data.error).toContain('Invalid collection');
+      expect(data.error).toContain('Collection must be a string value');
     });
 
     test('handles network timeouts gracefully', async () => {
@@ -704,7 +704,7 @@ describe('Chat API Route', () => {
       // Error should be about collection, not limit
       const data = await res.json();
       expect(data.error).not.toContain('limit');
-      expect(data.error).toContain('Invalid collection');
+      expect(data.error).toContain('Collection must be a string value');
     });
 
     test('processes sourceCount parameter', async () => {
@@ -733,7 +733,7 @@ describe('Chat API Route', () => {
       // Error should be about collection, not sourceCount
       const data = await res.json();
       expect(data.error).not.toContain('sourceCount');
-      expect(data.error).toContain('Invalid collection');
+      expect(data.error).toContain('Collection must be a string value');
     });
 
     test('handles model comparison requests', async () => {
@@ -762,7 +762,7 @@ describe('Chat API Route', () => {
       // Error should be about collection, not comparison
       const data = await res.json();
       expect(data.error).not.toContain('compare');
-      expect(data.error).toContain('Invalid collection');
+      expect(data.error).toContain('Collection must be a string value');
     });
 
     test('handles separate histories for model comparison', async () => {

@@ -19,26 +19,16 @@ type MockSnapshot = {
   forEach?: (callback: (doc: any) => void) => void;
 };
 
-// Set mock Firebase credentials to bypass initialization checks in services/firebase.ts
-process.env.GOOGLE_APPLICATION_CREDENTIALS = JSON.stringify({
-  type: 'service_account',
-  project_id: 'mock-project',
-  private_key_id: 'mock-key-id',
-  private_key:
-    '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj\nMzEfYyjiWA4R4/M2bS1GB4t7NXp98C3SC6dVMvDuictGeurT8jNbvJZHtCSuYEvu\nNMoSfm76oqFvAp8Gy0iz5sxjZmSnXyCdPEovGhLa0VzMaQ8s+CLOyS56YyCFGeJZ\n-----END PRIVATE KEY-----\n',
-  client_email: 'mock@example.com',
-  client_id: 'mock-client-id',
-  auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-  token_uri: 'https://oauth2.googleapis.com/token',
-  auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
-  client_x509_cert_url:
-    'https://www.googleapis.com/robot/v1/metadata/x509/mock%40example.com',
-});
-
 // Create mock objects we'll use in tests
 const mockDB = {
   collection: jest.fn(),
-  batch: jest.fn(),
+  batch: jest.fn().mockImplementation(() => {
+    return {
+      set: jest.fn(),
+      // @ts-ignore - Mock implementation doesn't need to match exact return type
+      commit: jest.fn().mockResolvedValue(undefined),
+    };
+  }),
   doc: jest.fn(),
   get: jest.fn(),
   update: jest.fn(),
@@ -124,7 +114,7 @@ import {
   fetchKeywords,
   updateRelatedQuestions,
   findRelatedQuestionsUsingKeywords,
-} from './relatedQuestionsUtils';
+} from '../../../utils/server/relatedQuestionsUtils';
 import { Answer } from '@/types/answer';
 
 // Import mocked modules after mocking
