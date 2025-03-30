@@ -9,7 +9,10 @@ const createJestConfig = nextJest({
 
 // Add any custom config to be passed to Jest
 const customJestConfig = {
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  setupFilesAfterEnv: [
+    '<rootDir>/jest.setup.ts',
+    '<rootDir>/__tests__/setup.ts',
+  ],
   setupFiles: ['<rootDir>/test/jest.setup.js'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
@@ -74,6 +77,7 @@ const serverConfig = {
   testMatch: ['<rootDir>/__tests__/utils/server/**/*.test.ts'],
   testEnvironment: 'node',
   setupFiles: ['<rootDir>/test/jest.setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
   testTimeout: 10000,
   forceExit: true,
   detectOpenHandles: true,
