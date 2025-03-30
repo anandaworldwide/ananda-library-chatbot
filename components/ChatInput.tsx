@@ -171,7 +171,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   // Function to sanitize user input
   const sanitizeInput = (input: string) => {
-    return DOMPurify.sanitize(input);
+    return DOMPurify.sanitize(input).toString();
   };
 
   // Function to validate user input
