@@ -21,7 +21,7 @@
 
 /* Add tooltip for the chatbot bubble */
 #aichatbot-bubble::after {
-  content: 'Ananda Assist (AI)';
+  content: 'Ananda Intelligence (AI)';
   position: absolute;
   bottom: 60px;
   left: 50%;

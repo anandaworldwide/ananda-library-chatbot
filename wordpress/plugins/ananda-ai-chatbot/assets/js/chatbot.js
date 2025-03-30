@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const header = document.createElement('div');
   header.id = 'aichatbot-header';
   header.innerHTML = `
-    <h3>Ananda Assist</h3>
+    <h3>Ananda Intelligence (AI)</h3>
     <span id="aichatbot-close"><i class="fas fa-chevron-down"></i></span>
   `;
   chatWindow.insertBefore(header, chatWindow.firstChild);

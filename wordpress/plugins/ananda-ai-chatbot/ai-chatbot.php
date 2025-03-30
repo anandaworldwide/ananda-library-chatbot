@@ -17,7 +17,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://ananda-public-chatbot.vercel
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.9'); // Increment this when you make CSS or JS changes
+define('AICHATBOT_VERSION', '1.0.11'); // Increment this when you make CSS or JS changes
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -379,7 +379,7 @@ function aichatbot_add_chat_bubble() {
           </div>';
     echo '<div id="aichatbot-window" style="display:none;">
             <div id="aichatbot-messages"></div>
-            <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Assist uses AI, mistakes may occur.</div>
+            <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Intelligence uses AI and may make mistakes.</div>
             <div id="aichatbot-input-container">
                 <textarea id="aichatbot-input" placeholder="' . $random_placeholder . '" rows="1"></textarea>
                 <button id="aichatbot-send"><i class="fas fa-paper-plane"></i></button>
