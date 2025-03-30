@@ -26,7 +26,7 @@ const nextConfig = {
     config.experiments = { ...config.experiments, topLevelAwait: true };
 
     if (dev && !isServer) {
-      // Disable optimization in development mode
+      // Disable optimization in development mode.
       config.optimization = {
         ...config.optimization,
         splitChunks: false,
