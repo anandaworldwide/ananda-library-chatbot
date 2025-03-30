@@ -27,6 +27,20 @@ this page.**
 Prelude: Please make sure you have already downloaded node on your system and
 the version is 18 or greater.
 
+## Documentation
+
+For detailed information about the project architecture and functionality, please refer to the documentation in
+the `docs` directory:
+
+- [PRD](docs/PRD.md) - Product Requirements Document outlining the project's features and specifications
+- [Tech Stack](docs/tech-stack.md) - Overview of technologies used in the project
+- [App Flow](docs/app-flow.md) - Explanation of the application's main user flows and interactions
+- [Frontend Guidelines](docs/frontend-guidelines.md) - Styling and design rules for the frontend codebase
+- [Backend Structure](docs/backend-structure.md) - Architecture and organization of the backend services
+- [File Structure](docs/file-structure.md) - Organization of the project's files and directories
+
+These documents provide comprehensive guidance for developers working on or extending the project.
+
 ## Forked Version
 
 This is a fork of gpt4-pdf-chatbot-langchain. This version looks for a specified
