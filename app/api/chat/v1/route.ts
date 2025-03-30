@@ -291,13 +291,28 @@ async function validateAndPreprocessInput(
     .escape(question.trim())
     .replaceAll('\n', ' ');
 
-  // Validate collection
-  if (
-    typeof collection !== 'string' ||
-    !['master_swami', 'whole_library'].includes(collection)
-  ) {
+  // Validate collection - only if collectionConfig has multiple options
+  if (typeof collection !== 'string') {
     const response = NextResponse.json(
-      { error: 'Invalid collection provided' },
+      { error: 'Collection must be a string value' },
+      { status: 400 },
+    );
+    return addCorsHeaders(response, req, siteConfig);
+  }
+
+  // Only validate collection against available options if there are multiple collections configured
+  if (
+    siteConfig.collectionConfig &&
+    Object.keys(siteConfig.collectionConfig).length > 1 &&
+    !Object.keys(siteConfig.collectionConfig).includes(collection)
+  ) {
+    const availableCollections = Object.keys(siteConfig.collectionConfig).join(
+      ', ',
+    );
+    const response = NextResponse.json(
+      {
+        error: `Invalid collection provided. Available collections: ${availableCollections}`,
+      },
       { status: 400 },
     );
     return addCorsHeaders(response, req, siteConfig);
@@ -366,13 +381,14 @@ async function setupPineconeAndFilter(
     $and: [{ type: { $in: [] } }],
   };
 
-  if (
-    collection === 'master_swami' &&
-    siteConfig.collectionConfig?.master_swami
-  ) {
-    filter.$and.push({
-      author: { $in: ['Paramhansa Yogananda', 'Swami Kriyananda'] },
-    });
+  // Apply collection-specific filters only if the collection exists in siteConfig
+  if (siteConfig.collectionConfig && siteConfig.collectionConfig[collection]) {
+    // Apply collection-specific filters based on the collection name
+    if (collection === 'master_swami') {
+      filter.$and.push({
+        author: { $in: ['Paramhansa Yogananda', 'Swami Kriyananda'] },
+      });
+    }
   }
 
   // Apply library filter only if includedLibraries is non-empty
@@ -554,7 +570,7 @@ async function handleComparisonRequest(
 
         // Set up Pinecone and filter
         const { index } = await setupPineconeAndFilter(
-          requestBody.collection || 'default',
+          requestBody.collection || 'whole_library',
           normalizeMediaTypes(requestBody.mediaTypes),
           siteConfig,
         );
@@ -986,7 +1002,7 @@ async function handleChatRequest(req: NextRequest) {
 
         // Set up Pinecone and filter
         const { index, filter } = await setupPineconeAndFilter(
-          sanitizedInput.collection || 'default',
+          sanitizedInput.collection || 'whole_library',
           normalizeMediaTypes(sanitizedInput.mediaTypes),
           siteConfig,
         );
@@ -1036,7 +1052,7 @@ async function handleChatRequest(req: NextRequest) {
           const docId = await saveAnswerToFirestore(
             originalQuestion,
             fullResponse,
-            sanitizedInput.collection || 'default',
+            sanitizedInput.collection || 'whole_library',
             promiseDocuments,
             sanitizedInput.history || [],
             clientIP,
