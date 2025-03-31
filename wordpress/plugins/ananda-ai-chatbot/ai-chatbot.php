@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define default API URLs
-define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://ananda-public-chatbot.vercel.app/api/chat/v1');
+define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://chat.ananda.org/api/chat/v1');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
 // Define plugin version at the top with other constants

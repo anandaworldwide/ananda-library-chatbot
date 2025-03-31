@@ -20,10 +20,12 @@ async function handler(
     error?: string;
   }>,
 ) {
-  // Apply rate limiting
+  // Apply rate limiting. This method is called when a new question answer pair is added and it is
+  // also called by a periodic cron job because the cron job can't do JWT tokens we keep the rate
+  // limit very low here for security.
   const isAllowed = await genericRateLimiter(req, res, {
     windowMs: 5 * 60 * 1000, // 5 minutes
-    max: 500, // 500 requests per 5 minutes
+    max: 50, // 50 requests per 5 minutes
     name: 'related-questions-api',
   });
 
