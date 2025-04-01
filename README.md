@@ -38,6 +38,10 @@ the `docs` directory:
 - [Frontend Guidelines](docs/frontend-guidelines.md) - Styling and design rules for the frontend codebase
 - [Backend Structure](docs/backend-structure.md) - Architecture and organization of the backend services
 - [File Structure](docs/file-structure.md) - Organization of the project's files and directories
+- [Security](docs/SECURITY-README.md) - Security implementation details and best practices
+- [Security TODO](docs/SECURITY-TODO.md) - Planned security improvements and tasks
+- [Testing](docs/TESTS-README.md) - Testing framework and guidelines
+- [Testing TODO](docs/TESTS-TODO.md) - Planned testing improvements and tasks
 
 These documents provide comprehensive guidance for developers working on or extending the project.
 
