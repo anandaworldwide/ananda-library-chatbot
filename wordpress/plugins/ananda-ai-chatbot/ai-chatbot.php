@@ -3,7 +3,7 @@
 Plugin Name: Ananda AI Chatbot
 Description: Adds an AI chatbot bubble to your WordPress site, connecting to 
              a Vercel backend.
-Version:     1.0.22
+Version:     1.0.28
 Author:      Michael Olivier
 */
 
@@ -17,7 +17,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://chat.ananda.org/api/chat/v1'
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.22'); // Increment this when you make CSS or JS changes
+define('AICHATBOT_VERSION', '1.0.28'); // Increment this when you make CSS or JS changes
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
