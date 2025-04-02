@@ -4,10 +4,19 @@ globs: *.js,*.ts,*.tsx
 alwaysApply: false
 ---
 
-# Your rule content
+# JavaScript and TypeScript
 
+## General 
 - Use `function` for pure functions, no semicolons.
 - TypeScript (strict), interfaces over types, maps over enums.
 - File structure: Component, subcomponents, helpers, static, types.
 - Early returns, minimal braces, lowercase-dashed dirs.
 - Named exports, RORO pattern.
+
+## React/Next.js
+
+- Functional components with TS interfaces.
+- Minimize `use client`, `useEffect`, `setState`; favor RSC.
+- Use Tailwind
+- Suspense for client components, `next-safe-action` for server actions.
+- Optimize images (WebP, lazy loading).

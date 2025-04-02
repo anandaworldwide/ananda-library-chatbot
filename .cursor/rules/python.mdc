@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Python
+
+- Python 3.10+, use typing module.
+- PEP 8 with Ruff, Google-style docstrings.
+- Async/await for I/O, Poetry/Rye for deps.
+- 90%+ test coverage with pytest.
+- Specific exception handling.

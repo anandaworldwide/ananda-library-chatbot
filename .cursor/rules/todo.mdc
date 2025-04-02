@@ -1,0 +1,12 @@
+---
+description: 
+globs: *TODO.md
+alwaysApply: false
+---
+
+# To Do Files
+
+- allowed statuses: `[ ]` (todo), `[?]` (to test), `[x]` (done).
+- Always proceed from todo > to test > done. Never go from todo > done without 'to test' step.
+- for larger to-do lists once a significant number of items have been done ask the user whether to split the file into two sections (To Do and Done) and move all the done items to the done section.
+- When marking something as to test or done, you may add a phrase of details about what was done, but don't add multiple lines of details about what you did. 
