@@ -44,7 +44,7 @@ describe('API Middleware', () => {
     // Reset mocks
     jest.clearAllMocks();
 
-    // Create mock request and response
+    // Create mock request and response.
     mockReq = {
       method: 'GET',
       url: '/api/test',
