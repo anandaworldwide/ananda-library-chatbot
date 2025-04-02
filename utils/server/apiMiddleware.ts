@@ -63,9 +63,8 @@ export function withJwtOnlyAuth(handler: ApiHandler): ApiHandler {
 function applySecurityChecks(handler: ApiHandler): ApiHandler {
   return async (req: NextApiRequest, res: NextApiResponse) => {
     const referer = req.headers.referer || req.headers.referrer;
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
-    const isVercelPreview = process.env.VERCEL_ENV === 'preview';
     const isDevelopment = process.env.NODE_ENV === 'development';
+    const siteConfig = loadSiteConfigSync();
 
     // Perform security checks for POST requests in non-development environments
     if (req.method === 'POST' && !isDevelopment) {
@@ -74,30 +73,25 @@ function applySecurityChecks(handler: ApiHandler): ApiHandler {
         console.info(
           `POST request to ${req.url} without referer. IP: ${req.socket.remoteAddress}`,
         );
-        // You might want to allow this, or handle it differently based on your security requirements
-      } else if (typeof referer === 'string') {
+      } else if (typeof referer === 'string' && siteConfig) {
         try {
-          // Validate referer against base URL
+          // Validate referer against allowed domains
           const refererUrl = new URL(referer);
-          // Only compare if we have a base URL
-          if (baseUrl) {
-            const baseUrlObj = new URL(baseUrl);
+          const allowedDomains = siteConfig.allowedFrontEndDomains || [];
 
-            if (
-              !isVercelPreview &&
-              refererUrl.hostname !== baseUrlObj.hostname
-            ) {
-              console.warn(
-                `POST request to ${req.url} with invalid referer. IP: ${req.socket.remoteAddress}, Referer: ${referer}`,
-              );
-              return res
-                .status(403)
-                .json({ message: 'Forbidden: Invalid referer' });
+          // Check if referer matches any allowed domain pattern
+          const isAllowedDomain = allowedDomains.some((domain) => {
+            // Handle wildcard patterns (e.g., **-ananda-web-services-projects.vercel.app)
+            if (domain.includes('**')) {
+              const pattern = domain.replace('**', '.*');
+              return new RegExp(`^${pattern}$`).test(refererUrl.hostname);
             }
-          } else {
-            // If no base URL is set, reject all POST requests with referers
+            return refererUrl.hostname === domain;
+          });
+
+          if (!isAllowedDomain) {
             console.warn(
-              `POST request to ${req.url} with referer but no base URL set. IP: ${req.socket.remoteAddress}, Referer: ${referer}`,
+              `POST request to ${req.url} with invalid referer. IP: ${req.socket.remoteAddress}, Referer: ${referer}`,
             );
             return res
               .status(403)

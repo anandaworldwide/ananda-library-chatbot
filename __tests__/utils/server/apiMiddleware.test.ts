@@ -65,6 +65,7 @@ describe('API Middleware', () => {
     // Default to no login required
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: false,
+      allowedFrontEndDomains: ['example.com'],
     });
 
     // Mock process.env with default values
@@ -85,6 +86,7 @@ describe('API Middleware', () => {
     // Setup site config to not require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: false,
+      allowedFrontEndDomains: ['example.com'],
     });
 
     // Create wrapped handler
@@ -104,6 +106,7 @@ describe('API Middleware', () => {
     // Setup site config to require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: true,
+      allowedFrontEndDomains: ['example.com'],
     });
 
     // Create wrapped handler
@@ -123,6 +126,7 @@ describe('API Middleware', () => {
     // Setup site config to not require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: false,
+      allowedFrontEndDomains: ['example.com'],
     });
 
     // Create wrapped handler with forceAuth
@@ -142,6 +146,7 @@ describe('API Middleware', () => {
     // Setup site config to require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: true,
+      allowedFrontEndDomains: ['example.com'],
     });
 
     // Create wrapped handler with skipAuth
@@ -265,6 +270,7 @@ describe('API Middleware Utilities', () => {
     it('should apply withJwtAuth when site config requires login', async () => {
       (loadSiteConfigSync as jest.Mock).mockReturnValue({
         requireLogin: true,
+        allowedFrontEndDomains: ['example.com'],
       });
 
       const wrappedHandler = withApiMiddleware(mockHandler);
@@ -280,6 +286,7 @@ describe('API Middleware Utilities', () => {
     it('should not apply withJwtAuth when site config does not require login', async () => {
       (loadSiteConfigSync as jest.Mock).mockReturnValue({
         requireLogin: false,
+        allowedFrontEndDomains: ['example.com'],
       });
 
       const wrappedHandler = withApiMiddleware(mockHandler);
@@ -295,6 +302,7 @@ describe('API Middleware Utilities', () => {
     it('should not apply withJwtAuth when skipAuth option is true', async () => {
       (loadSiteConfigSync as jest.Mock).mockReturnValue({
         requireLogin: true,
+        allowedFrontEndDomains: ['example.com'],
       });
 
       const wrappedHandler = withApiMiddleware(mockHandler, { skipAuth: true });
@@ -310,6 +318,7 @@ describe('API Middleware Utilities', () => {
     it('should apply withJwtAuth when forceAuth option is true', async () => {
       (loadSiteConfigSync as jest.Mock).mockReturnValue({
         requireLogin: false,
+        allowedFrontEndDomains: ['example.com'],
       });
 
       const wrappedHandler = withApiMiddleware(mockHandler, {
