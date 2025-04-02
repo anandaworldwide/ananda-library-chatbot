@@ -133,7 +133,7 @@
     "enableAuthorSelection": false,
     "requireLogin": false,
     "allowPrivateSessions": false,
-    "allowAllAnswersPage": false,
+    "allowAllAnswersPage": true,
     "loginImage": null,
     "header": {
       "logo": "ananda-logo.png",
