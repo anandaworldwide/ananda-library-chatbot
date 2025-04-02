@@ -27,6 +27,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const sendButton = document.getElementById('aichatbot-send');
   const messages = document.getElementById('aichatbot-messages');
 
+  // Initialize language hint functionality
+  const hint = document.querySelector('.aichatbot-language-hint');
+  const modal = document.querySelector('.aichatbot-language-modal');
+
+  if (hint && modal) {
+    hint.addEventListener('click', () => {
+      modal.style.display = 'flex';
+    });
+
+    const closeButton = modal.querySelector('.modal-close');
+    if (closeButton) {
+      closeButton.addEventListener('click', () => {
+        modal.style.display = 'none';
+      });
+    }
+
+    // Close modal when clicking outside
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+  }
+
   // Create controls container (to hold both buttons)
   const controlsContainer = document.createElement('div');
   controlsContainer.id = 'aichatbot-controls';
@@ -36,15 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const fullPageButton = document.createElement('div');
   fullPageButton.id = 'aichatbot-fullpage';
   fullPageButton.innerHTML = `<i class="fas fa-expand-alt"></i> Open full page chat`;
-
-  // Add header with close button to the chat window
-  const header = document.createElement('div');
-  header.id = 'aichatbot-header';
-  header.innerHTML = `
-    <h3>Ananda Intelligence (AI)</h3>
-    <span id="aichatbot-close"><i class="fas fa-chevron-down"></i></span>
-  `;
-  chatWindow.insertBefore(header, chatWindow.firstChild);
 
   // Initialize chat history
   let chatHistory = [];

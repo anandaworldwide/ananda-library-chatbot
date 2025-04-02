@@ -3,7 +3,7 @@
 Plugin Name: Ananda AI Chatbot
 Description: Adds an AI chatbot bubble to your WordPress site, connecting to 
              a Vercel backend.
-Version:     1.0
+Version:     1.0.22
 Author:      Michael Olivier
 */
 
@@ -17,7 +17,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://chat.ananda.org/api/chat/v1'
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.12'); // Increment this when you make CSS or JS changes
+define('AICHATBOT_VERSION', '1.0.22'); // Increment this when you make CSS or JS changes
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -378,6 +378,25 @@ function aichatbot_add_chat_bubble() {
             </span>
           </div>';
     echo '<div id="aichatbot-window" style="display:none;">
+            <div id="aichatbot-header">
+                <h3>Ananda Intelligence (AI)</h3>
+                <div class="aichatbot-header-controls">
+                    <div class="aichatbot-language-hint">
+                        <span class="hint-icon">🌐</span>
+                        <span class="hint-text">Languages</span>
+                    </div>
+                    <span id="aichatbot-close"><i class="fas fa-chevron-down"></i></span>
+                </div>
+            </div>
+            
+            <div class="aichatbot-language-modal" style="display: none;">
+                <div class="modal-content">
+                    <h3>Chat in Your Language</h3>
+                    <p>Feel free to ask questions in any language - I\'ll respond in the same language you use!</p>
+                    <button class="modal-close">Got it</button>
+                </div>
+            </div>
+
             <div id="aichatbot-messages"></div>
             <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Intelligence uses AI and may make mistakes.</div>
             <div id="aichatbot-input-container">
@@ -546,4 +565,43 @@ function aichatbot_ajax_test_api() {
             'message' => 'Received a token from the backend, but it\'s not in the expected JWT format'
         ));
     }
+}
+
+function aichatbot_chat_window_html() {
+    $font_size = get_option('aichatbot_font_size', 16);
+    $window_width = get_option('aichatbot_window_width', 560);
+    $window_height = get_option('aichatbot_window_height', 600);
+    $placeholder = get_option('aichatbot_placeholder_questions', 'Ask me anything about this website');
+    
+    ob_start();
+    ?>
+    <div id="aichatbot-window" class="aichatbot-window" style="width: <?php echo esc_attr($window_width); ?>px; height: <?php echo esc_attr($window_height); ?>px; font-size: <?php echo esc_attr($font_size); ?>px;">
+        <!-- Language hint and modal -->
+        <div class="aichatbot-language-hint" style="display: none;">
+            <span class="hint-icon">🌐</span>
+            <span class="hint-text">Languages</span>
+        </div>
+        
+        <div class="aichatbot-language-modal" style="display: none;">
+            <div class="modal-content">
+                <h3>Chat in Your Language</h3>
+                <p>Feel free to ask questions in any language - I'll respond in the same language you use!</p>
+                <button class="modal-close">Got it</button>
+            </div>
+        </div>
+        
+        <!-- Existing chat window content -->
+        <div class="aichatbot-header">
+            <span class="aichatbot-title">Ananda AI Assistant</span>
+            <button class="aichatbot-close">&times;</button>
+        </div>
+        <div id="aichatbot-messages"></div>
+        <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Intelligence uses AI and may make mistakes.</div>
+        <div id="aichatbot-input-container">
+            <textarea id="aichatbot-input" placeholder="' . $placeholder . '" rows="1"></textarea>
+            <button id="aichatbot-send"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+    <?php
+    return ob_get_clean();
 }
