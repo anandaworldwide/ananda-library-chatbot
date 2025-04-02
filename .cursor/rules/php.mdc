@@ -1,0 +1,14 @@
+---
+description: 
+globs: *.php
+alwaysApply: false
+---
+
+# PHP Rules
+
+- Use classes with strict types and interfaces (PHP 8+).
+- Minimize global state, $_SESSION, static; favor dependency injection.
+- Leverage PSR-12, Composer, and autoloading; PHPUnit for testing.
+- Use attributes for routing/metadata, PSR-7 for HTTP handling.
+- Optimize performance (OPcache, lazy loading, prepared statements).
+- If there is a cache-busting version number, increment it when you make changes. 

@@ -1,0 +1,13 @@
+---
+description: 
+globs: *.js,*.ts,*.tsx
+alwaysApply: false
+---
+
+# Your rule content
+
+- Use `function` for pure functions, no semicolons.
+- TypeScript (strict), interfaces over types, maps over enums.
+- File structure: Component, subcomponents, helpers, static, types.
+- Early returns, minimal braces, lowercase-dashed dirs.
+- Named exports, RORO pattern.
