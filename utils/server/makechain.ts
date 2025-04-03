@@ -232,6 +232,27 @@ const getFullTemplate = async (siteId: string) => {
 // This helps maintain context while allowing effective vector store querying
 const CONDENSE_TEMPLATE = `Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question.
 
+IMPORTANT: NEVER reformulate social messages or conversation closers. If the follow up input includes ANY 
+of the following:
+1. Expressions of gratitude: "thanks", "thank you", "gracias", "merci", "danke", etc.
+2. Conversation closers: "that's all", "I'm all set", "got it", "that's what I needed", "okay then", etc.
+3. Acknowledgments: "I understand", "I see", "sounds good", "makes sense", etc.
+4. General positive feedback: "great", "wonderful", "perfect", "nice", "awesome", etc.
+
+DO NOT attempt to reformulate these into questions. Instead, return EXACTLY what the user said, word for word.
+
+Examples of inputs you should return unchanged:
+- "Thanks for the information!"
+- "That's all I needed, thank you."
+- "Sounds good, I'll check that out."
+- "Perfect, thank you very much."
+- "Great, that answers my question."
+- "I'm all set, thanks!"
+- "That's helpful, I appreciate it."
+- "Got it, thanks for explaining."
+- "Okay, thank you!"
+- "I understand now, thanks."
+
 <chat_history>
   {chat_history}
 </chat_history>
@@ -505,11 +526,38 @@ export const makeChain = async (
   // Combine all chains into the final conversational retrieval QA chain
   const conversationalRetrievalQAChain = RunnableSequence.from([
     {
-      question: (input: AnswerChainInput) => {
+      question: async (input: AnswerChainInput) => {
+        // Debug: Log the original question
+        console.log(`🔍 ORIGINAL QUESTION: "${input.question}"`);
+
+        // Check for social messages like "thanks" and bypass reformulation.
+        // This is a fallback to catch the basic cases in case the CONDENSE_TEMPLATE does not handle it correctly.
+        const simpleSocialPattern =
+          /^(thanks|thank you|gracias|merci|danke|thank|thx|ty|thank u|muchas gracias|vielen dank|great|awesome|perfect|good|nice|ok|okay|got it|perfect|clear)[\s!.]*$/i;
+        if (simpleSocialPattern.test(input.question.trim())) {
+          console.log(
+            `🔍 SOCIAL MESSAGE DETECTED: "${input.question}" - bypassing reformulation`,
+          );
+          return input.question; // Don't reformulate social messages
+        }
+
         if (input.chat_history.trim() === '') {
+          console.log(`🔍 NO CHAT HISTORY: Using original question`);
           return input.question; // Use original question if no chat history
         }
-        return standaloneQuestionChain.invoke(input);
+
+        // Debug: Show the question is being sent for reformulation
+        console.log(
+          `🔍 REFORMULATING QUESTION with chat history of ${input.chat_history.length} characters`,
+        );
+
+        // Get the reformulated standalone question
+        const standaloneQuestion = await standaloneQuestionChain.invoke(input);
+
+        // Debug: Show the result of reformulation
+        console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
+
+        return standaloneQuestion;
       },
       chat_history: (input: AnswerChainInput) => input.chat_history,
       modelInfo: () => ({ label, model, temperature }), // Pass model info through
