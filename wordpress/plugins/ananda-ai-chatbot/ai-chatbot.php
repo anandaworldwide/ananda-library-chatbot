@@ -3,7 +3,7 @@
 Plugin Name: Ananda AI Chatbot
 Description: Adds an AI chatbot bubble to your WordPress site, connecting to 
              a Vercel backend.
-Version:     1.0.28
+Version:     1.0.29
 Author:      Michael Olivier
 */
 
@@ -17,7 +17,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://chat.ananda.org/api/chat/v1'
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.28'); // Increment this when you make CSS or JS changes
+define('AICHATBOT_VERSION', '1.0.29'); // Increment this when you make CSS or JS changes
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -251,23 +251,40 @@ function aichatbot_settings_page() {
     <?php
 }
 
+/**
+ * Enqueues a style or script in the plugin directory. File last modified time is used as version string.
+ * 
+ * @param string $type 'style' or 'script'
+ * @param string $handle Unique identifier
+ * @param string $file Path to file relative to plugin directory
+ * @param array $deps Dependencies
+ * @param string|bool $media_or_footer For styles: media type, for scripts: whether to load in footer
+ * @param bool $defer Whether to defer script loading (scripts only)
+ */
+function ananda_enqueue_asset($type, $handle, $file, $deps = array(), $media_or_footer = 'all', $defer = false) {
+    $file_path = plugin_dir_path(__FILE__) . $file;
+    $file_url = plugin_dir_url(__FILE__) . $file;
+    $ver = filemtime($file_path);
+    
+    if ($type === 'style') {
+        wp_enqueue_style($handle, $file_url, $deps, $ver, $media_or_footer);
+    } else if ($type === 'script') {
+        wp_enqueue_script($handle, $file_url, $deps, $ver, $media_or_footer);
+        if ($defer) {
+            wp_script_add_data($handle, 'defer', true);
+        }
+    }
+}
+
 // Load styles and scripts
 function aichatbot_enqueue_assets() {
     // Enqueue Font Awesome from CDN with a reliable approach
     wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css', array(), null);
     
-    // Enqueue our CSS with version for cache busting
-    wp_enqueue_style('aichatbot-css', 
-        plugins_url('assets/css/chatbot.css', __FILE__), 
-        array(), 
-        AICHATBOT_VERSION
-    );
-    
-    // Enqueue auth utilities FIRST so they're available to the main script
-    wp_enqueue_script('aichatbot-auth', plugins_url('assets/js/chatbot-auth.js', __FILE__), array('jquery'), AICHATBOT_VERSION, true);
-    
-    // Enqueue main plugin script with dependency on auth script
-    wp_enqueue_script('aichatbot-js', plugins_url('assets/js/chatbot.js', __FILE__), array('jquery', 'aichatbot-auth'), AICHATBOT_VERSION, true);
+    // Enqueue plugin assets using the new function
+    ananda_enqueue_asset('style', 'aichatbot-css', 'assets/css/chatbot.css', array(), 'all');
+    ananda_enqueue_asset('script', 'aichatbot-auth', 'assets/js/chatbot-auth.js', array('jquery'), true);
+    ananda_enqueue_asset('script', 'aichatbot-js', 'assets/js/chatbot.js', array('jquery', 'aichatbot-auth'), true);
     
     // Get Vercel URL from settings, with fallbacks
     $saved_url = get_option('aichatbot_vercel_url');
