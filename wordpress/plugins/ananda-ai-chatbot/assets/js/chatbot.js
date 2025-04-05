@@ -91,8 +91,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Bubble click functionality
   bubble.addEventListener('click', (e) => {
-    chatWindow.style.display =
-      chatWindow.style.display === 'none' ? 'flex' : 'none';
+    
+    chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none';
+        
     if (chatWindow.style.display === 'flex') {
       document.body.classList.add('aichatbot-window-open');
       setTimeout(() => input.focus(), 0);
