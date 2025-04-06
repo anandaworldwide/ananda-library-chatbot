@@ -551,8 +551,18 @@ export const makeChain = async (
           `🔍 REFORMULATING QUESTION with chat history of ${input.chat_history.length} characters`,
         );
 
+        // Measure time for the reformulation process
+        const reformulationStartTime = Date.now();
+
         // Get the reformulated standalone question
         const standaloneQuestion = await standaloneQuestionChain.invoke(input);
+
+        // Calculate and log the time taken
+        const reformulationTime = Date.now() - reformulationStartTime;
+        console.log(`⏱️ QUESTION REFORMULATION took ${reformulationTime}ms`);
+        console.log(
+          `⏱️ PERFORMANCE METRIC - Question Reformulation: ${reformulationTime}ms`,
+        );
 
         // Debug: Show the result of reformulation
         console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
