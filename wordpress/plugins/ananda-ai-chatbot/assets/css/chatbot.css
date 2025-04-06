@@ -470,11 +470,6 @@
   z-index: 9999 !important;
 }
 
-/* Hidden class for the Intercom launcher when our chat is open */
-.aichatbot-window-open .intercom-lightweight-app {
-  visibility: hidden !important;
-}
-
 /* Force our chatbot window above everything */
 .intercom-enabled #aichatbot-window {
   right: 20px; /* Keep same position when Intercom is present */

@@ -20,6 +20,15 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize variables
+  let isStreaming = false;
+  let currentAbortController = null;
+  let defaultCollection = 'whole_library';
+  let privateSession = false;
+  let mediaTypes = { text: true, audio: false, youtube: false };
+  let sourceCount = 6;
+  let intercomEnabled = false;
+
   // Get DOM elements
   const bubble = document.getElementById('aichatbot-bubble');
   const chatWindow = document.getElementById('aichatbot-window');
@@ -63,14 +72,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize chat history
   let chatHistory = [];
-  let isStreaming = false;
-  let currentAbortController = null;
-
-  // Default collection and settings
-  const defaultCollection = 'whole_library';
-  const privateSession = false;
-  const mediaTypes = { text: true, audio: false, youtube: false };
-  const sourceCount = 6;
 
   // Add event listeners after all elements are created
   // Close button functionality
@@ -207,37 +208,19 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('resize', autoResizeTextarea);
 
   // Handle Intercom integration if enabled
-  let intercomEnabled = false;
-
   if (typeof aichatbotData !== 'undefined') {
     intercomEnabled = aichatbotData.enableIntercom === '1';
 
-    // Hide Intercom widget initially if integration is enabled
+    // Add body class for Intercom positioning but don't hide the Intercom widget
     if (intercomEnabled && typeof window.Intercom !== 'undefined') {
       // Add a class to the body for CSS targeting when Intercom is active
       document.body.classList.add('intercom-enabled');
-
-      // Hide Intercom widget when page loads
-      const style = document.createElement('style');
-      style.id = 'aichatbot-intercom-style';
-      style.innerHTML = `
-        #intercom-container {
-          display: none !important;
-        }
-      `;
-      document.head.appendChild(style);
     }
   }
 
   // Function to show Intercom and hide chatbot
   function showIntercom() {
     if (intercomEnabled && typeof window.Intercom !== 'undefined') {
-      // Remove the CSS that hides Intercom
-      const intercomStyle = document.getElementById('aichatbot-intercom-style');
-      if (intercomStyle) {
-        intercomStyle.remove();
-      }
-
       // Hide chatbot window
       chatWindow.style.display = 'none';
 
