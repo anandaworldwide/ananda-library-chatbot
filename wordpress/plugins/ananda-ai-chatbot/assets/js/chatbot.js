@@ -770,6 +770,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  /* @TODO Commenting this out for now. After some testing, if the chat window works well
+           on mobile and desktop, we can delete the code altogether. 
+
   // Handle window resize events for responsive behavior
   window.addEventListener('resize', () => {
     const windowVisible = sessionStorage.getItem('aichatbot_window_visible');
@@ -794,7 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Focus the input when we open
       setTimeout(() => input.focus(), 0);
     }
-  });
+  }); */
 
   // Save chat state when user leaves the page
   window.addEventListener('beforeunload', saveChatState);
