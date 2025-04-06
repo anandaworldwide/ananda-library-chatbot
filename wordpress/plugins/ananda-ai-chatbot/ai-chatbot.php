@@ -3,7 +3,6 @@
 Plugin Name: Ananda AI Chatbot
 Description: Adds an AI chatbot bubble to your WordPress site, connecting to 
              a Vercel backend.
-Version:     1.0.29
 Author:      Michael Olivier
 */
 
