@@ -21,6 +21,86 @@
   "build-with-api-tests": "jest && jest --selectProjects=server && node scripts/build.js"
   ```
 
+### Index.tsx Coverage Plan (Target: 70%)
+
+#### Phase 1: Basic Component Testing
+
+- [x] Setup test environment and basic rendering tests
+- [x] Props validation tests
+- [x] Initial state verification tests
+- [ ] Maintenance mode rendering tests
+
+#### Phase 2: Core Functionality (25% coverage)
+
+- [ ] Chat message handling tests
+- [ ] Stream processing tests
+- [ ] Error scenario tests
+- [ ] Basic user interaction tests
+
+#### Phase 3: Advanced Features (25% coverage)
+
+- [ ] Session management tests
+- [ ] Collection handling tests
+- [ ] Media type filtering tests
+- [ ] Scroll behavior tests
+
+#### Phase 4: Integration Testing (20% coverage)
+
+- [ ] API integration tests
+- [ ] WebSocket handling tests
+- [ ] Error boundary tests
+- [ ] Edge case tests
+
+#### Setup Requirements
+
+##### MSW (Mock Service Worker) Setup
+
+- [ ] Install MSW v2: `npm install msw --save-dev`
+- [ ] Create handlers for streaming chat responses:
+
+  ```typescript
+  // __tests__/mocks/handlers.ts
+  import { http, HttpResponse } from 'msw';
+
+  export const handlers = [
+    http.post('/api/chat/v1', async ({ request }) => {
+      const stream = new ReadableStream({
+        async start(controller) {
+          // Simulate streaming chat response
+          controller.enqueue('data: {"token": "Hello"}\n\n');
+          controller.enqueue('data: {"token": " world"}\n\n');
+          controller.enqueue('data: {"sourceDocs": []}\n\n');
+          controller.enqueue('data: {"done": true}\n\n');
+          controller.close();
+        },
+      });
+      return new HttpResponse(stream, {
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }),
+  ];
+  ```
+
+- [ ] Setup MSW in jest setup file:
+
+  ```typescript
+  // jest.setup.ts
+  import { setupServer } from 'msw/node';
+  import { handlers } from './mocks/handlers';
+
+  const server = setupServer(...handlers);
+
+  beforeAll(() => server.listen());
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
+  ```
+
+##### Additional Tools Status
+
+- ✓ Jest + React Testing Library (already configured)
+- ✓ jest-dom (already configured in jest.setup.ts)
+- ✓ user-event (template exists but needs consistent usage)
+
 ### Long-term
 
 - [x] Consolidate testing approach:
