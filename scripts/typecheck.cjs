@@ -33,8 +33,18 @@ if (testFiles.length > 0) {
 
     const tempConfig = {
       extends: './tsconfig.test.json',
-      include: testFiles,
+      include: [
+        ...testFiles,
+        'components/**/*',
+        'styles/**/*',
+        'types/**/*.d.ts',
+      ],
       exclude: ['node_modules'],
+      compilerOptions: {
+        moduleResolution: 'node',
+        allowJs: true,
+        resolveJsonModule: true,
+      },
     };
 
     fs.writeFileSync(tempConfigPath, JSON.stringify(tempConfig, null, 2));

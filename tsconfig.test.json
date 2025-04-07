@@ -6,8 +6,9 @@
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "jsxImportSource": "react",
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    "moduleResolution": "node"
   },
-  "include": ["__tests__/**/*", "types/**/*.d.ts"],
+  "include": ["__tests__/**/*", "types/**/*.d.ts", "components/**/*"],
   "exclude": ["node_modules"]
 }
