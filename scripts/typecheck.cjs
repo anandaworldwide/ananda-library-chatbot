@@ -4,9 +4,11 @@
 // This gets around the limitation where TypeScript cannot accept both
 // file paths and a project flag at the same time
 
+/* eslint-disable @typescript-eslint/no-var-requires */
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+/* eslint-enable @typescript-eslint/no-var-requires */
 
 // Get files from command line arguments
 const files = process.argv.slice(2);
@@ -14,9 +16,6 @@ const files = process.argv.slice(2);
 // Filter TypeScript files that are in the __tests__ directory
 const testFiles = files.filter(
   (file) => /\.(ts|tsx)$/.test(file) && file.includes('__tests__'),
-);
-const nonTestFiles = files.filter(
-  (file) => /\.(ts|tsx)$/.test(file) && !file.includes('__tests__'),
 );
 
 console.log(`Received ${files.length} files, ${testFiles.length} test files`);
