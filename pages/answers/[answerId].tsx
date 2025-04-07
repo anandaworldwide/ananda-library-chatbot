@@ -1,6 +1,10 @@
 // This component renders a single answer page, fetching and displaying the answer details,
 // handling likes, and providing admin functionality for deletion.
 
+// Special features:
+// - GETHUMAN links: For the 'ananda-public' site ID, links in the format [text](GETHUMAN)
+//   are automatically converted to links to the Ananda contact page (https://www.ananda.org/contact-us/)
+
 import { SiteConfig } from '@/types/siteConfig';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';

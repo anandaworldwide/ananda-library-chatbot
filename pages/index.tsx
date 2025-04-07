@@ -2,6 +2,10 @@
 // and media type filtering. The component manages chat state, handles user input,
 // and communicates with a backend API for chat responses.
 
+// Special features:
+// - GETHUMAN links: For the 'ananda-public' site ID, links in the format [text](GETHUMAN)
+//   are automatically converted to links to the Ananda contact page (https://www.ananda.org/contact-us/)
+
 // React and Next.js imports
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 

@@ -187,6 +187,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
           <TruncatedMarkdown
             markdown={answer.answer || ''}
             maxCharacters={isFullPage ? 4000 : 600}
+            siteConfig={siteConfig}
           />
 
           {/* Render sources if available */}

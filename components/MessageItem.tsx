@@ -16,6 +16,7 @@ import { RelatedQuestion } from '@/types/RelatedQuestion';
 import { useSudo } from '@/contexts/SudoContext';
 import { useVote } from '@/hooks/useVote';
 import { logEvent } from '@/utils/client/analytics';
+import { Components } from 'react-markdown';
 
 interface MessageItemProps {
   message: ExtendedAIMessage;
@@ -243,6 +244,32 @@ const MessageItem: React.FC<MessageItemProps> = ({
     );
   };
 
+  const components: Components = {
+    a: (props) => {
+      // Check if this is a GETHUMAN link for ananda-public site
+      if (siteConfig?.siteId === 'ananda-public' && props.href === 'GETHUMAN') {
+        // For ananda-public site, convert GETHUMAN links to contact page links
+        return (
+          <a href="https://www.ananda.org/contact-us/" {...props}>
+            {props.children}
+          </a>
+        );
+      }
+
+      // Default link rendering with target and rel attributes
+      return (
+        <a
+          href={props.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          {...props}
+        >
+          {props.children}
+        </a>
+      );
+    },
+  };
+
   return (
     <Fragment key={messageKey}>
       {/* Add a horizontal line between AI messages */}
@@ -264,11 +291,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
               {/* Render message content */}
               <ReactMarkdown
                 remarkPlugins={[gfm]}
-                components={{
-                  a: ({ ...props }) => (
-                    <a target="_blank" rel="noopener noreferrer" {...props} />
-                  ),
-                }}
+                components={components}
                 className={`mt-1 ${markdownStyles.markdownanswer}`}
               >
                 {message.message
