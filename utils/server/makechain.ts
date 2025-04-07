@@ -11,6 +11,7 @@
  * - Proportional document retrieval across knowledge bases
  * - Model comparison capabilities for A/B testing different LLMs
  * - Streaming support for real-time responses
+ * - Performance optimization: Uses faster model (gpt-3.5-turbo) for question rephrasing
  *
  * The system uses a multi-stage pipeline:
  * 1. Question processing - Converts follow-ups into standalone questions
@@ -334,13 +335,18 @@ export const makeChain = async (
   baseFilter?: Record<string, unknown>,
   sendData?: (data: StreamingResponseData) => void,
   resolveDocs?: (docs: Document[]) => void,
+  rephraseModelConfig: ModelConfig = {
+    model: 'gpt-3.5-turbo',
+    temperature: 0.1,
+  }, // New param for rephrasing model
 ) => {
   const siteId = process.env.SITE_ID || 'default';
   const configPath = path.join(process.cwd(), 'site-config/config.json');
   const siteConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
 
   const { model, temperature, label } = modelConfig;
-  let languageModel: BaseLanguageModel;
+  let answerModel: BaseLanguageModel; // Renamed for clarity
+  let rephraseModel: BaseLanguageModel; // New model for rephrasing
 
   // If includedLibraries has weights, then preserves weighted objects for proportional source
   // retrieval. Otherwise, it
@@ -348,14 +354,21 @@ export const makeChain = async (
     siteConfig[siteId]?.includedLibraries || [];
 
   try {
-    // Initialize the language model
-    languageModel = new ChatOpenAI({
+    // Initialize the answer generation model
+    answerModel = new ChatOpenAI({
       temperature,
       modelName: model,
       streaming: true,
     }) as BaseLanguageModel;
+
+    // Initialize the rephrasing model (faster, lighter)
+    rephraseModel = new ChatOpenAI({
+      temperature: rephraseModelConfig.temperature,
+      modelName: rephraseModelConfig.model,
+      streaming: false, // No need for streaming here
+    }) as BaseLanguageModel;
   } catch (error) {
-    console.error(`Failed to initialize model ${model}:`, error);
+    console.error(`Failed to initialize models:`, error);
     throw new Error(`Model initialization failed for ${label || model}`);
   }
 
@@ -372,9 +385,10 @@ export const makeChain = async (
 
   // Rephrase the initial question into a dereferenced standalone question based on
   // the chat history to allow effective vectorstore querying.
+  // Use the faster rephraseModel for standalone question generation
   const standaloneQuestionChain = RunnableSequence.from([
     condenseQuestionPrompt,
-    languageModel,
+    rephraseModel,
     new StringOutputParser(),
   ]);
 
@@ -519,7 +533,7 @@ export const makeChain = async (
       }) => input.retrievalOutput.documents,
     },
     answerPrompt,
-    languageModel,
+    answerModel,
     new StringOutputParser(),
   ]);
 
@@ -559,9 +573,11 @@ export const makeChain = async (
 
         // Calculate and log the time taken
         const reformulationTime = Date.now() - reformulationStartTime;
-        console.log(`⏱️ QUESTION REFORMULATION took ${reformulationTime}ms`);
         console.log(
-          `⏱️ PERFORMANCE METRIC - Question Reformulation: ${reformulationTime}ms`,
+          `⏱️ PERFORMANCE METRIC - Question Reformulation took: ${reformulationTime}ms`,
+        );
+        console.log(
+          `🔧 Using ${rephraseModelConfig.model} for rephrasing (faster model)`,
         );
 
         // Debug: Show the result of reformulation
@@ -592,11 +608,31 @@ export const makeComparisonChains = async (
   retriever: VectorStoreRetriever,
   modelA: ModelConfig,
   modelB: ModelConfig,
+  rephraseModelConfig: ModelConfig = {
+    model: 'gpt-3.5-turbo',
+    temperature: 0.1,
+  },
 ) => {
   try {
     const [chainA, chainB] = await Promise.all([
-      makeChain(retriever, { ...modelA, label: 'A' }),
-      makeChain(retriever, { ...modelB, label: 'B' }),
+      makeChain(
+        retriever,
+        { ...modelA, label: 'A' },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        rephraseModelConfig,
+      ),
+      makeChain(
+        retriever,
+        { ...modelB, label: 'B' },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        rephraseModelConfig,
+      ),
     ]);
 
     return { chainA, chainB };
@@ -620,6 +656,8 @@ export async function setupAndExecuteLanguageModelChain(
   try {
     const modelName = siteConfig?.modelName || 'gpt-4o';
     const temperature = siteConfig?.temperature || 0.3;
+    const rephraseModelName = 'gpt-3.5-turbo';
+    const rephraseTemperature = 0.1;
 
     // Send site ID immediately and validate
     if (siteConfig?.siteId) {
@@ -632,6 +670,10 @@ export async function setupAndExecuteLanguageModelChain(
       sendData({ siteId: siteConfig.siteId });
     }
 
+    console.log(
+      `🔧 Using ${modelName} for answer generation and ${rephraseModelName} for rephrasing`,
+    );
+
     const chainCreationStartTime = Date.now();
     const chain = await makeChain(
       retriever,
@@ -640,6 +682,7 @@ export async function setupAndExecuteLanguageModelChain(
       filter,
       sendData,
       resolveDocs,
+      { model: rephraseModelName, temperature: rephraseTemperature },
     );
     console.log(`Chain creation took ${Date.now() - chainCreationStartTime}ms`);
 

@@ -306,11 +306,18 @@ describe('makeChain', () => {
     // Verify that fs.readFile was called for config
     expect(fs.readFile).toHaveBeenCalled();
 
-    // Verify that ChatOpenAI was initialized
+    // Verify that ChatOpenAI was initialized for answer generation
     expect(ChatOpenAI).toHaveBeenCalledWith({
       temperature: 0.7,
       modelName: 'gpt-4o-mini',
       streaming: true,
+    });
+
+    // Verify that ChatOpenAI was initialized for rephrasing
+    expect(ChatOpenAI).toHaveBeenCalledWith({
+      temperature: 0.1,
+      modelName: 'gpt-3.5-turbo',
+      streaming: false,
     });
   });
 
@@ -408,6 +415,15 @@ describe('makeChain', () => {
     expect(ChatPromptTemplate.fromTemplate).toHaveBeenCalledWith(
       expect.stringContaining('rephrase the follow up question'),
     );
+
+    // Verify that the rephrasing model was used for the standalone question chain
+    // This is an indirect verification since we can't directly access the model used
+    // in the chain, but we can verify that ChatOpenAI was called with the correct parameters
+    expect(ChatOpenAI).toHaveBeenCalledWith({
+      temperature: 0.1,
+      modelName: 'gpt-3.5-turbo',
+      streaming: false,
+    });
   });
 
   test('should calculate sources based on configured library weights', async () => {
@@ -605,6 +621,13 @@ describe('makeChain', () => {
       label: 'Custom Model',
     };
 
+    // Custom rephrasing model config
+    const customRephraseModelConfig = {
+      model: 'gpt-3.5-turbo-16k',
+      temperature: 0.2,
+      label: 'Custom Rephrase Model',
+    };
+
     // Call makeChain with custom config
     await makeChain(
       mockRetriever,
@@ -613,13 +636,21 @@ describe('makeChain', () => {
       undefined,
       sendData,
       resolveDocs,
+      customRephraseModelConfig,
     );
 
-    // Check that ChatOpenAI was initialized with custom params
+    // Check that ChatOpenAI was initialized with custom params for answer generation
     expect(ChatOpenAI).toHaveBeenCalledWith({
       temperature: 0.3,
       modelName: 'gpt-4-turbo',
       streaming: true,
+    });
+
+    // Check that ChatOpenAI was initialized with custom params for rephrasing
+    expect(ChatOpenAI).toHaveBeenCalledWith({
+      temperature: 0.2,
+      modelName: 'gpt-3.5-turbo-16k',
+      streaming: false,
     });
   });
 
