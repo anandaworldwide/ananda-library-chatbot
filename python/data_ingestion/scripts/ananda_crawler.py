@@ -8,11 +8,13 @@
 #   --site: Site ID for environment variables (e.g., ananda-public). Will load from .env.[site]
 #           Default: 'ananda-public'
 #   --max-pages: Maximum number of pages to crawl
-#                Default: 10
+#                Default: 1000000
 #   --domain: Domain to crawl (e.g., ananda.org)
 #             Default: 'ananda.org'
 #   --continue: Continue from previous checkpoint (if available)
 #               Default: False (start fresh)
+#   --active-hours: Optional active time range (e.g., "9pm-6am" or "21:00-06:00"). 
+#                   Crawler pauses outside this window.
 #
 # Example usage:
 #   python ananda_crawler.py --domain ananda.org --max-pages 50
@@ -31,7 +33,7 @@ import sys
 import time
 import traceback
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
@@ -379,7 +381,7 @@ class AnandaCrawler:
                     continue
                 return None, []
 
-    def crawl(self, max_pages: int = 10):
+    def crawl(self, max_pages: int = 1000000):
         logging.debug(f"Starting crawl with max_pages={max_pages}")
         with sync_playwright() as p:
             browser = p.firefox.launch(headless=False)
@@ -515,6 +517,102 @@ def upsert_to_pinecone(vectors: List[Dict], index: pinecone.Index):
         index.upsert(vectors=vectors)
         print("Upsert complete")
 
+def parse_time_string(time_str: str) -> Optional[dt_time]:
+    """Parse HH:MM (24hr) or H:MMam/pm time string into a time object."""
+    time_str = time_str.strip().lower()
+    # Added %I%p for cases like "9pm"
+    formats_to_try = [
+        '%H:%M',       # 24-hour (e.g., 14:30)
+        '%I:%M%p',     # 12-hour AM/PM (e.g., 2:30pm)
+        '%I%p',        # 12-hour AM/PM no minutes (e.g., 9pm)
+    ]
+    for fmt in formats_to_try:
+        try:
+             # No change needed here, strptime handles the format directly
+             parsed_time = datetime.strptime(time_str, fmt).time()
+             return parsed_time
+        except ValueError:
+            continue # Try next format
+
+    logging.error(f"Invalid time format: '{time_str}'. Use HH:MM (24hr) or H:MMam/pm (e.g., 9:00pm, 14:30).")
+    return None
+
+def parse_time_range_string(range_str: Optional[str]) -> Tuple[Optional[dt_time], Optional[dt_time]]:
+    """Parse 'START-END' time range string into start and end time objects."""
+    if not range_str:
+        return None, None
+    parts = range_str.split('-')
+    if len(parts) != 2:
+        logging.error(f"Invalid time range format: {range_str}. Use START-END format (e.g., 9:00pm-5:00am).")
+        return None, None
+    start_str, end_str = parts
+    start_time = parse_time_string(start_str)
+    end_time = parse_time_string(end_str)
+    return start_time, end_time
+
+def is_within_time_range(start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time]) -> Tuple[bool, Optional[float]]:
+    """Check if the current time is within the specified range. Handles overnight ranges. Returns (is_within, sleep_seconds)."""
+    if not start_time_obj or not end_time_obj:
+        return True, None  # No range specified, always within
+
+    now = datetime.now()
+    current_time = now.time()
+
+    # Check if range spans midnight (e.g., 21:00 to 05:00)
+    if start_time_obj <= end_time_obj:
+        # Normal range (e.g., 09:00 to 17:00)
+        is_within = start_time_obj <= current_time <= end_time_obj
+    else:
+        # Overnight range (e.g., 21:00 to 05:00)
+        is_within = current_time >= start_time_obj or current_time <= end_time_obj
+
+    if is_within:
+        return True, None
+    else:
+        # Calculate time until the next start time
+        start_datetime_today = now.replace(hour=start_time_obj.hour, minute=start_time_obj.minute, second=0, microsecond=0)
+
+        next_start_datetime = start_datetime_today
+        # If current time is past today's end time (for overnight) OR past today's start time (for same day)
+        if (start_time_obj > end_time_obj and current_time > end_time_obj) or \
+           (start_time_obj <= end_time_obj and current_time > start_time_obj): 
+             if now >= start_datetime_today:
+                 next_start_datetime += timedelta(days=1)
+        # Handle case where it's before the start time on the same day (for overnight range)
+        elif start_time_obj > end_time_obj and current_time < start_time_obj:
+             # next_start_datetime is already correctly set to today's start time
+             pass 
+
+        sleep_duration_seconds = max(0, (next_start_datetime - now).total_seconds())
+        return False, sleep_duration_seconds
+
+def check_and_wait_if_inactive(start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time], crawler: AnandaCrawler, active_hours_str: Optional[str]):
+    """Checks if current time is outside active hours and sleeps if needed. Returns False if exit requested during sleep, True otherwise."""
+    is_active, sleep_duration_seconds = is_within_time_range(start_time_obj, end_time_obj)
+    if not is_active and sleep_duration_seconds is not None and sleep_duration_seconds > 0:
+        sleep_hours = sleep_duration_seconds / 3600
+        wake_time = (datetime.now() + timedelta(seconds=sleep_duration_seconds)).strftime('%Y-%m-%d %H:%M:%S')
+        logging.info(f"Outside active hours ({active_hours_str}). Sleeping for {sleep_hours:.2f} hours until {wake_time}. Saving checkpoint.")
+        crawler.save_checkpoint()
+        try:
+            # Sleep in shorter intervals to allow faster exit if signal received
+            sleep_interval = 60 # Sleep for 1 minute at a time
+            remaining_sleep = sleep_duration_seconds
+            while remaining_sleep > 0:
+                if handle_exit.exit_requested:
+                    logging.info("Exit signal received during sleep. Stopping.")
+                    return False # Indicates sleep was interrupted by exit request
+                sleep_this_interval = min(sleep_interval, remaining_sleep)
+                time.sleep(sleep_this_interval)
+                remaining_sleep -= sleep_this_interval
+            logging.info("Woke up. Resuming crawl.")
+        except KeyboardInterrupt:
+            logging.info("Keyboard interrupt during sleep. Stopping.")
+            handle_exit.exit_requested = True # Ensure graceful shutdown
+            return False # Indicates sleep was interrupted by exit request
+    # Return True if active, no sleep needed, or sleep completed normally
+    return True 
+
 def main():
     # Reset exit counter at start
     handle_exit.counter = 0
@@ -526,10 +624,22 @@ def main():
         default='ananda-public',
         help='Site ID for environment variables (e.g., ananda-public). Will load from .env.[site]'
     )
-    parser.add_argument('--max-pages', type=int, default=10, help='Maximum number of pages to crawl')
+    parser.add_argument('--max-pages', type=int, default=None, help='Maximum number of pages to crawl (default: unlimited)')
     parser.add_argument('--domain', default='ananda.org', help='Domain to crawl (e.g., ananda.org)')
     parser.add_argument('--continue', action='store_true', help='Continue from previous checkpoint')
+    parser.add_argument(
+        '--active-hours',
+        type=str,
+        default=None,
+        help='Optional active time range (e.g., "9pm-5am" or "21:00-05:00"). Crawler pauses outside this window.'
+     )
     args = parser.parse_args()
+
+    # Parse the active hours range
+    start_time_obj, end_time_obj = parse_time_range_string(args.active_hours)
+    if args.active_hours and (not start_time_obj or not end_time_obj):
+        print("Invalid --active-hours format provided. Exiting.")
+        return # Exit if format is wrong or parsing failed
 
     # Convert domain to full URL
     start_url = f"https://{args.domain}"
@@ -613,22 +723,34 @@ def main():
         
         with sync_playwright() as p:
             browser = p.firefox.launch(headless=False)
+            should_continue_loop = True # Flag to control the main loop
             try:
                 page = browser.new_page()
                 page.set_extra_http_headers({
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
                 })
                 
-                # Add timeout for the entire crawl process
-                start_time = time.time()
-                max_runtime = 60*60*24  # 24 hour timeout
+                start_run_time = time.time()
+
+                # --- Initial Time Check Before Loop ---
+                logging.info("Performing initial active hours check...")
+                should_continue_loop = check_and_wait_if_inactive(start_time_obj, end_time_obj, crawler, args.active_hours)
+                if not should_continue_loop:
+                    logging.info("Exiting after initial sleep interruption.")
+                    # Ensure cleanup happens by letting the finally block run
                 
-                while crawler.state.pending_urls and pages_processed < args.max_pages:
-                    # Check for overall timeout
-                    if time.time() - start_time > max_runtime:
-                        logging.warning("Maximum runtime reached, stopping crawl")
+                while crawler.state.pending_urls and should_continue_loop:
+                    # --- Time Check Inside Loop ---
+                    should_continue_loop = check_and_wait_if_inactive(start_time_obj, end_time_obj, crawler, args.active_hours)
+                    if not should_continue_loop:
+                        logging.info("Exit requested during sleep, breaking main loop.")
+                        break # Exit while loop
+
+                    # Check for max_pages limit if specified
+                    if args.max_pages is not None and pages_processed >= args.max_pages:
+                        logging.info(f"Reached max pages limit ({args.max_pages}), stopping crawl.")
                         break
-                        
+
                     url = crawler.state.pending_urls.pop(0)
                     normalized_url = crawler.normalize_url(url)
                     
@@ -672,20 +794,26 @@ def main():
                     # Save checkpoint after each page
                     crawler.save_checkpoint()
                     
-                    # Check exit flag
+                    # Check exit flag (safety check)
                     if handle_exit.exit_requested:
-                        print("\nGracefully stopping crawler...")
+                        print("\nGracefully stopping crawler due to signal...")
+                        should_continue_loop = False # Ensure loop terminates
                         break
                 
             except Exception as e:
-                logging.error(f"Browser error: {e}")
+                logging.error(f"Browser or main loop error: {e}")
                 logging.error(traceback.format_exc())
+                should_continue_loop = False # Stop loop on error
             finally:
+                # Ensure browser is closed cleanly
+                logging.info("Closing browser...")
                 try:
-                    browser.close()
+                    if 'browser' in locals() and browser.is_connected():
+                         browser.close()
+                         logging.info("Browser closed.")
                 except Exception as e:
-                    logging.debug(f"Error closing browser: {e}")
-                    
+                    logging.warning(f"Error closing browser: {e}")
+
         if pages_processed == 0:
             print("No pages were crawled successfully.")
             return
@@ -693,13 +821,16 @@ def main():
         print(f"\nCompleted processing {pages_processed} pages")
         
     except SystemExit:
-        print("\nExiting...")
+        print("\nExiting due to SystemExit...")
     except Exception as e:
-        logging.error(f"Unexpected error: {e}")
+        logging.error(f"Unexpected error in main: {e}")
         logging.error(traceback.format_exc())
     finally:
-        crawler.save_checkpoint()
+        if 'crawler' in locals():
+            print("Performing final checkpoint save...")
+            crawler.save_checkpoint() # Ensure final save
         if handle_exit.exit_requested:
+            print("Exiting script now.")
             sys.exit(0)
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/python/data_ingestion/scripts/ananda_crawler.py",
       "console": "integratedTerminal",
-      "args": ["--site", "ananda-public", "--max-pages", "1000"]
+      "args": ["--site", "ananda-public", "--active-hours", "10:34am-10:35am"]
     },
     {
       "name": "Python: supercut.py",
