@@ -16,7 +16,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://chat.ananda.org/api/chat/v1'
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.29'); // Increment this when you make CSS or JS changes
+define('AICHATBOT_VERSION', '1.0.31');
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -331,6 +331,9 @@ function aichatbot_add_custom_css() {
     $window_width = get_option('aichatbot_window_width', 560);
     $window_height = get_option('aichatbot_window_height', 600);
     
+    // Check if Intercom integration is enabled
+    $enable_intercom = get_option('aichatbot_enable_intercom', false);
+
     // Add Font Awesome directly to ensure it loads
     echo '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />';
     
@@ -372,6 +375,17 @@ function aichatbot_add_custom_css() {
                 border-radius: 0;
             }
         }
+
+        /* REMOVED CSS rule for hiding Intercom launcher - Use JS settings instead */
+        /* ' . ($enable_intercom ? 
+            '/* Default Intercom launcher - common selector */
+             .intercom-lightweight-app-launcher, /* Newer selector */
+             .intercom-launcher, /* Older selector */
+             #intercom-container .intercom-launcher /* More specific selector */ { 
+                display: none !important; 
+             }' 
+            : '') . ' */
+
     </style>';
 }
 add_action('wp_head', 'aichatbot_add_custom_css');

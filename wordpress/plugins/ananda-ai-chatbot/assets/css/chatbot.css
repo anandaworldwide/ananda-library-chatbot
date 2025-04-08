@@ -1,6 +1,6 @@
 #aichatbot-bubble {
   position: fixed;
-  bottom: 100px;
+  bottom: 20px;
   right: 20px; /* Match Intercom's positioning */
   background-color: #4a90e2;
   color: white;
@@ -447,8 +447,25 @@
 }
 
 #aichatbot-fullpage i,
-#aichatbot-clear-history i {
+#aichatbot-clear-history i,
+#aichatbot-contact-human i {
   margin-right: 5px;
+}
+
+/* Contact Human Button */
+#aichatbot-contact-human {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  padding: 8px;
+  cursor: pointer;
+  transition: color 0.2s;
+  flex: 1;
+  border-left: 1px solid #eaeaea;
+}
+
+#aichatbot-contact-human:hover {
+  color: #4a90e2;
 }
 
 /* Disclaimer text */
@@ -462,7 +479,7 @@
 /* Style adjustments when Intercom is active */
 .intercom-enabled #aichatbot-bubble {
   right: 20px; /* Keep same position when Intercom is present */
-  bottom: 100px; /* Stack above Intercom */
+  bottom: 20px;
 }
 
 /* Ensure proper z-index stacking */

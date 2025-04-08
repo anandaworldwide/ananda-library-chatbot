@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Add full page chat button
   const fullPageButton = document.createElement('div');
   fullPageButton.id = 'aichatbot-fullpage';
-  fullPageButton.innerHTML = `<i class="fas fa-expand-alt"></i> Open full page chat`;
+  fullPageButton.innerHTML = `<i class="fas fa-expand-alt"></i>Full page chat`;
 
   // Initialize chat history
   let chatHistory = [];
@@ -92,9 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Bubble click functionality
   bubble.addEventListener('click', (e) => {
-    
-    chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none';
-        
+    chatWindow.style.display =
+      chatWindow.style.display === 'none' ? 'flex' : 'none';
+
     if (chatWindow.style.display === 'flex') {
       document.body.classList.add('aichatbot-window-open');
       setTimeout(() => input.focus(), 0);
@@ -211,39 +211,75 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof aichatbotData !== 'undefined') {
     intercomEnabled = aichatbotData.enableIntercom === '1';
 
-    // Add body class for Intercom positioning but don't hide the Intercom widget
+    // Hide Intercom container initially if integration is enabled
     if (intercomEnabled && typeof window.Intercom !== 'undefined') {
       // Add a class to the body for CSS targeting when Intercom is active
       document.body.classList.add('intercom-enabled');
+
+      // Inject CSS to hide Intercom container when page loads
+      const style = document.createElement('style');
+      style.id = 'aichatbot-intercom-style';
+      style.innerHTML = `#intercom-container { display: none !important; }`;
+      document.head.appendChild(style);
+
+      // Add listener for when Intercom messenger is hidden by the user
+      window.Intercom('onHide', function () {
+        console.log('Intercom messenger hidden (onHide event).');
+
+        // Re-hide the Intercom container/launcher using our CSS rule
+        let existingStyle = document.getElementById('aichatbot-intercom-style');
+        if (!existingStyle) {
+          const style = document.createElement('style');
+          style.id = 'aichatbot-intercom-style';
+          style.innerHTML = `#intercom-container { display: none !important; }`;
+          document.head.appendChild(style);
+          console.log('Re-injected CSS to hide Intercom container.');
+        } else {
+          console.log('Intercom hiding CSS already exists.');
+        }
+
+        // Show the chatbot bubble (if it exists)
+        const bubble = document.getElementById('aichatbot-bubble');
+        if (bubble) {
+          bubble.style.display = 'flex'; // Assuming flex is the default visible state
+          console.log('Chatbot bubble shown.');
+        }
+      });
     }
   }
 
   // Function to show Intercom and hide chatbot
   function showIntercom() {
     if (intercomEnabled && typeof window.Intercom !== 'undefined') {
+      // Remove the CSS that hides Intercom
+      const intercomStyle = document.getElementById('aichatbot-intercom-style');
+      if (intercomStyle) {
+        intercomStyle.remove();
+        console.log('Removed CSS hiding Intercom container.');
+      } else {
+        console.log('Intercom hiding CSS not found, proceeding anyway.');
+      }
+
       // Hide chatbot window
       chatWindow.style.display = 'none';
+      document.body.classList.remove('aichatbot-window-open'); // Ensure body class is removed
+      saveChatState(); // Save closed state
 
       // Show Intercom - use the proper method to both show and open the messenger
       try {
-        // First try the boot method which is more reliable
-        window.Intercom('boot', {
-          app_id: window.intercomSettings?.app_id,
-          // Open the messenger immediately
-          hide_default_launcher: false,
-        });
-
-        // Then explicitly show and open the messenger
+        // Explicitly show and open the messenger
         window.Intercom('show');
-        window.Intercom('showNewMessage');
+        window.Intercom('showNewMessage'); // Optionally opens composer directly
 
-        console.log('Intercom triggered successfully');
+        console.log('Intercom triggered successfully via show/showNewMessage');
         return true;
       } catch (e) {
         console.error('Error showing Intercom:', e);
         return false;
       }
     }
+    // Log if Intercom isn't enabled or ready
+    console.log('Intercom not enabled or not ready.');
     return false;
   }
 
@@ -817,6 +853,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Always add the full page button to the controls - it should always be visible
     controlsContainer.appendChild(fullPageButton);
+
+    // Add Contact a Human button
+    const contactHumanButton = document.createElement('div');
+    contactHumanButton.id = 'aichatbot-contact-human';
+    contactHumanButton.innerHTML = `<i class="fas fa-user"></i> Contact a human`;
+    contactHumanButton.addEventListener('click', showIntercom);
+
+    // Add to the controls container
+    controlsContainer.appendChild(contactHumanButton);
   }
 
   // Function to clear chat history
