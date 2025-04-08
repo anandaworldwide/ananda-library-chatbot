@@ -282,7 +282,7 @@ class AnandaCrawler:
                 try:
                     # Set page timeout
                     page.set_default_timeout(30000)  # 30 seconds
-                    response = page.goto(url, wait_until='networkidle')
+                    response = page.goto(url, wait_until='domcontentloaded')
                 except PlaywrightTimeout:
                     logging.error(f"Navigation timeout for {url}")
                     # Try to recover the page instance
