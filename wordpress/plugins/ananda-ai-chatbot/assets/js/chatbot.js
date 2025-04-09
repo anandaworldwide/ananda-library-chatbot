@@ -560,6 +560,11 @@ document.addEventListener('DOMContentLoaded', () => {
           const chunk = decoder.decode(value);
           const lines = chunk.split('\n');
 
+          // Check if user is near the bottom BEFORE adding the new chunk
+          const wasScrolledToBottom =
+            messages.scrollHeight - messages.clientHeight <=
+            messages.scrollTop + 10; // 10px tolerance
+
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               try {
@@ -660,8 +665,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           }
 
-          // Scroll to bottom with each update
-          messages.scrollTop = messages.scrollHeight;
+          // Scroll to bottom AFTER potentially adding content, ONLY if user WAS at the bottom before
+          if (wasScrolledToBottom) {
+            messages.scrollTop = messages.scrollHeight;
+          }
         }
       } else {
         // Fallback for non-streaming responses
@@ -785,7 +792,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update clear history button state
       updateClearHistoryButton();
 
-      messages.scrollTop = messages.scrollHeight;
+      // Check if user WAS near the bottom before the final processing
+      const wasScrolledToBottomFinal =
+        messages.scrollHeight - messages.clientHeight <=
+        messages.scrollTop + 10; // 10px tolerance
+      // Scroll to bottom AFTER final processing ONLY if user WAS near the bottom before
+      if (wasScrolledToBottomFinal) {
+        messages.scrollTop = messages.scrollHeight;
+      }
     }
   }
 
