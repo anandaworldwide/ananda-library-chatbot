@@ -1,3 +1,5 @@
+#! /usr/bin/env python
+#
 # This script is a web crawler designed to scrape content from a specified domain and store it in a Pinecone index.
 # It uses Playwright for browser automation and BeautifulSoup for HTML parsing.
 # The crawler maintains state across runs using checkpoints and can resume from where it left off.
@@ -44,6 +46,8 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pinecone.exceptions import NotFoundException
+from pinecone import ServerlessSpec
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
@@ -52,6 +56,10 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+# Suppress INFO messages from the underlying HTTP library (often httpx)
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.setLevel(logging.WARNING)
 
 @dataclass
 class PageContent:
@@ -68,7 +76,7 @@ def chunk_content(content: str, target_words: int = 150, overlap_words: int = 75
     start = 0
     total_words = len(words)
     
-    print(f"Starting chunking of {total_words} words")
+    logging.debug(f"Starting chunking of {total_words} words")
     
     while start < total_words:
         # Calculate end position
@@ -91,21 +99,21 @@ def chunk_content(content: str, target_words: int = 150, overlap_words: int = 75
         chunk = ' '.join(words[start:end]).strip()
         if chunk:
             chunks.append(chunk)
-            print(f"Created chunk {len(chunks)}: words {start}-{end} ({end-start} words)")
+            logging.debug(f"Created chunk {len(chunks)}: words {start}-{end} ({end-start} words)")
         
         # Move start position for next chunk with safety check
         new_start = end - overlap_words
         if new_start <= start:  # If we're not making progress
             new_start = end  # Skip overlap and continue from end
-            print(f"Warning: Reset overlap at word {end}")
+            logging.warning(f"Reset overlap calculation at word {end} to avoid infinite loop")
         start = new_start
         
         # Extra safety check
         if len(chunks) > total_words / 50:  # No more than 1 chunk per 50 words
-            print("Warning: Too many chunks created, breaking")
+            logging.warning("Too many chunks created, likely an issue with content or chunking logic. Breaking chunk loop.")
             break
     
-    print(f"Chunking complete: {len(chunks)} chunks created")
+    logging.debug(f"Chunking complete: {len(chunks)} chunks created")
     return chunks
 
 @dataclass
@@ -121,6 +129,7 @@ class AnandaCrawler:
         checkpoint_dir = Path.home() / '.ananda_crawler_checkpoints'
         checkpoint_dir.mkdir(exist_ok=True)
         self.checkpoint_file = checkpoint_dir / f"crawler_checkpoint_{self.domain}.pkl"
+        self.current_processing_url: Optional[str] = None # Track URL being processed
         
         # Initialize state
         self.state = CrawlerState(
@@ -134,24 +143,26 @@ class AnandaCrawler:
             try:
                 with open(self.checkpoint_file, 'rb') as f:
                     loaded_state = pickle.load(f)
-                    # Filter out any external URLs from the loaded state
-                    self.state.visited_urls = {url for url in loaded_state.visited_urls 
-                                             if self.is_valid_url(url)}
-                    self.state.attempted_urls = {url for url in loaded_state.attempted_urls 
-                                               if self.is_valid_url(url)}
-                    self.state.pending_urls = [url for url in loaded_state.pending_urls 
+                    # Assume URLs in visited/attempted were valid when added.
+                    # Only filter pending URLs.
+                    self.state.visited_urls = loaded_state.visited_urls
+                    self.state.attempted_urls = loaded_state.attempted_urls
+                    self.state.pending_urls = [url for url in loaded_state.pending_urls
                                              if self.is_valid_url(url)]
-                    
+
                 # If no pending URLs after filtering, add start_url back
-                if not self.state.pending_urls:
-                    self.state.pending_urls = [start_url]
-                    
+                if not self.state.pending_urls and self.start_url not in self.state.visited_urls:
+                     if self.is_valid_url(self.start_url): # Check if start_url itself is valid before adding
+                         self.state.pending_urls = [self.start_url]
+                     else:
+                         logging.warning(f"Start URL {self.start_url} is not valid according to is_valid_url, cannot re-initialize queue.")
+
                 logging.info(f"Loaded checkpoint: {len(self.state.visited_urls)} visited, "
-                           f"{len(self.state.pending_urls)} pending URLs (after filtering external domains)")
+                           f"{len(self.state.pending_urls)} pending URLs (pending URLs filtered for validity)")
             except Exception as e:
                 logging.error(f"Failed to load checkpoint: {e}")
                 # Reset to initial state with start_url
-                self.state.pending_urls = [start_url]
+                self.state.pending_urls = [self.start_url]
         
         # Skip patterns for URLs
         self.skip_patterns = [
@@ -273,115 +284,148 @@ class AnandaCrawler:
         except Exception as e:
             logging.debug(f"Error in reveal_nav_items: {e}")
 
-    def crawl_page(self, browser, page, url: str) -> Tuple[Optional[Dict], List[str]]:
+    def crawl_page(self, browser, page, url: str) -> Tuple[Optional[PageContent], List[str]]:
         retries = 2
+        last_exception = None # Keep track of the last error
+
         while retries > 0:
             try:
-                logging.info(f"Navigating to {url}")
-                # Add wait_until option and handle response
-                try:
-                    # Set page timeout
-                    page.set_default_timeout(30000)  # 30 seconds
-                    response = page.goto(url, wait_until='domcontentloaded')
-                except PlaywrightTimeout:
-                    logging.error(f"Navigation timeout for {url}")
-                    # Try to recover the page instance
-                    try:
-                        page.close()
-                        page = browser.new_page()
-                        page.set_extra_http_headers({
-                            'User-Agent': 'Ananda Chatbot Crawler'
-                        })
-                    except Exception:
-                        logging.error("Failed to recover page instance")
-                    retries -= 1
-                    if retries > 0:
-                        continue
-                    return None, []
-                except Exception as e:
-                    logging.error(f"Navigation failed for {url}: {e}")
-                    retries -= 1
-                    if retries > 0:
-                        continue
-                    return None, []
+                logging.debug(f"Navigating to {url} (Attempts left: {retries})")
+                page.set_default_timeout(30000) # 30 seconds page timeout
 
+                # --- Navigation Attempt ---
+                response = page.goto(url, wait_until='domcontentloaded')
+                # --- Check Response ---
                 if not response:
-                    logging.error(f"Failed to get response from {url}")
-                    return None, []
-                
+                    logging.error(f"Failed to get response object from {url}")
+                    last_exception = Exception("No response object")
+                    # Consider retry? For now, fail fast.
+                    retries = 0 # Fail immediately if no response object
+                    continue
                 if response.status >= 400:
                     logging.error(f"HTTP {response.status} error for {url}")
-                    return None, []
+                    last_exception = Exception(f"HTTP {response.status}")
+                    # Don't retry HTTP errors generally
+                    retries = 0
+                    continue
 
-                # Wait for content with error handling
-                try:
-                    page.wait_for_selector('body', timeout=30000)
-                except PlaywrightTimeout:
-                    logging.error(f"Timeout waiting for body content on {url}")
-                    return None, []
+                # --- Wait and Extract ---
+                page.wait_for_selector('body', timeout=15000) # Shorter wait for body after load
 
-                # More targeted menu handling with error catching
+                # Evaluate menu handling script (reverting to more complex version)
                 try:
                     page.evaluate("""() => {
-                        document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item, index) => {
-                            try {
-                                if (!item.closest('.sub-menu')) {
-                                    item.classList.add('active');
-                                    const submenu = item.querySelector(':scope > .sub-menu');
-                                    if (submenu) {
-                                        submenu.style.display = 'block';
-                                        submenu.style.visibility = 'visible';
-                                    }
+                        document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item) => {
+                            // Only target top-level items, not items already within an expanded submenu
+                            if (!item.closest('.sub-menu')) { 
+                                item.classList.add('active'); // Add active class
+                                // Attempt to find the direct child submenu
+                                const submenu = item.querySelector(':scope > .sub-menu'); 
+                                if (submenu) {
+                                    // Directly set styles to ensure visibility
+                                    submenu.style.display = 'block';
+                                    submenu.style.visibility = 'visible';
+                                    submenu.style.opacity = '1'; // Add opacity for good measure
                                 }
-                            } catch (e) {
-                                console.error('Menu handling error:', e);
                             }
                         });
                     }""")
-                except Exception as e:
-                    logging.debug(f"Menu handling failed (non-critical): {e}")
+                except Exception as menu_e:
+                    logging.debug(f"Non-critical menu handling failed for {url}: {menu_e}")
 
-                # Get links, filtering for valid URLs only
-                links = page.evaluate("""() => {
-                    return Array.from(document.querySelectorAll('a[href]'))
-                        .map(a => a.href)
-                        .filter(href => !href.endsWith('#') && !href.includes('/#'));
-                }""")
-                
-                # Filter links to only include same domain
+                links = page.evaluate("""() => Array.from(document.querySelectorAll('a[href]')).map(a => a.href).filter(href => href && !href.endsWith('#') && !href.includes('/#'))""") # Added check for href existence
                 valid_links = [link for link in links if self.is_valid_url(link)]
                 if len(links) != len(valid_links):
-                    logging.debug(f"Filtered out {len(links) - len(valid_links)} external links")
-                
-                title = page.title()
+                     logging.debug(f"Filtered out {len(links) - len(valid_links)} external/invalid links")
+
+                title = page.title() or "No Title Found"
                 logging.debug(f"Page title: {title}")
-                clean_text = self.clean_content(page.content())
+                html_content = page.content() # Get content *before* cleaning checks potential errors earlier
+                clean_text = self.clean_content(html_content)
                 logging.debug(f"Cleaned text length: {len(clean_text)}")
-                
+
                 if not clean_text.strip():
                     logging.warning(f"No content extracted from {url}")
-                    return None, []
-                
+                    # Don't retry if no content, just mark as success with no data
+                    return None, valid_links # Return links found, but no PageContent
+
+                # --- Success ---
                 return PageContent(
                     url=url,
                     title=title,
                     content=clean_text,
-                    metadata={
-                        'type': 'text',
-                        'source': url
-                    }
+                    metadata={'type': 'text', 'source': url}
                 ), valid_links
-                
-            except Exception as e:
-                logging.error(f"Error crawling {url}: {str(e)}")
-                logging.error(traceback.format_exc())
+
+            # --- Exception Handling within Retry Loop ---
+            except PlaywrightTimeout as e:
+                logging.warning(f"Timeout error crawling {url}: {e}. Retrying...")
+                last_exception = e
+                # Timeout recovery: Try closing page and making a new one
+                try:
+                    # Ensure page is not already closed before trying to close it
+                    if not page.is_closed():
+                        page.close()
+                except Exception as close_err:
+                    logging.warning(f"Error closing page after timeout (continuing recovery): {close_err}")
+                try:
+                     page = browser.new_page()
+                     # Reapply headers to the new page
+                     page.set_extra_http_headers({'User-Agent': 'Ananda Chatbot Crawler'}) 
+                     logging.info("Created new page instance after timeout.")
+                except Exception as new_page_err:
+                     logging.error(f"Failed to create new page after timeout: {new_page_err}. Aborting retries for this URL.")
+                     last_exception = new_page_err
+                     retries = 0 # Cannot recover if new page fails
+
+            except Exception as e: # Catch other potential Playwright errors or general exceptions
+                 # Check if it's the "Target page/context/browser closed" error
+                 if "Target page, context or browser has been closed" in str(e):
+                      logging.warning(f"Target closed error for {url}: {e}. Attempting page recovery...")
+                      last_exception = e
+                      # Try the same page recovery logic as for timeout
+                      try:
+                          # Check if page object is still usable for close
+                          if not page.is_closed():
+                              page.close()
+                      except Exception as close_err:
+                           logging.warning(f"Error closing page after target closed (continuing recovery): {close_err}")
+                      try:
+                           # Ensure browser context is still available before creating new page
+                           if browser.contexts:
+                               page = browser.new_page()
+                               # Reapply headers to the new page
+                               page.set_extra_http_headers({'User-Agent': 'Ananda Chatbot Crawler'})
+                               logging.info("Created new page instance after target closed.")
+                           else:
+                               logging.error("Browser context lost, cannot create new page. Aborting retries for this URL.")
+                               last_exception = Exception("Browser context lost")
+                               retries = 0 # Cannot recover if context is lost
+                      except Exception as new_page_err:
+                           logging.error(f"Failed to create new page after target closed: {new_page_err}. Aborting retries for this URL.")
+                           last_exception = new_page_err
+                           retries = 0 # Cannot recover if new page fails
+                 else:
+                      # For other unexpected errors, log and stop retrying this URL
+                      logging.error(f"Unexpected error crawling {url}: {e}")
+                      logging.error(traceback.format_exc())
+                      last_exception = e
+                      retries = 0 # Stop retrying on unexpected errors
+
+            # Decrement retries only if we are going to loop again
+            if retries > 0:
                 retries -= 1
                 if retries > 0:
-                    logging.info(f"Retrying {url} ({retries} attempts remaining)")
-                    continue
-                return None, []
+                     logging.info(f"Waiting 5s before next retry for {url}...")
+                     time.sleep(5) # Add a small delay before retrying
+                # else: # This log will be replaced by the one outside the loop
+                     # logging.error(f"Failed to crawl {url} after multiple retries. Last error: {last_exception}")
 
-    def crawl(self, max_pages: int = 1000000):
+
+        # If loop finishes without success
+        logging.error(f"Giving up on {url} after exhausting retries or encountering fatal error. Last error: {last_exception}")
+        return None, [] # Return empty list of links on complete failure
+
         logging.debug(f"Starting crawl with max_pages={max_pages}")
         with sync_playwright() as p:
             browser = p.firefox.launch(headless=False)
@@ -417,7 +461,7 @@ class AnandaCrawler:
                                 normalized_link not in self.state.attempted_urls and
                                 link not in self.state.pending_urls):
                                 self.state.pending_urls.append(link)
-                        print(f"Queue size: {len(self.state.pending_urls)} URLs pending")
+                        logging.debug(f"Queue size after adding links: {len(self.state.pending_urls)} URLs pending")
                     else:
                         self.state.attempted_urls.add(normalized_url)
                     
@@ -459,9 +503,7 @@ class AnandaCrawler:
                 'metadata': chunk_metadata
             })
 
-            print(f"\nVector {i+1}/{len(chunks)}:")
-            print(f"ID: {chunk_id}")
-            print(f"Text preview: {chunk[:200]}...")
+            logging.debug(f"Vector {i+1}/{len(chunks)} - ID: {chunk_id} - Preview: {chunk[:100]}...")
         
         return vectors
     
@@ -478,21 +520,27 @@ def sanitize_for_id(text: str) -> str:
 
 def handle_exit(signum, frame):
     """Handle exit signals gracefully"""
-    # Initialize counter if not exists
     if not hasattr(handle_exit, 'counter'):
         handle_exit.counter = 0
     handle_exit.counter += 1
-    
-    print(f"\nReceived exit signal ({handle_exit.counter}). Saving checkpoint...")
-    
-    # Force exit after 3 attempts
-    if handle_exit.counter >= 3:
-        print("Force exiting...")
-        os._exit(1)  # Force immediate exit
-        
-    if hasattr(handle_exit, 'crawler'):
-        handle_exit.crawler.save_checkpoint()
-    handle_exit.exit_requested = True
+
+    logging.warning(f"Received exit signal ({handle_exit.counter}). Saving checkpoint and exiting immediately...")
+
+    # Attempt to save checkpoint
+    if hasattr(handle_exit, 'crawler') and handle_exit.crawler:
+        crawler = handle_exit.crawler
+        # Put the URL currently being processed back in the queue
+        if crawler.current_processing_url and crawler.current_processing_url not in crawler.state.pending_urls:
+            logging.debug(f"Re-queuing URL in progress: {crawler.current_processing_url}")
+            crawler.state.pending_urls.insert(0, crawler.current_processing_url)
+
+        try:
+            crawler.save_checkpoint()
+        except Exception as e:
+            logging.error(f"Error saving checkpoint during exit: {e}")
+
+    # Force immediate exit - skips further cleanup
+    os._exit(1)
 
 def create_chunks_from_page(page_content) -> List[str]:
     """Create text chunks from page content."""
@@ -510,12 +558,12 @@ def create_chunks_from_page(page_content) -> List[str]:
     logging.debug(f"Created {len(chunks)} chunks from page")
     return chunks
 
-def upsert_to_pinecone(vectors: List[Dict], index: pinecone.Index):
+def upsert_to_pinecone(vectors: List[Dict], index: pinecone.Index, index_name: str):
     """Upsert vectors to Pinecone index."""
     if vectors:
-        print(f"\nUpserting {len(vectors)} vectors to Pinecone...")
+        logging.debug(f"Upserting {len(vectors)} vectors to Pinecone index '{index_name}'...")
         index.upsert(vectors=vectors)
-        print("Upsert complete")
+        logging.debug("Upsert complete.")
 
 def parse_time_string(time_str: str) -> Optional[dt_time]:
     """Parse HH:MM (24hr) or H:MMam/pm time string into a time object."""
@@ -638,13 +686,15 @@ def main():
     # Parse the active hours range
     start_time_obj, end_time_obj = parse_time_range_string(args.active_hours)
     if args.active_hours and (not start_time_obj or not end_time_obj):
-        print("Invalid --active-hours format provided. Exiting.")
+        logging.error("Invalid --active-hours format provided. Exiting.")
+        print(f"Error: Invalid --active-hours format provided. Exiting.")
         return # Exit if format is wrong or parsing failed
 
     # Convert domain to full URL
     start_url = f"https://{args.domain}"
     if not urlparse(start_url).netloc:
-        print(f"Invalid domain: {args.domain}")
+        logging.error(f"Invalid domain provided: {args.domain}")
+        print(f"Error: Invalid domain provided: {args.domain}")
         return
 
     # Set up signal handlers
@@ -664,62 +714,113 @@ def main():
         )  # Start fresh
         if crawler.checkpoint_file.exists():
             crawler.checkpoint_file.unlink()  # Remove existing checkpoint
-    elif crawler.checkpoint_file.exists():
-        print(f"\nContinuing from checkpoint:")
-        print(f"- Previously visited URLs: {len(crawler.state.visited_urls)}")
-        print(f"- Top level domains visited:")
-        domain_counts = {}
-        for url in crawler.state.visited_urls:
-            domain = urlparse(url).netloc
-            domain_counts[domain] = domain_counts.get(domain, 0) + 1
-        for domain, count in domain_counts.items():
-            print(f"  • {domain}: {count} pages")
-    else:
-        print("No checkpoint file found to continue from")
+    elif not crawler.checkpoint_file.exists():
+        logging.warning("No checkpoint file found to continue from.")
 
     # Load environment variables
     env_file = f".env.{args.site}"
     if not os.path.exists(env_file):
-        print(f"Error: Environment file {env_file} not found")
+        logging.error(f"Environment file {env_file} not found.")
+        print(f"Error: Environment file {env_file} not found.")
         return
     
     load_dotenv(env_file)
-    print(f"Loaded environment from: {os.path.abspath(env_file)}")
-    print(f"\nUsing environment from {env_file}")
+    logging.info(f"Loaded environment from: {os.path.abspath(env_file)}")
+    logging.info(f"Using environment from {env_file}")
 
     # Verify required environment variables
     required_vars = ['PINECONE_API_KEY', 'PINECONE_INGEST_INDEX_NAME', 'OPENAI_API_KEY']
     missing_vars = [var for var in required_vars if not os.getenv(var)]
     if missing_vars:
-        print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
-        print(f"Please check your {env_file} file")
+        error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
+        logging.error(error_msg)
+        print(f"Error: {error_msg}")
+        print(f"Please check your {env_file} file.")
         return
 
     # Initialize Pinecone with new API
     pc = pinecone.Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
     index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
     if not index_name:
-        print("Error: PINECONE_INGEST_INDEX_NAME environment variable is not set")
+        logging.error("PINECONE_INGEST_INDEX_NAME environment variable is not set.")
+        print("Error: PINECONE_INGEST_INDEX_NAME environment variable is not set.")
         return
     
-    print(f"Target Pinecone index: {index_name}")
+    logging.info(f"Target Pinecone index: {index_name}")
+    pinecone_index = None 
     try:
         pinecone_index = pc.Index(index_name)
+        logging.debug(f"Successfully connected to existing Pinecone index '{index_name}'.")
+
+    except NotFoundException:
+        logging.warning(f"Pinecone index '{index_name}' not found.")
+        user_input = input(f"Index '{index_name}' does not exist. Create it now? (y/N): ").strip().lower()
+
+        if user_input == 'y':
+            try:
+                dimension = 1536 # Standard dimension for OpenAI ada-002 embeddings
+                metric = 'cosine' # Standard metric for semantic search
+                spec = ServerlessSpec(
+                    cloud='aws', 
+                    region='us-west-2'
+                )
+                logging.info(f"Creating Pinecone index '{index_name}' with dimension={dimension}, metric='{metric}', spec={spec}...")
+                pc.create_index(
+                    name=index_name, 
+                    dimension=dimension, 
+                    metric=metric,
+                    spec=spec
+                )
+
+                # Wait for the index to be ready
+                wait_time = 10 # seconds - adjust as needed
+                logging.info(f"Waiting {wait_time} seconds for index '{index_name}' to initialize...")
+                time.sleep(wait_time)
+
+                # Try connecting again
+                pinecone_index = pc.Index(index_name)
+                logging.info(f"Successfully created and connected to Pinecone index '{index_name}'.")
+
+            except Exception as create_e:
+                logging.error(f"Failed to create or connect to Pinecone index '{index_name}' after user confirmation: {create_e}")
+                print(f"Error: Failed to create index '{index_name}'. Please check Pinecone console/logs. Exiting.")
+                return # Exit if creation failed
+        else:
+            logging.info("User declined to create the index. Exiting.")
+            print("Operation aborted by user. Index not found.")
+            return # Exit if user declines
+
     except Exception as e:
-        print(f"Error connecting to Pinecone index: {e}")
-        return
+        # Catch other potential connection errors
+        logging.error(f"Error connecting to Pinecone index '{index_name}': {e}")
+        print(f"Error connecting to Pinecone index '{index_name}': {e}")
+        return # Exit on other connection errors
+
+    # --- Proceed with the crawl only if pinecone_index is successfully assigned ---
+    if not pinecone_index:
+         logging.error("Failed to establish connection to Pinecone index. Exiting.")
+         print("Error: Could not connect to Pinecone index. Exiting.")
+         return
 
     try:
-        print(f"\nStarting crawl of {start_url} with max pages: {args.max_pages}")
+        logging.info(f"Starting crawl of {start_url}")
+        if args.max_pages:
+            logging.info(f"Maximum pages to crawl: {args.max_pages}")
+        
+        if start_time_obj and end_time_obj:
+            logging.info(f"Crawler active hours: {start_time_obj.strftime('%H:%M')} to {end_time_obj.strftime('%H:%M')}")
+        else:
+            logging.info("Crawler active 24/7.")
+            
         pages_processed = 0
         
         # Ensure we have a starting URL
         if not crawler.state.pending_urls:
-            print("No pending URLs found, reinitializing with start URL")
+            logging.warning("No pending URLs found in state, reinitializing queue with start URL.")
             crawler.state.pending_urls = [start_url]
             
-        print(f"Initial queue size: {len(crawler.state.pending_urls)} URLs")
-        print(f"First URL in queue: {crawler.state.pending_urls[0] if crawler.state.pending_urls else 'None'}")
+        logging.info(f"Initial queue size: {len(crawler.state.pending_urls)} URLs")
+        logging.info(f"First URL in queue: {crawler.state.pending_urls[0] if crawler.state.pending_urls else 'None'}")
         
         with sync_playwright() as p:
             browser = p.firefox.launch(headless=False)
@@ -733,7 +834,7 @@ def main():
                 start_run_time = time.time()
 
                 # --- Initial Time Check Before Loop ---
-                logging.info("Performing initial active hours check...")
+                logging.debug("Performing initial active hours check...")
                 should_continue_loop = check_and_wait_if_inactive(start_time_obj, end_time_obj, crawler, args.active_hours)
                 if not should_continue_loop:
                     logging.info("Exiting after initial sleep interruption.")
@@ -752,54 +853,70 @@ def main():
                         break
 
                     url = crawler.state.pending_urls.pop(0)
+                    crawler.current_processing_url = url # Track current URL
                     normalized_url = crawler.normalize_url(url)
                     
-                    print(f"\nProcessing URL: {url}")
-                    print(f"Remaining in queue: {len(crawler.state.pending_urls)}")
+                    logging.info(f"Processing URL: {url}")
+                    logging.debug(f"Remaining in queue: {len(crawler.state.pending_urls)}")
                     
                     if normalized_url in crawler.state.visited_urls:
-                        print(f"Skipping already visited URL: {url}")
+                        logging.debug(f"Skipping already visited URL: {url}")
                         continue
                         
                     content, new_links = crawler.crawl_page(browser, page, url)
                     
                     if content:
-                        crawler.state.visited_urls.add(normalized_url)
+                        # Check exit flag *before* processing content or adding to visited
+                        if handle_exit.exit_requested:
+                            logging.info("Exit requested after crawling, stopping before processing.")
+                            should_continue_loop = False
+                            break
+
                         pages_processed += 1
-                        
-                        # Process new links
-                        for link in new_links:
-                            normalized_link = crawler.normalize_url(link)
-                            if (normalized_link not in crawler.state.visited_urls and 
-                                normalized_link not in crawler.state.attempted_urls and
-                                link not in crawler.state.pending_urls):
-                                crawler.state.pending_urls.append(link)
-                        
-                        print(f"Queue size: {len(crawler.state.pending_urls)} URLs pending")
-                        
+
                         # Process the page content
                         try:
                             chunks = create_chunks_from_page(content)
                             if chunks:
                                 embeddings = crawler.create_embeddings(chunks, url, content.title)
-                                upsert_to_pinecone(embeddings, pinecone_index)
-                                print(f"Successfully processed page {pages_processed}/{args.max_pages}: {url}")
-                                print(f"Created {len(chunks)} chunks, {len(embeddings)} embeddings")
+                                upsert_to_pinecone(embeddings, pinecone_index, index_name)
+                                logging.debug(f"Successfully processed and upserted: {url}")
+                                logging.debug(f"Created {len(chunks)} chunks, {len(embeddings)} embeddings.")
+
+                            # Add to visited ONLY after successful processing
+                            crawler.state.visited_urls.add(normalized_url)
+
+                            # Process new links ONLY after successful processing
+                            for link in new_links:
+                                normalized_link = crawler.normalize_url(link)
+                                if (normalized_link not in crawler.state.visited_urls and
+                                    normalized_link not in crawler.state.attempted_urls and
+                                    link not in crawler.state.pending_urls):
+                                    crawler.state.pending_urls.append(link)
+                            logging.debug(f"Queue size after adding links: {len(crawler.state.pending_urls)} URLs pending")
+
                         except Exception as e:
-                            logging.error(f"Failed to process page {url}: {e}")
+                            logging.error(f"Failed to process page content {url}: {e}")
                             logging.error(traceback.format_exc())
+                            # Decide if this URL should be marked as attempted instead of visited?
+                            # For now, it won't be added to visited if processing fails.
+                            crawler.state.attempted_urls.add(normalized_url)
+
                     else:
+                        # crawl_page returned None (error or no content)
                         crawler.state.attempted_urls.add(normalized_url)
-                    
-                    # Save checkpoint after each page
+
+                    # Save checkpoint after each page attempt (success or failure)
                     crawler.save_checkpoint()
-                    
-                    # Check exit flag (safety check)
+
+                    # Check exit flag again after saving checkpoint (safety)
                     if handle_exit.exit_requested:
-                        print("\nGracefully stopping crawler due to signal...")
+                        logging.info("Exit requested after saving checkpoint, stopping loop.")
                         should_continue_loop = False # Ensure loop terminates
                         break
-                
+
+                    crawler.current_processing_url = None # Clear tracked URL after processing/saving
+
             except Exception as e:
                 logging.error(f"Browser or main loop error: {e}")
                 logging.error(traceback.format_exc())
@@ -815,22 +932,21 @@ def main():
                     logging.warning(f"Error closing browser: {e}")
 
         if pages_processed == 0:
-            print("No pages were crawled successfully.")
-            return
+            logging.warning("No pages were crawled successfully in this run.")
             
-        print(f"\nCompleted processing {pages_processed} pages")
+        logging.info(f"Completed processing {pages_processed} pages during this run.")
         
     except SystemExit:
-        print("\nExiting due to SystemExit...")
+        logging.info("Exiting due to SystemExit signal.")
     except Exception as e:
         logging.error(f"Unexpected error in main: {e}")
         logging.error(traceback.format_exc())
     finally:
         if 'crawler' in locals():
-            print("Performing final checkpoint save...")
+            logging.info("Performing final checkpoint save...")
             crawler.save_checkpoint() # Ensure final save
         if handle_exit.exit_requested:
-            print("Exiting script now.")
+            logging.info("Exiting script now due to signal.")
             sys.exit(0)
 
 if __name__ == "__main__":
