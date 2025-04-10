@@ -18,6 +18,7 @@
 #   --active-hours: Optional active time range (e.g., "9pm-6am" or "21:00-06:00"). 
 #                   Crawler pauses outside this window.
 #   --slow: Add a 15-second delay between page crawls
+#   --retry-failed: Retry URLs marked as failed in the previous checkpoint.
 #
 # Example usage:
 #   python ananda_crawler.py --domain ananda.org --max-pages 50
@@ -39,7 +40,7 @@ from dataclasses import dataclass
 from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 # Third party imports
 import pinecone
@@ -62,6 +63,9 @@ logging.basicConfig(
 # Suppress INFO messages from the underlying HTTP library (often httpx)
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
+
+# Define User-Agent constant
+USER_AGENT = 'Ananda Chatbot Crawler'
 
 @dataclass
 class PageContent:
@@ -118,6 +122,23 @@ def chunk_content(content: str, target_words: int = 150, overlap_words: int = 75
     logging.debug(f"Chunking complete: {len(chunks)} chunks created")
     return chunks
 
+def ensure_scheme(url: str, default_scheme: str = "https") -> str:
+    """Ensure a URL has a scheme, adding a default if missing."""
+    parsed = urlparse(url)
+    if not parsed.scheme:
+        # Reconstruct with default scheme, preserving path, query, etc.
+        # Handle schemeless absolute paths like 'domain.com/path'
+        if not parsed.netloc and parsed.path:
+            parts = parsed.path.split('/', 1)
+            netloc = parts[0]
+            path = '/' + parts[1] if len(parts) > 1 else ''
+            parsed = parsed._replace(scheme=default_scheme, netloc=netloc, path=path)
+        else:
+            # Standard case
+            parsed = parsed._replace(scheme=default_scheme)
+        return urlunparse(parsed)
+    return url
+
 @dataclass
 class CrawlerState:
     visited_urls: Set[str]
@@ -125,7 +146,7 @@ class CrawlerState:
     pending_urls: List[str]   # Queue of URLs to visit
 
 class AnandaCrawler:
-    def __init__(self, start_url: str = "https://ananda.org"):
+    def __init__(self, start_url: str = "https://ananda.org", retry_failed: bool = False):
         self.start_url = start_url
         self.domain = urlparse(start_url).netloc.replace('www.', '')
         checkpoint_dir = Path.home() / '.ananda_crawler_checkpoints'
@@ -145,13 +166,33 @@ class AnandaCrawler:
             try:
                 with open(self.checkpoint_file, 'rb') as f:
                     loaded_state = pickle.load(f)
+                    # Load visited URLs
                     self.state.visited_urls = loaded_state.visited_urls
-                    self.state.attempted_urls = loaded_state.attempted_urls
-                    filtered_urls = [url for url in loaded_state.pending_urls if self.is_valid_url(url)]
-                    self.state.pending_urls = filtered_urls or [self.start_url] if self.start_url not in self.state.visited_urls else []
-                    logging.info(f"Loaded checkpoint: {len(self.state.visited_urls)} visited, {len(loaded_state.pending_urls)} pending URLs")
+
+                    # Filter and load pending URLs, ensuring scheme
+                    filtered_urls = [ensure_scheme(url) for url in loaded_state.pending_urls if self.is_valid_url(url)]
+                    initial_pending = [ensure_scheme(self.start_url)] if ensure_scheme(self.start_url) not in self.state.visited_urls else []
+                    self.state.pending_urls = filtered_urls or initial_pending
+                    logging.info(f"Loaded checkpoint: {len(self.state.visited_urls)} visited, {len(self.state.pending_urls)} pending URLs")
                     if len(loaded_state.pending_urls) != len(filtered_urls):
                         logging.debug(f"Filtered out {len(loaded_state.pending_urls) - len(filtered_urls)} invalid pending URLs")
+
+                    # Handle --retry-failed flag passed from main
+                    if retry_failed and hasattr(loaded_state, 'attempted_urls') and loaded_state.attempted_urls:
+                        # Ensure scheme when creating retry list
+                        retry_urls = [ensure_scheme(url) for url in loaded_state.attempted_urls]
+                        logging.info(f"Retry requested: Re-queuing {len(retry_urls)} previously failed URLs.")
+                        # Prepend failed URLs to the front of the queue
+                        # Filter out any retry URLs that might already be pending (unlikely but safe)
+                        existing_pending_set = set(self.state.pending_urls)
+                        unique_retry_urls = [url for url in retry_urls if url not in existing_pending_set]
+                        self.state.pending_urls = unique_retry_urls + self.state.pending_urls
+                        # Clear attempted URLs for this run to avoid immediate re-marking on failure
+                        self.state.attempted_urls = set()
+                    else:
+                        # Load attempted URLs normally if not retrying
+                        self.state.attempted_urls = loaded_state.attempted_urls if hasattr(loaded_state, 'attempted_urls') else set()
+
             except Exception as e:
                 logging.error(f"Failed to load checkpoint: {e}")
                 self.state.pending_urls = [self.start_url] if self.is_valid_url(self.start_url) else []
@@ -165,6 +206,10 @@ class AnandaCrawler:
             r'/checkout/',
             r'/wp-admin/',
             r'\?',  # Skip URLs with query parameters
+            # --- Specific Exclusions ---
+            r'/online-courses/lessons-in-meditation-reviews/',
+            r'/autobiography',
+            r'/free-inspiration/books/efl' # Added due to redirect timeout loop
         ]
 
     def save_checkpoint(self):
@@ -323,9 +368,11 @@ class AnandaCrawler:
         except Exception as e:
             logging.debug(f"Error in reveal_nav_items: {e}")
 
-    def crawl_page(self, browser, page, url: str) -> Tuple[Optional[PageContent], List[str]]:
+    def crawl_page(self, browser, page, url: str) -> Tuple[Optional[PageContent], List[str], bool]:
+        # Added bool return value: restart_needed
         retries = 2
         last_exception = None # Keep track of the last error
+        restart_needed = False # Initialize restart flag
 
         while retries > 0:
             try:
@@ -333,22 +380,28 @@ class AnandaCrawler:
                 page.set_default_timeout(30000) # 30 seconds page timeout
 
                 # --- Navigation Attempt ---
-                response = page.goto(url, wait_until='domcontentloaded')
+                response = page.goto(url, wait_until='commit')
                 # --- Check Response ---
                 if not response:
                     logging.error(f"Failed to get response object from {url}")
                     last_exception = Exception("No response object")
-                    # Consider retry? For now, fail fast.
                     retries = 0 # Fail immediately if no response object
                     continue
                 if response.status >= 400:
                     logging.error(f"HTTP {response.status} error for {url}")
                     last_exception = Exception(f"HTTP {response.status}")
-                    # Don't retry HTTP errors generally
-                    retries = 0
+                    retries = 0 # Don't retry HTTP errors generally
                     continue
+                
+                # --- Check Content-Type before proceeding ---
+                content_type = response.header_value('content-type')
+                if content_type and not content_type.lower().startswith('text/html'):
+                    logging.info(f"Skipping non-HTML content ({content_type}) at {url}")
+                    # Mark as visited because we successfully reached it, even if not processing
+                    self.state.visited_urls.add(self.normalize_url(url))
+                    return None, [], False # Return no content, no links, no restart needed
 
-                # --- Wait and Extract ---
+                # --- Wait and Extract (Only for HTML) ---
                 page.wait_for_selector('body', timeout=15000) # Shorter wait for body after load
 
                 # Evaluate menu handling script (reverting to more complex version)
@@ -379,14 +432,17 @@ class AnandaCrawler:
 
                 title = page.title() or "No Title Found"
                 logging.debug(f"Page title: {title}")
-                html_content = page.content() # Get content *before* cleaning checks potential errors earlier
+                html_content = page.content()
                 clean_text = self.clean_content(html_content)
                 logging.debug(f"Cleaned text length: {len(clean_text)}")
 
-                if not clean_text.strip():
-                    logging.warning(f"No content extracted from {url}")
+                # Ensure links have schemes before returning
+                schemed_valid_links = [ensure_scheme(link) for link in valid_links]
+
+                if not clean_text.strip() and title == "No Title Found": # Be more specific about failure
+                    logging.warning(f"No content or title extracted from {url}")
                     # Don't retry if no content, just mark as success with no data
-                    return None, valid_links # Return links found, but no PageContent
+                    return None, schemed_valid_links, False # Return links found (with schemes), but no PageContent
 
                 # --- Success ---
                 return PageContent(
@@ -394,85 +450,37 @@ class AnandaCrawler:
                     title=title,
                     content=clean_text,
                     metadata={'type': 'text', 'source': url}
-                ), valid_links
+                ), schemed_valid_links, False
 
             # --- Exception Handling within Retry Loop ---
             except PlaywrightTimeout as e:
-                logging.warning(f"Timeout error crawling {url}: {e}. Retrying...")
+                logging.warning(f"Timeout error crawling {url}: {e}. Flagging for browser restart.")
                 last_exception = e
-                # Timeout recovery: Try closing page and making a new one
-                try:
-                    # Ensure page is not already closed before trying to close it
-                    if not page.is_closed():
-                        page.close()
-                except Exception as close_err:
-                    logging.warning(f"Error closing page after timeout (continuing recovery): {close_err}")
-                try:
-                     page = browser.new_page()
-                     # Reapply headers to the new page
-                     page.set_extra_http_headers({'User-Agent': 'Ananda Chatbot Crawler'}) 
-                     logging.info("Created new page instance after timeout.")
-                except Exception as new_page_err:
-                     logging.error(f"Failed to create new page after timeout: {new_page_err}. Aborting retries for this URL.")
-                     last_exception = new_page_err
-                     retries = 0 # Cannot recover if new page fails
+                restart_needed = True
+                retries = 0 # Abort retries for this URL, trigger restart
 
             except Exception as e: # Catch other potential Playwright errors or general exceptions
                  # Check if it's the "Target page/context/browser closed" error
                  if "Target page, context or browser has been closed" in str(e):
-                      logging.warning(f"Target closed error for {url}: {e}. Attempting page recovery...")
+                      logging.warning(f"Target closed error for {url}: {e}. Flagging for browser restart.")
                       last_exception = e
-                      # Try the same page recovery logic as for timeout
-                      try:
-                          # Check if page object is still usable for close
-                          if not page.is_closed():
-                              page.close()
-                      except Exception as close_err:
-                           logging.warning(f"Error closing page after target closed (continuing recovery): {close_err}")
-                      try:
-                           # Ensure browser context is still available before creating new page
-                           if browser.contexts:
-                               page = browser.new_page()
-                               # Reapply headers to the new page
-                               page.set_extra_http_headers({'User-Agent': 'Ananda Chatbot Crawler'})
-                               logging.info("Created new page instance after target closed.")
-                           else:
-                               logging.error("Browser context lost, cannot create new page. Aborting retries for this URL.")
-                               last_exception = Exception("Browser context lost")
-                               retries = 0 # Cannot recover if context is lost
-                      except Exception as new_page_err:
-                           logging.error(f"Failed to create new page after target closed: {new_page_err}. Aborting retries for this URL.")
-                           last_exception = new_page_err
-                           retries = 0 # Cannot recover if new page fails
-                 # ---> Add specific handling for NS_ERROR_ABORT <-----
-                 # Use a more general check or the specific internal error type if known
-                 # Checking the type name in the string representation is less robust but avoids import issues
-                 # Let's check if the exception's type name indicates a Playwright-related error
-                 # and if the message contains NS_ERROR_ABORT
-                 elif "playwright" in repr(e).lower() and "NS_ERROR_ABORT" in str(e):
-                     logging.warning(f"NS_ERROR_ABORT encountered for {url}: {e}. Retrying with page recovery...")
+                      restart_needed = True
+                      retries = 0 # Abort retries for this URL, trigger restart
+
+                 # Check for NS_ERROR_ABORT or similar navigation errors
+                 elif "playwright" in repr(e).lower() and ("NS_ERROR_ABORT" in str(e) or "Navigation failed because browser has disconnected" in str(e)):
+                     logging.warning(f"Browser/Navigation error encountered for {url}: {e}. Flagging for browser restart.")
                      last_exception = e
-                     # Attempt page recovery
-                     try:
-                         if not page.is_closed():
-                             page.close()
-                     except Exception as close_err:
-                         logging.warning(f"Error closing page after NS_ERROR_ABORT (continuing recovery): {close_err}")
-                     try:
-                         if browser.contexts:
-                             page = browser.new_page()
-                             page.set_extra_http_headers({'User-Agent': 'Ananda Chatbot Crawler'})
-                             logging.info("Created new page instance after NS_ERROR_ABORT.")
-                             # Retry will happen naturally due to loop structure
-                         else:
-                             logging.error("Browser context lost, cannot create new page after NS_ERROR_ABORT. Aborting retries.")
-                             last_exception = Exception("Browser context lost during NS_ERROR_ABORT recovery")
-                             retries = 0 # Cannot recover
-                     except Exception as new_page_err:
-                         logging.error(f"Failed to create new page after NS_ERROR_ABORT: {new_page_err}. Aborting retries.")
-                         last_exception = new_page_err
-                         retries = 0 # Cannot recover
-                 # ---> End NS_ERROR_ABORT handling <-----
+                     restart_needed = True
+                     retries = 0 # Abort retries for this URL, trigger restart
+                 
+                 # Handle potential asyncio runtime error directly
+                 elif isinstance(e, RuntimeError) and "no running event loop" in str(e):
+                     logging.error(f"Caught 'no running event loop' error for {url}. Flagging for browser restart.")
+                     last_exception = e
+                     restart_needed = True
+                     retries = 0 # Abort retries for this URL, trigger restart
+
                  else:
                       # For other unexpected errors, log and stop retrying this URL
                       logging.error(f"Unexpected error crawling {url}: {e}")
@@ -480,21 +488,21 @@ class AnandaCrawler:
                       last_exception = e
                       retries = 0 # Stop retrying on unexpected errors
 
-            # Decrement retries only if we are going to loop again
-            if retries > 0:
+            # Decrement retries only if we are going to loop again and didn't flag for restart
+            if retries > 0 and not restart_needed:
                 retries -= 1
                 if retries > 0:
                      logging.info(f"Waiting 5s before next retry for {url}...")
                      time.sleep(5) # Add a small delay before retrying
-                # else: # This log will be replaced by the one outside the loop
-                     # logging.error(f"Failed to crawl {url} after multiple retries. Last error: {last_exception}")
 
+        # If loop finishes without success (or flagged for restart)
+        if not restart_needed:
+             logging.error(f"Giving up on {url} after exhausting retries or encountering fatal error. Last error: {last_exception}")
+             # Add to attempted URLs only on normal failure, not restart failure (handled in run_crawl_loop)
+             self.state.attempted_urls.add(self.normalize_url(url))
 
-        # If loop finishes without success
-        logging.error(f"Giving up on {url} after exhausting retries or encountering fatal error. Last error: {last_exception}")
-        # Add to attempted URLs on failure
-        self.state.attempted_urls.add(self.normalize_url(url))
-        return None, [] # Return empty list of links on complete failure
+        # Return based on whether restart is needed
+        return None, [], restart_needed # Return restart flag
 
     def create_embeddings(self, chunks: List[str], url: str, page_title: str) -> List[Dict]:
         """Create embeddings for text chunks."""
@@ -587,9 +595,21 @@ def create_chunks_from_page(page_content) -> List[str]:
 def upsert_to_pinecone(vectors: List[Dict], index: pinecone.Index, index_name: str):
     """Upsert vectors to Pinecone index."""
     if vectors:
-        logging.debug(f"Upserting {len(vectors)} vectors to Pinecone index '{index_name}'...")
-        index.upsert(vectors=vectors)
-        logging.debug("Upsert complete.")
+        batch_size = 100  # Pinecone recommends batches of 100 or less
+        total_vectors = len(vectors)
+        logging.debug(f"Upserting {total_vectors} vectors to Pinecone index '{index_name}' in batches of {batch_size}...")
+        
+        for i in range(0, total_vectors, batch_size):
+            batch = vectors[i:i + batch_size]
+            logging.debug(f"Upserting batch {i // batch_size + 1}/{(total_vectors + batch_size - 1) // batch_size} (size: {len(batch)})...")
+            try:
+                index.upsert(vectors=batch)
+                if i > 2:
+                    print(".", end="", flush=True)
+            except Exception as e:
+                logging.error(f"Error upserting batch starting at index {i}: {e}")
+                pass # Continue with next batch
+        logging.info(f"Upsert of {total_vectors} vectors complete.")
 
 def parse_time_string(time_str: str) -> Optional[dt_time]:
     """Parse HH:MM (24hr) or H:MMam/pm time string into a time object."""
@@ -678,6 +698,7 @@ def parse_arguments() -> argparse.Namespace:
         help='Optional active time range (e.g., "9pm-5am" or "21:00-05:00"). Crawler pauses outside this window.'
     )
     parser.add_argument('--slow', action='store_true', help='Add a 15-second delay between page crawls')
+    parser.add_argument('--retry-failed', action='store_true', help='Retry URLs marked as failed in the previous checkpoint.')
     return parser.parse_args()
 
 def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
@@ -789,10 +810,9 @@ def run_crawl_loop(crawler: AnandaCrawler, pinecone_index: pinecone.Index, args:
             firefox_user_prefs={"media.volume_scale": "0.0"} # Mute audio
         )
         page = browser.new_page() # Create page initially
-        page.set_extra_http_headers({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
-        })
+        page.set_extra_http_headers({'User-Agent': USER_AGENT})
         should_continue_loop = True # Flag to control the main loop
+        
         try:
             start_run_time = time.time()
 
@@ -805,6 +825,63 @@ def run_crawl_loop(crawler: AnandaCrawler, pinecone_index: pinecone.Index, args:
             
             # Modified loop condition to check exit flag
             while crawler.state.pending_urls and should_continue_loop and not handle_exit.exit_requested:
+                # --- Browser Restart Logic ---
+                # Trigger restart if counter reaches limit OR if restart_needed was flagged last iteration
+                # (restart_needed logic is handled *after* crawl_page call below)
+                if pages_since_restart >= PAGES_PER_RESTART:
+                    # Calculate batch success rate
+                    batch_attempts = len(batch_results)
+                    batch_successes = batch_results.count(True)
+                    batch_success_rate = (batch_successes / batch_attempts * 100) if batch_attempts > 0 else 0
+
+                    # Calculate and log stats
+                    batch_elapsed_time = time.time() - batch_start_time
+                    # Avoid division by zero if batch_elapsed_time is very small
+                    if batch_elapsed_time > 0:
+                        pages_per_minute = (pages_since_restart / batch_elapsed_time * 60)
+                    else:
+                        pages_per_minute = float('inf') # Or some other indicator
+                    
+                    total_visited = len(crawler.state.visited_urls)
+                    total_attempted = total_visited + len(crawler.state.attempted_urls)
+                    success_rate = (total_visited / total_attempted * 100) if total_attempted > 0 else 0
+                    pending_count = len(crawler.state.pending_urls)
+                    
+                    stats_message = (
+                        f"\n--- Stats at {pages_since_restart} page boundary ---\n"
+                        f"- Processing {pages_per_minute:.1f} pages/minute (last {pages_since_restart} pages)\n"
+                        f"- Total {total_visited} visited pages of {total_attempted} attempted ({round(success_rate)}% success)\n"
+                        f"- Success rate last {batch_attempts} attempts: {round(batch_success_rate)}%\n"
+                        f"- Total {pending_count} pending pages\n"
+                        f"--- End Stats ---"
+                    )
+                    for line in stats_message.split('\n'):
+                        logging.info(line)
+
+                    # Restart Browser
+                    logging.info(f"Restarting browser after {pages_since_restart} pages (or due to error)...")
+                    try:
+                        if page and not page.is_closed():
+                            page.close()
+                        if browser and browser.is_connected():
+                            browser.close()
+                    except Exception as close_err:
+                        logging.warning(f"Error closing browser/page during restart: {close_err}")
+                    
+                    browser = p.firefox.launch(
+                        headless=True,
+                        firefox_user_prefs={"media.volume_scale": "0.0"}
+                    )
+                    page = browser.new_page()
+                    page.set_extra_http_headers({'User-Agent': USER_AGENT})
+                    pages_since_restart = 0
+                    batch_start_time = time.time()
+                    batch_results = [] # Reset batch results for new batch
+                    logging.info("Browser restarted successfully.")
+                    # Skip to next iteration to avoid processing URL with potentially old page object
+                    # Continue is important here to ensure the loop condition re-evaluates
+                    continue 
+
                 # --- Slow Crawl Delay ---
                 if args.slow and pages_processed > 0: # Add delay after the first page is processed
                     delay_seconds = 15 # Define delay duration
@@ -851,9 +928,23 @@ def run_crawl_loop(crawler: AnandaCrawler, pinecone_index: pinecone.Index, args:
                     
                 # Reset processing URL before crawl attempt
                 crawler.current_processing_url = url # Track current URL
-                content, new_links = crawler.crawl_page(browser, page, url)
+                content, new_links, restart_needed = crawler.crawl_page(browser, page, url) # Capture restart flag
                 
-                # Track attempt result immediately after crawl_page
+                # --- Handle Restart Request ---
+                if restart_needed:
+                    logging.warning(f"Browser restart requested after attempting {url}.")
+                    crawler.state.attempted_urls.add(normalized_url) # Mark as attempted
+                    # Re-queue the URL to try again after restart
+                    if url not in crawler.state.pending_urls: # Avoid duplicate re-queueing
+                       logging.debug(f"Re-queuing {url} for retry after browser restart.")
+                       crawler.state.pending_urls.insert(0, url)
+                    # Force restart by setting counter past the limit
+                    pages_since_restart = PAGES_PER_RESTART 
+                    crawler.save_checkpoint() # Save state before forcing restart
+                    crawler.current_processing_url = None
+                    continue # Skip rest of loop, trigger restart block at the top of the next iteration
+
+                # --- Process Normal Result ---
                 is_success = content is not None
                 batch_results.append(is_success)
 
@@ -862,8 +953,9 @@ def run_crawl_loop(crawler: AnandaCrawler, pinecone_index: pinecone.Index, args:
                     # URL was put back in queue by handle_exit if it was being processed
                     break
 
-                if content:
+                if content: # Page crawled successfully
                     pages_processed += 1
+                    pages_since_restart += 1 # Increment only on successful crawl
 
                     try:
                         chunks = create_chunks_from_page(content)
@@ -874,7 +966,6 @@ def run_crawl_loop(crawler: AnandaCrawler, pinecone_index: pinecone.Index, args:
                             logging.debug(f"Created {len(chunks)} chunks, {len(embeddings)} embeddings.")
 
                         crawler.state.visited_urls.add(normalized_url)
-                        pages_since_restart += 1
                         
                         for link in new_links:
                             normalized_link = crawler.normalize_url(link)
@@ -889,72 +980,29 @@ def run_crawl_loop(crawler: AnandaCrawler, pinecone_index: pinecone.Index, args:
                         logging.error(traceback.format_exc())
                         crawler.state.attempted_urls.add(normalized_url)
                         
-                    if pages_since_restart >= PAGES_PER_RESTART:
-                        # Calculate batch success rate
-                        batch_attempts = len(batch_results)
-                        batch_successes = batch_results.count(True)
-                        batch_success_rate = (batch_successes / batch_attempts * 100) if batch_attempts > 0 else 0
+                else: # Page crawl failed normally (e.g., no content, HTTP error handled in crawl_page)
+                    # Already added to attempted_urls inside crawl_page if it failed there
+                    # (and returned restart_needed=False)
+                    # If crawl_page returned (None, links, False) it means no content extracted
+                    # Ensure it's marked as attempted if not already done in crawl_page
+                    if not restart_needed and normalized_url not in crawler.state.attempted_urls:
+                        logging.debug(f"Marking URL with no content or prior error as attempted: {url}")
+                        crawler.state.attempted_urls.add(normalized_url)
 
-                        # Calculate and log stats
-                        batch_elapsed_time = time.time() - batch_start_time
-                        pages_per_minute = (PAGES_PER_RESTART / batch_elapsed_time * 60) if batch_elapsed_time > 0 else 0
-                        total_visited = len(crawler.state.visited_urls)
-                        total_attempted = total_visited + len(crawler.state.attempted_urls)
-                        success_rate = (total_visited / total_attempted * 100) if total_attempted > 0 else 0
-                        pending_count = len(crawler.state.pending_urls)
-                        
-                        stats_message = (
-                            f"\n--- Stats at {PAGES_PER_RESTART} page boundary ---\n"
-                            f"- Processing {pages_per_minute:.1f} pages/minute (last {PAGES_PER_RESTART} pages)\n"
-                            f"- Total {total_visited} visited pages of {total_attempted} attempted ({round(success_rate)}% success)\n"
-                            f"- Success rate last {batch_attempts} attempts: {round(batch_success_rate)}%\n"
-                            f"- Total {pending_count} pending pages\n"
-                            f"--- End Stats ---"
-                        )
-                        for line in stats_message.split('\n'):
-                            logging.info(line)
-
-                        # Restart Browser
-                        logging.info(f"Restarting browser after {pages_since_restart} pages...")
-                        try:
-                            if page and not page.is_closed():
-                                page.close()
-                            if browser and browser.is_connected():
-                                browser.close()
-                            logging.info("Old browser closed.")
-                        except Exception as close_err:
-                            logging.warning(f"Error closing browser/page during restart: {close_err}")
-                        
-                        browser = p.firefox.launch(
-                            headless=True,
-                            firefox_user_prefs={"media.volume_scale": "0.0"}
-                        )
-                        page = browser.new_page()
-                        page.set_extra_http_headers({
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
-                        })
-                        logging.info("New browser launched.")
-                        pages_since_restart = 0
-                        batch_start_time = time.time()
-                        batch_results = [] # Reset batch results for new batch
-
-                else:
-                    crawler.state.attempted_urls.add(normalized_url)
-
-                # Save checkpoint *after* result is determined and added to batch_results
+                # Save checkpoint *after* result is determined and added to batch_results/state updated
                 crawler.save_checkpoint()
 
                 if handle_exit.exit_requested:
                     logging.info("Exit requested after saving checkpoint, stopping loop.")
                     break
 
-                crawler.current_processing_url = None
+            crawler.current_processing_url = None
 
         except Exception as e:
             logging.error(f"Browser or main loop error: {e}")
             logging.error(traceback.format_exc())
-            # should_continue_loop = False # Let loop naturally end or finally block handle
         finally:
+            # Ensure browser is closed cleanly unless exit was requested
             if not handle_exit.exit_requested:
                 logging.info("Closing browser cleanly...")
                 try:
@@ -986,23 +1034,24 @@ def main():
         print(f"Error: Invalid --active-hours format provided. Exiting.")
         sys.exit(1)
 
-    # Validate domain and create start URL
-    start_url = f"https://{args.domain}"
-    if not urlparse(start_url).netloc:
-        logging.error(f"Invalid domain provided: {args.domain}")
-        print(f"Error: Invalid domain provided: {args.domain}")
+    # Validate domain and create start URL, ensuring scheme
+    start_url = ensure_scheme(args.domain)
+    parsed_start = urlparse(start_url)
+    if not parsed_start.netloc: # Basic validation after ensuring scheme
+        logging.error(f"Invalid domain provided or scheme missing: {args.domain}")
+        print(f"Error: Invalid domain provided or scheme missing: {args.domain}")
         sys.exit(1)
 
     # Set up signal handlers
     signal.signal(signal.SIGINT, handle_exit)
     signal.signal(signal.SIGTERM, handle_exit)
     
-    # Initialize crawler
-    crawler = AnandaCrawler(start_url=start_url)
+    # Initialize crawler, passing the retry flag
+    crawler = AnandaCrawler(start_url=start_url, retry_failed=args.retry_failed)
     handle_exit.crawler = crawler  # Store crawler reference for signal handler
 
     # Handle --continue flag and checkpoint file
-    if not getattr(args, 'continue'):
+    if not getattr(args, 'continue') and not args.retry_failed: # Don't clear state if retrying failed
         crawler.state = CrawlerState(
             visited_urls=set(),
             attempted_urls=set(),
