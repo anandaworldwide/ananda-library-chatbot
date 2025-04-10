@@ -21,9 +21,9 @@
 #   --retry-failed: Retry URLs marked as failed in the previous checkpoint.
 #
 # Example usage:
-#   python ananda_crawler.py --domain ananda.org --max-pages 50
-#   python ananda_crawler.py --site ananda-public --continue
-#   python ananda_crawler.py --domain crystalclarity.com --max-pages 100 --site crystal-clarity
+#   python website_crawler.py --domain ananda.org --max-pages 50
+#   python website_crawler.py --site ananda-public --continue
+#   python website_crawler.py --domain crystalclarity.com --max-pages 100 --site crystal-clarity
 
 # Standard library imports
 import argparse
