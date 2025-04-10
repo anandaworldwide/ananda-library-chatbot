@@ -19,6 +19,7 @@
 #                   Crawler pauses outside this window.
 #   --slow: Add a 15-second delay between page crawls
 #   --retry-failed: Retry URLs marked as failed in the previous checkpoint.
+#   --report: Generate a report of failed URLs from the last checkpoint and exit.
 #
 # Example usage:
 #   python website_crawler.py --domain ananda.org --max-pages 50
@@ -142,10 +143,10 @@ def ensure_scheme(url: str, default_scheme: str = "https") -> str:
 @dataclass
 class CrawlerState:
     visited_urls: Set[str]
-    attempted_urls: Set[str]  # URLs we've tried but failed
+    attempted_urls: Dict[str, str]  # URLs we've tried but failed. Changed from Set[str] to Dict[str, str].
     pending_urls: List[str]   # Queue of URLs to visit
 
-class AnandaCrawler:
+class WebsiteCrawler:
     def __init__(self, start_url: str = "https://ananda.org", retry_failed: bool = False):
         self.start_url = start_url
         self.domain = urlparse(start_url).netloc.replace('www.', '')
@@ -157,7 +158,7 @@ class AnandaCrawler:
         # Initialize state
         self.state = CrawlerState(
             visited_urls=set(),
-            attempted_urls=set(),
+            attempted_urls={},
             pending_urls=[start_url]
         )
         
@@ -177,10 +178,28 @@ class AnandaCrawler:
                     if len(loaded_state.pending_urls) != len(filtered_urls):
                         logging.debug(f"Filtered out {len(loaded_state.pending_urls) - len(filtered_urls)} invalid pending URLs")
 
+                    # --- Handle attempted_urls (including migration) ---
+                    if hasattr(loaded_state, 'attempted_urls'):
+                        # @TODO: Remove this migration logic after a few runs
+                        if isinstance(loaded_state.attempted_urls, set):
+                            # Migrate from Set to Dict
+                            logging.warning("Migrating attempted_urls from old set format to new dictionary format.")
+                            self.state.attempted_urls = {ensure_scheme(url): "Failure recorded in previous version" for url in loaded_state.attempted_urls}
+                            logging.info(f"Migrated {len(self.state.attempted_urls)} URLs from old attempted_urls format.")
+                        elif isinstance(loaded_state.attempted_urls, dict):
+                            # Load existing Dict, ensuring keys have schemes
+                            self.state.attempted_urls = {ensure_scheme(url): msg for url, msg in loaded_state.attempted_urls.items()}
+                        else:
+                            logging.warning(f"Unexpected type for attempted_urls in checkpoint: {type(loaded_state.attempted_urls)}. Initializing as empty.")
+                            self.state.attempted_urls = {}
+                    else:
+                         # Checkpoint existed but had no attempted_urls attribute
+                         self.state.attempted_urls = {}
+
                     # Handle --retry-failed flag passed from main
-                    if retry_failed and hasattr(loaded_state, 'attempted_urls') and loaded_state.attempted_urls:
-                        # Ensure scheme when creating retry list
-                        retry_urls = [ensure_scheme(url) for url in loaded_state.attempted_urls]
+                    if retry_failed and self.state.attempted_urls:
+                        # Ensure scheme when creating retry list from keys
+                        retry_urls = list(self.state.attempted_urls.keys()) # Already have schemes due to loading logic
                         logging.info(f"Retry requested: Re-queuing {len(retry_urls)} previously failed URLs.")
                         # Prepend failed URLs to the front of the queue
                         # Filter out any retry URLs that might already be pending (unlikely but safe)
@@ -188,14 +207,17 @@ class AnandaCrawler:
                         unique_retry_urls = [url for url in retry_urls if url not in existing_pending_set]
                         self.state.pending_urls = unique_retry_urls + self.state.pending_urls
                         # Clear attempted URLs for this run to avoid immediate re-marking on failure
-                        self.state.attempted_urls = set()
-                    else:
-                        # Load attempted URLs normally if not retrying
-                        self.state.attempted_urls = loaded_state.attempted_urls if hasattr(loaded_state, 'attempted_urls') else set()
+                        self.state.attempted_urls = {}
+                    # No 'else' needed here, attempted_urls already loaded/migrated correctly
 
             except Exception as e:
                 logging.error(f"Failed to load checkpoint: {e}")
-                self.state.pending_urls = [self.start_url] if self.is_valid_url(self.start_url) else []
+                # Initialize fresh state if loading fails
+                self.state = CrawlerState(
+                    visited_urls=set(),
+                    attempted_urls={},
+                    pending_urls=[self.start_url] if self.is_valid_url(self.start_url) else []
+                )
 
         # Skip patterns for URLs
         self.skip_patterns = [
@@ -499,7 +521,9 @@ class AnandaCrawler:
         if not restart_needed:
              logging.error(f"Giving up on {url} after exhausting retries or encountering fatal error. Last error: {last_exception}")
              # Add to attempted URLs only on normal failure, not restart failure (handled in run_crawl_loop)
-             self.state.attempted_urls.add(self.normalize_url(url))
+             # Store the error message as well
+             error_message = str(last_exception) if last_exception else "Unknown error during crawl attempt"
+             self.state.attempted_urls[self.normalize_url(url)] = error_message
 
         # Return based on whether restart is needed
         return None, [], restart_needed # Return restart flag
@@ -699,6 +723,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument('--slow', action='store_true', help='Add a 15-second delay between page crawls')
     parser.add_argument('--retry-failed', action='store_true', help='Retry URLs marked as failed in the previous checkpoint.')
+    parser.add_argument('--report', action='store_true', help='Generate a report of failed URLs from the last checkpoint and exit.')
     return parser.parse_args()
 
 def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
@@ -782,7 +807,7 @@ def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
         
     return pinecone_index
 
-def run_crawl_loop(crawler: AnandaCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace, start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time]):
+def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace, start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time]):
     """Run the main crawling loop."""
     # Get index name (needed for upsert)
     index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
@@ -1046,24 +1071,43 @@ def main():
     signal.signal(signal.SIGINT, handle_exit)
     signal.signal(signal.SIGTERM, handle_exit)
     
-    # Initialize crawler, passing the retry flag
-    crawler = AnandaCrawler(start_url=start_url, retry_failed=args.retry_failed)
+    # Initialize crawler, passing the retry flag. This loads/migrates the state.
+    crawler = WebsiteCrawler(start_url=start_url, retry_failed=args.retry_failed)
     handle_exit.crawler = crawler  # Store crawler reference for signal handler
 
-    # Handle --continue flag and checkpoint file
-    if not getattr(args, 'continue') and not args.retry_failed: # Don't clear state if retrying failed
+    # --- Handle --report flag ---
+    if args.report:
+        logging.info("Generating report of failed URLs...")
+        print("\n--- Failed URL Report ---")
+        if crawler.state.attempted_urls:
+            for url, error_msg in crawler.state.attempted_urls.items():
+                print(f"URL: {url}\nError: {error_msg}\n---")
+            print(f"Total failed URLs reported: {len(crawler.state.attempted_urls)}")
+        else:
+            print("No recorded failures found in the checkpoint.")
+        print("------------------------")
+        sys.exit(0) # Exit after generating report
+
+    # Handle --continue flag and checkpoint file (only if not reporting)
+    # This logic is now primarily about *clearing* state if not continuing/retrying
+    if not getattr(args, 'continue') and not args.retry_failed:
+        # Check if the checkpoint file exists before attempting to unlink
+        if crawler.checkpoint_file.exists():
+             logging.info("Starting fresh: Removing existing checkpoint file.")
+             crawler.checkpoint_file.unlink() # Remove existing checkpoint
+        # Reset state in the crawler object itself
         crawler.state = CrawlerState(
             visited_urls=set(),
-            attempted_urls=set(),
-            pending_urls=[] # Start with empty pending, loop will add start_url if needed
-        )  # Start fresh
-        if crawler.checkpoint_file.exists():
-            logging.info("Starting fresh: Removing existing checkpoint file.")
-            crawler.checkpoint_file.unlink()  # Remove existing checkpoint
-    elif not crawler.checkpoint_file.exists():
-        logging.warning("Continue requested, but no checkpoint file found. Starting fresh.")
-        # Initialize with start URL if no checkpoint and continue requested
-        crawler.state.pending_urls = [crawler.start_url] if crawler.is_valid_url(crawler.start_url) else []
+            attempted_urls={},
+            pending_urls=[crawler.start_url] if crawler.is_valid_url(crawler.start_url) else []
+        )
+        logging.info("Crawler state has been reset for a fresh run.")
+
+    elif not crawler.checkpoint_file.exists() and (getattr(args, 'continue') or args.retry_failed):
+         logging.warning("Continue or Retry requested, but no checkpoint file found. Starting fresh.")
+         # Ensure state is initialized correctly even if checkpoint didn't exist
+         if not crawler.state.pending_urls:
+             crawler.state.pending_urls = [crawler.start_url] if crawler.is_valid_url(crawler.start_url) else []
 
     # Initialize Pinecone
     env_file = f".env.{args.site}"
