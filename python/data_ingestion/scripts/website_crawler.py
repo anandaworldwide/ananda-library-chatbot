@@ -1081,8 +1081,9 @@ def main():
         print("\n--- Failed URL Report ---")
         if crawler.state.attempted_urls:
             for url, error_msg in crawler.state.attempted_urls.items():
-                print(f"URL: {url}\nError: {error_msg}\n---")
-            print(f"Total failed URLs reported: {len(crawler.state.attempted_urls)}")
+                # Print URL and error message on a single line
+                print(f"{url} - {error_msg}")
+            print(f"\nTotal failed URLs reported: {len(crawler.state.attempted_urls)}")
         else:
             print("No recorded failures found in the checkpoint.")
         print("------------------------")
