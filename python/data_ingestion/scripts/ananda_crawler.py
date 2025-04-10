@@ -235,6 +235,33 @@ class AnandaCrawler:
             logging.debug(f"Invalid URL {url}: {e}")
             return False
 
+    def wait_if_inactive(self, start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time], active_hours_str: Optional[str]):
+        """Checks if current time is outside active hours and sleeps if needed. Returns False if exit requested during sleep, True otherwise."""
+        is_active, sleep_duration_seconds = is_within_time_range(start_time_obj, end_time_obj)
+        if not is_active and sleep_duration_seconds is not None and sleep_duration_seconds > 0:
+            sleep_hours = sleep_duration_seconds / 3600
+            wake_time = (datetime.now() + timedelta(seconds=sleep_duration_seconds)).strftime('%Y-%m-%d %H:%M:%S')
+            logging.info(f"Outside active hours ({active_hours_str}). Sleeping for {sleep_hours:.2f} hours until {wake_time}. Saving checkpoint.")
+            self.save_checkpoint() # Use self.save_checkpoint
+            try:
+                # Sleep in shorter intervals to allow faster exit if signal received
+                sleep_interval = 60 # Sleep for 1 minute at a time
+                remaining_sleep = sleep_duration_seconds
+                while remaining_sleep > 0:
+                    if handle_exit.exit_requested:
+                        logging.info("Exit signal received during sleep. Stopping.")
+                        return False # Indicates sleep was interrupted by exit request
+                    sleep_this_interval = min(sleep_interval, remaining_sleep)
+                    time.sleep(sleep_this_interval)
+                    remaining_sleep -= sleep_this_interval
+                logging.info("Woke up. Resuming crawl.")
+            except KeyboardInterrupt:
+                logging.info("Keyboard interrupt during sleep. Stopping.")
+                handle_exit.exit_requested = True # Ensure graceful shutdown
+                return False # Indicates sleep was interrupted by exit request
+        # Return True if active, no sleep needed, or sleep completed normally
+        return True
+
     def clean_content(self, html_content: str) -> str:
         logging.debug(f"Cleaning HTML content (length: {len(html_content)})")
         soup = BeautifulSoup(html_content, 'html.parser')
@@ -633,38 +660,8 @@ def is_within_time_range(start_time_obj: Optional[dt_time], end_time_obj: Option
         sleep_duration_seconds = max(0, (next_start_datetime - now).total_seconds())
         return False, sleep_duration_seconds
 
-def check_and_wait_if_inactive(start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time], crawler: AnandaCrawler, active_hours_str: Optional[str]):
-    """Checks if current time is outside active hours and sleeps if needed. Returns False if exit requested during sleep, True otherwise."""
-    is_active, sleep_duration_seconds = is_within_time_range(start_time_obj, end_time_obj)
-    if not is_active and sleep_duration_seconds is not None and sleep_duration_seconds > 0:
-        sleep_hours = sleep_duration_seconds / 3600
-        wake_time = (datetime.now() + timedelta(seconds=sleep_duration_seconds)).strftime('%Y-%m-%d %H:%M:%S')
-        logging.info(f"Outside active hours ({active_hours_str}). Sleeping for {sleep_hours:.2f} hours until {wake_time}. Saving checkpoint.")
-        crawler.save_checkpoint()
-        try:
-            # Sleep in shorter intervals to allow faster exit if signal received
-            sleep_interval = 60 # Sleep for 1 minute at a time
-            remaining_sleep = sleep_duration_seconds
-            while remaining_sleep > 0:
-                if handle_exit.exit_requested:
-                    logging.info("Exit signal received during sleep. Stopping.")
-                    return False # Indicates sleep was interrupted by exit request
-                sleep_this_interval = min(sleep_interval, remaining_sleep)
-                time.sleep(sleep_this_interval)
-                remaining_sleep -= sleep_this_interval
-            logging.info("Woke up. Resuming crawl.")
-        except KeyboardInterrupt:
-            logging.info("Keyboard interrupt during sleep. Stopping.")
-            handle_exit.exit_requested = True # Ensure graceful shutdown
-            return False # Indicates sleep was interrupted by exit request
-    # Return True if active, no sleep needed, or sleep completed normally
-    return True 
-
-def main():
-    # Reset exit counter at start
-    handle_exit.counter = 0
-    handle_exit.exit_requested = False
-    
+def parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Crawl a website and store in Pinecone')
     parser.add_argument(
         '--site', 
@@ -679,50 +676,16 @@ def main():
         type=str,
         default=None,
         help='Optional active time range (e.g., "9pm-5am" or "21:00-05:00"). Crawler pauses outside this window.'
-     )
+    )
     parser.add_argument('--slow', action='store_true', help='Add a 15-second delay between page crawls')
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # Parse the active hours range
-    start_time_obj, end_time_obj = parse_time_range_string(args.active_hours)
-    if args.active_hours and (not start_time_obj or not end_time_obj):
-        logging.error("Invalid --active-hours format provided. Exiting.")
-        print(f"Error: Invalid --active-hours format provided. Exiting.")
-        return # Exit if format is wrong or parsing failed
-
-    # Convert domain to full URL
-    start_url = f"https://{args.domain}"
-    if not urlparse(start_url).netloc:
-        logging.error(f"Invalid domain provided: {args.domain}")
-        print(f"Error: Invalid domain provided: {args.domain}")
-        return
-
-    # Set up signal handlers
-    signal.signal(signal.SIGINT, handle_exit)
-    signal.signal(signal.SIGTERM, handle_exit)
-    
-    # Initialize crawler
-    crawler = AnandaCrawler(start_url=start_url)
-    handle_exit.crawler = crawler  # Store crawler reference for signal handler
-
-    # Only load checkpoint if --continue flag is present
-    if not getattr(args, 'continue'):
-        crawler.state = CrawlerState(
-            visited_urls=set(),
-            attempted_urls=set(),
-            pending_urls=[]
-        )  # Start fresh
-        if crawler.checkpoint_file.exists():
-            crawler.checkpoint_file.unlink()  # Remove existing checkpoint
-    elif not crawler.checkpoint_file.exists():
-        logging.warning("No checkpoint file found to continue from.")
-
-    # Load environment variables
-    env_file = f".env.{args.site}"
+def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
+    """Load environment, connect to Pinecone, and create index if needed."""
     if not os.path.exists(env_file):
         logging.error(f"Environment file {env_file} not found.")
         print(f"Error: Environment file {env_file} not found.")
-        return
+        return None
     
     load_dotenv(env_file)
     logging.info(f"Loaded environment from: {os.path.abspath(env_file)}")
@@ -736,7 +699,7 @@ def main():
         logging.error(error_msg)
         print(f"Error: {error_msg}")
         print(f"Please check your {env_file} file.")
-        return
+        return None
 
     # Initialize Pinecone with new API
     pc = pinecone.Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
@@ -744,7 +707,7 @@ def main():
     if not index_name:
         logging.error("PINECONE_INGEST_INDEX_NAME environment variable is not set.")
         print("Error: PINECONE_INGEST_INDEX_NAME environment variable is not set.")
-        return
+        return None
     
     logging.info(f"Target Pinecone index: {index_name}")
     pinecone_index = None 
@@ -784,24 +747,282 @@ def main():
             except Exception as create_e:
                 logging.error(f"Failed to create or connect to Pinecone index '{index_name}' after user confirmation: {create_e}")
                 print(f"Error: Failed to create index '{index_name}'. Please check Pinecone console/logs. Exiting.")
-                return # Exit if creation failed
+                return None # Indicate failure
         else:
             logging.info("User declined to create the index. Exiting.")
             print("Operation aborted by user. Index not found.")
-            return # Exit if user declines
+            return None # Indicate failure
 
     except Exception as e:
         # Catch other potential connection errors
         logging.error(f"Error connecting to Pinecone index '{index_name}': {e}")
         print(f"Error connecting to Pinecone index '{index_name}': {e}")
-        return # Exit on other connection errors
+        return None # Indicate failure
+        
+    return pinecone_index
 
-    # --- Proceed with the crawl only if pinecone_index is successfully assigned ---
+def run_crawl_loop(crawler: AnandaCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace, start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time]):
+    """Run the main crawling loop."""
+    # Get index name (needed for upsert)
+    index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
+    if not index_name:
+        logging.error("PINECONE_INGEST_INDEX_NAME not found in environment during loop start.")
+        return # Should not happen if initialize_pinecone succeeded
+
+    pages_processed = 0
+    pages_since_restart = 0
+    batch_results = [] # Track success/failure for the current batch
+    batch_start_time = time.time()
+    PAGES_PER_RESTART = 50
+
+    # Ensure we have a starting URL
+    if not crawler.state.pending_urls:
+        logging.warning("No pending URLs found in state, reinitializing queue with start URL.")
+        crawler.state.pending_urls = [crawler.start_url]
+        
+    logging.info(f"Initial queue size: {len(crawler.state.pending_urls)} URLs")
+    logging.info(f"First URL in queue: {crawler.state.pending_urls[0] if crawler.state.pending_urls else 'None'}")
+
+    with sync_playwright() as p:
+        browser = p.firefox.launch(
+            headless=True, 
+            firefox_user_prefs={"media.volume_scale": "0.0"} # Mute audio
+        )
+        page = browser.new_page() # Create page initially
+        page.set_extra_http_headers({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
+        })
+        should_continue_loop = True # Flag to control the main loop
+        try:
+            start_run_time = time.time()
+
+            # --- Initial Time Check Before Loop ---
+            logging.debug("Performing initial active hours check...")
+            should_continue_loop = crawler.wait_if_inactive(start_time_obj, end_time_obj, args.active_hours)
+            if not should_continue_loop:
+                logging.info("Exiting after initial sleep interruption.")
+                # Let finally block handle cleanup
+            
+            # Modified loop condition to check exit flag
+            while crawler.state.pending_urls and should_continue_loop and not handle_exit.exit_requested:
+                # --- Slow Crawl Delay ---
+                if args.slow and pages_processed > 0: # Add delay after the first page is processed
+                    delay_seconds = 15 # Define delay duration
+                    logging.info(f"Slow mode enabled: Pausing for {delay_seconds} seconds...")
+                    interrupted_during_sleep = False
+                    for _ in range(delay_seconds):
+                        time.sleep(1) # Sleep for 1 second
+                        if handle_exit.exit_requested:
+                            logging.info("Exit requested during slow mode pause, stopping sleep.")
+                            interrupted_during_sleep = True
+                            break # Exit the inner sleep loop
+                    
+                    if interrupted_during_sleep:
+                        break # Exit the main while loop if interrupted
+
+                    if handle_exit.exit_requested:
+                        logging.info("Exit requested immediately after slow mode pause, breaking loop.")
+                        break
+
+                # --- Time Check Inside Loop ---
+                should_continue_loop = crawler.wait_if_inactive(start_time_obj, end_time_obj, args.active_hours)
+                if not should_continue_loop:
+                    logging.info("Exit requested during sleep, breaking main loop.")
+                    break # Exit while loop
+                
+                if handle_exit.exit_requested:
+                    logging.info("Exit requested before processing next URL, breaking loop.")
+                    break
+
+                if args.max_pages is not None and pages_processed >= args.max_pages:
+                    logging.info(f"Reached max pages limit ({args.max_pages}), stopping crawl.")
+                    break
+
+                url = crawler.state.pending_urls.pop(0)
+                crawler.current_processing_url = url # Track current URL
+                normalized_url = crawler.normalize_url(url)
+                
+                logging.info(f"Processing URL: {url}")
+                logging.debug(f"Remaining in queue: {len(crawler.state.pending_urls)}")
+                
+                if normalized_url in crawler.state.visited_urls:
+                    logging.debug(f"Skipping already visited URL: {url}")
+                    continue
+                    
+                # Reset processing URL before crawl attempt
+                crawler.current_processing_url = url # Track current URL
+                content, new_links = crawler.crawl_page(browser, page, url)
+                
+                # Track attempt result immediately after crawl_page
+                is_success = content is not None
+                batch_results.append(is_success)
+
+                if handle_exit.exit_requested:
+                    logging.info("Exit requested after crawling page, stopping before processing/saving.")
+                    # URL was put back in queue by handle_exit if it was being processed
+                    break
+
+                if content:
+                    pages_processed += 1
+
+                    try:
+                        chunks = create_chunks_from_page(content)
+                        if chunks:
+                            embeddings = crawler.create_embeddings(chunks, url, content.title)
+                            upsert_to_pinecone(embeddings, pinecone_index, index_name)
+                            logging.debug(f"Successfully processed and upserted: {url}")
+                            logging.debug(f"Created {len(chunks)} chunks, {len(embeddings)} embeddings.")
+
+                        crawler.state.visited_urls.add(normalized_url)
+                        pages_since_restart += 1
+                        
+                        for link in new_links:
+                            normalized_link = crawler.normalize_url(link)
+                            if (normalized_link not in crawler.state.visited_urls and
+                                normalized_link not in crawler.state.attempted_urls and
+                                link not in crawler.state.pending_urls):
+                                crawler.state.pending_urls.append(link)
+                        logging.debug(f"Queue size after adding links: {len(crawler.state.pending_urls)} URLs pending")
+
+                    except Exception as e:
+                        logging.error(f"Failed to process page content {url}: {e}")
+                        logging.error(traceback.format_exc())
+                        crawler.state.attempted_urls.add(normalized_url)
+                        
+                    if pages_since_restart >= PAGES_PER_RESTART:
+                        # Calculate batch success rate
+                        batch_attempts = len(batch_results)
+                        batch_successes = batch_results.count(True)
+                        batch_success_rate = (batch_successes / batch_attempts * 100) if batch_attempts > 0 else 0
+
+                        # Calculate and log stats
+                        batch_elapsed_time = time.time() - batch_start_time
+                        pages_per_minute = (PAGES_PER_RESTART / batch_elapsed_time * 60) if batch_elapsed_time > 0 else 0
+                        total_visited = len(crawler.state.visited_urls)
+                        total_attempted = total_visited + len(crawler.state.attempted_urls)
+                        success_rate = (total_visited / total_attempted * 100) if total_attempted > 0 else 0
+                        pending_count = len(crawler.state.pending_urls)
+                        
+                        stats_message = (
+                            f"\n--- Stats at {PAGES_PER_RESTART} page boundary ---\n"
+                            f"- Processing {pages_per_minute:.1f} pages/minute (last {PAGES_PER_RESTART} pages)\n"
+                            f"- Total {total_visited} visited pages of {total_attempted} attempted ({round(success_rate)}% success)\n"
+                            f"- Success rate last {batch_attempts} attempts: {round(batch_success_rate)}%\n"
+                            f"- Total {pending_count} pending pages\n"
+                            f"--- End Stats ---"
+                        )
+                        for line in stats_message.split('\n'):
+                            logging.info(line)
+
+                        # Restart Browser
+                        logging.info(f"Restarting browser after {pages_since_restart} pages...")
+                        try:
+                            if page and not page.is_closed():
+                                page.close()
+                            if browser and browser.is_connected():
+                                browser.close()
+                            logging.info("Old browser closed.")
+                        except Exception as close_err:
+                            logging.warning(f"Error closing browser/page during restart: {close_err}")
+                        
+                        browser = p.firefox.launch(
+                            headless=True,
+                            firefox_user_prefs={"media.volume_scale": "0.0"}
+                        )
+                        page = browser.new_page()
+                        page.set_extra_http_headers({
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
+                        })
+                        logging.info("New browser launched.")
+                        pages_since_restart = 0
+                        batch_start_time = time.time()
+                        batch_results = [] # Reset batch results for new batch
+
+                else:
+                    crawler.state.attempted_urls.add(normalized_url)
+
+                # Save checkpoint *after* result is determined and added to batch_results
+                crawler.save_checkpoint()
+
+                if handle_exit.exit_requested:
+                    logging.info("Exit requested after saving checkpoint, stopping loop.")
+                    break
+
+                crawler.current_processing_url = None
+
+        except Exception as e:
+            logging.error(f"Browser or main loop error: {e}")
+            logging.error(traceback.format_exc())
+            # should_continue_loop = False # Let loop naturally end or finally block handle
+        finally:
+            if not handle_exit.exit_requested:
+                logging.info("Closing browser cleanly...")
+                try:
+                    if 'page' in locals() and page and not page.is_closed():
+                         page.close()
+                    if 'browser' in locals() and browser and browser.is_connected():
+                         browser.close()
+                         logging.info("Browser closed.")
+                except Exception as e:
+                    logging.warning(f"Error during clean browser close: {e}")
+            else:
+                logging.info("Exit requested via signal, skipping potentially blocking browser close.")
+                
+    if pages_processed == 0:
+        logging.warning("No pages were crawled successfully in this run.")
+    logging.info(f"Completed processing {pages_processed} pages during this run.")
+
+def main():
+    # Reset exit counter at start
+    handle_exit.counter = 0
+    handle_exit.exit_requested = False
+    
+    args = parse_arguments()
+
+    # Validate active hours
+    start_time_obj, end_time_obj = parse_time_range_string(args.active_hours)
+    if args.active_hours and (not start_time_obj or not end_time_obj):
+        logging.error("Invalid --active-hours format provided. Exiting.")
+        print(f"Error: Invalid --active-hours format provided. Exiting.")
+        sys.exit(1)
+
+    # Validate domain and create start URL
+    start_url = f"https://{args.domain}"
+    if not urlparse(start_url).netloc:
+        logging.error(f"Invalid domain provided: {args.domain}")
+        print(f"Error: Invalid domain provided: {args.domain}")
+        sys.exit(1)
+
+    # Set up signal handlers
+    signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGTERM, handle_exit)
+    
+    # Initialize crawler
+    crawler = AnandaCrawler(start_url=start_url)
+    handle_exit.crawler = crawler  # Store crawler reference for signal handler
+
+    # Handle --continue flag and checkpoint file
+    if not getattr(args, 'continue'):
+        crawler.state = CrawlerState(
+            visited_urls=set(),
+            attempted_urls=set(),
+            pending_urls=[] # Start with empty pending, loop will add start_url if needed
+        )  # Start fresh
+        if crawler.checkpoint_file.exists():
+            logging.info("Starting fresh: Removing existing checkpoint file.")
+            crawler.checkpoint_file.unlink()  # Remove existing checkpoint
+    elif not crawler.checkpoint_file.exists():
+        logging.warning("Continue requested, but no checkpoint file found. Starting fresh.")
+        # Initialize with start URL if no checkpoint and continue requested
+        crawler.state.pending_urls = [crawler.start_url] if crawler.is_valid_url(crawler.start_url) else []
+
+    # Initialize Pinecone
+    env_file = f".env.{args.site}"
+    pinecone_index = initialize_pinecone(env_file)
     if not pinecone_index:
-         logging.error("Failed to establish connection to Pinecone index. Exiting.")
-         print("Error: Could not connect to Pinecone index. Exiting.")
-         return
+        sys.exit(1) # Exit if Pinecone initialization failed
 
+    # --- Start Crawl --- 
     try:
         logging.info(f"Starting crawl of {start_url}")
         if args.max_pages:
@@ -812,224 +1033,13 @@ def main():
         else:
             logging.info("Crawler active 24/7.")
             
-        pages_processed = 0
-        # --- Stats Tracking ---
-        pages_since_restart = 0
-        batch_start_time = time.time()
-        PAGES_PER_RESTART = 50 # Restart browser every 50 pages
-        # --- End Stats Tracking ---
-        
-        # Ensure we have a starting URL
-        if not crawler.state.pending_urls:
-            logging.warning("No pending URLs found in state, reinitializing queue with start URL.")
-            crawler.state.pending_urls = [start_url]
-            
-        logging.info(f"Initial queue size: {len(crawler.state.pending_urls)} URLs")
-        logging.info(f"First URL in queue: {crawler.state.pending_urls[0] if crawler.state.pending_urls else 'None'}")
-        
-        with sync_playwright() as p:
-            browser = p.firefox.launch(
-                headless=False, 
-                firefox_user_prefs={"media.volume_scale": "0.0"} # Mute audio
-            )
-            page = browser.new_page() # Create page initially
-            page.set_extra_http_headers({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
-            })
-            should_continue_loop = True # Flag to control the main loop
-            try:
-                start_run_time = time.time()
-
-                # --- Initial Time Check Before Loop ---
-                logging.debug("Performing initial active hours check...")
-                should_continue_loop = check_and_wait_if_inactive(start_time_obj, end_time_obj, crawler, args.active_hours)
-                if not should_continue_loop:
-                    logging.info("Exiting after initial sleep interruption.")
-                    # Ensure cleanup happens by letting the finally block run
-                
-                # Modified loop condition to check exit flag
-                while crawler.state.pending_urls and should_continue_loop and not handle_exit.exit_requested:
-                    # --- Slow Crawl Delay ---
-                    if args.slow and pages_processed > 0: # Add delay after the first page is processed
-                        delay_seconds = 15 # Define delay duration
-                        logging.info(f"Slow mode enabled: Pausing for {delay_seconds} seconds...")
-                        interrupted_during_sleep = False
-                        for _ in range(delay_seconds):
-                            time.sleep(1) # Sleep for 1 second
-                            if handle_exit.exit_requested:
-                                logging.info("Exit requested during slow mode pause, stopping sleep.")
-                                interrupted_during_sleep = True
-                                break # Exit the inner sleep loop
-                        
-                        if interrupted_during_sleep:
-                            break # Exit the main while loop if interrupted
-
-                        # Original check after sleep is now redundant due to the inner loop check, but kept for safety
-                        # Check exit flag *again* after sleeping, in case it was received during sleep
-                        if handle_exit.exit_requested:
-                            logging.info("Exit requested immediately after slow mode pause, breaking loop.")
-                            break
-
-                    # --- Time Check Inside Loop ---
-                    should_continue_loop = check_and_wait_if_inactive(start_time_obj, end_time_obj, crawler, args.active_hours)
-                    if not should_continue_loop:
-                        logging.info("Exit requested during sleep, breaking main loop.")
-                        break # Exit while loop
-                    
-                    # Check exit flag *before* popping URL
-                    if handle_exit.exit_requested:
-                        logging.info("Exit requested before processing next URL, breaking loop.")
-                        break
-
-                    # Check for max_pages limit if specified
-                    if args.max_pages is not None and pages_processed >= args.max_pages:
-                        logging.info(f"Reached max pages limit ({args.max_pages}), stopping crawl.")
-                        break
-
-                    url = crawler.state.pending_urls.pop(0)
-                    crawler.current_processing_url = url # Track current URL
-                    normalized_url = crawler.normalize_url(url)
-                    
-                    logging.info(f"Processing URL: {url}")
-                    logging.debug(f"Remaining in queue: {len(crawler.state.pending_urls)}")
-                    
-                    if normalized_url in crawler.state.visited_urls:
-                        logging.debug(f"Skipping already visited URL: {url}")
-                        continue
-                        
-                    content, new_links = crawler.crawl_page(browser, page, url)
-                    
-                    # Check exit flag *immediately* after crawl_page returns
-                    if handle_exit.exit_requested:
-                        logging.info("Exit requested after crawling page, stopping before processing/saving.")
-                        # URL was put back in queue by handle_exit if it was being processed
-                        break
-
-                    if content:
-                        pages_processed += 1
-
-                        # Process the page content
-                        try:
-                            chunks = create_chunks_from_page(content)
-                            if chunks:
-                                embeddings = crawler.create_embeddings(chunks, url, content.title)
-                                upsert_to_pinecone(embeddings, pinecone_index, index_name)
-                                logging.debug(f"Successfully processed and upserted: {url}")
-                                logging.debug(f"Created {len(chunks)} chunks, {len(embeddings)} embeddings.")
-
-                            # Add to visited ONLY after successful processing
-                            crawler.state.visited_urls.add(normalized_url)
-                            
-                            # --- Increment counter after successful processing ---
-                            pages_since_restart += 1
-                            
-                            # Process new links ONLY after successful processing
-                            for link in new_links:
-                                normalized_link = crawler.normalize_url(link)
-                                if (normalized_link not in crawler.state.visited_urls and
-                                    normalized_link not in crawler.state.attempted_urls and
-                                    link not in crawler.state.pending_urls):
-                                    crawler.state.pending_urls.append(link)
-                            logging.debug(f"Queue size after adding links: {len(crawler.state.pending_urls)} URLs pending")
-
-                        except Exception as e:
-                            logging.error(f"Failed to process page content {url}: {e}")
-                            logging.error(traceback.format_exc())
-                            # Decide if this URL should be marked as attempted instead of visited?
-                            # For now, it won't be added to visited if processing fails.
-                            crawler.state.attempted_urls.add(normalized_url)
-                            
-                        # --- Check for Browser Restart (Moved outside try/except, inside if content) ---
-                        if pages_since_restart >= PAGES_PER_RESTART:
-                            # Calculate stats before restart
-                            batch_elapsed_time = time.time() - batch_start_time
-                            pages_per_minute = (PAGES_PER_RESTART / batch_elapsed_time * 60) if batch_elapsed_time > 0 else 0
-                            total_visited = len(crawler.state.visited_urls)
-                            total_attempted = total_visited + len(crawler.state.attempted_urls)
-                            success_rate = (total_visited / total_attempted * 100) if total_attempted > 0 else 0
-                            pending_count = len(crawler.state.pending_urls)
-                            
-                            stats_message = (
-                                f"\n--- Stats at {PAGES_PER_RESTART} page boundary ---\n"
-                                f"- Processing {pages_per_minute:.1f} pages/minute (last {PAGES_PER_RESTART} pages)\n"
-                                f"- Total {total_visited} visited pages of {total_attempted} attempted ({round(success_rate)}% success)\n"
-                                f"- Total {pending_count} pending pages\n"
-                                f"--- End Stats ---"
-                            )
-                            # Log each line separately to preserve newlines
-                            for line in stats_message.split('\n'):
-                                logging.info(line)
-
-                            # --- Restart Browser ---
-                            logging.info(f"Restarting browser after {pages_since_restart} pages...")
-                            try:
-                                if page and not page.is_closed():
-                                    page.close()
-                                if browser and browser.is_connected():
-                                    browser.close()
-                                logging.info("Old browser closed.")
-                            except Exception as close_err:
-                                logging.warning(f"Error closing browser/page during restart: {close_err}")
-                            
-                            # Launch new browser and page
-                            browser = p.firefox.launch(
-                                headless=False,
-                                firefox_user_prefs={"media.volume_scale": "0.0"} # Mute audio
-                            )
-                            page = browser.new_page()
-                            page.set_extra_http_headers({
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0'
-                            })
-                            logging.info("New browser launched.")
-                            # --- Reset Counters ---
-                            pages_since_restart = 0
-                            batch_start_time = time.time()
-                            # --- End Browser Restart ---
-
-                    else:
-                        # crawl_page returned None (error or no content)
-                        crawler.state.attempted_urls.add(normalized_url)
-
-                    # Save checkpoint after each page attempt (success or failure)
-                    crawler.save_checkpoint()
-
-                    # Check exit flag again after saving checkpoint (safety)
-                    if handle_exit.exit_requested:
-                        logging.info("Exit requested after saving checkpoint, stopping loop.")
-                        # should_continue_loop = False # Ensure loop terminates (already handled by loop condition)
-                        break
-
-                    crawler.current_processing_url = None # Clear tracked URL after processing/saving
-
-            except Exception as e:
-                logging.error(f"Browser or main loop error: {e}")
-                logging.error(traceback.format_exc())
-                should_continue_loop = False # Stop loop on error
-            finally:
-                # Ensure browser is closed cleanly, *unless* exiting due to signal
-                if not handle_exit.exit_requested:
-                    logging.info("Closing browser cleanly...")
-                    try:
-                        # Check if page and browser objects exist and are usable before closing
-                        if 'page' in locals() and page and not page.is_closed():
-                             page.close()
-                        if 'browser' in locals() and browser and browser.is_connected():
-                             browser.close()
-                             logging.info("Browser closed.")
-                    except Exception as e:
-                        logging.warning(f"Error during clean browser close: {e}")
-                else:
-                    logging.info("Exit requested via signal, skipping potentially blocking browser close.")
-
-        if pages_processed == 0:
-            logging.warning("No pages were crawled successfully in this run.")
-            
-        logging.info(f"Completed processing {pages_processed} pages during this run.")
+        # Run the main crawl loop
+        run_crawl_loop(crawler, pinecone_index, args, start_time_obj, end_time_obj)
         
     except SystemExit:
         logging.info("Exiting due to SystemExit signal.")
     except Exception as e:
-        logging.error(f"Unexpected error in main: {e}")
+        logging.error(f"Unexpected error in main execution: {e}")
         logging.error(traceback.format_exc())
     finally:
         if 'crawler' in locals():
@@ -1038,8 +1048,10 @@ def main():
         if handle_exit.exit_requested:
             logging.info("Exiting script now due to signal request.")
         else:
-             logging.info("Script finished normally.") # Added for clarity
-        sys.exit(0) # Use sys.exit for cleaner shutdown than implicit exit
+             logging.info("Script finished normally.") 
+        # Use explicit exit code
+        exit_code = 1 if handle_exit.exit_requested else 0
+        sys.exit(exit_code)
 
 if __name__ == "__main__":
     main()
