@@ -21,7 +21,7 @@
 
 /* Add tooltip for the chatbot bubble */
 #aichatbot-bubble::after {
-  content: 'Ananda Intelligence (AI)';
+  content: 'Vivek - Ananda Intelligence';
   position: absolute;
   bottom: 60px;
   left: 50%;

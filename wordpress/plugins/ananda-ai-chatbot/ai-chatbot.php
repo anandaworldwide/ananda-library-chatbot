@@ -409,7 +409,7 @@ function aichatbot_add_chat_bubble() {
           </div>';
     echo '<div id="aichatbot-window" style="display:none;">
             <div id="aichatbot-header">
-                <h3>Ananda Intelligence (AI)</h3>
+                <h3>Vivek - Ananda Intelligence</h3>
                 <div class="aichatbot-header-controls">
                     <div class="aichatbot-language-hint">
                         <span class="hint-icon">🌐</span>
@@ -428,7 +428,7 @@ function aichatbot_add_chat_bubble() {
             </div>
 
             <div id="aichatbot-messages"></div>
-            <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Intelligence uses AI and may make mistakes.</div>
+            <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Vivek uses AI and may make mistakes.</div>
             <div id="aichatbot-input-container">
                 <textarea id="aichatbot-input" placeholder="' . $random_placeholder . '" rows="1"></textarea>
                 <button id="aichatbot-send"><i class="fas fa-paper-plane"></i></button>
@@ -626,7 +626,7 @@ function aichatbot_chat_window_html() {
             <button class="aichatbot-close">&times;</button>
         </div>
         <div id="aichatbot-messages"></div>
-        <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Ananda Intelligence uses AI and may make mistakes.</div>
+        <div id="aichatbot-disclaimer" style="font-size: 12px; color: #888; text-align: center; padding: 5px 0;">Vivek uses AI and may make mistakes.</div>
         <div id="aichatbot-input-container">
             <textarea id="aichatbot-input" placeholder="' . $placeholder . '" rows="1"></textarea>
             <button id="aichatbot-send"><i class="fas fa-paper-plane"></i></button>

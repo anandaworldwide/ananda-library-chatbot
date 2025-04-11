@@ -1010,7 +1010,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const messageContent = document.createElement('div');
       messageContent.className = 'aichatbot-message-content';
-      messageContent.innerHTML = '<p>Hi! Ask me anything.</p>';
+      messageContent.innerHTML = "<p>Hi, I'm Vivek. Ask me anything.</p>";
 
       welcomeMessage.appendChild(messageContent);
       messages.appendChild(welcomeMessage);
