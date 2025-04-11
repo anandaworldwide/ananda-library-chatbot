@@ -170,12 +170,14 @@ def delete_vectors_by_skip_pattern(
                 if current_list_len <= remaining_to_skip:
                     # Skip the entire list
                     skipped_count += current_list_len
+                    pbar.update(current_list_len) # Update pbar for skipped vectors
                     pbar.set_postfix_str(f"Skipping {skipped_count}/{skip_vectors}")
                     continue # Move to the next list from the generator
                 else:
                     # Skip part of this list and process the rest
                     num_to_skip_from_this_list = remaining_to_skip
                     skipped_count += num_to_skip_from_this_list
+                    pbar.update(num_to_skip_from_this_list) # Update pbar for skipped vectors
                     # Get the portion of the list *after* skipping
                     ids_to_process_from_this_list = vector_id_list[num_to_skip_from_this_list:]
                     logging.info(f"Finished skipping {skipped_count} vectors. Starting processing.")
@@ -212,12 +214,6 @@ def delete_vectors_by_skip_pattern(
 
                     metadata = vector_data.get('metadata', {})
                     source_url = metadata.get('source')
-
-                    # Log the first processed ID and every 1000th processed ID
-                    if total_processed == 1 or total_processed % 1000 == 0:
-                        print()
-                        # Modify log message to include skipped count
-                        logging.info(f"Processing vector {skipped_count + total_processed} (skipped: {skipped_count}). Sample Source URL: {source_url}")
 
                     if source_url:
                         try:
@@ -281,12 +277,6 @@ def delete_vectors_by_skip_pattern(
 
                  metadata = vector_data.get('metadata', {})
                  source_url = metadata.get('source')
-
-                 # Log the first processed ID and every 1000th (also in the final batch)
-                 if total_processed == 1 or total_processed % 1000 == 0:
-                     print()
-                     # Modify log message to include skipped count
-                     logging.info(f"Processing vector {skipped_count + total_processed} (skipped: {skipped_count}). Sample Source URL: {source_url}")
 
                  if source_url:
                     try:
