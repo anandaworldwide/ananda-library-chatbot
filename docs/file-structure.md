@@ -57,7 +57,8 @@ ananda-library-chatbot/
 │   ├── bin/                      # Python utility scripts.
 │   ├── data_ingestion/           # Scripts and modules related to ingesting data from various sources.
 │   │   ├── db-to-pdf/            # Scripts to convert database content to PDFs.
-│   │   ├── scripts/              # Core data ingestion scripts (crawlers, processing, queue management).
+│   │   ├── crawler/              # Web crawler for ingesting website content.
+│   │   ├── scripts/              # Other data ingestion scripts (processing, queue management).
 │   │   └── tests/                # Tests for the data ingestion scripts.
 │   ├── supercut/                 # Python scripts possibly related to creating "supercuts" from media.
 │   └── util/                     # Utility functions specific to Python scripts.

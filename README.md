@@ -241,19 +241,18 @@ directory to generate PDF files.
 
 This repo includes a script to crawl websites and ingest their content.
 
-1. Run the script `python python/data_ingestion/scripts/website_crawler.py` with appropriate arguments.
+1. Run the script `python python/data_ingestion/crawler/website_crawler.py` with appropriate arguments.
 
    ```bash
-   python python/data_ingestion/scripts/website_crawler.py --domain yourdomain.com --site [site] --max-pages 500
+   python python/data_ingestion/crawler/website_crawler.py --domain yourdomain.com --site [site]
    ```
 
    - `--domain`: The domain to crawl (e.g., `ananda.org`).
    - `--site`: The site configuration name (e.g., `ananda-public`) used for `.env` file loading.
-   - `--max-pages`: Optional limit on the number of pages to crawl.
    - `--continue`: Resume crawling from the last saved checkpoint.
    - `--retry-failed`: Retry URLs that failed in the previous run.
    - `--active-hours`: Specify active crawling times (e.g., `9pm-6am`).
-   - `--slow`: Add a delay between page crawls.
+   - `--report`: Generate a report of failed URLs from the last checkpoint and exit.
 
 2. Check Pinecone dashboard to verify vectors have been added for the crawled content.
 

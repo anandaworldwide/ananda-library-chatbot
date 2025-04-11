@@ -9,22 +9,19 @@
 # Command line arguments:
 #   --site: Site ID for environment variables (e.g., ananda-public). Will load from .env.[site]
 #           Default: 'ananda-public'
-#   --max-pages: Maximum number of pages to crawl
-#                Default: 1000000
 #   --domain: Domain to crawl (e.g., ananda.org)
 #             Default: 'ananda.org'
 #   --continue: Continue from previous checkpoint (if available)
 #               Default: False (start fresh)
 #   --active-hours: Optional active time range (e.g., "9pm-6am" or "21:00-06:00"). 
 #                   Crawler pauses outside this window.
-#   --slow: Add a 15-second delay between page crawls
 #   --retry-failed: Retry URLs marked as failed in the previous checkpoint.
 #   --report: Generate a report of failed URLs from the last checkpoint and exit.
 #
 # Example usage:
-#   python website_crawler.py --domain ananda.org --max-pages 50
+#   python website_crawler.py --domain ananda.org
 #   python website_crawler.py --site ananda-public --continue
-#   python website_crawler.py --domain crystalclarity.com --max-pages 100 --site crystal-clarity
+#   python website_crawler.py --domain crystalclarity.com --site crystal-clarity
 
 # Standard library imports
 import argparse
@@ -150,7 +147,7 @@ class WebsiteCrawler:
     def __init__(self, start_url: str = "https://ananda.org", retry_failed: bool = False):
         self.start_url = start_url
         self.domain = urlparse(start_url).netloc.replace('www.', '')
-        checkpoint_dir = Path.home() / '.ananda_crawler_checkpoints'
+        checkpoint_dir = Path(__file__).parent / 'checkpoints'
         checkpoint_dir.mkdir(exist_ok=True)
         self.checkpoint_file = checkpoint_dir / f"crawler_checkpoint_{self.domain}.pkl"
         self.current_processing_url: Optional[str] = None # Track URL being processed
@@ -712,7 +709,6 @@ def parse_arguments() -> argparse.Namespace:
         default='ananda-public',
         help='Site ID for environment variables (e.g., ananda-public). Will load from .env.[site]'
     )
-    parser.add_argument('--max-pages', type=int, default=None, help='Maximum number of pages to crawl (default: unlimited)')
     parser.add_argument('--domain', default='ananda.org', help='Domain to crawl (e.g., ananda.org)')
     parser.add_argument('--continue', action='store_true', help='Continue from previous checkpoint')
     parser.add_argument(
@@ -721,7 +717,6 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         help='Optional active time range (e.g., "9pm-5am" or "21:00-05:00"). Crawler pauses outside this window.'
     )
-    parser.add_argument('--slow', action='store_true', help='Add a 15-second delay between page crawls')
     parser.add_argument('--retry-failed', action='store_true', help='Retry URLs marked as failed in the previous checkpoint.')
     parser.add_argument('--report', action='store_true', help='Generate a report of failed URLs from the last checkpoint and exit.')
     return parser.parse_args()
@@ -907,25 +902,6 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                     # Continue is important here to ensure the loop condition re-evaluates
                     continue 
 
-                # --- Slow Crawl Delay ---
-                if args.slow and pages_processed > 0: # Add delay after the first page is processed
-                    delay_seconds = 15 # Define delay duration
-                    logging.info(f"Slow mode enabled: Pausing for {delay_seconds} seconds...")
-                    interrupted_during_sleep = False
-                    for _ in range(delay_seconds):
-                        time.sleep(1) # Sleep for 1 second
-                        if handle_exit.exit_requested:
-                            logging.info("Exit requested during slow mode pause, stopping sleep.")
-                            interrupted_during_sleep = True
-                            break # Exit the inner sleep loop
-                    
-                    if interrupted_during_sleep:
-                        break # Exit the main while loop if interrupted
-
-                    if handle_exit.exit_requested:
-                        logging.info("Exit requested immediately after slow mode pause, breaking loop.")
-                        break
-
                 # --- Time Check Inside Loop ---
                 should_continue_loop = crawler.wait_if_inactive(start_time_obj, end_time_obj, args.active_hours)
                 if not should_continue_loop:
@@ -934,10 +910,6 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                 
                 if handle_exit.exit_requested:
                     logging.info("Exit requested before processing next URL, breaking loop.")
-                    break
-
-                if args.max_pages is not None and pages_processed >= args.max_pages:
-                    logging.info(f"Reached max pages limit ({args.max_pages}), stopping crawl.")
                     break
 
                 url = crawler.state.pending_urls.pop(0)
@@ -1119,8 +1091,6 @@ def main():
     # --- Start Crawl --- 
     try:
         logging.info(f"Starting crawl of {start_url}")
-        if args.max_pages:
-            logging.info(f"Maximum pages to crawl: {args.max_pages}")
         
         if start_time_obj and end_time_obj:
             logging.info(f"Crawler active hours: {start_time_obj.strftime('%H:%M')} to {end_time_obj.strftime('%H:%M')}")
