@@ -4,8 +4,14 @@
 Vector Database Statistics Generator
 
 This script analyzes a Pinecone vector database to generate statistics about stored vectors,
-specifically counting occurrences of metadata fields (author, library, type). It implements
-retry logic for handling network issues and processes vectors in batches for efficiency.
+specifically counting occurrences of metadata fields (author, library, type). It processes
+vectors in batches for efficiency using `index.list()` and `index.fetch()`.
+
+Usage:
+    python python/bin/vector_db_stats.py --site <site_id> [--prefix <id_prefix>]
+
+Example:
+    python python/bin/vector_db_stats.py --site mysite --prefix book_
 """
 
 import os
@@ -22,42 +28,18 @@ import random
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from util.env_utils import load_env
 
-def query_with_retries(index, vector_id, max_retries=3, initial_delay=1):
-    """
-    Query Pinecone index with exponential backoff retry logic.
-    
-    Args:
-        index: Pinecone index instance
-        vector_id: ID of the vector to query
-        max_retries: Maximum number of retry attempts (default: 3)
-        initial_delay: Base delay in seconds for retry backoff (default: 1)
-    
-    Returns:
-        Query response or raises final ProtocolError after max retries
-    """
-    for attempt in range(max_retries):
-        try:
-            return index.query(
-                id=vector_id,
-                top_k=1,
-                include_metadata=True
-            )
-        except ProtocolError:
-            if attempt == max_retries - 1:
-                raise
-            # Calculate exponential backoff with jitter
-            delay = initial_delay * (2 ** attempt) + random.uniform(0, 1)
-            time.sleep(delay)
-
 def get_pinecone_stats(id_prefix=None):
     """
-    Retrieves and aggregates statistics from Pinecone vectors.
+    Retrieves and aggregates statistics from Pinecone vectors using batch fetching.
     
     Args:
         id_prefix (str, optional): Filter vectors by ID prefix
     """
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
-    index = pc.Index(os.getenv('PINECONE_INGEST_INDEX_NAME'))
+    index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
+    if not index_name:
+        raise ValueError("PINECONE_INGEST_INDEX_NAME environment variable not set.")
+    index = pc.Index(index_name)
     
     stats = {
         'author': Counter(),
@@ -65,45 +47,50 @@ def get_pinecone_stats(id_prefix=None):
         'type': Counter()
     }
     
-    # Get total vector count for progress tracking
+    # Get total vector count (might be slightly off if using prefix, but good estimate for progress)
     index_stats = index.describe_index_stats()
     total_vectors = index_stats.total_vector_count
-    pbar = tqdm(total=total_vectors, desc="Processing vectors")
+    pbar = tqdm(total=total_vectors, desc=f"Listing vectors with prefix '{id_prefix or ''}'")
     
-    batch_size = 100
-    id_batch = []
+    # 1. List all vector IDs matching the prefix
+    all_vector_ids = []
+    try:
+        for ids_list in index.list(prefix=id_prefix):
+            all_vector_ids.extend(ids_list)
+        pbar.set_description("Processing fetched vectors")
+        pbar.reset(total=len(all_vector_ids)) # Reset pbar for processing phase
+    except Exception as e:
+        print(f"\nError listing vector IDs: {e}")
+        pbar.close()
+        return stats # Return potentially empty stats
     
-    # Use prefix parameter in list() call
-    for vector_ids in index.list(prefix=id_prefix):
-        id_batch.extend(vector_ids)
-        
-        if len(id_batch) >= batch_size:
-            for vector_id in id_batch:
-                response = query_with_retries(index, vector_id)
-                if response and response.matches:
-                    metadata = response.matches[0].metadata
-                    if metadata:
-                        # Update counters for each metadata field if present
-                        for field in ['author', 'library', 'type']:
-                            if field in metadata:
-                                stats[field][metadata[field]] += 1
-            
-            pbar.update(len(id_batch))
-            id_batch = []
-    
-    # Handle any remaining vectors in the final batch
-    if id_batch:
-        for vector_id in id_batch:
-            response = query_with_retries(index, vector_id)
-            if response and response.matches:
-                metadata = response.matches[0].metadata
+    # 2. Fetch and process vectors in batches
+    batch_size = 50 # Reduced batch size to prevent 414 Request-URI Too Large errors
+    total_processed = 0
+
+    for i in range(0, len(all_vector_ids), batch_size):
+        batch_ids = all_vector_ids[i:i + batch_size]
+        try:
+            fetch_response = index.fetch(ids=batch_ids)
+            fetched_vectors = fetch_response.vectors
+
+            for vec_id, vector_data in fetched_vectors.items():
+                metadata = vector_data.get('metadata', {})
                 if metadata:
+                    # Update counters for each metadata field if present
                     for field in ['author', 'library', 'type']:
                         if field in metadata:
                             stats[field][metadata[field]] += 1
-        pbar.update(len(id_batch))
-    
+            total_processed += len(fetched_vectors)
+            pbar.update(len(batch_ids)) # Update based on batch size processed/attempted
+
+        except Exception as e:
+            print(f"\nError fetching/processing batch starting at index {i}: {e}")
+            # Option: could add retry logic here or skip the batch
+            pbar.update(len(batch_ids)) # Still update progress bar for attempted batch
+
     pbar.close()
+    print(f"\nProcessed metadata for {total_processed} vectors.")
     return stats
 
 def print_stats(stats):
