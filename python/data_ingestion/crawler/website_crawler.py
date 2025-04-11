@@ -7,21 +7,19 @@
 # The script also handles exit signals gracefully, saving its state before shutting down.
 #
 # Command line arguments:
-#   --site: Site ID for environment variables (e.g., ananda-public). Will load from .env.[site]
-#           Default: 'ananda-public'
-#   --domain: Domain to crawl (e.g., ananda.org)
-#             Default: 'ananda.org'
+#   --site: Site ID for environment variables (e.g., ananda-public).
+#           Loads config from crawler_config/[site]-config.json and .env.[site]. REQUIRED.
 #   --continue: Continue from previous checkpoint (if available)
 #               Default: False (start fresh)
-#   --active-hours: Optional active time range (e.g., "9pm-6am" or "21:00-06:00"). 
+#   --active-hours: Optional active time range (e.g., "9pm-6am" or "21:00-06:00").
 #                   Crawler pauses outside this window.
 #   --retry-failed: Retry URLs marked as failed in the previous checkpoint.
 #   --report: Generate a report of failed URLs from the last checkpoint and exit.
 #
 # Example usage:
-#   python website_crawler.py --domain ananda.org
+#   python website_crawler.py --site ananda-public
 #   python website_crawler.py --site ananda-public --continue
-#   python website_crawler.py --domain crystalclarity.com --site crystal-clarity
+#   python website_crawler.py --site crystal-clarity --retry-failed
 
 # Standard library imports
 import argparse
@@ -34,6 +32,7 @@ import signal
 import sys
 import time
 import traceback
+import json
 from dataclasses import dataclass
 from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
@@ -64,6 +63,30 @@ httpx_logger.setLevel(logging.WARNING)
 
 # Define User-Agent constant
 USER_AGENT = 'Ananda Chatbot Crawler'
+
+# --- Configuration Loading ---
+def load_config(site_id: str) -> Optional[Dict]:
+    """Load site configuration from JSON file."""
+    config_dir = Path(__file__).parent / 'crawler_config'
+    config_file = config_dir / f"{site_id}-config.json"
+    if not config_file.exists():
+        logging.error(f"Configuration file not found: {config_file}")
+        return None
+    try:
+        with open(config_file, 'r') as f:
+            config_data = json.load(f)
+        logging.info(f"Loaded configuration from {config_file}")
+        # Basic validation (add more as needed)
+        if 'domain' not in config_data or 'skip_patterns' not in config_data:
+             logging.error("Config file is missing required keys ('domain', 'skip_patterns').")
+             return None
+        return config_data
+    except json.JSONDecodeError as e:
+        logging.error(f"Error decoding JSON from {config_file}: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"Error loading config file {config_file}: {e}")
+        return None
 
 @dataclass
 class PageContent:
@@ -144,19 +167,24 @@ class CrawlerState:
     pending_urls: List[str]   # Queue of URLs to visit
 
 class WebsiteCrawler:
-    def __init__(self, start_url: str = "https://ananda.org", retry_failed: bool = False):
-        self.start_url = start_url
-        self.domain = urlparse(start_url).netloc.replace('www.', '')
+    def __init__(self, site_id: str, site_config: Dict, retry_failed: bool = False):
+        self.site_id = site_id
+        self.config = site_config
+        self.domain = self.config['domain'] 
+        self.start_url = ensure_scheme(self.domain) # Start URL is now just the domain
+        self.skip_patterns = self.config.get('skip_patterns', []) 
+
         checkpoint_dir = Path(__file__).parent / 'checkpoints'
         checkpoint_dir.mkdir(exist_ok=True)
-        self.checkpoint_file = checkpoint_dir / f"crawler_checkpoint_{self.domain}.pkl"
+        # Use site_id in checkpoint filename
+        self.checkpoint_file = checkpoint_dir / f"crawler_checkpoint_{self.site_id}.pkl"
         self.current_processing_url: Optional[str] = None # Track URL being processed
         
         # Initialize state
         self.state = CrawlerState(
             visited_urls=set(),
             attempted_urls={},
-            pending_urls=[start_url]
+            pending_urls=[self.start_url]
         )
         
         # Load previous checkpoint if exists
@@ -215,21 +243,6 @@ class WebsiteCrawler:
                     attempted_urls={},
                     pending_urls=[self.start_url] if self.is_valid_url(self.start_url) else []
                 )
-
-        # Skip patterns for URLs
-        self.skip_patterns = [
-            r'/search/',
-            r'/login/',
-            r'/cart/',
-            r'/account/',
-            r'/checkout/',
-            r'/wp-admin/',
-            r'\?',  # Skip URLs with query parameters
-            # --- Specific Exclusions ---
-            r'/online-courses/lessons-in-meditation-reviews/',
-            r'/autobiography',
-            r'/free-inspiration/books/efl' # Added due to redirect timeout loop
-        ]
 
     def save_checkpoint(self):
         """Save crawler state to checkpoint file"""
@@ -705,11 +718,10 @@ def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Crawl a website and store in Pinecone')
     parser.add_argument(
-        '--site', 
-        default='ananda-public',
-        help='Site ID for environment variables (e.g., ananda-public). Will load from .env.[site]'
+        '--site',
+        required=True, # Make site ID required
+        help='Site ID for environment variables (e.g., ananda-public). Loads config from crawler_config/[site]-config.json. REQUIRED.'
     )
-    parser.add_argument('--domain', default='ananda.org', help='Domain to crawl (e.g., ananda.org)')
     parser.add_argument('--continue', action='store_true', help='Continue from previous checkpoint')
     parser.add_argument(
         '--active-hours',
@@ -919,6 +931,17 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                 logging.info(f"Processing URL: {url}")
                 logging.debug(f"Remaining in queue: {len(crawler.state.pending_urls)}")
                 
+                # --- Add skip pattern check ---
+                if crawler.should_skip_url(url):
+                    logging.info(f"Skipping URL based on skip patterns: {url}")
+                    # Ensure it's marked as 'attempted' so it's not retried if --retry-failed is used later,
+                    # but don't mark as visited, as we didn't actually process it.
+                    if normalized_url not in crawler.state.attempted_urls:
+                        crawler.state.attempted_urls[normalized_url] = "Skipped by pattern rule" # Add reason
+                    crawler.current_processing_url = None # Reset since we're skipping
+                    continue
+                # --- End skip pattern check ---
+                
                 if normalized_url in crawler.state.visited_urls:
                     logging.debug(f"Skipping already visited URL: {url}")
                     continue
@@ -930,7 +953,7 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                 # --- Handle Restart Request ---
                 if restart_needed:
                     logging.warning(f"Browser restart requested after attempting {url}.")
-                    crawler.state.attempted_urls.add(normalized_url) # Mark as attempted
+                    crawler.state.attempted_urls[normalized_url] = "Attempted before browser restart" # Mark as attempted with reason
                     # Re-queue the URL to try again after restart
                     if url not in crawler.state.pending_urls: # Avoid duplicate re-queueing
                        logging.debug(f"Re-queuing {url} for retry after browser restart.")
@@ -968,15 +991,16 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                             normalized_link = crawler.normalize_url(link)
                             if (normalized_link not in crawler.state.visited_urls and
                                 normalized_link not in crawler.state.attempted_urls and
-                                link not in crawler.state.pending_urls):
+                                link not in crawler.state.pending_urls and
+                                not crawler.should_skip_url(link)): # Add skip check here
                                 crawler.state.pending_urls.append(link)
                         logging.debug(f"Queue size after adding links: {len(crawler.state.pending_urls)} URLs pending")
 
                     except Exception as e:
                         logging.error(f"Failed to process page content {url}: {e}")
                         logging.error(traceback.format_exc())
-                        crawler.state.attempted_urls.add(normalized_url)
-                        
+                        crawler.state.attempted_urls[normalized_url] = "Failed during content processing"
+
                 else: # Page crawl failed normally (e.g., no content, HTTP error handled in crawl_page)
                     # Already added to attempted_urls inside crawl_page if it failed there
                     # (and returned restart_needed=False)
@@ -984,7 +1008,7 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                     # Ensure it's marked as attempted if not already done in crawl_page
                     if not restart_needed and normalized_url not in crawler.state.attempted_urls:
                         logging.debug(f"Marking URL with no content or prior error as attempted: {url}")
-                        crawler.state.attempted_urls.add(normalized_url)
+                        crawler.state.attempted_urls[normalized_url] = "No content or prior error"
 
                 # Save checkpoint *after* result is determined and added to batch_results/state updated
                 crawler.save_checkpoint()
@@ -1024,27 +1048,48 @@ def main():
     
     args = parse_arguments()
 
-    # Validate active hours
+    # --- Load Site Configuration ---
+    site_config = load_config(args.site)
+    if not site_config:
+        print(f"Error: Failed to load configuration for site '{args.site}'. See logs for details.")
+        sys.exit(1)
+
+    # --- Environment File ---
+    # Construct path relative to the script's location
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent.parent.parent  # Go up three levels
+    env_file = project_root / f".env.{args.site}"
+
+    # Convert Path object to string for os.path.exists
+    env_file_str = str(env_file)
+    if not os.path.exists(env_file_str):
+        print(f"Error: Environment file {env_file_str} not found. Pinecone/OpenAI keys required. Exiting.")
+        sys.exit(1)
+    else:
+        logging.info(f"Will load environment variables from: {os.path.abspath(env_file_str)}")
+
+    # --- Validate Active Hours ---
     start_time_obj, end_time_obj = parse_time_range_string(args.active_hours)
     if args.active_hours and (not start_time_obj or not end_time_obj):
         logging.error("Invalid --active-hours format provided. Exiting.")
         print(f"Error: Invalid --active-hours format provided. Exiting.")
         sys.exit(1)
 
-    # Validate domain and create start URL, ensuring scheme
-    start_url = ensure_scheme(args.domain)
-    parsed_start = urlparse(start_url)
-    if not parsed_start.netloc: # Basic validation after ensuring scheme
-        logging.error(f"Invalid domain provided or scheme missing: {args.domain}")
-        print(f"Error: Invalid domain provided or scheme missing: {args.domain}")
+    # --- Get Domain & Start URL from Config ---
+    domain = site_config.get('domain')
+    if not domain:
+        logging.error(f"Domain not found in configuration for site '{args.site}'. Exiting.")
+        print(f"Error: Domain not found in configuration for site '{args.site}'. Exiting.")
         sys.exit(1)
+    start_url = ensure_scheme(domain)
+    logging.info(f"Configured domain: {domain}")
 
     # Set up signal handlers
     signal.signal(signal.SIGINT, handle_exit)
     signal.signal(signal.SIGTERM, handle_exit)
-    
-    # Initialize crawler, passing the retry flag. This loads/migrates the state.
-    crawler = WebsiteCrawler(start_url=start_url, retry_failed=args.retry_failed)
+
+    # Initialize crawler, passing site_id, config, and retry flag.
+    crawler = WebsiteCrawler(site_id=args.site, site_config=site_config, retry_failed=args.retry_failed)
     handle_exit.crawler = crawler  # Store crawler reference for signal handler
 
     # --- Handle --report flag ---
@@ -1083,15 +1128,14 @@ def main():
              crawler.state.pending_urls = [crawler.start_url] if crawler.is_valid_url(crawler.start_url) else []
 
     # Initialize Pinecone
-    env_file = f".env.{args.site}"
     pinecone_index = initialize_pinecone(env_file)
     if not pinecone_index:
         sys.exit(1) # Exit if Pinecone initialization failed
 
-    # --- Start Crawl --- 
+    # --- Start Crawl ---
     try:
-        logging.info(f"Starting crawl of {start_url}")
-        
+        logging.info(f"Starting crawl of {start_url} for site '{args.site}'")
+
         if start_time_obj and end_time_obj:
             logging.info(f"Crawler active hours: {start_time_obj.strftime('%H:%M')} to {end_time_obj.strftime('%H:%M')}")
         else:
