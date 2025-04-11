@@ -1,17 +1,16 @@
 {
   "domain": "ananda.org",
   "skip_patterns": [
-    "/search/",
-    "/login/",
-    "/cart/",
-    "/account/",
-    "/checkout/",
-    "/wp-admin/",
-    "\\?",
-    "/online-courses/lessons-in-meditation-reviews/",
-    "/autobiography",
-    "/free-inspiration/books/efl",
-    "/ask/answerer/",
-    "/video/locations/"
+    "^/search/",
+    "^/login/",
+    "^/cart/",
+    "^/account/",
+    "^/checkout/",
+    "^/wp-admin/",
+    "^/online-courses/lessons-in-meditation-reviews/",
+    "^/autobiography$",
+    "^/free-inspiration/books/efl$",
+    "^/ask/answerer/",
+    "^/video/locations/"
   ]
 }
