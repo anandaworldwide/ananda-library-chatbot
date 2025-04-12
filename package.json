@@ -21,7 +21,7 @@
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage && jest --selectProjects=server --ci --coverage",
     "test:changed": "jest --bail --findRelatedTests",
-    "test:queries:ananda-public": "dotenv -e .env.ananda-public -- jest -c jest.config.cjs __tests__/site_specific/ananda-public/*.test.ts",
+    "test:queries:ananda-public": "RUN_SEMANTIC_TESTS=true dotenv -e .env.ananda-public -- jest -c jest.config.cjs __tests__/site_specific/ananda-public/*.test.ts",
     "find-untested": "node scripts/find-untested-files.js",
     "ingest": "NODE_OPTIONS='--max-old-space-size=6000' tsx -r dotenv/config scripts/ingest-text-data.ts",
     "ingest-trace": "NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' tsx -r dotenv/config scripts/ingest-text-data.ts",

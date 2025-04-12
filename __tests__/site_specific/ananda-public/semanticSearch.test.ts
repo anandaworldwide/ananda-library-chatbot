@@ -8,14 +8,25 @@
  * whether the query is related to Ananda's teachings or resources, using
  * embedding similarity.
  *
+ * These tests are SKIPPED by default when running the full test suite.
+ *
  * To run these tests specifically:
- * npm run test:queries ananda-public
+ * - Use `npm run test:queries:ananda-public` - This runs all Ananda tests with semantic tests enabled
+ * - Or set environment variable: `RUN_SEMANTIC_TESTS=true` when running tests
+ *
+ * Important: Running these tests requires:
+ * 1. A valid OPENAI_API_KEY environment variable
+ * 2. A valid SECURE_TOKEN environment variable for JWT generation
  */
 
 // Polyfill fetch for Node environment
 import fetch from 'node-fetch';
 import jwt from 'jsonwebtoken';
 import { getEmbedding, cosineSimilarity } from '../../utils/embeddingUtils';
+
+// Skip all tests unless running with explicit flag
+const runSemanticTests = process.env.RUN_SEMANTIC_TESTS === 'true';
+const testRunner = runSemanticTests ? describe : describe.skip;
 
 // Increase default timeout for tests involving API calls
 jest.setTimeout(30000); // 30 seconds
@@ -32,7 +43,7 @@ const CANONICAL_REJECTIONS = [
 // Precompute rejection embeddings (optional optimization, could be done once)
 let rejectionEmbeddings: number[][] = [];
 
-describe('Vivek Response Semantic Validation (ananda-public)', () => {
+testRunner('Vivek Response Semantic Validation (ananda-public)', () => {
   // Fetch embeddings for canonical rejections once before tests run
   beforeAll(async () => {
     rejectionEmbeddings = await Promise.all(
@@ -257,6 +268,11 @@ function generateTestToken(client = 'web') {
   // Ensure we have a valid secret key for signing
   const secretKey = process.env.SECURE_TOKEN;
   if (!secretKey) {
+    if (!runSemanticTests) {
+      // Return a mock token when not intending to run the tests
+      // This keeps the tests from failing outright when skipped
+      return 'mock-jwt-token-for-testing';
+    }
     throw new Error(
       'SECURE_TOKEN environment variable is not set. Cannot generate test JWT.',
     );
