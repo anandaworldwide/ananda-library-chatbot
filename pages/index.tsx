@@ -226,7 +226,7 @@ export default function Home({
     }
   }, [abortController, setLoading, setAbortController]);
 
-  const [, setSourceDocs] = useState<Document[] | null>(null);
+  const [sourceDocs, setSourceDocs] = useState<Document[] | null>(null);
   const [lastRelatedQuestionsUpdate, setLastRelatedQuestionsUpdate] = useState<
     string | null
   >(null);
@@ -332,11 +332,6 @@ export default function Home({
         setTimingMetrics(data.timing);
       }
 
-      if (data.token) {
-        accumulatedResponseRef.current += data.token;
-        updateMessageState(accumulatedResponseRef.current, null);
-      }
-
       if (data.sourceDocs) {
         console.log(
           'Received sourceDocs:',
@@ -344,29 +339,31 @@ export default function Home({
           data.sourceDocs,
         );
         try {
-          setTimeout(() => {
-            const immutableSourceDocs = Array.isArray(data.sourceDocs)
-              ? [...data.sourceDocs]
-              : [];
+          const immutableSourceDocs = Array.isArray(data.sourceDocs)
+            ? [...data.sourceDocs]
+            : [];
 
-            if (immutableSourceDocs.length < sourceCount) {
-              console.error(
-                `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
-              );
-            }
-
-            setSourceDocs(immutableSourceDocs);
-            updateMessageState(
-              accumulatedResponseRef.current,
-              immutableSourceDocs,
+          if (immutableSourceDocs.length < sourceCount) {
+            console.error(
+              `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
             );
-          }, 100);
+          }
+
+          setSourceDocs(immutableSourceDocs);
+          // Update message state with sources but without the answer yet
+          updateMessageState('', immutableSourceDocs);
         } catch (error) {
           console.error('Error handling sourceDocs:', error);
           // Fallback to empty array if parsing fails
           setSourceDocs([]);
-          updateMessageState(accumulatedResponseRef.current, []);
+          updateMessageState('', []);
         }
+      }
+
+      if (data.token) {
+        accumulatedResponseRef.current += data.token;
+        // Only update the answer part of the message state
+        updateMessageState(accumulatedResponseRef.current, sourceDocs);
       }
 
       if (data.done) {
@@ -409,15 +406,7 @@ export default function Home({
         });
       }
     },
-    [
-      updateMessageState,
-      sourceCount,
-      setLoading,
-      setError,
-      setMessageState,
-      fetchRelatedQuestions,
-      siteConfig?.siteId,
-    ],
+    [setMessageState, scrollToBottom, sourceDocs, siteConfig, sourceCount, setSourceDocs, setTimingMetrics, setLoading, setError, fetchRelatedQuestions],
   );
 
   // Effect to scroll to bottom after related questions are added
