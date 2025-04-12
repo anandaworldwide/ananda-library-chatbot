@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.test.json",
+  "include": [
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/site_specific/ananda-public/semanticSearch.test.ts",
+    "/Users/Michael/Documents/development/ananda-library-chatbot/__tests__/utils/embeddingUtils.ts",
+    "components/**/*",
+    "styles/**/*",
+    "types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ],
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "allowJs": true,
+    "resolveJsonModule": true
+  }
+}
