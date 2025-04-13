@@ -8,7 +8,7 @@ const openai = new OpenAI({
 });
 
 // Use a recommended embedding model
-const EMBEDDING_MODEL = 'text-embedding-3-small';
+const EMBEDDING_MODEL = 'text-embedding-3-large';
 
 /**
  * Calculates the cosine similarity between two vectors.
@@ -52,10 +52,10 @@ export async function getEmbedding(text: string): Promise<number[]> {
 
   if (!cleanedText) {
     // Handle empty strings to avoid API errors - return a zero vector or handle as needed
-    // The dimension depends on the model, text-embedding-3-small uses 1536
+    // The dimension depends on the model, text-embedding-3-large uses 1536
     // You might need to adjust this based on the model you use.
     console.warn('Attempted to embed an empty string. Returning zero vector.');
-    const dimensions = 1536; // Dimension for text-embedding-3-small
+    const dimensions = 1536; // Dimension for text-embedding-3-large
     return Array(dimensions).fill(0);
   }
 

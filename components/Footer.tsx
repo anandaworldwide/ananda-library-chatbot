@@ -37,6 +37,13 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
               <span className="material-icons text-sm ml-1">thumb_down</span>
             </Link>
             <Link
+              href="/admin/relatedQuestionsUpdater"
+              className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
+            >
+              Related Qs Updater
+              <span className="material-icons text-sm ml-1">update</span>
+            </Link>
+            <Link
               href="/bless"
               className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
             >

@@ -133,3 +133,37 @@ export async function getTotalDocuments(): Promise<number> {
 
   return count;
 }
+
+/**
+ * Fetches the title (question text) for a single answer ID.
+ * Returns null if the document or title is not found.
+ */
+export async function getAnswerTitle(id: string): Promise<string | null> {
+  if (!db) {
+    console.error('getAnswerTitle: Database not available');
+    return null;
+  }
+  if (!id) {
+    console.warn('getAnswerTitle called with empty ID.');
+    return null;
+  }
+
+  try {
+    const docRef = db.collection(getAnswersCollectionName()).doc(id);
+    const docSnap = await docRef.get();
+
+    if (docSnap.exists) {
+      const data = docSnap.data();
+      return data?.question || null;
+    } else {
+      console.warn(`getAnswerTitle: Document not found for ID: ${id}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(
+      `getAnswerTitle: Error fetching document for ID ${id}:`,
+      error,
+    );
+    return null;
+  }
+}
