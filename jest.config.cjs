@@ -71,6 +71,7 @@ const customJestConfig = {
   transformIgnorePatterns: [
     '/node_modules/(?!react-markdown|remark-*|rehype-*|unified|mdast-*|micromark|decode-named-character-reference|character-entities|property-information|hast-*|unist-*|bail|is-plain-obj|trough|vfile|escape-string-regexp)/',
   ],
+  maxWorkers: 4,
 };
 
 // Configuration for server-side tests that need Node environment
