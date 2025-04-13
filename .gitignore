@@ -54,6 +54,9 @@ yarn-error.log*
 .env.*
 !.env.example
 
+# temporary files
+.temp-*
+
 # vercel
 .vercel
 
