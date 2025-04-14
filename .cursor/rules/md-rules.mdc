@@ -1,0 +1,9 @@
+---
+description: 
+globs: *.md
+alwaysApply: false
+---
+
+# Your rule content
+
+- Follow markdownlint rules such as 120 character line limit
