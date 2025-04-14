@@ -84,10 +84,10 @@ async function handler(
 
     try {
       // Update related questions for the specified document
-      const relatedQuestions = await updateRelatedQuestions(docId);
+      const result = await updateRelatedQuestions(docId);
       return res.status(200).json({
         message: 'Related questions updated successfully',
-        relatedQuestions,
+        relatedQuestions: result.current,
       });
     } catch (error: unknown) {
       // Handle and log errors during individual update
