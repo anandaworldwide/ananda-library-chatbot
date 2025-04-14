@@ -8,6 +8,9 @@ import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
+// Set maximum vercel duration to 300 seconds (5 minutes)
+export const maxDuration = 300;
+
 /**
  * API handler for managing related questions.
  * Supports batch updates (GET) and individual question updates (POST).
