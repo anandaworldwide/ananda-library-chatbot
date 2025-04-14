@@ -13,5 +13,10 @@
         "buildCommand": "npm run build-with-api-tests"
       }
     }
-  ]
+  ],
+  "functions": {
+    "pages/api/relatedQuestions.ts": {
+      "maxDuration": 300
+    }
+  }
 }
