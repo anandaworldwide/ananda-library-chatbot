@@ -6,7 +6,7 @@
  * 2. Pinecone Index Management (`getPineconeIndexName`, `getPineconeIndex`): Creates or retrieves an environment-specific Pinecone index (e.g., `dev-related-questions`) with the correct dimension (`embeddingDimension`) for the chosen OpenAI model (`embeddingModel`).
  * 3. Embedding Generation (`getEmbedding`): Takes text, cleans it, and uses the OpenAI client to generate a vector embedding.
  * 4. Vector Upsert (`upsertEmbeddings`): Takes `Answer` objects, generates embeddings for their questions, and upserts them into Pinecone in batches. Includes `siteId` and truncated `title` in metadata.
- * 5. Vector Search (`findRelatedQuestionsPinecone`): Embeds a query question, searches Pinecone for similar vectors (filtering by `siteId`), retrieves matched IDs, fetches their titles from Firestore (`getAnswerTitle`), and returns the top results.
+ * 5. Vector Search (`findRelatedQuestionsPinecone`): Embeds a query question, searches Pinecone for similar vectors (filtering by `siteId`), retrieves matched IDs and metadata (including truncated titles) from Pinecone, filters by similarity score and title uniqueness, and returns the top results.
  * 6. Firestore Retrieval (`getRelatedQuestions`): Fetches pre-calculated related questions (stored in the `relatedQuestionsV2` field) for a given question ID from Firestore.
  * 7. Batch Update (`updateRelatedQuestionsBatch`): The main orchestration function. It reads a progress marker, fetches Firestore documents in batches (`getQuestionsBatch`), upserts their embeddings (`upsertEmbeddings`), finds related questions via Pinecone search (`findRelatedQuestionsPinecone`), updates the `relatedQuestionsV2` field in Firestore for each document, and updates the progress marker. Designed for periodic execution.
  * 8. Single Update (`updateRelatedQuestions`): Updates related questions for one specific document on demand, ensuring its embedding exists first.
@@ -29,7 +29,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '@/services/firebase';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
 import { getEnvName } from '@/utils/env';
-import { getAnswersByIds, getAnswerTitle } from '@/utils/server/answersUtils';
+import { getAnswersByIds } from '@/utils/server/answersUtils';
 import { Answer } from '@/types/answer';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 
@@ -249,6 +249,43 @@ function checkDbAvailable(): void {
 // --- Embedding Generation ---
 
 /**
+ * Generates vector embeddings for multiple text inputs in a single API call.
+ * Much more efficient than making individual API calls for each text.
+ * @param {string[]} texts - Array of text inputs to embed.
+ * @returns {Promise<number[][]>} A promise resolving to an array of embedding vectors.
+ * @throws {Error} If OpenAI client initialization fails or embedding generation fails.
+ */
+async function getBatchEmbeddings(texts: string[]): Promise<number[][]> {
+  // Ensure OpenAI client is ready
+  await initializeClients();
+  if (!openai) throw new Error('OpenAI client accessed before initialization.');
+
+  // Filter out empty texts
+  const validTexts = texts.filter((text) => text && text.trim().length > 0);
+  if (validTexts.length === 0) {
+    console.warn('Attempted to get embeddings for empty texts array.');
+    return [];
+  }
+
+  try {
+    // Clean the texts by replacing newlines
+    const cleanedTexts = validTexts.map((text) => text.replace(/\n/g, ' '));
+
+    // Request embeddings for all texts in a single API call
+    const response = await openai.embeddings.create({
+      model: embeddingModel,
+      input: cleanedTexts,
+    });
+
+    // Return the array of embedding vectors
+    return response.data.map((item) => item.embedding);
+  } catch (error) {
+    console.error('Error getting batch embeddings from OpenAI:', error);
+    throw error;
+  }
+}
+
+/**
  * Generates a vector embedding for the given text using the configured OpenAI model.
  * Handles empty input and cleans the text before sending it to OpenAI.
  * @param {string} text - The input text to embed.
@@ -291,7 +328,7 @@ async function getEmbedding(text: string): Promise<number[]> {
  * @param {Answer[]} questions - An array of Answer objects containing questions to embed.
  * @throws {Error} If Pinecone index is not available, SITE_ID is missing, or upsert fails.
  */
-async function upsertEmbeddings(questions: Answer[]): Promise<void> {
+export async function upsertEmbeddings(questions: Answer[]): Promise<void> {
   // Ensure Pinecone client and index are ready.
   await initializeClients();
   if (!pineconeIndex || !currentPineconeIndexName)
@@ -305,63 +342,69 @@ async function upsertEmbeddings(questions: Answer[]): Promise<void> {
     );
   }
 
-  // Prepare vectors for upserting.
-  const vectors = [];
-  for (const q of questions) {
-    // Basic validation for question data.
-    if (!q.id || !q.question || typeof q.question !== 'string') {
-      console.warn(`Skipping upsert for invalid question data: ID=${q.id}`);
-      continue; // Skip invalid entries.
-    }
-    try {
-      // Generate embedding for the question text.
-      // Note: This performs sequential embedding generation. Consider batching OpenAI API calls for better performance on large datasets.
-      const embedding = await getEmbedding(q.question);
-      // Only proceed if embedding generation was successful.
-      if (embedding.length > 0) {
-        // Construct the vector object for Pinecone.
-        vectors.push({
-          id: q.id, // Use Firestore document ID as the vector ID.
-          values: embedding, // The generated embedding vector.
-          metadata: {
-            // Include relevant metadata for filtering and display.
-            title: q.question.substring(0, 140), // Truncated title for potential display.
-            siteId: currentSiteId, // Site ID for filtering search results.
-          },
-        });
-      }
-    } catch (error) {
-      // Log errors during embedding generation but continue with other questions.
-      console.error(
-        `Failed to generate embedding for question ID ${q.id}:`,
-        error,
-      );
-    }
-  }
+  // Filter out invalid questions
+  const validQuestions = questions.filter(
+    (q) => q.id && q.question && typeof q.question === 'string',
+  );
 
-  // If no valid vectors were generated, exit early.
-  if (vectors.length === 0) {
-    console.log('No valid embeddings generated for upsert in this batch.');
+  if (validQuestions.length === 0) {
+    console.warn('No valid questions to process for embeddings.');
     return;
   }
 
-  console.log(
-    `Attempting to upsert ${vectors.length} vectors into Pinecone index: ${currentPineconeIndexName}`,
-  );
+  // Extract texts and question objects for batched processing
+  const textsToEmbed = validQuestions.map((q) => q.question);
 
   try {
-    // Upsert vectors to Pinecone in batches to avoid exceeding request size limits.
-    const batchSize = 100; // Pinecone recommends batch sizes of 100 or fewer.
+    // Generate embeddings for all questions in a single batch
+    console.log(
+      `Generating embeddings for ${textsToEmbed.length} questions in a batch...`,
+    );
+    const embeddings = await getBatchEmbeddings(textsToEmbed);
+
+    // Prepare vectors for upserting
+    const vectors = [];
+    for (let i = 0; i < validQuestions.length; i++) {
+      const q = validQuestions[i];
+      const embedding = embeddings[i];
+
+      // Only proceed if embedding generation was successful
+      if (embedding && embedding.length > 0) {
+        // Construct the vector object for Pinecone
+        vectors.push({
+          id: q.id, // Use Firestore document ID as the vector ID
+          values: embedding, // The generated embedding vector
+          metadata: {
+            // Include relevant metadata for filtering and display
+            title: q.question.substring(0, 140), // Truncated title for potential display
+            siteId: currentSiteId, // Site ID for filtering search results
+          },
+        });
+      }
+    }
+
+    // If no valid vectors were generated, exit early.
+    if (vectors.length === 0) {
+      console.log('No valid embeddings generated for upsert in this batch.');
+      return;
+    }
+
+    console.log(
+      `Attempting to upsert ${vectors.length} vectors into Pinecone index: ${currentPineconeIndexName}`,
+    );
+
+    // Upsert vectors to Pinecone in batches
+    const batchSize = 100; // Pinecone recommends batch sizes of 100 or fewer
     for (let i = 0; i < vectors.length; i += batchSize) {
       const batch = vectors.slice(i, i + batchSize);
-      // Perform the upsert operation for the current batch.
+      // Perform the upsert operation for the current batch
       await pineconeIndex.upsert(batch);
       console.log(
         `Upserted batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(vectors.length / batchSize)} (size: ${batch.length}) into Pinecone.`,
       );
     }
   } catch (error) {
-    // Log and rethrow errors encountered during the Pinecone upsert operation.
+    // Log and rethrow errors encountered during the Pinecone upsert operation
     console.error('Error upserting embeddings to Pinecone:', error);
     throw error;
   }
@@ -485,17 +528,18 @@ async function getQuestionsBatch(
 /**
  * Finds related questions for a single question using Pinecone vector search.
  * Generates an embedding for the input question text, queries Pinecone filtering by the current `siteId`,
- * fetches titles for the resulting matches from Firestore, and returns the top related questions.
+ * includes metadata (truncated title) in the results, filters results by similarity score
+ * and unique truncated title (compared to source's metadata title, if found), and returns the top 5 related questions.
  * @param {string} questionId - The ID of the source question (used to filter itself from results).
  * @param {string} questionText - The text of the source question to find related questions for.
- * @param {number} [topK=6] - The number of results to fetch from Pinecone (slightly more than needed to account for self-filtering).
+ * @param {number} [resultsLimit=5] - The maximum number of related questions to return.
  * @returns {Promise<RelatedQuestion[]>} A promise resolving to an array of related questions ({ id, title, similarity }).
  * @throws {Error} If Pinecone index is not available or SITE_ID is missing.
  */
-async function findRelatedQuestionsPinecone(
+export async function findRelatedQuestionsPinecone(
   questionId: string,
   questionText: string,
-  topK: number = 6, // Fetch topK (e.g., 6) to ensure topK-1 (e.g., 5) results after self-filtering.
+  resultsLimit: number = 5,
 ): Promise<RelatedQuestion[]> {
   // Ensure required clients and configuration are ready.
   await initializeClients();
@@ -509,11 +553,13 @@ async function findRelatedQuestionsPinecone(
     );
   }
 
+  // Constants for filtering
+  const topK = 20; // Request more initial candidates from Pinecone
+  const similarityThreshold = 0.62; // Minimum similarity score
+
   let queryEmbedding: number[];
   try {
-    // Generate the embedding for the input question text.
     queryEmbedding = await getEmbedding(questionText);
-    // Handle cases where embedding generation fails.
     if (queryEmbedding.length === 0) {
       console.warn(
         `Could not generate embedding for question ID ${questionId}. Skipping search.`,
@@ -525,20 +571,38 @@ async function findRelatedQuestionsPinecone(
       `Embedding generation failed for query ${questionId}:`,
       error,
     );
-    return []; // Cannot perform search without the query embedding.
+    return [];
   }
 
-  console.log(
-    `Querying Pinecone for questions related to ID: ${questionId}, filtering for siteId: ${currentSiteId}`,
-  );
   try {
-    // Construct the Pinecone query object.
+    // Fetch the source question's metadata (specifically its truncated title) from Pinecone
+    // This is needed for the exact title comparison later.
+    let sourceMetadataTitle: string | null = null;
+    try {
+      const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
+      const sourceRecord = sourceFetchResponse.records[questionId];
+      if (
+        sourceRecord?.metadata?.title &&
+        typeof sourceRecord.metadata.title === 'string'
+      ) {
+        sourceMetadataTitle = sourceRecord.metadata.title;
+      } else {
+        console.warn(
+          `Could not fetch or find metadata title for source question ${questionId} in Pinecone. Proceeding without exact title filtering.`,
+        );
+      }
+    } catch (fetchError) {
+      console.warn(
+        `Error fetching source question ${questionId} metadata from Pinecone: ${fetchError}. Proceeding without exact title filtering.`,
+      );
+    }
+
+    // Construct the Pinecone query object, now including metadata.
     const pineconeQuery = {
-      vector: queryEmbedding, // The embedding of the source question.
-      topK: topK, // Number of nearest neighbors to retrieve.
-      includeMetadata: false, // Metadata (like title) is fetched from Firestore later for freshness.
-      includeValues: false, // Vector values are not needed in the response.
-      // Filter results to only include vectors matching the current siteId.
+      vector: queryEmbedding,
+      topK: topK,
+      includeMetadata: true,
+      includeValues: false,
       filter: { siteId: { $eq: currentSiteId } },
     };
 
@@ -546,73 +610,62 @@ async function findRelatedQuestionsPinecone(
     const queryResponse = await pineconeIndex.query(pineconeQuery);
 
     const matches = queryResponse.matches || [];
-    console.log(
-      `Pinecone returned ${matches.length} potential matches for ${questionId}.`,
-    );
 
-    // Process the matches: filter out the source question and prepare for title fetching.
+    // Process the matches: filter out source, apply similarity threshold, and filter by exact metadata title match.
     const related: RelatedQuestion[] = [];
-    const idsToFetch: string[] = []; // Store IDs of potential related questions.
-    const scores: { [id: string]: number } = {}; // Store similarity scores keyed by ID.
+    const seenTitles = new Map<string, { index: number; similarity: number }>(); // Track seen titles and their highest score
 
     for (const match of matches) {
-      // Exclude the source question itself from the results.
-      if (match.id !== questionId && match.score !== undefined) {
-        idsToFetch.push(match.id);
-        scores[match.id] = match.score; // Pinecone score represents similarity (cosine).
-      }
-    }
+      const metadataTitle = match.metadata?.title;
 
-    // If no relevant matches remain after filtering, return empty array.
-    if (idsToFetch.length === 0) {
-      console.log(
-        `No relevant matches found for ${questionId} after filtering self.`,
-      );
-      return [];
-    }
-
-    // Fetch titles for the identified related question IDs from Firestore.
-    console.log(
-      `Fetching titles from Firestore for ${idsToFetch.length} related IDs...`,
-    );
-    const titlesMap = new Map<string, string>();
-    // Fetch titles individually.
-    // @TODO: Optimize by implementing batch title fetching in getAnswerTitle or a new utility function.
-    for (const id of idsToFetch) {
-      try {
-        const title = await getAnswerTitle(id); // Assumes getAnswerTitle fetches one title.
-        if (title) {
-          titlesMap.set(id, title);
-        } else {
-          // Log if a title couldn't be found for a matched ID.
-          console.warn(`Could not find title for related question ID: ${id}`);
+      // Apply filters: not self, score threshold, metadata title exists, and title doesn't match source's metadata title.
+      if (
+        match.id !== questionId &&
+        match.score !== undefined &&
+        match.score >= similarityThreshold &&
+        metadataTitle &&
+        typeof metadataTitle === 'string' // Ensure title exists in metadata
+      ) {
+        if (!sourceMetadataTitle || metadataTitle !== sourceMetadataTitle) {
+          // Check if we've seen this exact title before
+          if (seenTitles.has(metadataTitle)) {
+            // We've seen this title before - check if this one has a higher score
+            const existingEntry = seenTitles.get(metadataTitle)!;
+            if (match.score > existingEntry.similarity) {
+              // This one has a higher score - replace the existing entry
+              related[existingEntry.index] = {
+                id: match.id,
+                title: metadataTitle,
+                similarity: match.score,
+              };
+              seenTitles.set(metadataTitle, {
+                index: existingEntry.index,
+                similarity: match.score,
+              });
+            }
+            // If the existing entry has a higher score, do nothing
+          } else {
+            // New unique title - add it
+            const newIndex = related.length;
+            related.push({
+              id: match.id,
+              title: metadataTitle, // Use title from metadata
+              similarity: match.score,
+            });
+            seenTitles.set(metadataTitle, {
+              index: newIndex,
+              similarity: match.score,
+            });
+          }
         }
-      } catch (error) {
-        // Log errors during title fetching but continue with others.
-        console.error(`Error fetching title for related ID ${id}:`, error);
       }
     }
 
-    // Construct the final list of related questions using the fetched titles and stored scores.
-    for (const id of idsToFetch) {
-      const title = titlesMap.get(id);
-      // Only include questions for which a title was successfully fetched.
-      if (title) {
-        related.push({
-          id: id,
-          title: title,
-          similarity: scores[id],
-        });
-      }
-    }
-
-    // Sort the final list by similarity score in descending order.
+    // Sort the final filtered list by similarity score in descending order.
     related.sort((a, b) => b.similarity - a.similarity);
-    console.log(
-      `Found ${related.length} related questions for ${questionId} after fetching titles.`,
-    );
-    // Return the top N related questions (e.g., 5 if topK was 6).
-    return related.slice(0, topK - 1);
+
+    // Return the top N related questions based on the resultsLimit.
+    return related.slice(0, resultsLimit);
   } catch (error) {
     // Log and handle errors during the Pinecone query process.
     console.error(
@@ -626,8 +679,8 @@ async function findRelatedQuestionsPinecone(
 /**
  * Orchestrates the batch update process for related questions.
  * Fetches questions in batches, upserts their embeddings to Pinecone,
- * finds related questions for each using Pinecone, updates the results in Firestore,
- * and manages progress tracking using a dedicated Firestore document.
+ * finds related questions for each using Pinecone, logs before/after state,
+ * updates the results in Firestore, and manages progress tracking.
  * @param {number} batchSize - The number of questions to process in each batch.
  * @throws {Error} If client initialization fails, Pinecone index is unavailable, or critical errors occur during processing.
  */
@@ -746,18 +799,40 @@ export async function updateRelatedQuestionsBatch(
       continue;
     }
 
+    // Capture the 'before' state from the fetched data
+    const previousRelatedQuestions: RelatedQuestion[] =
+      question.relatedQuestionsV2 || []; // Use existing data from the batch fetch
+
     try {
       // Find related questions using Pinecone search.
-      const relatedQuestions = await findRelatedQuestionsPinecone(
+      const currentRelatedQuestions = await findRelatedQuestionsPinecone(
         question.id,
         question.question,
-        6, // Request 6 to get top 5 after self-filtering.
+        5,
       );
+
+      // --- Debug Logging: Before and After (Batch Item) ---
+      console.log(`--- Related Questions Update Debug (Batch Item) ---`);
+      console.log(
+        `Question: ${question.id}: ${question.question.slice(0, 120)}`,
+      );
+      console.log(`Previous Related (${previousRelatedQuestions.length}):`);
+      previousRelatedQuestions.forEach((q) =>
+        console.log(`  - ${q.id}: ${q.title.slice(0, 120)}`),
+      );
+      console.log(`Current Related (${currentRelatedQuestions.length}):`);
+      currentRelatedQuestions.forEach((q) =>
+        console.log(
+          `  - ${q.id}: ${q.title.slice(0, 120)} (Score: ${q.similarity.toFixed(4)})`,
+        ),
+      );
+      console.log(`--- End Debug ---`);
+      // --- End Debug Logging ---
 
       // Update the corresponding Firestore document with the new list of related questions.
       // This overwrites the existing `relatedQuestionsV2` field.
       await db!.collection(getAnswersCollectionName()).doc(question.id).update({
-        relatedQuestionsV2: relatedQuestions,
+        relatedQuestionsV2: currentRelatedQuestions, // <-- Use currentRelatedQuestions
       });
       updatedCount++;
     } catch (error) {
@@ -806,14 +881,15 @@ export async function updateRelatedQuestionsBatch(
 /**
  * Updates related questions for a specific question ID on demand.
  * Fetches the question text, ensures its embedding exists in Pinecone (upserting if necessary),
- * finds related questions via Pinecone, and updates the Firestore document asynchronously.
+ * finds related questions via Pinecone (using the updated logic), logs before/after,
+ * and updates the Firestore document asynchronously.
  * @param {string} questionId - The ID of the question to update related questions for.
- * @returns {Promise<RelatedQuestion[]>} A promise resolving to the newly calculated list of related questions.
+ * @returns {Promise<{ previous: RelatedQuestion[]; current: RelatedQuestion[] }>} A promise resolving to an object containing the previous and newly calculated lists of related questions.
  * @throws {Error} If client initialization fails, Pinecone index is unavailable, the question is not found, or embedding fails.
  */
 export async function updateRelatedQuestions(
   questionId: string,
-): Promise<RelatedQuestion[]> {
+): Promise<{ previous: RelatedQuestion[]; current: RelatedQuestion[] }> {
   // Ensure database and clients are ready.
   checkDbAvailable();
   try {
@@ -837,6 +913,7 @@ export async function updateRelatedQuestions(
   // 1. Fetch the target question text from Firestore.
   console.log(`Updating related questions for single ID: ${questionId}`);
   let questionText: string;
+  let previousRelatedQuestions: RelatedQuestion[] = [];
   try {
     const questionDoc = await db!
       .collection(getAnswersCollectionName())
@@ -852,6 +929,8 @@ export async function updateRelatedQuestions(
       throw new Error(`Question data or text missing for ID: ${questionId}`);
     }
     questionText = questionData.question;
+    // Capture the current related questions before calculating new ones
+    previousRelatedQuestions = questionData.relatedQuestionsV2 || [];
   } catch (error) {
     console.error(
       `Failed to fetch question ${questionId} from Firestore:`,
@@ -888,24 +967,24 @@ export async function updateRelatedQuestions(
     );
   }
 
-  // 3. Find related questions using Pinecone search.
+  // 3. Find related questions using Pinecone search (now with new logic).
   console.log(`Finding related questions via Pinecone for ${questionId}...`);
-  const relatedQuestions = await findRelatedQuestionsPinecone(
+  const currentRelatedQuestions = await findRelatedQuestionsPinecone(
     questionId,
     questionText,
-    6, // Request 6 to get top 5 after filtering self.
+    5, // Explicitly pass the desired final limit (5)
   );
 
   // 4. Update the Firestore document asynchronously (fire and forget).
   // This allows the function to return the calculated list quickly without waiting for the DB write.
   console.log(
-    `Updating Firestore asynchronously for ${questionId} with ${relatedQuestions.length} related questions.`,
+    `Updating Firestore asynchronously for ${questionId} with ${currentRelatedQuestions.length} related questions.`,
   );
   db!
     .collection(getAnswersCollectionName())
     .doc(questionId)
     .update({
-      relatedQuestionsV2: relatedQuestions, // Overwrite with the newly found list.
+      relatedQuestionsV2: currentRelatedQuestions, // Overwrite with the newly found list.
     })
     .then(() => {
       // Log success of the async update.
@@ -920,6 +999,9 @@ export async function updateRelatedQuestions(
       // Note: This error occurs after the function has already returned. Consider more robust error handling if needed.
     });
 
-  // Return the calculated list of related questions immediately.
-  return relatedQuestions;
+  // Return the previous and current lists of related questions immediately.
+  return {
+    previous: previousRelatedQuestions,
+    current: currentRelatedQuestions,
+  };
 }
