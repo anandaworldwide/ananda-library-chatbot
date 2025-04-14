@@ -47,6 +47,67 @@ let currentPineconeIndexName: string | null = null;
 // Initialization flag to prevent redundant concurrent initializations.
 let isInitializing = false;
 
+// Firestore operation timeout (ms) for timing out long-running operations
+const FIRESTORE_OPERATION_TIMEOUT = 14000; // 14 seconds (just under Vercel's 15s limit)
+
+/**
+ * Wrapper for Firestore operations with timeout and detailed error logging
+ * @param operation - Function that performs a Firestore operation
+ * @param operationName - Name of the operation for logging
+ * @param docInfo - Information about the document(s) involved
+ * @returns Promise with the operation result
+ */
+async function performFirestoreOperation<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  docInfo: string,
+): Promise<T> {
+  try {
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(
+          new Error(
+            `Firestore ${operationName} timed out after ${FIRESTORE_OPERATION_TIMEOUT}ms`,
+          ),
+        );
+      }, FIRESTORE_OPERATION_TIMEOUT);
+    });
+
+    // Race the operation against the timeout
+    const result = await Promise.race([operation(), timeoutPromise]);
+    return result as T;
+  } catch (error) {
+    // Enhanced error logging with operation details
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+
+    console.error(`Firestore ${operationName} failed for ${docInfo}:`, {
+      error: errorMessage,
+      stack: errorStack,
+      documentInfo: docInfo,
+      operation: operationName,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Add diagnostics for common Firestore issues
+    if (
+      errorMessage.includes('DEADLINE_EXCEEDED') ||
+      errorMessage.includes('timeout')
+    ) {
+      console.error(`FIRESTORE TIMEOUT DETECTED: The ${operationName} operation likely exceeded Firestore's deadline. 
+        This could be due to:
+        1. Network latency between your server and Firestore
+        2. Firestore instance under heavy load
+        3. Complex queries or large document operations
+        4. Rate limiting on Firestore
+        Consider adding circuit breakers or batch processing to handle this scenario.`);
+    }
+
+    throw error;
+  }
+}
+
 /**
  * Initializes OpenAI and Pinecone clients if they haven't been already.
  * Ensures required API keys and SITE_ID environment variables are present.
@@ -472,56 +533,74 @@ export async function getRelatedQuestions(
 // --- Batch Processing ---
 
 /**
- * Fetches a batch of question documents from Firestore for processing.
- * Uses Firestore pagination based on the document ID (`startAfter`).
- * @param {string | null} lastProcessedId - The ID of the last document processed in the previous batch, or null to start from the beginning.
- * @param {number} batchSize - The maximum number of documents to fetch.
- * @returns {Promise<Answer[]>} A promise resolving to an array of fetched Answer objects.
- * @throws {Error} If Firestore query fails.
+ * Fetches a batch of questions from Firestore, starting after the specified lastProcessedId.
+ * @param {string | null} lastProcessedId - The ID of the last successfully processed question, or null to start from the beginning.
+ * @param {number} batchSize - The number of questions to fetch in this batch.
+ * @returns {Promise<Answer[]>} A promise resolving to an array of Answer objects from Firestore.
  */
 async function getQuestionsBatch(
   lastProcessedId: string | null,
   batchSize: number,
 ): Promise<Answer[]> {
-  // Ensure Firestore DB is available.
   checkDbAvailable();
-  const answersCollection = getAnswersCollectionName();
-
   console.log(
-    `Fetching question batch. Collection: ${answersCollection}, Start After ID: ${lastProcessedId}, Size: ${batchSize}`,
+    `Fetching batch of ${batchSize} questions${
+      lastProcessedId ? ` after ID ${lastProcessedId}` : ' from start'
+    }...`,
   );
 
-  // Construct the Firestore query.
-  let query = db!
-    .collection(answersCollection)
-    // Order by document ID for consistent pagination.
-    .orderBy(firebase.firestore.FieldPath.documentId())
-    .limit(batchSize); // Limit the number of documents fetched.
-
-  // If `lastProcessedId` is provided, start the query after that document.
-  if (lastProcessedId) {
-    query = query.startAfter(lastProcessedId);
-  }
-
   try {
-    const snapshot = await query.get();
+    // Build the base query for the answers collection.
+    let query = db!
+      .collection(getAnswersCollectionName())
+      // Order by document ID for consistent pagination
+      .orderBy(firebase.firestore.FieldPath.documentId());
 
-    // If the query returns no documents, log and return empty array.
-    if (snapshot.empty) {
-      console.log('No more documents found in the batch query.');
-      return [];
+    // If a lastProcessedId is provided, start the query after that document.
+    if (lastProcessedId) {
+      // Get a reference to the document to start after.
+      const lastProcessedDoc = await performFirestoreOperation(
+        () =>
+          db!.collection(getAnswersCollectionName()).doc(lastProcessedId).get(),
+        'document get for cursor',
+        `lastProcessedId: ${lastProcessedId}`,
+      );
+
+      // Handle case where the lastProcessedId document no longer exists.
+      if (!lastProcessedDoc.exists) {
+        console.warn(
+          `Last processed question ID ${lastProcessedId} no longer exists. Starting from the beginning.`,
+        );
+      } else {
+        // Add the startAfter cursor to the query.
+        query = query.startAfter(lastProcessedDoc);
+      }
     }
 
-    // Map Firestore documents to Answer objects.
-    const questions: Answer[] = snapshot.docs.map(
-      (doc) => ({ id: doc.id, ...doc.data() }) as Answer,
+    // Limit the query to the specified batch size.
+    query = query.limit(batchSize);
+
+    // Execute the query with error handling
+    const querySnapshot = await performFirestoreOperation(
+      () => query.get(),
+      'batch query',
+      `batchSize: ${batchSize}, after: ${lastProcessedId || 'START'}`,
     );
-    console.log(`Fetched ${questions.length} questions.`);
+
+    // Extract the complete question data from the query results.
+    const questions = querySnapshot.docs.map(
+      (doc) =>
+        ({
+          ...doc.data(),
+          id: doc.id,
+        }) as Answer,
+    );
+
+    console.log(`Successfully fetched ${questions.length} questions.`);
     return questions;
   } catch (error) {
-    // Log and propagate errors during Firestore query execution.
-    console.error('Error executing batch query in getQuestionsBatch:', error);
-    throw error;
+    console.error('Error during question batch retrieval:', error);
+    throw error; // Re-throw the error to be handled by the caller.
   }
 }
 
@@ -677,12 +756,10 @@ export async function findRelatedQuestionsPinecone(
 }
 
 /**
- * Orchestrates the batch update process for related questions.
- * Fetches questions in batches, upserts their embeddings to Pinecone,
- * finds related questions for each using Pinecone, logs before/after state,
- * updates the results in Firestore, and manages progress tracking.
- * @param {number} batchSize - The number of questions to process in each batch.
- * @throws {Error} If client initialization fails, Pinecone index is unavailable, or critical errors occur during processing.
+ * Updates related questions for multiple documents in batches.
+ * @param {number} batchSize - The size of each batch to process.
+ * @returns {Promise<void>} A promise that resolves when the batch update is complete.
+ * @throws {Error} If there are critical errors during the update process.
  */
 export async function updateRelatedQuestionsBatch(
   batchSize: number,
@@ -724,7 +801,12 @@ export async function updateRelatedQuestionsBatch(
   let lastProcessedId: string | null = null;
   try {
     // Attempt to read the last processed ID from the progress document.
-    const progressDoc = await progressDocRef.get();
+    const progressDoc = await performFirestoreOperation(
+      () => progressDocRef.get(),
+      'progress document get',
+      `progressDocId: ${progressDocId}`,
+    );
+
     lastProcessedId = progressDoc.exists
       ? progressDoc.data()?.lastProcessedId
       : null;
@@ -756,7 +838,12 @@ export async function updateRelatedQuestionsBatch(
     lastProcessedId = null; // Reset progress marker to null.
     try {
       // Persist the reset progress marker to Firestore.
-      await progressDocRef.set({ lastProcessedId: null });
+      await performFirestoreOperation(
+        () => progressDocRef.set({ lastProcessedId: null }),
+        'progress reset',
+        `progressDocId: ${progressDocId}`,
+      );
+
       // Fetch the first batch again from the beginning.
       questions = await getQuestionsBatch(null, batchSize);
     } catch (error) {
@@ -831,9 +918,15 @@ export async function updateRelatedQuestionsBatch(
 
       // Update the corresponding Firestore document with the new list of related questions.
       // This overwrites the existing `relatedQuestionsV2` field.
-      await db!.collection(getAnswersCollectionName()).doc(question.id).update({
-        relatedQuestionsV2: currentRelatedQuestions, // <-- Use currentRelatedQuestions
-      });
+      await performFirestoreOperation(
+        () =>
+          db!.collection(getAnswersCollectionName()).doc(question.id).update({
+            relatedQuestionsV2: currentRelatedQuestions, // <-- Use currentRelatedQuestions
+          }),
+        'document update',
+        `questionId: ${question.id}`,
+      );
+
       updatedCount++;
     } catch (error) {
       // Log errors during individual question processing but continue with the batch.
@@ -859,7 +952,11 @@ export async function updateRelatedQuestionsBatch(
       );
       try {
         // Persist the ID of the last successfully processed question in this batch.
-        await progressDocRef.set({ lastProcessedId: lastQuestionInBatch.id });
+        await performFirestoreOperation(
+          () => progressDocRef.set({ lastProcessedId: lastQuestionInBatch.id }),
+          'progress update',
+          `lastProcessedId: ${lastQuestionInBatch.id}`,
+        );
       } catch (error) {
         // Log errors during progress update, but don't necessarily halt the entire process.
         console.error('Failed to update progress document:', error);
@@ -915,10 +1012,13 @@ export async function updateRelatedQuestions(
   let questionText: string;
   let previousRelatedQuestions: RelatedQuestion[] = [];
   try {
-    const questionDoc = await db!
-      .collection(getAnswersCollectionName())
-      .doc(questionId)
-      .get();
+    // Use the performFirestoreOperation utility for better error handling and timeout detection
+    const questionDoc = await performFirestoreOperation(
+      () => db!.collection(getAnswersCollectionName()).doc(questionId).get(),
+      'document get',
+      `questionId: ${questionId}`,
+    );
+
     // Handle case where the specified question document doesn't exist.
     if (!questionDoc.exists) {
       throw new Error(`Question not found: ${questionId}`);
@@ -975,31 +1075,31 @@ export async function updateRelatedQuestions(
     5, // Explicitly pass the desired final limit (5)
   );
 
-  // 4. Update the Firestore document asynchronously (fire and forget).
-  // This allows the function to return the calculated list quickly without waiting for the DB write.
+  // 4. Update the Firestore document with proper error handling
   console.log(
-    `Updating Firestore asynchronously for ${questionId} with ${currentRelatedQuestions.length} related questions.`,
+    `Updating Firestore for ${questionId} with ${currentRelatedQuestions.length} related questions.`,
   );
-  db!
-    .collection(getAnswersCollectionName())
-    .doc(questionId)
-    .update({
-      relatedQuestionsV2: currentRelatedQuestions, // Overwrite with the newly found list.
-    })
-    .then(() => {
-      // Log success of the async update.
-      console.log(`Firestore update successful for ${questionId}`);
-    })
-    .catch((error) => {
-      // Log any errors during the async Firestore update.
-      console.error(
-        `Error during asynchronous Firestore update for ${questionId}:`,
-        error,
-      );
-      // Note: This error occurs after the function has already returned. Consider more robust error handling if needed.
-    });
 
-  // Return the previous and current lists of related questions immediately.
+  try {
+    // Use the performFirestoreOperation utility with a timeout
+    await performFirestoreOperation(
+      () =>
+        db!.collection(getAnswersCollectionName()).doc(questionId).update({
+          relatedQuestionsV2: currentRelatedQuestions, // Overwrite with the newly found list.
+        }),
+      'document update',
+      `questionId: ${questionId}`,
+    );
+    console.log(`Firestore update successful for ${questionId}`);
+  } catch (error) {
+    // Log but continue since we have the calculated results
+    console.error(`Error updating Firestore for ${questionId}:`, error);
+    console.warn(
+      `Returning calculated results despite Firestore update failure for ${questionId}`,
+    );
+  }
+
+  // Return the previous and current lists of related questions.
   return {
     previous: previousRelatedQuestions,
     current: currentRelatedQuestions,
