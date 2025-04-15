@@ -11,10 +11,11 @@
 const mockDB = {
   collection: jest.fn(),
   batch: jest.fn().mockImplementation(() => {
+    // Simplified implementation
     return {
       set: jest.fn(),
-      // @ts-ignore - Mock implementation doesn't need to match exact return type
-      commit: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn(), // Ensure update is present
+      commit: jest.fn().mockImplementation(() => Promise.resolve()),
     };
   }),
   doc: jest.fn(),
@@ -506,6 +507,19 @@ describe('Pinecone Integration with Site ID Filtering', () => {
         .fn()
         .mockReturnValue({ startAfter: mockStartAfter, limit: mockLimit });
 
+      // Create a mock batch with update/commit functions
+      const mockBatchUpdate = jest.fn();
+      const mockBatchCommit = jest
+        .fn()
+        .mockImplementation(() => Promise.resolve());
+      const mockBatch = {
+        update: mockBatchUpdate,
+        commit: mockBatchCommit,
+      };
+
+      // Mock the batch method at the DB level
+      mockDB.batch = jest.fn().mockReturnValue(mockBatch);
+
       // Combine into the answers collection mock
       const mockAnswersCollection = {
         doc: mockDoc,
@@ -542,8 +556,11 @@ describe('Pinecone Integration with Site ID Filtering', () => {
         expect(call[0]).toHaveProperty('filter.siteId.$eq', 'test-site-1');
       });
 
-      // Verify Firestore documents were updated
-      expect(mockUpdate).toHaveBeenCalledTimes(mockDocs.length);
+      // Verify Firestore batch update was called for each document
+      expect(mockBatchUpdate).toHaveBeenCalledTimes(mockDocs.length);
+
+      // Verify batch commit was called once
+      expect(mockBatchCommit).toHaveBeenCalledTimes(1);
 
       // Verify progress was updated
       expect(mockProgressSet).toHaveBeenCalledWith({
