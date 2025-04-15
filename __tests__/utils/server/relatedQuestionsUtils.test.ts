@@ -562,7 +562,7 @@ describe('Pinecone Integration with Site ID Filtering', () => {
       // Verify batch commit was called once
       expect(mockBatchCommit).toHaveBeenCalledTimes(1);
 
-      // Verify progress was updated
+      // Verify progress was updated.
       expect(mockProgressSet).toHaveBeenCalledWith({
         lastProcessedId: 'site1-q2',
       });
