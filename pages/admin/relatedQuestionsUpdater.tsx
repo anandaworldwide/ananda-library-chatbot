@@ -37,12 +37,28 @@ const RelatedQuestionsUpdater = ({
         },
       );
 
-      const data = await response.json();
-
+      // Check if the response is not OK (includes 4xx, 5xx errors)
       if (!response.ok) {
-        throw new Error(data.message || `HTTP error ${response.status}`);
+        let errorMessage = `HTTP error ${response.status}`;
+        // Specifically handle gateway timeouts (504)
+        if (response.status === 504) {
+          errorMessage =
+            'The update process timed out (504 Gateway Timeout). This might happen with large batch sizes or during high server load.';
+        } else {
+          // Try to parse JSON for other errors, but anticipate failure
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage; // Use message from response if available
+          } catch (parseError) {
+            // If JSON parsing fails, stick with the HTTP status message
+            console.error('Failed to parse error response JSON:', parseError);
+          }
+        }
+        throw new Error(errorMessage); // Throw an error with the determined message
       }
 
+      // If response IS ok, parse the JSON
+      const data = await response.json();
       setApiMessage(data.message || 'Update initiated successfully.');
     } catch (error: any) {
       console.error('Error triggering related questions update:', error);
