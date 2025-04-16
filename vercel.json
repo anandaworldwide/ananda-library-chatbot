@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/relatedQuestions?updateBatch=50",
-      "schedule": "0 * * * *"
+      "path": "/api/relatedQuestions?updateBatch=100",
+      "schedule": "0 */2 * * *"
     }
   ],
   "builds": [

@@ -1,3 +1,6 @@
+// Import OpenAI Node shim for Node.js environment
+import 'openai/shims/node';
+
 // Mock Firebase before any imports
 jest.mock('@/services/firebase', () => {
   const mockCollection = jest.fn().mockReturnThis();
