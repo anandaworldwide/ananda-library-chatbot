@@ -512,16 +512,68 @@ export async function upsertEmbeddings(
       // Perform the upsert operation for the current batch
       const batchNum = Math.floor(i / batchSize) + 1;
       const totalBatches = Math.ceil(vectors.length / batchSize);
-      console.time(
-        `Pinecone Upsert Batch ${batchNum}/${totalBatches} (${batch.length} vectors)`,
-      );
-      await pineconeIndex.upsert(batch);
-      console.timeEnd(
-        `Pinecone Upsert Batch ${batchNum}/${totalBatches} (${batch.length} vectors)`,
-      );
-      console.log(
-        `Upserted batch ${batchNum}/${totalBatches} (size: ${batch.length}) into Pinecone.`,
-      );
+
+      // Add retry logic for Pinecone upsert
+      const maxUpsertRetries = 3;
+      let upsertRetryDelay = 1000; // Start with 1 second delay
+      let upsertSuccess = false;
+
+      for (let attempt = 1; attempt <= maxUpsertRetries; attempt++) {
+        try {
+          console.time(
+            `Pinecone Upsert Batch ${batchNum}/${totalBatches} (${batch.length} vectors) - Attempt ${attempt}`,
+          );
+          await pineconeIndex.upsert(batch);
+          console.timeEnd(
+            `Pinecone Upsert Batch ${batchNum}/${totalBatches} (${batch.length} vectors) - Attempt ${attempt}`,
+          );
+          console.log(
+            `Upserted batch ${batchNum}/${totalBatches} (size: ${batch.length}) into Pinecone.`,
+          );
+          upsertSuccess = true;
+          break; // Exit retry loop on success
+        } catch (upsertError: any) {
+          console.timeEnd(
+            `Pinecone Upsert Batch ${batchNum}/${totalBatches} (${batch.length} vectors) - Attempt ${attempt}`,
+          );
+
+          // Check for retryable errors
+          const errorMessage = String(upsertError?.message || upsertError);
+          const causedBy = upsertError?.cause
+            ? String(upsertError.cause?.message || upsertError.cause)
+            : '';
+          const isRetryableError =
+            errorMessage.includes('getaddrinfo') ||
+            errorMessage.includes('EBUSY') ||
+            errorMessage.includes('ECONNRESET') ||
+            errorMessage.includes('ETIMEDOUT') ||
+            errorMessage.includes('failed to reach Pinecone') ||
+            causedBy.includes('getaddrinfo') ||
+            causedBy.includes('EBUSY');
+
+          if (isRetryableError && attempt < maxUpsertRetries) {
+            console.log(
+              `Retrying upsert for batch ${batchNum}/${totalBatches} after ${upsertRetryDelay}ms (attempt ${attempt}/${maxUpsertRetries})...`,
+            );
+            await new Promise((resolve) =>
+              setTimeout(resolve, upsertRetryDelay),
+            );
+            upsertRetryDelay *= 2; // Exponential backoff
+          } else {
+            console.error(
+              `Error upserting batch ${batchNum}/${totalBatches} to Pinecone (attempt ${attempt}/${maxUpsertRetries}):`,
+              upsertError,
+            );
+            throw upsertError; // Re-throw to be caught by outer try/catch
+          }
+        }
+      }
+
+      if (!upsertSuccess) {
+        throw new Error(
+          `All ${maxUpsertRetries} upsert attempts failed for batch ${batchNum}/${totalBatches}`,
+        );
+      }
     }
     console.timeEnd(`Pinecone Upsert Loop (${vectors.length} vectors)`); // End loop timer
   } catch (error) {
@@ -740,24 +792,74 @@ export async function findRelatedQuestionsPinecone(
     // Fetch the source question's metadata (specifically its truncated title) from Pinecone
     // This is needed for the exact title comparison later.
     let sourceMetadataTitle: string | null = null;
-    try {
-      console.time(`Pinecone Fetch Source Meta (${questionId})`);
-      const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
-      console.timeEnd(`Pinecone Fetch Source Meta (${questionId})`);
-      const sourceRecord = sourceFetchResponse.records[questionId];
-      if (
-        sourceRecord?.metadata?.title &&
-        typeof sourceRecord.metadata.title === 'string'
-      ) {
-        sourceMetadataTitle = sourceRecord.metadata.title;
-      } else {
-        console.warn(
-          `Could not fetch or find metadata title for source question ${questionId} in Pinecone. Proceeding without exact title filtering.`,
+
+    // Add retry logic for fetching source metadata
+    const maxMetadataRetries = 3;
+    let metadataRetryDelay = 1000; // Start with 1 second delay
+    let metadataFetchSuccess = false;
+
+    for (let attempt = 1; attempt <= maxMetadataRetries; attempt++) {
+      try {
+        console.time(
+          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
         );
+        const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
+        console.timeEnd(
+          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
+        );
+
+        const sourceRecord = sourceFetchResponse.records[questionId];
+        if (
+          sourceRecord?.metadata?.title &&
+          typeof sourceRecord.metadata.title === 'string'
+        ) {
+          sourceMetadataTitle = sourceRecord.metadata.title;
+        } else {
+          console.warn(
+            `Could not fetch or find metadata title for source question ${questionId} in Pinecone. Proceeding without exact title filtering.`,
+          );
+        }
+        metadataFetchSuccess = true;
+        break; // Exit retry loop on success
+      } catch (fetchError: any) {
+        console.timeEnd(
+          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
+        );
+
+        // Check for retryable errors (like DNS, connection, EBUSY)
+        const errorMessage = String(fetchError?.message || fetchError);
+        const causedBy = fetchError?.cause
+          ? String(fetchError.cause?.message || fetchError.cause)
+          : '';
+        const isRetryableError =
+          errorMessage.includes('getaddrinfo') ||
+          errorMessage.includes('EBUSY') ||
+          errorMessage.includes('ECONNRESET') ||
+          errorMessage.includes('ETIMEDOUT') ||
+          errorMessage.includes('failed to reach Pinecone') ||
+          causedBy.includes('getaddrinfo') ||
+          causedBy.includes('EBUSY');
+
+        if (isRetryableError && attempt < maxMetadataRetries) {
+          console.log(
+            `Retrying metadata fetch for ${questionId} after ${metadataRetryDelay}ms (attempt ${attempt}/${maxMetadataRetries})...`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, metadataRetryDelay),
+          );
+          metadataRetryDelay *= 2; // Exponential backoff
+        } else {
+          console.warn(
+            `Error fetching source question ${questionId} metadata from Pinecone (attempt ${attempt}/${maxMetadataRetries}): ${fetchError}. Proceeding without exact title filtering.`,
+          );
+          break; // Exit retry loop on non-retryable error or max retries
+        }
       }
-    } catch (fetchError) {
+    }
+
+    if (!metadataFetchSuccess) {
       console.warn(
-        `Error fetching source question ${questionId} metadata from Pinecone: ${fetchError}. Proceeding without exact title filtering.`,
+        `All ${maxMetadataRetries} metadata fetch attempts failed for ${questionId}. Continuing without metadata.`,
       );
     }
 
@@ -770,10 +872,57 @@ export async function findRelatedQuestionsPinecone(
       filter: { siteId: { $eq: currentSiteId } },
     };
 
-    // Execute the query against the Pinecone index.
-    console.time(`Pinecone Query (${questionId})`);
-    const queryResponse = await pineconeIndex.query(pineconeQuery);
-    console.timeEnd(`Pinecone Query (${questionId})`);
+    // Add retry logic for Pinecone query
+    const maxQueryRetries = 3;
+    let queryRetryDelay = 1000; // Start with 1 second delay
+    let queryResponse;
+    let querySuccess = false;
+
+    for (let attempt = 1; attempt <= maxQueryRetries; attempt++) {
+      try {
+        console.time(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
+        queryResponse = await pineconeIndex.query(pineconeQuery);
+        console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
+        querySuccess = true;
+        break; // Exit retry loop on success
+      } catch (queryError: any) {
+        console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
+
+        // Check for retryable errors
+        const errorMessage = String(queryError?.message || queryError);
+        const causedBy = queryError?.cause
+          ? String(queryError.cause?.message || queryError.cause)
+          : '';
+        const isRetryableError =
+          errorMessage.includes('getaddrinfo') ||
+          errorMessage.includes('EBUSY') ||
+          errorMessage.includes('ECONNRESET') ||
+          errorMessage.includes('ETIMEDOUT') ||
+          errorMessage.includes('failed to reach Pinecone') ||
+          causedBy.includes('getaddrinfo') ||
+          causedBy.includes('EBUSY');
+
+        if (isRetryableError && attempt < maxQueryRetries) {
+          console.log(
+            `Retrying Pinecone query for ${questionId} after ${queryRetryDelay}ms (attempt ${attempt}/${maxQueryRetries})...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, queryRetryDelay));
+          queryRetryDelay *= 2; // Exponential backoff
+        } else {
+          console.error(
+            `Error querying Pinecone for question ID ${questionId} (attempt ${attempt}/${maxQueryRetries}):`,
+            queryError,
+          );
+          throw queryError; // Re-throw to be caught by outer try/catch
+        }
+      }
+    }
+
+    if (!querySuccess || !queryResponse) {
+      throw new Error(
+        `All ${maxQueryRetries} Pinecone query attempts failed for ${questionId}`,
+      );
+    }
 
     const matches = queryResponse.matches || [];
 
@@ -895,24 +1044,74 @@ async function findRelatedQuestionsPineconeWithEmbedding(
   try {
     // Fetch the source question's metadata (specifically its truncated title) from Pinecone
     let sourceMetadataTitle: string | null = null;
-    try {
-      console.time(`Pinecone Fetch Source Meta (${questionId})`);
-      const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
-      console.timeEnd(`Pinecone Fetch Source Meta (${questionId})`);
-      const sourceRecord = sourceFetchResponse.records[questionId];
-      if (
-        sourceRecord?.metadata?.title &&
-        typeof sourceRecord.metadata.title === 'string'
-      ) {
-        sourceMetadataTitle = sourceRecord.metadata.title;
-      } else {
-        console.warn(
-          `Could not fetch or find metadata title for source question ${questionId} in Pinecone. Proceeding without exact title filtering.`,
+
+    // Add retry logic for fetching source metadata
+    const maxMetadataRetries = 3;
+    let metadataRetryDelay = 1000; // Start with 1 second delay
+    let metadataFetchSuccess = false;
+
+    for (let attempt = 1; attempt <= maxMetadataRetries; attempt++) {
+      try {
+        console.time(
+          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
         );
+        const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
+        console.timeEnd(
+          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
+        );
+
+        const sourceRecord = sourceFetchResponse.records[questionId];
+        if (
+          sourceRecord?.metadata?.title &&
+          typeof sourceRecord.metadata.title === 'string'
+        ) {
+          sourceMetadataTitle = sourceRecord.metadata.title;
+        } else {
+          console.warn(
+            `Could not fetch or find metadata title for source question ${questionId} in Pinecone. Proceeding without exact title filtering.`,
+          );
+        }
+        metadataFetchSuccess = true;
+        break; // Exit retry loop on success
+      } catch (fetchError: any) {
+        console.timeEnd(
+          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
+        );
+
+        // Check for retryable errors (like DNS, connection, EBUSY)
+        const errorMessage = String(fetchError?.message || fetchError);
+        const causedBy = fetchError?.cause
+          ? String(fetchError.cause?.message || fetchError.cause)
+          : '';
+        const isRetryableError =
+          errorMessage.includes('getaddrinfo') ||
+          errorMessage.includes('EBUSY') ||
+          errorMessage.includes('ECONNRESET') ||
+          errorMessage.includes('ETIMEDOUT') ||
+          errorMessage.includes('failed to reach Pinecone') ||
+          causedBy.includes('getaddrinfo') ||
+          causedBy.includes('EBUSY');
+
+        if (isRetryableError && attempt < maxMetadataRetries) {
+          console.log(
+            `Retrying metadata fetch for ${questionId} after ${metadataRetryDelay}ms (attempt ${attempt}/${maxMetadataRetries})...`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, metadataRetryDelay),
+          );
+          metadataRetryDelay *= 2; // Exponential backoff
+        } else {
+          console.warn(
+            `Error fetching source question ${questionId} metadata from Pinecone (attempt ${attempt}/${maxMetadataRetries}): ${fetchError}. Proceeding without exact title filtering.`,
+          );
+          break; // Exit retry loop on non-retryable error or max retries
+        }
       }
-    } catch (fetchError) {
+    }
+
+    if (!metadataFetchSuccess) {
       console.warn(
-        `Error fetching source question ${questionId} metadata from Pinecone: ${fetchError}. Proceeding without exact title filtering.`,
+        `All ${maxMetadataRetries} metadata fetch attempts failed for ${questionId}. Continuing without metadata.`,
       );
     }
 
@@ -925,10 +1124,57 @@ async function findRelatedQuestionsPineconeWithEmbedding(
       filter: { siteId: { $eq: currentSiteId } },
     };
 
-    // Execute the query against the Pinecone index.
-    console.time(`Pinecone Query (${questionId})`);
-    const queryResponse = await pineconeIndex.query(pineconeQuery);
-    console.timeEnd(`Pinecone Query (${questionId})`);
+    // Add retry logic for Pinecone query
+    const maxQueryRetries = 3;
+    let queryRetryDelay = 1000; // Start with 1 second delay
+    let queryResponse;
+    let querySuccess = false;
+
+    for (let attempt = 1; attempt <= maxQueryRetries; attempt++) {
+      try {
+        console.time(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
+        queryResponse = await pineconeIndex.query(pineconeQuery);
+        console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
+        querySuccess = true;
+        break; // Exit retry loop on success
+      } catch (queryError: any) {
+        console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
+
+        // Check for retryable errors
+        const errorMessage = String(queryError?.message || queryError);
+        const causedBy = queryError?.cause
+          ? String(queryError.cause?.message || queryError.cause)
+          : '';
+        const isRetryableError =
+          errorMessage.includes('getaddrinfo') ||
+          errorMessage.includes('EBUSY') ||
+          errorMessage.includes('ECONNRESET') ||
+          errorMessage.includes('ETIMEDOUT') ||
+          errorMessage.includes('failed to reach Pinecone') ||
+          causedBy.includes('getaddrinfo') ||
+          causedBy.includes('EBUSY');
+
+        if (isRetryableError && attempt < maxQueryRetries) {
+          console.log(
+            `Retrying Pinecone query for ${questionId} after ${queryRetryDelay}ms (attempt ${attempt}/${maxQueryRetries})...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, queryRetryDelay));
+          queryRetryDelay *= 2; // Exponential backoff
+        } else {
+          console.error(
+            `[findRelatedQuestionsPineconeWithEmbedding] Error querying Pinecone for question ID ${questionId} (attempt ${attempt}/${maxQueryRetries}):`,
+            queryError,
+          );
+          throw queryError; // Re-throw to be caught by outer try/catch
+        }
+      }
+    }
+
+    if (!querySuccess || !queryResponse) {
+      throw new Error(
+        `All ${maxQueryRetries} Pinecone query attempts failed for ${questionId}`,
+      );
+    }
 
     const matches = queryResponse.matches || [];
 
