@@ -33,7 +33,7 @@ jest.mock('@/utils/server/redisUtils', () => ({
   CACHE_EXPIRATION: 3600,
 }));
 
-// Mock environment and collection name utilities
+// Mock environment and collection name utilities.
 jest.mock('@/utils/env', () => ({
   getEnvName: jest.fn().mockReturnValue('test'),
 }));
