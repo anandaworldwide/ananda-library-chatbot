@@ -540,7 +540,7 @@ describe('Pinecone Integration with Site ID Filtering', () => {
       // Execute the function
       await updateRelatedQuestionsBatch(2);
 
-      // Verify Pinecone upsert was called
+      // Verify Pinecone upsert was called.
       expect(mockPineconeIndex.upsert).toHaveBeenCalled();
 
       // Get the upsert args to verify site ID in metadata
