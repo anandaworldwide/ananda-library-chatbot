@@ -8,7 +8,7 @@ import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
-// Set maximum vercel duration to 300 seconds (5 minutes)
+// Set maximum vercel duration to 300 seconds (5 minutes).
 export const config = { maxDuration: 300 };
 
 // Error types to help categorize and handle errors
