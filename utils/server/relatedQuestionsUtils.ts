@@ -1215,8 +1215,8 @@ export async function updateRelatedQuestionsBatch(
   console.timeEnd(`Parallel Pinecone Queries (${questions.length} items)`);
 
   // --- Batched Firestore Updates ---
-  const firestoreBatch = db!.batch();
   const itemsToUpdate: { id: string; data: RelatedQuestion[] }[] = []; // Store successful updates
+  const itemsWithErrors: string[] = []; // Store IDs of items that failed Pinecone query
 
   console.log(
     `Processing ${pineconeResults.length} Pinecone results for Firestore batch...`,
@@ -1234,121 +1234,205 @@ export async function updateRelatedQuestionsBatch(
             `Pinecone query failed for ${value.questionId}:`,
             value.error,
           );
-          errorCount++;
+          itemsWithErrors.push(value.questionId); // Track items with errors
+        } else {
+          // Also track skipped items if necessary, or just ignore
+          console.log(`Pinecone query skipped for ${value.questionId}`);
         }
       } else if ('results' in value && value.questionId) {
         // Successfully found related questions
         itemsToUpdate.push({ id: value.questionId, data: value.results });
 
         // Optional: Keep debug logging if needed, referencing the original question
-        const previousRelatedQuestions = question.relatedQuestionsV2 || [];
+        // const previousRelatedQuestions = question.relatedQuestionsV2 || []; // Removed unused assignment inside comment
+        /* // Keep debug logs commented out unless needed
         console.log(`--- Related Questions Update Debug (Batch Item) ---`);
         console.log(
           `Question: ${value.questionId}: ${(question.question || '').slice(0, 120)}`,
         );
         console.log(`Previous Related (${previousRelatedQuestions.length}):`);
-        // Explicitly type `q` here
         previousRelatedQuestions.forEach((q: RelatedQuestion) =>
           console.log(`  - ${q.id}: ${q.title.slice(0, 120)}`),
         );
         console.log(`Current Related (${value.results.length}):`);
-        // Explicitly type `q` here
         value.results.forEach((q: RelatedQuestion) =>
           console.log(
             `  - ${q.id}: ${q.title.slice(0, 120)} (Score: ${q.similarity.toFixed(4)})`,
           ),
         );
         console.log(`--- End Debug ---`);
+        */
       } else {
         // Should not happen if structure is correct, but handle defensively
         console.error(
-          `Fulfilled promise for index ${index} missing questionId or results.`,
+          `Fulfilled promise for index ${index} (associated question: ${question?.id || 'UNKNOWN'}) missing questionId or results. Value:`,
+          value,
         );
-        errorCount++;
+        if (question?.id) {
+          itemsWithErrors.push(question.id);
+        }
       }
     } else {
       // Promise was rejected (unexpected error in the promise setup/settling itself)
+      const failedQuestionId =
+        questions[index]?.id || `unknown_at_index_${index}`;
       console.error(
-        `Pinecone query promise rejected for index ${index}:`,
+        `Pinecone query promise rejected for ${failedQuestionId}:`,
         result.reason,
       );
-      errorCount++;
+      itemsWithErrors.push(failedQuestionId);
     }
   });
 
-  // Add successful updates to the Firestore batch
-  console.log(`Adding ${itemsToUpdate.length} updates to Firestore batch.`);
-  itemsToUpdate.forEach(({ id, data }) => {
-    const docRef = db!.collection(getAnswersCollectionName()).doc(id);
-    firestoreBatch.update(docRef, { relatedQuestionsV2: data });
-    updatedCount++; // Increment successful count here
-  });
+  // Update error count based on collected errors
+  errorCount = itemsWithErrors.length;
 
-  // Commit the batch if there are updates to perform
-  if (itemsToUpdate.length > 0) {
-    try {
-      console.time(`Firestore Batch Commit (${itemsToUpdate.length} updates)`);
-      await performFirestoreOperation(
-        () => firestoreBatch.commit(),
-        'batch commit',
-        `${itemsToUpdate.length} documents`,
-      );
-      console.timeEnd(
-        `Firestore Batch Commit (${itemsToUpdate.length} updates)`,
-      );
-      console.log(`Firestore batch commit successful.`);
-    } catch (error) {
-      console.error(
-        `CRITICAL: Firestore batch commit failed. ${itemsToUpdate.length} documents were not updated.`,
-        error,
-      );
-      // If commit fails, none of the updates went through.
-      updatedCount = 0; // Reflect that the batch failed
-      errorCount += itemsToUpdate.length; // Count all items intended for the batch as errors
-      // Consider throwing error to halt progress marker update
-      throw new Error(`Firestore batch commit failed: ${error}`);
+  // Add successful updates to Firestore in smaller batches
+  const firestoreChunkSize = 400; // Keep below Firestore's 500 limit
+  let lastSuccessfulChunkProcessedId: string | null = lastProcessedId; // Initialize with the ID we started this batch from
+
+  console.log(
+    `Attempting to commit ${itemsToUpdate.length} Firestore updates in chunks of ${firestoreChunkSize}...`,
+  );
+
+  for (let i = 0; i < itemsToUpdate.length; i += firestoreChunkSize) {
+    const chunk = itemsToUpdate.slice(i, i + firestoreChunkSize);
+    if (chunk.length === 0) continue; // Skip empty chunks (shouldn't happen with loop condition)
+
+    const firestoreBatch = db!.batch();
+    chunk.forEach(({ id, data }) => {
+      const docRef = db!.collection(getAnswersCollectionName()).doc(id);
+      firestoreBatch.update(docRef, { relatedQuestionsV2: data });
+    });
+
+    const chunkNumber = Math.floor(i / firestoreChunkSize) + 1;
+    const totalChunks = Math.ceil(itemsToUpdate.length / firestoreChunkSize);
+    const chunkLogPrefix = `Firestore Chunk ${chunkNumber}/${totalChunks} (${chunk.length} updates)`;
+
+    // --- Retry Logic for Batch Commit ---
+    let commitSuccessful = false;
+    const maxRetries = 3;
+    let retryDelay = 1000; // Start with 1 second delay
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.time(`${chunkLogPrefix} - Attempt ${attempt}`);
+        await performFirestoreOperation(
+          () => firestoreBatch.commit(),
+          'batch commit',
+          `${chunk.length} documents in chunk ${chunkNumber}`,
+        );
+        console.timeEnd(`${chunkLogPrefix} - Attempt ${attempt}`);
+        commitSuccessful = true;
+        updatedCount += chunk.length; // Increment successful count only on success
+        lastSuccessfulChunkProcessedId = chunk[chunk.length - 1].id; // Update progress marker *after* successful commit
+        console.log(`${chunkLogPrefix}: Commit successful.`);
+        break; // Exit retry loop on success
+      } catch (error: any) {
+        console.timeEnd(`${chunkLogPrefix} - Attempt ${attempt}`);
+        console.error(
+          `${chunkLogPrefix}: Commit attempt ${attempt} failed.`,
+          error,
+        );
+        // Check for specific retryable errors (like EBUSY or DEADLINE_EXCEEDED)
+        const errorMessage = String(error?.message || error);
+        if (
+          (errorMessage.includes('EBUSY') ||
+            errorMessage.includes('DEADLINE_EXCEEDED') ||
+            errorMessage.includes('UNAVAILABLE')) &&
+          attempt < maxRetries
+        ) {
+          console.log(
+            `Retrying commit for chunk ${chunkNumber} after ${retryDelay}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          retryDelay *= 2; // Exponential backoff
+        } else {
+          console.error(
+            `CRITICAL: Non-retryable error or max retries reached for chunk ${chunkNumber}. ${chunk.length} documents in this chunk were NOT updated.`,
+          );
+          errorCount += chunk.length; // Count all items in the failed chunk as errors
+          // Optional: Decide whether to throw error and stop the whole batch process,
+          // or just log and continue with the next chunk. Currently, it continues.
+          // throw new Error(`Unrecoverable Firestore commit error for chunk ${chunkNumber}: ${error}`);
+          break; // Exit retry loop on non-retryable error or max retries
+        }
+      }
     }
-  } else {
-    console.log('No successful updates to commit in this batch.');
-  }
+    // If commit ultimately failed after retries, ensure we reflect this
+    if (!commitSuccessful) {
+      console.warn(
+        `Chunk ${chunkNumber} commit failed permanently after ${maxRetries} attempts.`,
+      );
+      // errorCount was already incremented within the loop for the failed chunk
+    } else {
+      // --- Update Progress Marker After Successful Chunk Commit ---
+      // Only update if the commit for this chunk was successful
+      try {
+        console.log(
+          `Updating progress marker after successful chunk ${chunkNumber} to: ${lastSuccessfulChunkProcessedId}`,
+        );
+        console.time(
+          `Update Progress After Chunk ${chunkNumber} (${lastSuccessfulChunkProcessedId})`,
+        );
+        await performFirestoreOperation(
+          () =>
+            progressDocRef.set({
+              lastProcessedId: lastSuccessfulChunkProcessedId,
+            }),
+          'progress update',
+          `lastProcessedId: ${lastSuccessfulChunkProcessedId} (after chunk ${chunkNumber})`,
+        );
+        console.timeEnd(
+          `Update Progress After Chunk ${chunkNumber} (${lastSuccessfulChunkProcessedId})`,
+        );
+      } catch (progressError) {
+        console.error(
+          `Failed to update progress document after successful chunk ${chunkNumber}. Last successful ID was ${lastSuccessfulChunkProcessedId}. Continuing...`,
+          progressError,
+        );
+        // Log the error but continue processing other chunks. The next run *might* reprocess this chunk.
+      }
+    }
+  } // End of chunk loop
 
   console.timeEnd(`Batch Find & Update Loop (${questions.length} questions)`);
   console.log(
-    `Batch finished. Updated related questions for ${updatedCount} items, encountered errors for ${errorCount} items.`,
+    `Batch finished. Successfully updated related questions for ${updatedCount} items, encountered errors for ${errorCount} items (including commit failures and Pinecone query issues).`,
   );
 
-  // 3. Update Progress Marker.
-  // Only update if the batch actually contained questions.
-  if (questions.length > 0) {
-    const lastQuestionInBatch = questions[questions.length - 1];
-    // Ensure the last question has an ID.
-    if (lastQuestionInBatch?.id) {
+  // 3. Update Progress Marker (REMOVED - now happens after each successful chunk).
+  /*
+  // Only update if the batch actually contained questions and some updates were attempted.
+  if (questions.length > 0 && itemsToUpdate.length > 0) {
+    const lastSuccessfullyProcessedItem = itemsToUpdate.findLast(item => !itemsWithErrors.includes(item.id) && /* check if committed * /);
+    // This logic is complex because commit failures might happen mid-batch.
+    // The new logic updates progress marker based on last *successful* chunk commit ID.
+
+    if (lastSuccessfulChunkProcessedId && lastSuccessfulChunkProcessedId !== lastProcessedId) { // Check if progress actually advanced
       console.log(
-        `Updating progress marker to last processed ID: ${lastQuestionInBatch.id}`,
+        `Final check: Updating progress marker to last successfully processed ID from chunks: ${lastSuccessfulChunkProcessedId}`,
       );
       try {
-        console.time(`Batch Update Progress`);
-        // Persist the ID of the last successfully processed question in this batch.
+        console.time(`Batch Final Progress Update Check`);
         await performFirestoreOperation(
-          () => progressDocRef.set({ lastProcessedId: lastQuestionInBatch.id }),
+          () => progressDocRef.set({ lastProcessedId: lastSuccessfulChunkProcessedId }),
           'progress update',
-          `lastProcessedId: ${lastQuestionInBatch.id}`,
+          `lastProcessedId: ${lastSuccessfulChunkProcessedId} (final check)`,
         );
-        console.timeEnd(`Batch Update Progress`);
+        console.timeEnd(`Batch Final Progress Update Check`);
       } catch (error) {
-        // Log errors during progress update, but don't necessarily halt the entire process.
-        console.error('Failed to update progress document:', error);
+        console.error('Failed to update progress document at the very end:', error);
       }
-    } else {
-      console.warn(
-        'Last question in batch had no ID, progress marker not updated.',
-      );
+    } else if (!lastSuccessfulChunkProcessedId || lastSuccessfulChunkProcessedId === lastProcessedId) {
+       console.log('No successful chunk commits occurred, or progress did not advance. Final progress marker not updated.');
     }
   } else {
     console.log(
-      'No questions processed in this batch, progress marker not updated.',
+      'No questions processed or no items to update in this batch, progress marker not updated.',
     );
   }
+  */
   console.timeEnd(`updateRelatedQuestionsBatch (Size: ${batchSize})`); // End overall timer on success/partial failure
 }
 
