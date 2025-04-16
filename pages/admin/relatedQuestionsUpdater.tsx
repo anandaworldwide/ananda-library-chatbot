@@ -5,19 +5,24 @@ import { SiteConfig } from '@/types/siteConfig';
 import { GetServerSideProps, NextApiRequest } from 'next';
 import { loadSiteConfig } from '@/utils/server/loadSiteConfig';
 import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
+import { db } from '@/services/firebase'; // Import Firestore db instance
+import { getAnswersCollectionName } from '@/utils/server/firestoreUtils'; // Import the utility function
 
-// Define props type including siteConfig from getServerSideProps
+// Define props type including siteConfig and totalQuestions
 interface RelatedQuestionsUpdaterProps {
   siteConfig: SiteConfig | null;
+  totalQuestions: number | null; // Add totalQuestions prop
 }
 
 const RelatedQuestionsUpdater = ({
   siteConfig,
+  totalQuestions, // Destructure totalQuestions
 }: RelatedQuestionsUpdaterProps) => {
   const [batchSize, setBatchSize] = useState<number>(10);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [apiMessage, setApiMessage] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [executionTime, setExecutionTime] = useState<number | null>(null); // Add state for execution time
 
   const handleUpdateClick = async () => {
     if (batchSize <= 0) {
@@ -28,6 +33,8 @@ const RelatedQuestionsUpdater = ({
     setIsLoading(true);
     setApiMessage(null);
     setApiError(null);
+    setExecutionTime(null); // Reset execution time
+    const startTime = performance.now(); // Start timer
 
     try {
       const response = await fetchWithAuth(
@@ -67,6 +74,9 @@ const RelatedQuestionsUpdater = ({
       );
     } finally {
       setIsLoading(false);
+      const endTime = performance.now(); // End timer
+      const duration = (endTime - startTime) / 1000; // Calculate duration in seconds
+      setExecutionTime(parseFloat(duration.toFixed(1))); // Set execution time with one decimal place
     }
   };
 
@@ -77,6 +87,16 @@ const RelatedQuestionsUpdater = ({
         <h1 className="text-xl font-semibold mb-4">
           Manual Related Questions Updater
         </h1>
+        {/* Display total questions */}
+        {totalQuestions !== null ? (
+          <p className="mb-4 text-sm text-gray-700">
+            Total questions in database: <strong>{totalQuestions}</strong>
+          </p>
+        ) : (
+          <p className="mb-4 text-sm text-yellow-700">
+            Could not load total question count.
+          </p>
+        )}
         <p className="mb-4 text-sm text-gray-600">
           Trigger a batch update of related questions. This process involves
           embedding generation and vector search, which can take time.
@@ -96,6 +116,12 @@ const RelatedQuestionsUpdater = ({
             min="1"
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             disabled={isLoading}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isLoading && batchSize > 0) {
+                e.preventDefault(); // Prevent default form submission if any
+                handleUpdateClick();
+              }
+            }}
           />
         </div>
 
@@ -111,14 +137,24 @@ const RelatedQuestionsUpdater = ({
           {isLoading ? 'Updating...' : 'Start Update Batch'}
         </button>
 
-        {apiMessage && (
-          <div className="mt-4 p-3 bg-green-100 text-green-800 border border-green-300 rounded-md">
-            {apiMessage}
-          </div>
-        )}
-        {apiError && (
-          <div className="mt-4 p-3 bg-red-100 text-red-800 border border-red-300 rounded-md">
-            {apiError}
+        {/* Display results and execution time */}
+        {(apiMessage || apiError || executionTime !== null) && (
+          <div className="mt-4 space-y-3">
+            {apiMessage && (
+              <div className="p-3 bg-green-100 text-green-800 border border-green-300 rounded-md">
+                {apiMessage}
+              </div>
+            )}
+            {apiError && (
+              <div className="p-3 bg-red-100 text-red-800 border border-red-300 rounded-md">
+                {apiError}
+              </div>
+            )}
+            {executionTime !== null && (
+              <div className="p-3 bg-blue-100 text-blue-800 border border-blue-300 rounded-md text-sm">
+                Request took: {executionTime} seconds.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -128,8 +164,9 @@ const RelatedQuestionsUpdater = ({
 
 export default RelatedQuestionsUpdater;
 
-// getServerSideProps to load site config and check admin status
+// getServerSideProps to load site config, check admin status, and get question count
 export const getServerSideProps: GetServerSideProps = async ({ req }) => {
+  let totalQuestions: number | null = null;
   const siteConfig = await loadSiteConfig();
   const sudoStatus = getSudoCookie(req as NextApiRequest);
 
@@ -148,9 +185,26 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
     };
   }
 
+  // Try to get the total question count if db is available
+  if (db) {
+    try {
+      // Use the utility function to get the correct collection name
+      const collectionName = getAnswersCollectionName();
+      const questionsCol = db.collection(collectionName);
+      const snapshot = await questionsCol.count().get();
+      totalQuestions = snapshot.data().count; // Access count from data object
+    } catch (error) {
+      console.error('Error getting total question count:', error);
+      // Keep totalQuestions as null if count fails
+    }
+  } else {
+    console.warn('Firestore DB instance not available in getServerSideProps');
+  }
+
   return {
     props: {
       siteConfig,
+      totalQuestions, // Pass the count (or null)
     },
   };
 };
