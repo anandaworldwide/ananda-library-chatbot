@@ -766,6 +766,8 @@ export async function findRelatedQuestionsPinecone(
   // Constants for filtering
   const topK = 20; // Request more initial candidates from Pinecone
   const similarityThreshold = 0.62; // Minimum similarity score
+  const maxSourceMetaRetries = 5; // Maximum retries for getting source metadata
+  const initialRetryDelay = 200; // Start with 200ms delay
 
   let queryEmbedding: number[];
   try {
@@ -789,16 +791,11 @@ export async function findRelatedQuestionsPinecone(
   }
 
   try {
-    // Fetch the source question's metadata (specifically its truncated title) from Pinecone
-    // This is needed for the exact title comparison later.
+    // Fetch the source question's metadata with retries and exponential backoff
     let sourceMetadataTitle: string | null = null;
+    let retryDelay = initialRetryDelay;
 
-    // Add retry logic for fetching source metadata
-    const maxMetadataRetries = 3;
-    let metadataRetryDelay = 1000; // Start with 1 second delay
-    let metadataFetchSuccess = false;
-
-    for (let attempt = 1; attempt <= maxMetadataRetries; attempt++) {
+    for (let attempt = 1; attempt <= maxSourceMetaRetries; attempt++) {
       try {
         console.time(
           `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
@@ -814,56 +811,39 @@ export async function findRelatedQuestionsPinecone(
           typeof sourceRecord.metadata.title === 'string'
         ) {
           sourceMetadataTitle = sourceRecord.metadata.title;
-        } else {
-          console.warn(
-            `Could not fetch or find metadata title for source question ${questionId} in Pinecone. Proceeding without exact title filtering.`,
-          );
+          break; // Exit retry loop on success
         }
-        metadataFetchSuccess = true;
-        break; // Exit retry loop on success
+
+        if (attempt < maxSourceMetaRetries) {
+          console.log(
+            `Source metadata title not found on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          retryDelay *= 2; // Exponential backoff
+        }
       } catch (fetchError: any) {
         console.timeEnd(
           `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
         );
 
-        // Check for retryable errors (like DNS, connection, EBUSY)
-        const errorMessage = String(fetchError?.message || fetchError);
-        const causedBy = fetchError?.cause
-          ? String(fetchError.cause?.message || fetchError.cause)
-          : '';
-        const isRetryableError =
-          errorMessage.includes('getaddrinfo') ||
-          errorMessage.includes('EBUSY') ||
-          errorMessage.includes('ECONNRESET') ||
-          errorMessage.includes('ETIMEDOUT') ||
-          errorMessage.includes('failed to reach Pinecone') ||
-          causedBy.includes('getaddrinfo') ||
-          causedBy.includes('EBUSY');
-
-        if (isRetryableError && attempt < maxMetadataRetries) {
+        if (attempt < maxSourceMetaRetries) {
           console.log(
-            `Retrying metadata fetch for ${questionId} after ${metadataRetryDelay}ms (attempt ${attempt}/${maxMetadataRetries})...`,
+            `Error fetching source metadata on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry...`,
           );
-          await new Promise((resolve) =>
-            setTimeout(resolve, metadataRetryDelay),
-          );
-          metadataRetryDelay *= 2; // Exponential backoff
-        } else {
-          console.warn(
-            `Error fetching source question ${questionId} metadata from Pinecone (attempt ${attempt}/${maxMetadataRetries}): ${fetchError}. Proceeding without exact title filtering.`,
-          );
-          break; // Exit retry loop on non-retryable error or max retries
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          retryDelay *= 2; // Exponential backoff
         }
       }
     }
 
-    if (!metadataFetchSuccess) {
-      console.warn(
-        `All ${maxMetadataRetries} metadata fetch attempts failed for ${questionId}. Continuing without metadata.`,
+    // If we still don't have the source title after all retries, we cannot proceed
+    if (!sourceMetadataTitle) {
+      throw new Error(
+        `Could not retrieve source metadata title for ${questionId} after ${maxSourceMetaRetries} attempts. Cannot guarantee title uniqueness.`,
       );
     }
 
-    // Construct the Pinecone query object, now including metadata.
+    // Construct the Pinecone query object
     const pineconeQuery = {
       vector: queryEmbedding,
       topK: topK,
@@ -874,7 +854,7 @@ export async function findRelatedQuestionsPinecone(
 
     // Add retry logic for Pinecone query
     const maxQueryRetries = 3;
-    let queryRetryDelay = 1000; // Start with 1 second delay
+    let queryRetryDelay = 1000;
     let queryResponse;
     let querySuccess = false;
 
@@ -884,11 +864,10 @@ export async function findRelatedQuestionsPinecone(
         queryResponse = await pineconeIndex.query(pineconeQuery);
         console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
         querySuccess = true;
-        break; // Exit retry loop on success
+        break;
       } catch (queryError: any) {
         console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
 
-        // Check for retryable errors
         const errorMessage = String(queryError?.message || queryError);
         const causedBy = queryError?.cause
           ? String(queryError.cause?.message || queryError.cause)
@@ -907,7 +886,7 @@ export async function findRelatedQuestionsPinecone(
             `Retrying Pinecone query for ${questionId} after ${queryRetryDelay}ms (attempt ${attempt}/${maxQueryRetries})...`,
           );
           await new Promise((resolve) => setTimeout(resolve, queryRetryDelay));
-          queryRetryDelay *= 2; // Exponential backoff
+          queryRetryDelay *= 2;
         } else {
           console.error(
             `Error querying Pinecone for question ID ${questionId} (attempt ${attempt}/${maxQueryRetries}):`,
@@ -926,9 +905,9 @@ export async function findRelatedQuestionsPinecone(
 
     const matches = queryResponse.matches || [];
 
-    // Process the matches: filter out source, apply similarity threshold, and filter by exact metadata title match.
+    // Process the matches: filter out source, apply similarity threshold, and strictly enforce title uniqueness
     const related: RelatedQuestion[] = [];
-    const seenTitles = new Map<string, { index: number; similarity: number }>(); // Track seen titles and their highest score
+    const seenTitles = new Map<string, { index: number; similarity: number }>();
 
     for (const match of matches) {
       const metadataTitle = match.metadata?.title;
@@ -939,57 +918,51 @@ export async function findRelatedQuestionsPinecone(
         match.score !== undefined &&
         match.score >= similarityThreshold &&
         metadataTitle &&
-        typeof metadataTitle === 'string' // Ensure title exists in metadata
+        typeof metadataTitle === 'string' &&
+        metadataTitle !== sourceMetadataTitle // Strict title uniqueness check
       ) {
-        if (!sourceMetadataTitle || metadataTitle !== sourceMetadataTitle) {
-          // Check if we've seen this exact title before
-          if (seenTitles.has(metadataTitle)) {
-            // We've seen this title before - check if this one has a higher score
-            const existingEntry = seenTitles.get(metadataTitle)!;
-            if (match.score > existingEntry.similarity) {
-              // This one has a higher score - replace the existing entry
-              related[existingEntry.index] = {
-                id: match.id,
-                title: metadataTitle,
-                similarity: match.score,
-              };
-              seenTitles.set(metadataTitle, {
-                index: existingEntry.index,
-                similarity: match.score,
-              });
-            }
-            // If the existing entry has a higher score, do nothing
-          } else {
-            // New unique title - add it
-            const newIndex = related.length;
-            related.push({
+        if (seenTitles.has(metadataTitle)) {
+          // We've seen this title before - check if this one has a higher score
+          const existingEntry = seenTitles.get(metadataTitle)!;
+          if (match.score > existingEntry.similarity) {
+            // This one has a higher score - replace the existing entry
+            related[existingEntry.index] = {
               id: match.id,
-              title: metadataTitle, // Use title from metadata
+              title: metadataTitle,
               similarity: match.score,
-            });
+            };
             seenTitles.set(metadataTitle, {
-              index: newIndex,
+              index: existingEntry.index,
               similarity: match.score,
             });
           }
+        } else {
+          // New unique title - add it
+          const newIndex = related.length;
+          related.push({
+            id: match.id,
+            title: metadataTitle,
+            similarity: match.score,
+          });
+          seenTitles.set(metadataTitle, {
+            index: newIndex,
+            similarity: match.score,
+          });
         }
       }
     }
 
-    // Sort the final filtered list by similarity score in descending order.
+    // Sort by similarity score and return top N results
     related.sort((a, b) => b.similarity - a.similarity);
-
-    console.timeEnd(`findRelatedQuestionsPinecone (${questionId})`); // End timer on success
-    // Return the top N related questions based on the resultsLimit.
+    console.timeEnd(`findRelatedQuestionsPinecone (${questionId})`);
     return related.slice(0, resultsLimit);
   } catch (error) {
-    // Log and handle errors during the Pinecone query process.
     console.error(
       `Error querying Pinecone for question ID ${questionId}:`,
       error,
     );
-    console.timeEnd(`findRelatedQuestionsPinecone (${questionId})`); // End timer on error
-    return []; // Return empty array on query failure.
+    console.timeEnd(`findRelatedQuestionsPinecone (${questionId})`);
+    throw error; // Re-throw to be handled by caller
   }
 }
 
