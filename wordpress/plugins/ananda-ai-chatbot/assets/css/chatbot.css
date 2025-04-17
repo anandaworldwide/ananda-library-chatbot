@@ -56,6 +56,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative; /* Ensure stacking context */
+  z-index: 1; /* Keep icon above ::before pseudo-element */
 }
 
 #aichatbot-bubble .fa-circle {
@@ -581,4 +583,34 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+@keyframes rotate-gradient {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#aichatbot-bubble::before {
+  /* Use ::before or ::after */
+  content: '';
+  position: absolute;
+  inset: 0; /* Cover the entire bubble */
+  border-radius: 50%;
+  padding: 2px; /* Thickness of the effect */
+  background: conic-gradient(
+    from 0deg,
+    rgba(173, 216, 230, 0.8) 0%,
+    rgba(173, 216, 230, 0.8) 10%,
+    transparent 30%
+  ); /* Adjust gradient stops for desired effect */
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude; /* Punch hole in the middle */
+  animation: rotate-gradient 3s linear 4;
+  pointer-events: none;
 }
