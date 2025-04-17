@@ -850,6 +850,104 @@ testRunner('Vivek Response Semantic Validation (ananda-public)', () => {
         );
       },
     );
+
+    // Donation Handling Test
+    test.concurrent(
+      'should use the specific format for donation-related queries',
+      async () => {
+        const query = 'I need to cancel my monthly donation';
+        // Based exactly on the required format in the prompt
+        const expectedResponseCanonical = [
+          "Thank you for supporting Ananda's work! For questions about donations please contact our Fundraising Department directly at [donations@ananda.org](mailto:donations@ananda.org) or call +1 530-478-7717.",
+          'For donation inquiries, please contact our Fundraising Department directly at donations@ananda.org or call +1 530-478-7717.', // Minor variation
+        ];
+        // Unexpected: Detailed steps or PayPal instructions
+        const unexpectedResponseCanonical = [
+          'To cancel your monthly donations, follow these steps: Cancel directly through your PayPal account by locating pre-approved payments on your profile page.',
+          'You can cancel your donation by logging into your payment account and finding the recurring payment settings.',
+          "For monthly donation cancellations, you'll need to modify your payment settings through the original payment processor.",
+        ];
+
+        const actualResponse = await getVivekResponse(query);
+        const actualEmbedding = await getEmbedding(actualResponse);
+
+        const expectedEmbeddings = await Promise.all(
+          expectedResponseCanonical.map(getEmbedding),
+        );
+        const unexpectedEmbeddings = await Promise.all(
+          unexpectedResponseCanonical.map(getEmbedding),
+        );
+
+        const similarityToExpected = getMaxSimilarity(
+          actualEmbedding,
+          expectedEmbeddings,
+        );
+        const similarityToUnexpected = getMaxSimilarity(
+          actualEmbedding,
+          unexpectedEmbeddings,
+        );
+
+        console.log(
+          `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to Expected (Contact Fundraising): ${similarityToExpected}\nSimilarity to Unexpected (Detailed Steps): ${similarityToUnexpected}`,
+        );
+
+        // Check semantic similarity to the required simple redirection format
+        expect(similarityToExpected).toBeGreaterThan(0.75);
+        // Check dissimilarity to detailed PayPal instructions
+        expect(similarityToUnexpected).toBeLessThan(0.65);
+        // Check for presence of the fundraising department email
+        expect(actualResponse).toContain('donations@ananda.org');
+      },
+    );
+
+    // Subscription Handling Test
+    test.concurrent(
+      'should NOT use the donation format for subscription-related queries',
+      async () => {
+        const query = 'I need to cancel my monthly subscription';
+        // Donation format that should NOT be used for subscriptions
+        const donationFormatResponses = [
+          "Thank you for supporting Ananda's work! For questions about donations please contact our Fundraising Department directly at [donations@ananda.org](mailto:donations@ananda.org) or call +1 530-478-7717.",
+          'For donation inquiries, please contact our Fundraising Department directly at donations@ananda.org or call +1 530-478-7717.',
+        ];
+        // More appropriate support or customer service responses
+        const customerServiceResponses = [
+          'For account issues like subscription cancellations, please contact our support team.',
+          'Please click here to contact our support team [GETHUMAN] for assistance with your subscription.',
+          'This appears to be an account-specific issue. Our support team can help with subscription changes.',
+        ];
+
+        const actualResponse = await getVivekResponse(query);
+        const actualEmbedding = await getEmbedding(actualResponse);
+
+        const donationEmbeddings = await Promise.all(
+          donationFormatResponses.map(getEmbedding),
+        );
+        const serviceEmbeddings = await Promise.all(
+          customerServiceResponses.map(getEmbedding),
+        );
+
+        const similarityToDonation = getMaxSimilarity(
+          actualEmbedding,
+          donationEmbeddings,
+        );
+        const similarityToService = getMaxSimilarity(
+          actualEmbedding,
+          serviceEmbeddings,
+        );
+
+        console.log(
+          `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to Donation Format: ${similarityToDonation}\nSimilarity to Customer Service: ${similarityToService}`,
+        );
+
+        // Should NOT be similar to donation format
+        expect(similarityToDonation).toBeLessThan(0.75);
+        // Should NOT mention donations@ananda.org
+        expect(actualResponse).not.toContain('donations@ananda.org');
+        // Should be more similar to customer service format than donation format
+        expect(similarityToService).toBeGreaterThan(similarityToDonation);
+      },
+    );
   });
 
   describe('Unrelated Questions', () => {
