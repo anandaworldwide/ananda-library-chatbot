@@ -244,27 +244,23 @@ const MessageItem: React.FC<MessageItemProps> = ({
     );
   };
 
+  // Define custom components for ReactMarkdown
   const components: Components = {
-    a: (props) => {
+    a: ({ href, children, ...props }) => {
       // Check if this is a GETHUMAN link for ananda-public site
-      if (siteConfig?.siteId === 'ananda-public' && props.href === 'GETHUMAN') {
+      if (siteConfig?.siteId === 'ananda-public' && href === 'GETHUMAN') {
         // For ananda-public site, convert GETHUMAN links to contact page links
         return (
           <a href="https://www.ananda.org/contact-us/" {...props}>
-            {props.children}
+            {children}
           </a>
         );
       }
 
-      // Default link rendering with target and rel attributes
+      // Default link rendering for other cases
       return (
-        <a
-          href={props.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          {...props}
-        >
-          {props.children}
+        <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+          {children}
         </a>
       );
     },
