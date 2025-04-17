@@ -64,6 +64,28 @@ function categorizeError(error: unknown): { type: string; message: string } {
 }
 
 /**
+ * Middleware that allows either JWT authentication or Vercel cron requests
+ * @param handler The API route handler to wrap
+ * @returns A wrapped handler that checks for either valid JWT or Vercel cron
+ */
+function withJwtOrCronAuth(
+  handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void,
+) {
+  return async (req: NextApiRequest, res: NextApiResponse) => {
+    const userAgent = req.headers['user-agent'] || '';
+    const isVercelCron = userAgent.startsWith('vercel-cron/');
+
+    if (isVercelCron) {
+      // Allow Vercel cron requests through
+      return handler(req, res);
+    } else {
+      // For all other requests, require JWT authentication
+      return withJwtAuth(handler)(req, res);
+    }
+  };
+}
+
+/**
  * API handler for managing related questions.
  * Supports batch updates (GET) and individual question updates (POST).
  */
@@ -250,5 +272,5 @@ async function handler(
   }
 }
 
-// Apply API middleware and JWT authentication for security
-export default withApiMiddleware(withJwtAuth(handler));
+// Apply API middleware with custom auth
+export default withApiMiddleware(withJwtOrCronAuth(handler));
