@@ -37,6 +37,8 @@ export type Answer = {
   adminAction?: AdminAction;
   // Timestamp of when the admin action was taken
   adminActionTimestamp?: Timestamp;
+  // Optional conversation history leading up to this answer
+  history?: { role: string; content: string }[];
 };
 
 // Structure for timestamp data

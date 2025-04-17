@@ -89,6 +89,7 @@ async function getAnswers(
       related_questions: data.related_questions,
       adminAction: data.adminAction,
       adminActionTimestamp: data.adminActionTimestamp,
+      history: data.history || undefined,
     } as Answer;
   });
 

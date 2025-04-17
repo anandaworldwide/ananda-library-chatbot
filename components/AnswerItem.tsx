@@ -161,12 +161,21 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
                 </button>
               )}
           </div>
-          <div className="text-sm text-gray-500 flex flex-wrap">
+          <div className="text-sm text-gray-500 flex flex-wrap items-center">
             <span className="mr-4">
               {formatDistanceToNow(new Date(answer.timestamp._seconds * 1000), {
                 addSuffix: true,
               })}
             </span>
+            {/* Conditionally render history icon */}
+            {answer.history && answer.history.length > 0 && (
+              <span
+                className="material-icons text-base mr-4"
+                title={`${answer.history.length} messages in history`}
+              >
+                chat_bubble_outline
+              </span>
+            )}
             {hasMultipleCollections && (
               <span>
                 {answer.collection

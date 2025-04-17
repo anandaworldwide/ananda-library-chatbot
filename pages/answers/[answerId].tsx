@@ -19,6 +19,9 @@ import { getShortname } from '@/utils/client/siteConfig';
 import { useSudo } from '@/contexts/SudoContext';
 import { queryFetch } from '@/utils/client/reactQueryConfig';
 import { isAuthenticated } from '@/utils/client/tokenManager';
+import ReactMarkdown from 'react-markdown';
+import gfm from 'remark-gfm';
+import { Components } from 'react-markdown';
 
 interface SingleAnswerProps {
   siteConfig: SiteConfig | null;
@@ -34,6 +37,22 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   const { isSudoUser } = useSudo();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Custom link component to handle GETHUMAN links, similar to TruncatedMarkdown
+  const LinkComponent: Components['a'] = ({ href, children, ...props }) => {
+    if (siteConfig?.siteId === 'ananda-public' && href === 'GETHUMAN') {
+      return (
+        <a href="https://www.ananda.org/contact-us/" {...props}>
+          {children}
+        </a>
+      );
+    }
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+        {children}
+      </a>
+    );
+  };
 
   // Check if the user is authenticated
   const userIsAuthenticated = isAuthenticated();
@@ -120,6 +139,25 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
       fetchLikeStatuses([answer.id]);
     }
   }, [answer, siteConfig, allowLikes]);
+
+  // Scroll the main answer item into view after it's loaded/rendered
+  // NOTE: Moved before early returns to satisfy rules-of-hooks
+  useEffect(() => {
+    if (answer) {
+      // Use a timeout to ensure the DOM is updated after state change
+      const timer = setTimeout(() => {
+        const mainAnswerElement = document.getElementById('main-answer-item');
+        if (mainAnswerElement) {
+          mainAnswerElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center', // Scroll to the center of the element
+          });
+        }
+      }, 150); // Delay to allow rendering
+
+      return () => clearTimeout(timer); // Cleanup timeout
+    }
+  }, [answer]); // Dependency array includes the answer object
 
   // Handle like count changes
   const handleLikeCountChange = async (answerId: string) => {
@@ -272,22 +310,66 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
           {getShortname(siteConfig)}: {answer?.question?.substring(0, 150)}
         </title>
       </Head>
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8">
+        {/* Render Conversation History if available */}
+        {answer?.history &&
+          Array.isArray(answer.history) &&
+          answer.history.length > 0 && (
+            <div className="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50">
+              <h2 className="text-lg font-semibold mb-3 text-gray-700">
+                Conversation History
+              </h2>
+              <div className="space-y-3">
+                {answer.history.map(
+                  (turn: { role: string; content: string }, index: number) => (
+                    <div
+                      key={index}
+                      className={`p-3 rounded-md ${
+                        turn.role === 'user'
+                          ? 'bg-blue-50 text-blue-900'
+                          : 'bg-green-50 text-green-900'
+                      }`}
+                    >
+                      <span className="font-medium capitalize">
+                        {turn.role}:
+                      </span>{' '}
+                      <ReactMarkdown
+                        remarkPlugins={[gfm]}
+                        className="mt-1 prose prose-sm max-w-none text-gray-800"
+                        components={{
+                          a: LinkComponent, // Use the custom link handler
+                        }}
+                      >
+                        {typeof turn.content === 'string'
+                          ? turn.content
+                          : JSON.stringify(turn.content)}
+                      </ReactMarkdown>
+                    </div>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+
+        {/* Render Main Answer */}
         {answer && (
-          <AnswerItem
-            answer={answer}
-            // Only pass handleLikeCountChange if likes are allowed for this user
-            handleLikeCountChange={
-              allowLikes ? handleLikeCountChange : undefined
-            }
-            handleCopyLink={handleCopyLink}
-            handleDelete={handleDelete}
-            linkCopied={linkCopied ? answer.id : null}
-            likeStatuses={likeStatuses}
-            isSudoUser={isSudoUser}
-            isFullPage={true}
-            siteConfig={siteConfig}
-          />
+          // Add id here for scrolling
+          <div id="main-answer-item">
+            <AnswerItem
+              answer={answer}
+              // Only pass handleLikeCountChange if likes are allowed for this user
+              handleLikeCountChange={
+                allowLikes ? handleLikeCountChange : undefined
+              }
+              handleCopyLink={handleCopyLink}
+              handleDelete={handleDelete}
+              linkCopied={linkCopied ? answer.id : null}
+              likeStatuses={likeStatuses}
+              isSudoUser={isSudoUser}
+              isFullPage={true}
+              siteConfig={siteConfig}
+            />
+          </div>
         )}
       </div>
     </Layout>
