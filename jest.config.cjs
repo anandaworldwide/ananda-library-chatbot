@@ -19,6 +19,8 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/$1',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '\\.module\\.(css|less|scss|sass)$': 'identity-obj-proxy',
+    '^react-markdown$': '<rootDir>/__mocks__/react-markdown.js',
+    '^remark-gfm$': '<rootDir>/__mocks__/remark-gfm.js',
   },
   testMatch: ['**/__tests__/**/*.[jt]s?(x)', '**/?(*.)+(spec|test).[jt]s?(x)'],
   // Add patterns to ignore certain files that shouldn't be treated as tests
@@ -65,11 +67,15 @@ const customJestConfig = {
     },
   },
   transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest',
+    '^.+\\.(ts|tsx)$': [
+      'ts-jest',
+      { tsconfig: '<rootDir>/tsconfig.jest.json' },
+    ],
+    '^.+\\.(js|jsx|mjs)$': ['babel-jest', { presets: ['next/babel'] }],
   },
   // Configure transformIgnorePatterns to handle ES modules properly
   transformIgnorePatterns: [
-    '/node_modules/(?!react-markdown|remark-*|rehype-*|unified|mdast-*|micromark|decode-named-character-reference|character-entities|property-information|hast-*|unist-*|bail|is-plain-obj|trough|vfile|escape-string-regexp)/',
+    '/node_modules/(?!react-markdown|remark-*|rehype-*|unified|mdast-*|micromark|decode-named-character-reference|character-entities|property-information|hast-*|unist-*|bail|is-plain-obj|trough|vfile|escape-string-regexp|.+\\.mjs$)/',
   ],
   maxWorkers: 4,
 };
