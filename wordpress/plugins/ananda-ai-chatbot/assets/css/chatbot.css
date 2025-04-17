@@ -13,10 +13,11 @@
   cursor: pointer;
   font-weight: bold;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
   z-index: 9998;
   padding: 0;
   overflow: hidden;
+  animation: bounce-in 1s cubic-bezier(0.28, 0.84, 0.42, 1) 1 forwards;
 }
 
 /* Add tooltip for the chatbot bubble */
@@ -57,7 +58,7 @@
   justify-content: center;
   align-items: center;
   position: relative; /* Ensure stacking context */
-  z-index: 1; /* Keep icon above ::before pseudo-element */
+  z-index: 2; /* Increased z-index to be above ::before */
 }
 
 #aichatbot-bubble .fa-circle {
@@ -613,4 +614,30 @@
   mask-composite: exclude; /* Punch hole in the middle */
   animation: rotate-gradient 3s linear 4;
   pointer-events: none;
+}
+
+/* Enhanced bounce-in animation keyframes */
+@keyframes bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.1);
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.2);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  }
+  60% {
+    transform: scale(0.85);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  }
+  80% {
+    transform: scale(1.1);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
 }
