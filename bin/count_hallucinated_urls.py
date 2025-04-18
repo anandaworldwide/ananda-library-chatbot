@@ -77,7 +77,7 @@ def check_url_exists(url):
                 url, 
                 allow_redirects=True, 
                 timeout=5,  # Timeout for each attempt
-                headers={'User-Agent': 'Mozilla/5.0 (compatible; UrlValidator/1.0)'}
+                headers={'User-Agent': 'Ananda URL Checker 1.0'}
             )
             # Success! Return result.
             return url, response.status_code, 200 <= response.status_code < 400, None
@@ -236,7 +236,8 @@ def generate_report(url_counts_by_interval, url_validation, interval_start_dates
 
     # Create Markdown table header
     header_dates = [f"{date.month}/{date.day}" for date in interval_start_dates]
-    header_cells = header_dates + ["Status", "URL"]
+    # Add "Total" column header
+    header_cells = header_dates + ["Total", "Status", "URL"] 
     header_str = " | ".join(header_cells)
     # Create separator line based on number of columns
     separator_line = " | ".join(["---"] * len(header_cells))
@@ -248,9 +249,12 @@ def generate_report(url_counts_by_interval, url_validation, interval_start_dates
     sorted_invalid_urls = sorted(invalid_urls.keys())
     
     interval_totals = [0] * num_intervals
+    grand_total = 0 # Initialize grand total
 
     for url in sorted_invalid_urls:
         counts = url_counts_by_interval.get(url, [0] * num_intervals)
+        row_total = sum(counts) # Calculate total for the current URL
+        grand_total += row_total # Add to grand total
         
         # Add to interval totals
         for i in range(num_intervals):
@@ -261,15 +265,15 @@ def generate_report(url_counts_by_interval, url_validation, interval_start_dates
         error_info = f" - {validation_info['error']}" if validation_info['error'] else ""
         status_str = f"`[{status_code}]{error_info}`"
         # Escape pipe characters in the URL itself if necessary for Markdown
-        escaped_url = url.replace("|", "\\|") 
+        escaped_url = url.replace("|", "\\\\|") 
         
-        # Format table row cells
-        row_cells = [str(c) for c in counts] + [status_str, f"`{escaped_url}`"]
+        # Format table row cells, including the row_total
+        row_cells = [str(c) for c in counts] + [str(row_total), status_str, f"`{escaped_url}`"]
         row_str = " | ".join(row_cells)
         print(f"| {row_str} |")
 
-    # Print Totals row
-    totals_cells = [str(t) for t in interval_totals] + ["**TOTALS**", ""]
+    # Print Totals row, including the grand_total
+    totals_cells = [str(t) for t in interval_totals] + [f"**{grand_total}**", "**TOTALS**", ""]
     totals_str = " | ".join(totals_cells)
     print(f"| {totals_str} |")
 
