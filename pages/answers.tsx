@@ -359,6 +359,10 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     checkSudoStatus();
   }, [checkSudoStatus]);
 
+  // Get whether related questions should be shown (defaults to true)
+  // const showRelatedQuestions = true;
+  const showRelatedQuestions = siteConfig?.showRelatedQuestions ?? true;
+
   return (
     <SudoProvider>
       <Layout siteConfig={siteConfig}>
@@ -415,6 +419,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
                     likeStatuses={likeStatuses}
                     isSudoUser={isSudoUser}
                     isFullPage={false}
+                    showRelatedQuestions={showRelatedQuestions}
                   />
                 ))}
               </div>

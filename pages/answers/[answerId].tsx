@@ -262,6 +262,9 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
     }
   };
 
+  // Get whether related questions should be shown (defaults to true)
+  const showRelatedQuestions = siteConfig?.showRelatedQuestions ?? true;
+
   // Render "not found" message if the answer doesn't exist
   if (notFound) {
     return (
@@ -368,6 +371,7 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
               isSudoUser={isSudoUser}
               isFullPage={true}
               siteConfig={siteConfig}
+              showRelatedQuestions={showRelatedQuestions}
             />
           </div>
         )}

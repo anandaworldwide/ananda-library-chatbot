@@ -741,6 +741,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({
                       privateSession={false}
                       allowAllAnswersPage={false}
                       showSourcesBelow={false}
+                      showRelatedQuestions={false}
                       previousMessage={
                         modelKey === 'A'
                           ? messagesA[messagesA.length - 2]

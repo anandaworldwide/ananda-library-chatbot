@@ -20,6 +20,7 @@ import {
   getAllowAllAnswersPage,
   getEnabledMediaTypes,
   getCollectionsConfig,
+  getShowRelatedQuestions,
 } from '@/utils/client/siteConfig';
 import { SiteConfig } from '@/types/siteConfig';
 
@@ -86,6 +87,7 @@ describe('siteConfig utils', () => {
       expect(getAllowAllAnswersPage(null)).toBe(false);
       expect(getEnabledMediaTypes(null)).toEqual(['text', 'audio', 'youtube']);
       expect(getCollectionsConfig(null)).toEqual({});
+      expect(getShowRelatedQuestions(null)).toBe(true);
     });
   });
 

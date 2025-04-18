@@ -706,6 +706,9 @@ export default function Home({
     return `${ttfbSecs} secs to first character, then ${tokensPerSecond} chars/sec streamed (${totalTokens} total)`;
   }, [timingMetrics]);
 
+  // Get whether related questions should be shown (defaults to true)
+  const showRelatedQuestions = siteConfig?.showRelatedQuestions ?? true;
+
   // Render maintenance mode message if active
   if (isMaintenanceMode) {
     return (
@@ -776,6 +779,7 @@ export default function Home({
                     allowAllAnswersPage={
                       siteConfig?.allowAllAnswersPage ?? false
                     }
+                    showRelatedQuestions={showRelatedQuestions}
                   />
                 ))}
                 {/* Display timing metrics for sudo users */}

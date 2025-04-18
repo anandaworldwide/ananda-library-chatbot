@@ -53,4 +53,5 @@ export interface SiteConfig {
   defaultNumSources?: number;
   temperature?: number; // Added for LLM temperature setting
   modelName?: string; // Added for LLM model selection
+  showRelatedQuestions?: boolean; // Added to control visibility of related questions
 }

@@ -16,17 +16,19 @@ import markdownStyles from '@/styles/MarkdownStyles.module.css';
 import { DocMetadata } from '@/types/DocMetadata';
 import { Document } from 'langchain/document';
 import { logEvent } from '@/utils/client/analytics';
+import { RelatedQuestion } from '@/types/RelatedQuestion';
 
-interface AnswerItemProps {
+export interface AnswerItemProps {
   answer: Answer;
   handleLikeCountChange?: (answerId: string) => void;
-  handleCopyLink: (answerId: string) => void;
+  handleCopyLink?: (answerId: string) => void;
   handleDelete?: (answerId: string) => void;
   linkCopied: string | null;
   likeStatuses: Record<string, boolean>;
-  isSudoUser: boolean;
+  isSudoUser?: boolean;
   isFullPage?: boolean;
   siteConfig: SiteConfig | null;
+  showRelatedQuestions?: boolean;
 }
 
 const SIMILARITY_THRESHOLD = 0.15;
@@ -41,12 +43,14 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
   isSudoUser,
   isFullPage = false,
   siteConfig,
+  showRelatedQuestions = true,
 }) => {
   const hasMultipleCollections = useMultipleCollections(
     siteConfig || undefined,
   );
   const [expanded, setExpanded] = useState(isFullPage);
   const [likeError, setLikeError] = useState<string | null>(null);
+  const [forceShowRelated, setForceShowRelated] = useState(false);
 
   // Renders a truncated version of the question with line breaks
   const renderTruncatedQuestion = (question: string, maxLength: number) => {
@@ -209,31 +213,44 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
             />
           )}
 
-          {/* Render related questions if available and above similarity threshold */}
+          {/* Sudo Toggle for Related Questions */}
+          {!showRelatedQuestions && isSudoUser && (
+            <button
+              onClick={() => setForceShowRelated(!forceShowRelated)}
+              className="text-sm text-blue-600 hover:underline mt-1 block"
+            >
+              Admin: {forceShowRelated ? 'hide' : 'show'} related Questions
+            </button>
+          )}
+
+          {/* Related Questions Section (Conditional Display) */}
           {answer.relatedQuestionsV2 &&
             answer.relatedQuestionsV2.filter(
               (q: { similarity: number }) =>
                 q.similarity >= SIMILARITY_THRESHOLD,
-            ).length > 0 && (
-              <div className="bg-gray-200 pt-0.5 pb-3 px-3 rounded-lg mt-2 mb-2">
-                <h3 className="text-lg !font-bold mb-2">Related Questions</h3>
-                <ul className="list-disc pl-2">
+            ).length > 0 &&
+            (showRelatedQuestions || forceShowRelated) && (
+              <div className="mt-4">
+                <h3 className="text-sm font-medium text-gray-500 mb-2">
+                  Related Questions
+                </h3>
+                <div className="space-y-2">
                   {answer.relatedQuestionsV2
                     .filter(
                       (q: { similarity: number }) =>
                         q.similarity >= SIMILARITY_THRESHOLD,
                     )
-                    .map((relatedQuestion: { id: string; title: string }) => (
-                      <li key={relatedQuestion.id} className="ml-0">
-                        <a
+                    .map((relatedQuestion: RelatedQuestion, index: number) => (
+                      <div key={index} className="text-sm">
+                        <Link
                           href={`/answers/${relatedQuestion.id}`}
-                          className="text-blue-600 hover:underline"
+                          className="text-blue-600 hover:text-blue-800"
                         >
                           {truncateTitle(relatedQuestion.title, 150)}
-                        </a>
-                      </li>
+                        </Link>
+                      </div>
                     ))}
-                </ul>
+                </div>
               </div>
             )}
 
@@ -250,7 +267,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
 
             {/* Copy link button */}
             <button
-              onClick={() => handleCopyLink(answer.id)}
+              onClick={() => handleCopyLink && handleCopyLink(answer.id)}
               className="ml-2 sm:ml-4 text-black-600 hover:underline flex items-center"
               title="Copy link to clipboard"
             >

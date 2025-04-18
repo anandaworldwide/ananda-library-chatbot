@@ -17,6 +17,7 @@ import { useSudo } from '@/contexts/SudoContext';
 import { useVote } from '@/hooks/useVote';
 import { logEvent } from '@/utils/client/analytics';
 import { Components } from 'react-markdown';
+import Link from 'next/link';
 
 interface MessageItemProps {
   message: ExtendedAIMessage;
@@ -39,6 +40,7 @@ interface MessageItemProps {
   voteError?: string | null;
   allowAllAnswersPage: boolean;
   showSourcesBelow?: boolean;
+  showRelatedQuestions: boolean;
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({
@@ -56,70 +58,52 @@ const MessageItem: React.FC<MessageItemProps> = ({
   siteConfig,
   handleLikeCountChange,
   handleCopyLink,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  handleVote: _handleVote,
+  handleVote,
   lastMessageRef,
   messageKey,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  voteError: _voteError,
   allowAllAnswersPage,
-  showSourcesBelow = false, // Default to showing sources above
+  showSourcesBelow = false,
+  showRelatedQuestions,
 }) => {
-  const [likeError, setLikeError] = useState<string | null>(null);
   const { isSudoUser } = useSudo();
   const voteMutation = useVote();
+  const [forceShowRelated, setForceShowRelated] = useState(false);
 
-  // Local state to track current vote status
   const [currentVotes, setCurrentVotes] =
     useState<Record<string, number>>(votes);
 
-  // Properly handle voting with our new hook
   const handleVoteWithHook = (docId: string, isUpvote: boolean) => {
-    // Calculate vote value (1, 0, or -1)
     const currentVote = currentVotes[docId] || 0;
     let vote: 0 | 1 | -1;
-
     if ((isUpvote && currentVote === 1) || (!isUpvote && currentVote === -1)) {
-      vote = 0; // Toggle off if clicked again
+      vote = 0;
     } else {
       vote = isUpvote ? 1 : -1;
     }
-
-    // Update local state immediately for UI feedback
-    setCurrentVotes((prev) => ({
-      ...prev,
-      [docId]: vote,
-    }));
-
-    // Log the event
+    setCurrentVotes((prev) => ({ ...prev, [docId]: vote }));
     logEvent(
       isUpvote ? 'upvote_answer' : 'downvote_answer',
       'Engagement',
       docId,
       vote,
     );
-
-    // Submit to server via mutation
     voteMutation.mutate({ docId, vote });
   };
 
-  // Handles the like button click, updating the like count and managing errors
-  const onLikeButtonClick = (answerId: string, newLikeCount: number) => {
-    try {
-      handleLikeCountChange(answerId, newLikeCount > 0);
-    } catch (error) {
-      setLikeError(
-        error instanceof Error ? error.message : 'An error occurred',
-      );
-      // Clear the error message after 3 seconds
-      setTimeout(() => setLikeError(null), 3000);
-    }
+  const onLikeButtonClick = (answerId: string) => {
+    // Update like status immediately for UI responsiveness
+    const newLikeStatus = !likeStatuses[answerId];
+    handleLikeCountChange(answerId, newLikeStatus);
+
+    // Log the event (optimistically)
+    logEvent('like_answer', 'Engagement', answerId);
+
+    // Server update happens in the parent/hook, error handled there
+    // No need to handle errors/revert UI here, keep it simple
   };
 
-  // Determine the appropriate icon and class based on the message type
   let icon;
   let className;
-
   if (message.type === 'apiMessage') {
     icon = (
       <Image
@@ -147,20 +131,12 @@ const MessageItem: React.FC<MessageItemProps> = ({
       loading && isLastMessage ? styles.usermessagewaiting : styles.usermessage;
   }
 
-  // Renders related questions if they meet the similarity threshold
+  // Renders related questions with sudo toggle logic
   const renderRelatedQuestions = (
     relatedQuestions: RelatedQuestion[] | undefined,
   ) => {
-    if (!allowAllAnswersPage) {
-      return null;
-    }
-    if (!relatedQuestions || !Array.isArray(relatedQuestions)) {
-      console.error(
-        'relatedQuestions is empty or not an array:',
-        relatedQuestions,
-      );
-      return null;
-    }
+    if (!allowAllAnswersPage) return null;
+    if (!relatedQuestions || !Array.isArray(relatedQuestions)) return null;
 
     const SIMILARITY_THRESHOLD = 0.15;
     const filteredQuestions = relatedQuestions.filter(
@@ -169,26 +145,43 @@ const MessageItem: React.FC<MessageItemProps> = ({
 
     if (filteredQuestions.length === 0) return null;
 
+    // Show only if globally enabled OR if globally disabled but user is sudo and forcing show
+    const shouldDisplay =
+      showRelatedQuestions || (isSudoUser && forceShowRelated);
+
     return (
-      <div className="bg-gray-200 pt-0.5 pb-3 px-3 rounded-lg mt-2 mb-2">
-        <h3 className="text-lg !font-bold mb-2">Related Questions</h3>
-        <ul className="list-disc pl-2">
-          {filteredQuestions.map((relatedQuestion) => (
-            <li key={relatedQuestion.id} className="ml-0">
-              <a
-                href={`/answers/${relatedQuestion.id}`}
-                className="text-blue-600 hover:underline"
-              >
-                {truncateTitle(relatedQuestion.title, 150)}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <>
+        {/* Sudo Toggle Button - Show only when globally disabled and user is sudo */}
+        {!showRelatedQuestions && isSudoUser && (
+          <button
+            onClick={() => setForceShowRelated(!forceShowRelated)}
+            className="text-sm text-blue-600 hover:underline mt-1 block"
+          >
+            Admin: {forceShowRelated ? 'hide' : 'show'} related Questions
+          </button>
+        )}
+        {/* Actual Related Questions List - Show if shouldDisplay is true */}
+        {shouldDisplay && (
+          <div className="bg-gray-200 pt-0.5 pb-3 px-3 rounded-lg mt-2 mb-2">
+            <h3 className="text-lg !font-bold mb-2">Related Questions</h3>
+            <ul className="list-disc pl-2">
+              {filteredQuestions.map((relatedQuestion) => (
+                <li key={relatedQuestion.id} className="ml-0">
+                  <Link
+                    href={`/answers/${relatedQuestion.id}`}
+                    className="text-blue-600 hover:underline"
+                  >
+                    {truncateTitle(relatedQuestion.title, 150)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </>
     );
   };
 
-  // Truncates a title to a specified maximum length
   const truncateTitle = (title: string, maxLength: number) => {
     return title.length > maxLength ? `${title.slice(0, maxLength)}...` : title;
   };
@@ -213,12 +206,9 @@ const MessageItem: React.FC<MessageItemProps> = ({
     return null;
   };
 
-  // Replace the original downvote button implementation
   const renderDownvoteButton = (docId: string) => {
-    if (!docId) return null;
-
+    if (!docId || !handleVote) return null;
     const vote = currentVotes[docId] || 0;
-
     return (
       <div className="flex items-center">
         <button
@@ -233,31 +223,19 @@ const MessageItem: React.FC<MessageItemProps> = ({
             {vote === -1 ? 'thumb_down' : 'thumb_down_off_alt'}
           </span>
         </button>
-        {voteMutation.isError && (
-          <span className="text-red-500 text-sm ml-2">
-            {voteMutation.error instanceof Error
-              ? voteMutation.error.message
-              : 'Error voting'}
-          </span>
-        )}
       </div>
     );
   };
 
-  // Define custom components for ReactMarkdown
   const components: Components = {
     a: ({ href, children, ...props }) => {
-      // Check if this is a GETHUMAN link for ananda-public site
       if (siteConfig?.siteId === 'ananda-public' && href === 'GETHUMAN') {
-        // For ananda-public site, convert GETHUMAN links to contact page links
         return (
           <a href="https://www.ananda.org/contact-us/" {...props}>
             {children}
           </a>
         );
       }
-
-      // Default link rendering for other cases
       return (
         <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
           {children}
@@ -268,23 +246,17 @@ const MessageItem: React.FC<MessageItemProps> = ({
 
   return (
     <Fragment key={messageKey}>
-      {/* Add a horizontal line between AI messages */}
-      {message.type === 'apiMessage' && index > 0 && (
-        <hr className="border-t border-gray-200 mb-0" />
-      )}
+      {(message.type === 'apiMessage' || message.type === 'userMessage') &&
+        index > 0 && <hr className="border-t border-gray-200 mb-0" />}
       <div
         className={`${className} p-2 px-3`}
         ref={isLastMessage ? lastMessageRef : null}
       >
         <div className="flex items-start">
-          {/* Message icon */}
           <div className="flex-shrink-0 mr-2">{icon}</div>
           <div className="flex-grow">
             <div className="max-w-none">
-              {/* Render sources above if not showSourcesBelow */}
               {!showSourcesBelow && renderSources()}
-
-              {/* Render message content */}
               <ReactMarkdown
                 remarkPlugins={[gfm]}
                 components={components}
@@ -294,13 +266,9 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   .replace(/\n/g, '  \n')
                   .replace(/\n\n/g, '\n\n')}
               </ReactMarkdown>
-
-              {/* Render sources below if showSourcesBelow */}
               {showSourcesBelow && renderSources()}
             </div>
-            {/* Action icons container */}
             <div className="mt-2 flex items-center space-x-2">
-              {/* Render action buttons for AI messages */}
               {message.type === 'apiMessage' &&
                 index !== 0 &&
                 !loading &&
@@ -316,14 +284,12 @@ const MessageItem: React.FC<MessageItemProps> = ({
                     />
                   </>
                 )}
-              {/* Render additional actions for non-private AI messages */}
               {!privateSession &&
                 message.type === 'apiMessage' &&
                 message.docId &&
                 !loading &&
                 isLastMessage && (
                   <>
-                    {/* Copy link button */}
                     <button
                       onClick={() => handleCopyLink(message.docId ?? '')}
                       className="text-black-600 hover:underline flex items-center"
@@ -333,29 +299,21 @@ const MessageItem: React.FC<MessageItemProps> = ({
                         {linkCopied === message.docId ? 'check' : 'link'}
                       </span>
                     </button>
-                    {/* Like button */}
                     <div className="flex items-center">
                       <LikeButton
                         answerId={message.docId ?? ''}
                         initialLiked={
                           likeStatuses[message.docId ?? ''] || false
                         }
-                        likeCount={0}
+                        likeCount={0} // likeCount comes from AnswerItem now
                         onLikeCountChange={onLikeButtonClick}
                         showLikeCount={false}
                       />
-                      {likeError && (
-                        <span className="text-red-500 text-sm ml-2">
-                          {likeError}
-                        </span>
-                      )}
                     </div>
-                    {/* Use our new downvote button implementation */}
                     {renderDownvoteButton(message.docId ?? '')}
                   </>
                 )}
             </div>
-            {/* Related questions section */}
             {message.type === 'apiMessage' &&
               message.relatedQuestions &&
               renderRelatedQuestions(message.relatedQuestions)}

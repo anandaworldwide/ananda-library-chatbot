@@ -110,3 +110,8 @@ export const getEnabledMediaTypes = (
   siteConfig: SiteConfig | null,
 ): ('text' | 'audio' | 'youtube')[] =>
   siteConfig?.enabledMediaTypes ?? ['text', 'audio', 'youtube'];
+
+// Get whether related questions should be shown (defaults to true)
+export const getShowRelatedQuestions = (
+  siteConfig: SiteConfig | null,
+): boolean => siteConfig?.showRelatedQuestions ?? true;

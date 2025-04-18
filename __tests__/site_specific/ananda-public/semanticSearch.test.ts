@@ -932,6 +932,7 @@ testRunner('Vivek Response Semantic Validation (ananda-public)', () => {
           'https://www.ananda.org/meditation/meditation-support/articles/power-of-affirmation/',
           'https://www.ananda.org/meditation/meditation-support/articles/creating-sacred-space/',
           'https://www.ananda.org/meditation/meditation-support/articles/art-of-giving/',
+          'https://www.ananda.org/yogapedia/sanskrit',
         ];
 
         // Check that no known hallucinated URLs are present

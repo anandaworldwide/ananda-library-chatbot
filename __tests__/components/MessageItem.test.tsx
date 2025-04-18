@@ -6,6 +6,7 @@ import { Document } from 'langchain/document';
 import { DocMetadata } from '@/types/DocMetadata';
 import { SiteConfig } from '@/types/siteConfig';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useSudo } from '@/contexts/SudoContext';
 
 // Add mock for react-markdown at the top of the file
 jest.mock('react-markdown', () => {
@@ -242,6 +243,7 @@ describe('MessageItem', () => {
     messageKey: 'message-1',
     voteError: null,
     allowAllAnswersPage: false,
+    showRelatedQuestions: true,
   };
 
   it('renders user message correctly', () => {
@@ -335,45 +337,79 @@ describe('MessageItem', () => {
   });
 
   it('displays related questions when available and allowAllAnswersPage is true', () => {
-    const relatedQuestionsMessage: ExtendedAIMessage = {
+    const relatedQuestions = [
+      {
+        id: 'rel1',
+        title: 'Related Question 1',
+        similarity: 0.8,
+      },
+      {
+        id: 'rel2',
+        title: 'Related Question 2',
+        similarity: 0.7,
+      },
+      // Add a question below threshold to test filtering
+      {
+        id: 'rel3',
+        title: 'Unrelated Question',
+        similarity: 0.1, // Below threshold
+      },
+    ];
+    const messageWithRelated = {
       ...aiMessage,
-      relatedQuestions: [
-        { id: 'q1', title: 'Related Question 1', similarity: 0.8 },
-        { id: 'q2', title: 'Related Question 2', similarity: 0.5 },
-      ],
+      relatedQuestions: relatedQuestions,
     };
-
     const props = {
       ...defaultProps,
-      message: relatedQuestionsMessage,
-      allowAllAnswersPage: true,
+      message: messageWithRelated,
+      allowAllAnswersPage: true, // Ensure this is true for the test
+      // showRelatedQuestions is true from defaultProps
     };
 
     renderWithQueryClient(<MessageItem {...props} />);
 
+    // Check that the related questions container is rendered
     expect(screen.getByText('Related Questions')).toBeInTheDocument();
+
+    // Check that the correct related questions are linked
     expect(screen.getByText('Related Question 1')).toBeInTheDocument();
+    expect(screen.getByText('Related Question 1').closest('a')).toHaveAttribute(
+      'href',
+      '/answers/rel1',
+    );
     expect(screen.getByText('Related Question 2')).toBeInTheDocument();
+    expect(screen.getByText('Related Question 2').closest('a')).toHaveAttribute(
+      'href',
+      '/answers/rel2',
+    );
+
+    // Check that the unrelated question (below threshold) is NOT displayed
+    expect(screen.queryByText('Unrelated Question')).not.toBeInTheDocument();
   });
 
   it('does not display related questions when allowAllAnswersPage is false', () => {
-    const relatedQuestionsMessage: ExtendedAIMessage = {
+    const relatedQuestions = [
+      {
+        id: 'rel1',
+        title: 'Related Question 1',
+        similarity: 0.8,
+      },
+    ];
+    const messageWithRelated = {
       ...aiMessage,
-      relatedQuestions: [
-        { id: 'q1', title: 'Related Question 1', similarity: 0.8 },
-        { id: 'q2', title: 'Related Question 2', similarity: 0.5 },
-      ],
+      relatedQuestions: relatedQuestions,
     };
-
     const props = {
       ...defaultProps,
-      message: relatedQuestionsMessage,
-      allowAllAnswersPage: false,
+      message: messageWithRelated,
+      allowAllAnswersPage: false, // Explicitly false for this test
+      // showRelatedQuestions is true from defaultProps, but should be ignored due to allowAllAnswersPage
     };
 
     renderWithQueryClient(<MessageItem {...props} />);
 
     expect(screen.queryByText('Related Questions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Related Question 1')).not.toBeInTheDocument();
   });
 
   it('converts GETHUMAN links to Ananda contact page links for ananda-public site', () => {
@@ -431,5 +467,80 @@ describe('MessageItem', () => {
     expect(link.closest('a')).toHaveAttribute('href', 'https://example.com');
     expect(link.closest('a')).toHaveAttribute('target', '_blank');
     expect(link.closest('a')).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  // ADD A NEW TEST for the sudo toggle behavior
+  it('displays admin toggle when showRelatedQuestions is false and user is sudo', () => {
+    // Mock useSudo to return true for this test
+    (useSudo as jest.Mock).mockReturnValue({ isSudoUser: true });
+
+    const relatedQuestions = [
+      { id: 'rel1', title: 'Related Question 1', similarity: 0.8 },
+    ];
+    const messageWithRelated = {
+      ...aiMessage,
+      relatedQuestions: relatedQuestions,
+    };
+    const props = {
+      ...defaultProps,
+      message: messageWithRelated,
+      allowAllAnswersPage: true,
+      showRelatedQuestions: false, // Explicitly false for this test
+    };
+
+    renderWithQueryClient(<MessageItem {...props} />);
+
+    // Initially, related questions should be hidden
+    expect(screen.queryByText('Related Questions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Related Question 1')).not.toBeInTheDocument();
+
+    // The admin toggle button should be visible
+    const toggleButton = screen.getByText(/Admin: show related Questions/i);
+    expect(toggleButton).toBeInTheDocument();
+
+    // Click the toggle button
+    fireEvent.click(toggleButton);
+
+    // Now, the related questions should be visible
+    expect(screen.getByText('Related Questions')).toBeInTheDocument();
+    expect(screen.getByText('Related Question 1')).toBeInTheDocument();
+    expect(toggleButton).toHaveTextContent(/Admin: hide related Questions/i);
+
+    // Click again to hide
+    fireEvent.click(toggleButton);
+    expect(screen.queryByText('Related Questions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Related Question 1')).not.toBeInTheDocument();
+    expect(toggleButton).toHaveTextContent(/Admin: show related Questions/i);
+
+    // Reset the mock for other tests
+    (useSudo as jest.Mock).mockReturnValue({ isSudoUser: false });
+  });
+
+  it('does NOT display admin toggle when showRelatedQuestions is false and user is NOT sudo', () => {
+    // Ensure useSudo returns false (default mock)
+    (useSudo as jest.Mock).mockReturnValue({ isSudoUser: false });
+
+    const relatedQuestions = [
+      { id: 'rel1', title: 'Related Question 1', similarity: 0.8 },
+    ];
+    const messageWithRelated = {
+      ...aiMessage,
+      relatedQuestions: relatedQuestions,
+    };
+    const props = {
+      ...defaultProps,
+      message: messageWithRelated,
+      allowAllAnswersPage: true,
+      showRelatedQuestions: false, // Explicitly false
+    };
+
+    renderWithQueryClient(<MessageItem {...props} />);
+
+    // Neither related questions nor the admin toggle should be visible
+    expect(screen.queryByText('Related Questions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Related Question 1')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Admin: show related Questions/i),
+    ).not.toBeInTheDocument();
   });
 });

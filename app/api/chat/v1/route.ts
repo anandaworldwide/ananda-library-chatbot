@@ -504,6 +504,7 @@ async function saveAnswerToFirestore(
       history: history,
       ip: clientIP,
       timestamp: fbadmin.firestore.FieldValue.serverTimestamp(),
+      relatedQuestionsV2: [],
     };
     const docRef = await answerRef.add(answerEntry);
     return docRef.id;

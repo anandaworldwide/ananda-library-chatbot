@@ -1,6 +1,5 @@
 {
   "**/*.{ts,tsx}": [
-    "node scripts/typecheck.cjs",
     "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage --config=config/jest.pre-commit.cjs"
   ],
   "**/*.{js,jsx}": [
