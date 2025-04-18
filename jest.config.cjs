@@ -17,8 +17,13 @@ const customJestConfig = {
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
-    '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
-    '\\.module\\.(css|less|scss|sass)$': 'identity-obj-proxy',
+    '^@/pages/(.*)$': '<rootDir>/pages/$1',
+    '^@/utils/(.*)$': '<rootDir>/utils/$1',
+    '^@/types/(.*)$': '<rootDir>/types/$1',
+    '^@/services/(.*)$': '<rootDir>/services/$1',
+    '^@/components/(.*)$': '<rootDir>/components/$1',
+    '\.(css|less|scss|sass)$': 'identity-obj-proxy',
+    '\.module\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '^react-markdown$': '<rootDir>/__mocks__/react-markdown.js',
     '^remark-gfm$': '<rootDir>/__mocks__/remark-gfm.js',
   },
@@ -92,6 +97,11 @@ const serverConfig = {
   detectOpenHandles: true,
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^@/pages/(.*)$': '<rootDir>/pages/$1',
+    '^@/utils/(.*)$': '<rootDir>/utils/$1',
+    '^@/types/(.*)$': '<rootDir>/types/$1',
+    '^@/services/(.*)$': '<rootDir>/services/$1',
+    '^@/components/(.*)$': '<rootDir>/components/$1',
   },
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest'],

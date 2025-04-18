@@ -7,7 +7,8 @@
     "allowSyntheticDefaultImports": true,
     "jsxImportSource": "react",
     "types": ["jest", "node", "@testing-library/jest-dom"],
-    "moduleResolution": "node"
+    "moduleResolution": "bundler",
+    "target": "es2022"
   },
   "include": [
     "__tests__/**/*",

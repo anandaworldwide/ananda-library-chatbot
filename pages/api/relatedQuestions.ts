@@ -72,14 +72,19 @@ function withJwtOrCronAuth(
   handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void,
 ) {
   return async (req: NextApiRequest, res: NextApiResponse) => {
+    console.log('[withJwtOrCronAuth] Checking auth...');
     const userAgent = req.headers['user-agent'] || '';
+    console.log(`[withJwtOrCronAuth] User-Agent: "${userAgent}"`);
     const isVercelCron = userAgent.startsWith('vercel-cron/');
+    console.log(`[withJwtOrCronAuth] Is Vercel Cron: ${isVercelCron}`);
 
     if (isVercelCron) {
       // Allow Vercel cron requests through
+      console.log('[withJwtOrCronAuth] Allowing Vercel cron request.');
       return handler(req, res);
     } else {
       // For all other requests, require JWT authentication
+      console.log('[withJwtOrCronAuth] Applying JWT authentication.');
       return withJwtAuth(handler)(req, res);
     }
   };
