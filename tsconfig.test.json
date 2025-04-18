@@ -9,6 +9,11 @@
     "types": ["jest", "node", "@testing-library/jest-dom"],
     "moduleResolution": "node"
   },
-  "include": ["__tests__/**/*", "types/**/*.d.ts", "components/**/*"],
+  "include": [
+    "__tests__/**/*",
+    "types/**/*.d.ts",
+    "components/**/*",
+    "jest.setup.ts"
+  ],
   "exclude": ["node_modules"]
 }

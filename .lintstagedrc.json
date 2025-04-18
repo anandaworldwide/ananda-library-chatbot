@@ -1,5 +1,6 @@
 {
   "**/*.{ts,tsx}": [
+    "npx tsc --noEmit",
     "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage --config=config/jest.pre-commit.cjs"
   ],
   "**/*.{js,jsx}": [

@@ -1,21 +1,22 @@
 // Add custom jest matchers for DOM elements
 import '@testing-library/jest-dom';
-import type { TestingLibraryMatchers } from '@testing-library/jest-dom/matchers';
 
 // Polyfill for TextEncoder/TextDecoder
-// @ts-expect-error - importing from a JS module
-import { TextEncoder, TextDecoder } from 'text-encoding';
-global.TextEncoder = TextEncoder;
-global.TextDecoder = TextDecoder;
+import {
+  TextEncoder as TextEncodingPolyfill,
+  TextDecoder as TextDecodingPolyfill,
+} from 'text-encoding';
 
-// Extend Jest matchers using module augmentation
-declare module 'expect' {
-  interface Matchers<R>
-    extends TestingLibraryMatchers<typeof expect.stringContaining, R> {
-    // This is needed to satisfy the linter, even though we're extending the interface
-    _brand: 'jest-matchers';
-  }
+if (typeof global.TextEncoder === 'undefined') {
+  global.TextEncoder = TextEncodingPolyfill as typeof global.TextEncoder;
 }
+
+if (typeof global.TextDecoder === 'undefined') {
+  global.TextDecoder = TextDecodingPolyfill as typeof global.TextDecoder;
+}
+
+// Make sure jest-dom matchers are properly set up
+expect.extend({});
 
 // Mock next/router
 jest.mock('next/router', () => ({

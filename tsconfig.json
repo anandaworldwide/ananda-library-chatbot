@@ -23,7 +23,8 @@
     "paths": {
       "@/*": ["./*"]
     },
-    "typeRoots": ["./node_modules/@types", "./types"]
+    "typeRoots": ["./node_modules/@types", "./types"],
+    "types": ["jest", "node", "@testing-library/jest-dom"]
   },
   "include": [
     "next-env.d.ts",
@@ -31,7 +32,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     "utils/server/loadEnv.js",
-    "types/**/*.d.ts"
+    "types/**/*.d.ts",
+    "jest.setup.ts"
   ],
   "exclude": ["node_modules"]
 }
