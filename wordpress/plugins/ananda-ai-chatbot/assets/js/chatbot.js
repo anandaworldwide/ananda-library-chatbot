@@ -481,8 +481,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentBotMessage = null;
 
   // Simple markdown parser function
-  function renderMarkdown(text) {
+  function renderMarkdown(text) { console.log(text);
     if (!text) return '';
+
+    // Collapse multiple newlines before an asterisk to a single newline
+    text = text.replace(/\n{2,}(\s*\*)/g, '\n$1');
 
     // Pre-process: Convert double line breaks to paragraph markers without adding extra newlines
     text = text.replace(/\n\s*\n/g, '<p-break>');
