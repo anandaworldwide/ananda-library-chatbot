@@ -218,6 +218,7 @@ export function middleware(req: NextRequest) {
   const allowedOrigins = [
     process.env.NEXT_PUBLIC_BASE_URL,
     'http://localhost:3000',
+    'http://chatbot-test.local',
   ];
   const origin = req.headers.get('origin');
 

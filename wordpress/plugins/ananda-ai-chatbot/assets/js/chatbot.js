@@ -20,6 +20,113 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Simple UUID generator (needed by original script and NPS)
+  function generateUuid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
+      /[xy]/g,
+      function (c) {
+        var r = (Math.random() * 16) | 0,
+          v = c == 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      },
+    );
+  }
+
+  // --- NPS Survey Logic Start ---
+
+  // Helper to get item from localStorage with default value
+  function getLocalStorageItem(key, defaultValue) {
+    try {
+      const item = localStorage.getItem(key);
+      // Handle explicit null/undefined storage vs. missing key
+      if (item === null) return defaultValue;
+      // Attempt to parse if it looks like JSON, otherwise return raw
+      try {
+        // Be careful with primitive strings that are valid JSON ('"string"')
+        if (
+          typeof defaultValue !== 'string' ||
+          item.startsWith('{') ||
+          item.startsWith('[')
+        ) {
+          return JSON.parse(item);
+        }
+      } catch (e) {
+        /* Ignore parse error, return raw string */
+      }
+      return item;
+    } catch (error) {
+      console.error(
+        `Error reading localStorage key \u201C${key}\u201D:`,
+        error,
+      );
+      return defaultValue;
+    }
+  }
+
+  // Helper to set item in localStorage
+  function setLocalStorageItem(key, value) {
+    try {
+      const stringValue =
+        typeof value === 'string' ? value : JSON.stringify(value);
+      localStorage.setItem(key, stringValue);
+    } catch (error) {
+      console.error(
+        `Error setting localStorage key \u201C${key}\u201D:`,
+        error,
+      );
+    }
+  }
+
+  // Initialize NPS state variables from localStorage
+  let npsQueryCount = getLocalStorageItem('npsQueryCount', 0);
+  let npsLastSurveyTimestamp = getLocalStorageItem(
+    'npsLastSurveyTimestamp',
+    null,
+  );
+  let npsLastSurveyQueryCount = getLocalStorageItem(
+    'npsLastSurveyQueryCount',
+    0,
+  );
+  let npsUserUuid = getLocalStorageItem('npsUserUuid', null);
+
+  // Generate and save UUID if it doesn't exist
+  if (!npsUserUuid) {
+    npsUserUuid = generateUuid(); // Use the globally available function
+    setLocalStorageItem('npsUserUuid', npsUserUuid);
+  }
+
+  // Function to increment query count and check NPS trigger conditions
+  function handleNpsSurveyCheck() {
+    npsQueryCount++;
+    setLocalStorageItem('npsQueryCount', npsQueryCount);
+
+    // --- Trigger Logic Start ---
+    const NPS_QUERY_THRESHOLD = 5;
+    const THREE_MONTHS_IN_MS = 3 * 30 * 24 * 60 * 60 * 1000; // Approximate
+    const now = Date.now();
+
+    let shouldShow = false;
+
+    // Condition 1: Initial trigger (no previous survey, threshold met)
+    if (!npsLastSurveyTimestamp && npsQueryCount >= NPS_QUERY_THRESHOLD) {
+      shouldShow = true;
+    }
+    // Condition 2: Recurrence trigger (3 months passed, threshold met since last survey)
+    else if (
+      npsLastSurveyTimestamp &&
+      now - npsLastSurveyTimestamp >= THREE_MONTHS_IN_MS &&
+      npsQueryCount - npsLastSurveyQueryCount >= NPS_QUERY_THRESHOLD
+    ) {
+      shouldShow = true;
+    }
+
+    if (shouldShow) {
+      showNpsSurveyModal();
+    }
+    // --- Trigger Logic End ---
+  }
+  // --- NPS Survey Logic End ---
+
   // Initialize variables
   let isStreaming = false;
   let currentAbortController = null;
@@ -427,6 +534,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (stopStreaming()) {
       return;
     }
+
+    // --- NPS Survey Logic Start ---
+    handleNpsSurveyCheck();
+    // --- NPS Survey Logic End ---
 
     // Reset accumulated response
     accumulatedResponse = '';
@@ -1057,4 +1168,300 @@ document.addEventListener('DOMContentLoaded', () => {
     sendButton.style.display = 'inline-block';
   });
   sendButton.parentNode.insertBefore(stopButton, sendButton.nextSibling);
+
+  // --- NPS Survey Logic: Modal UI Start ---
+  let npsModalElement = null; // Reference to the modal DOM element
+
+  function createNpsModalHtml() {
+    if (document.getElementById('nps-survey-modal')) return; // Avoid creating duplicates
+
+    const chatWindowElement = document.getElementById('aichatbot-window');
+    if (!chatWindowElement) {
+      console.error(
+        'Chat window element #aichatbot-window not found. Cannot create NPS modal.',
+      );
+      return;
+    }
+
+    npsModalElement = document.createElement('div');
+    npsModalElement.id = 'nps-survey-modal';
+    npsModalElement.style.display = 'none'; // Initially hidden
+    npsModalElement.style.position = 'absolute'; // Position relative to chat window
+    npsModalElement.style.left = '50%';
+    npsModalElement.style.top = '50%';
+    npsModalElement.style.transform = 'translate(-50%, -50%)';
+    npsModalElement.style.zIndex = '10'; // Needs to be above content *within* chat window
+    npsModalElement.style.backgroundColor = 'white';
+    npsModalElement.style.padding = '25px';
+    npsModalElement.style.border = '1px solid #ccc';
+    npsModalElement.style.borderRadius = '8px';
+    npsModalElement.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+    npsModalElement.style.maxWidth = '450px';
+    npsModalElement.style.width = '90%';
+    npsModalElement.style.textAlign = 'center';
+
+    npsModalElement.innerHTML = `
+      <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 1.1em; color: #333;">Feedback Request</h3>
+      <p style="margin-bottom: 15px; font-size: 0.95em; color: #555;">
+        On a scale of 0-10, how likely are you to recommend this chatbot to a friend or colleague?
+      </p>
+      <div id="nps-score-options" style="display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; margin-bottom: 20px;">
+        ${[...Array(11).keys()]
+          .map(
+            (score) =>
+              `<button class="nps-score-btn" data-score="${score}" style="border: 1px solid #ccc; background: #f9f9f9; padding: 8px 12px; border-radius: 4px; cursor: pointer; min-width: 40px; transition: background-color 0.2s, border-color 0.2s;">${score}</button>`,
+          )
+          .join('')}
+      </div>
+      <p style="margin-top: 5px; margin-bottom: 15px; font-size: 0.8em; color: #999;">0 = Not at all likely, 10 = Extremely likely</p>
+      <p style="margin-bottom: 5px; font-size: 0.9em; color: #555; text-align: left;">Optional: What's the main reason for your score?</p>
+      <textarea id="nps-feedback" placeholder="Your feedback helps us improve..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; margin-bottom: 20px; box-sizing: border-box;"></textarea>
+      <div id="nps-buttons" style="display: flex; justify-content: space-between; gap: 10px;">
+        <button id="nps-submit" style="background-color: #4CAF50; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; flex-grow: 1; opacity: 0.5; pointer-events: none;">Submit</button>
+        <button id="nps-ask-later" style="background-color: #f0f0f0; color: #333; padding: 10px 15px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">Ask Me Later</button>
+        <button id="nps-no-thanks" style="background-color: #f0f0f0; color: #333; padding: 10px 15px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">No Thanks</button>
+      </div>
+      <div id="nps-message-area" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none; font-weight: bold;"></div>
+    `;
+
+    // Append inside chat window
+    chatWindowElement.appendChild(npsModalElement);
+
+    // Add event listeners (we'll define these functions later)
+    setupNpsModalEventListeners();
+  }
+
+  function setupNpsModalEventListeners() {
+    if (!npsModalElement) return;
+
+    let selectedScore = -1;
+
+    const scoreButtons = npsModalElement.querySelectorAll('.nps-score-btn');
+    const submitButton = npsModalElement.querySelector('#nps-submit');
+    const askLaterButton = npsModalElement.querySelector('#nps-ask-later');
+    const noThanksButton = npsModalElement.querySelector('#nps-no-thanks');
+    const feedbackInput = npsModalElement.querySelector('#nps-feedback');
+
+    scoreButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        selectedScore = parseInt(button.dataset.score, 10);
+        scoreButtons.forEach((btn) => {
+          btn.style.backgroundColor = '#f9f9f9';
+          btn.style.borderColor = '#ccc';
+          btn.style.fontWeight = 'normal';
+        });
+        button.style.backgroundColor = '#e0e0e0';
+        button.style.borderColor = '#aaa';
+        button.style.fontWeight = 'bold';
+        submitButton.style.opacity = '1';
+        submitButton.style.pointerEvents = 'auto';
+      });
+    });
+
+    submitButton.addEventListener('click', async () => {
+      if (selectedScore >= 0) {
+        await handleNpsSubmit(selectedScore, feedbackInput.value);
+      }
+    });
+
+    askLaterButton.addEventListener('click', () => {
+      handleNpsDismiss('later');
+      hideNpsSurveyModal();
+    });
+
+    noThanksButton.addEventListener('click', () => {
+      handleNpsDismiss('no_thanks');
+      hideNpsSurveyModal();
+    });
+  }
+
+  function showNpsSurveyModal() {
+    if (npsModalElement) {
+      // Reset state before showing
+      const formContent = npsModalElement.querySelectorAll(
+        'h3, p, #nps-score-options, #nps-feedback, #nps-buttons',
+      );
+      const scoreButtons = npsModalElement.querySelectorAll('.nps-score-btn');
+      const submitButton = npsModalElement.querySelector('#nps-submit');
+      const feedbackInput = npsModalElement.querySelector('#nps-feedback');
+      const messageArea = npsModalElement.querySelector('#nps-message-area');
+
+      // Ensure form content is visible and message area is hidden
+      formContent.forEach((el) => (el.style.display = '')); // Reset display
+      messageArea.style.display = 'none';
+      messageArea.textContent = '';
+
+      scoreButtons.forEach((btn) => {
+        btn.style.backgroundColor = '#f9f9f9';
+        btn.style.borderColor = '#ccc';
+        btn.style.fontWeight = 'normal';
+      });
+      submitButton.style.opacity = '0.5';
+      submitButton.style.pointerEvents = 'none';
+      feedbackInput.value = '';
+
+      npsModalElement.style.display = 'block';
+    }
+  }
+
+  function hideNpsSurveyModal() {
+    if (npsModalElement) {
+      npsModalElement.style.display = 'none';
+    }
+  }
+
+  // Placeholder functions for submit/dismiss actions (to be implemented later)
+  async function handleNpsSubmit(score, feedback) {
+    const timestamp = new Date().toISOString();
+    const payload = {
+      uuid: npsUserUuid,
+      score: score,
+      feedback: feedback || '', // Ensure feedback is at least an empty string
+      additionalComments: '', // Add if needed later
+      timestamp: timestamp,
+    };
+
+    const messageArea = npsModalElement?.querySelector('#nps-message-area');
+    const formContent = npsModalElement?.querySelectorAll(
+      'h3, p, #nps-score-options, #nps-feedback, #nps-buttons',
+    );
+
+    // Disable buttons during submission
+    const buttons = npsModalElement?.querySelectorAll('button');
+    if (buttons) buttons.forEach((btn) => (btn.disabled = true));
+
+    try {
+      // Ensure aichatbotData and vercelUrl are available
+      if (!window.aichatbotData || !window.aichatbotData.vercelUrl) {
+        throw new Error('Chatbot configuration (vercelUrl) is missing.');
+      }
+      // Construct the full API endpoint URL for NPS
+      // Assumes NPS API route is at the same origin as the main chat URL
+      let npsApiUrl;
+      try {
+        const baseUrl = new URL(window.aichatbotData.vercelUrl).origin;
+        npsApiUrl = `${baseUrl}/api/submitNpsSurvey`;
+      } catch (urlError) {
+        console.error(
+          'Invalid vercelUrl format:',
+          window.aichatbotData.vercelUrl,
+        );
+        throw new Error('Could not construct API URL from configuration.');
+      }
+
+      const response = await window.aichatbotAuth.fetchWithAuth(
+        npsApiUrl, // Use the constructed full URL for NPS submission
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})); // Try to get JSON error
+        throw new Error(
+          `API Error (${response.status}): ${errorData.message || response.statusText}`,
+        );
+      }
+
+      // Success: Update state and localStorage
+      const now = Date.now();
+      npsLastSurveyTimestamp = now;
+      npsLastSurveyQueryCount = npsQueryCount; // Record count *at time of submission*
+      setLocalStorageItem('npsLastSurveyTimestamp', npsLastSurveyTimestamp);
+      setLocalStorageItem('npsLastSurveyQueryCount', npsLastSurveyQueryCount);
+
+      // Show success message and hide form
+      if (messageArea && formContent) {
+        messageArea.textContent = 'Thank you for your feedback!';
+        messageArea.style.backgroundColor = '#d4edda'; // Light green
+        messageArea.style.color = '#155724'; // Dark green
+        messageArea.style.display = 'block';
+        formContent.forEach((el) => (el.style.display = 'none'));
+        // Automatically hide modal after a delay
+        setTimeout(() => {
+          hideNpsSurveyModal();
+          // Re-enable buttons when hiding
+          if (buttons) buttons.forEach((btn) => (btn.disabled = false));
+        }, 2500); // Hide after 2.5 seconds
+      }
+    } catch (error) {
+      console.error('Error submitting NPS survey:', error);
+      // Show error message
+      if (messageArea) {
+        // Check for the specific "one survey per month" rate limit error
+        if (
+          error.message &&
+          error.message.includes('You can only submit one survey per month')
+        ) {
+          messageArea.textContent = 'You can only submit one survey per month.';
+
+          // Treat this rate limit error as a completed survey for tracking purposes
+          const now = Date.now();
+          npsLastSurveyTimestamp = now;
+          npsLastSurveyQueryCount = npsQueryCount;
+          setLocalStorageItem('npsLastSurveyTimestamp', npsLastSurveyTimestamp);
+          setLocalStorageItem(
+            'npsLastSurveyQueryCount',
+            npsLastSurveyQueryCount,
+          );
+        } else {
+          messageArea.textContent =
+            'Error submitting survey. Please try again later.';
+        }
+        messageArea.style.backgroundColor = '#f8d7da'; // Light red
+        messageArea.style.color = '#721c24'; // Dark red
+        messageArea.style.display = 'block';
+
+        // Add acknowledge button
+        const acknowledgeButton = document.createElement('button');
+        acknowledgeButton.textContent = 'OK';
+        acknowledgeButton.style.marginTop = '10px';
+        acknowledgeButton.style.padding = '5px 15px';
+        acknowledgeButton.style.backgroundColor = '#f0f0f0';
+        acknowledgeButton.style.border = '1px solid #ccc';
+        acknowledgeButton.style.borderRadius = '4px';
+        acknowledgeButton.style.cursor = 'pointer';
+
+        // Add click handler to close modal when button is clicked
+        acknowledgeButton.addEventListener('click', () => {
+          hideNpsSurveyModal();
+        });
+
+        // Append button to message area
+        messageArea.appendChild(document.createElement('br'));
+        messageArea.appendChild(acknowledgeButton);
+      }
+
+      // Re-enable form buttons
+      if (buttons) {
+        buttons.forEach((btn) => {
+          // Keep submit button disabled to prevent multiple submissions
+          if (btn.id !== 'nps-submit') {
+            btn.disabled = false;
+          }
+        });
+      }
+    }
+  }
+
+  function handleNpsDismiss(reason) {
+    console.log(`NPS Dismissed: Reason=${reason}`);
+    if (reason === 'no_thanks') {
+      // Treat "No Thanks" like a submission for tracking purposes (prevents immediate re-prompt)
+      const now = Date.now();
+      npsLastSurveyTimestamp = now;
+      npsLastSurveyQueryCount = npsQueryCount;
+      setLocalStorageItem('npsLastSurveyTimestamp', npsLastSurveyTimestamp);
+      setLocalStorageItem('npsLastSurveyQueryCount', npsLastSurveyQueryCount);
+    }
+    // 'later' requires no state update, just hide (already handled by listener).
+  }
+
+  // --- NPS Survey Logic: Modal UI End ---
+
+  // --- NPS Survey Logic: Modal Creation Call ---
+  createNpsModalHtml();
+  // --- NPS Survey Logic: Modal Creation Call End ---
 });

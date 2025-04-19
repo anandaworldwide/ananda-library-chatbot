@@ -5,6 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
+import { withPagesCors } from '@/utils/server/pagesCorsUtils';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 
 // Handler function for NPS survey submission
@@ -126,5 +127,5 @@ async function handleRequest(
   }
 }
 
-// Export with standard JWT auth
-export default withJwtAuth(withApiMiddleware(handleRequest));
+// Export wrapped with CORS, then Auth, then Middleware
+export default withApiMiddleware(withPagesCors(withJwtAuth(handleRequest)));
