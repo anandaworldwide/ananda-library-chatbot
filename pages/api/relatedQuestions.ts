@@ -277,5 +277,7 @@ async function handler(
   }
 }
 
-// Apply API middleware with custom auth
-export default withApiMiddleware(withJwtOrCronAuth(handler));
+// Apply API middleware, skipping its default auth check and relying solely on withJwtOrCronAuth
+export default withApiMiddleware(withJwtOrCronAuth(handler), {
+  skipAuth: true,
+});
