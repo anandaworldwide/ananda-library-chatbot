@@ -481,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentBotMessage = null;
 
   // Simple markdown parser function
-  function renderMarkdown(text) { console.log(text);
+  function renderMarkdown(text) { 
     if (!text) return '';
 
     // Collapse multiple newlines before an asterisk to a single newline
