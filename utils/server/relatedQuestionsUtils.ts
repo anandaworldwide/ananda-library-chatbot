@@ -121,8 +121,6 @@ async function initializeClients() {
   if (isInitializing) return;
 
   isInitializing = true;
-  console.log('Initializing OpenAI and Pinecone clients...');
-  console.time('Client Initialization'); // Start timer
 
   try {
     // Retrieve necessary credentials and configuration from environment variables.
@@ -142,29 +140,20 @@ async function initializeClients() {
 
     // Initialize OpenAI client if it doesn't exist.
     if (!openai) {
-      console.time('OpenAI Client Init');
       openai = new OpenAI({ apiKey: openaiApiKey });
-      console.timeEnd('OpenAI Client Init');
-      console.log('OpenAI client initialized.');
     }
 
     // Initialize Pinecone client if it doesn't exist.
     if (!pinecone) {
-      console.time('Pinecone Client Init');
       pinecone = new Pinecone({
         apiKey: pineconeApiKey,
       });
-      console.timeEnd('Pinecone Client Init');
-      console.log('Pinecone client initialized.');
       // Immediately attempt to get or create the Pinecone index after client setup.
       await getPineconeIndex();
     } else if (!pineconeIndex) {
       // If Pinecone client exists but index is not set (e.g., after a previous error), try again.
-      console.log('Pinecone client existed, ensuring index is ready...');
       await getPineconeIndex();
     }
-
-    console.log('OpenAI and Pinecone clients ready.');
   } catch (error) {
     console.error('Error during client initialization:', error);
     // Reset clients on failure to allow subsequent initialization attempts.
@@ -177,7 +166,6 @@ async function initializeClients() {
   } finally {
     // Reset the initialization flag regardless of success or failure.
     isInitializing = false;
-    console.timeEnd('Client Initialization'); // End timer
   }
 }
 
@@ -219,33 +207,22 @@ async function getPineconeIndex(): Promise<PineconeIndex> {
 
   // Store the name of the index we intend to use.
   currentPineconeIndexName = indexName;
-  console.log(`Attempting to access Pinecone index: ${indexName}`);
-  console.time(`Pinecone Index Setup (${indexName})`); // Start timer for index setup
 
   try {
     // Check if the index already exists in the Pinecone project.
-    console.time(`Pinecone listIndexes (${indexName})`);
     const existingIndexes = await pinecone.listIndexes();
-    console.timeEnd(`Pinecone listIndexes (${indexName})`);
     const indexExists = existingIndexes.indexes?.some(
       (index) => index.name === indexName,
     );
 
     // If the index does not exist, create it.
     if (!indexExists) {
-      console.log(
-        `Creating Pinecone index: ${indexName} with dimension ${embeddingDimension}...`,
-      );
       // Retrieve Pinecone cloud and region settings from environment variables, defaulting if not set.
       const pineconeCloud = (process.env.PINECONE_CLOUD ||
         'aws') as ServerlessSpecCloudEnum;
       const pineconeRegion = process.env.PINECONE_REGION || 'us-west-2';
-      console.log(
-        `Using Pinecone Serverless spec: Cloud=${pineconeCloud}, Region=${pineconeRegion}`,
-      );
 
       // Create the index with the specified name, dimension, metric, and serverless configuration.
-      console.time(`Pinecone createIndex (${indexName})`);
       await pinecone.createIndex({
         name: indexName,
         dimension: embeddingDimension, // Dimension must match the embedding model.
@@ -258,11 +235,8 @@ async function getPineconeIndex(): Promise<PineconeIndex> {
           },
         },
       });
-      console.timeEnd(`Pinecone createIndex (${indexName})`);
 
       // Wait for the newly created index to become ready.
-      console.log(`Waiting for index ${indexName} to initialize...`);
-      console.time(`Pinecone Index Wait (${indexName})`); // Timer for waiting phase
       let indexDescription = await pinecone.describeIndex(indexName);
       const maxWaitTime = 5 * 60 * 1000; // Set a maximum wait time (5 minutes).
       const startTime = Date.now();
@@ -271,30 +245,20 @@ async function getPineconeIndex(): Promise<PineconeIndex> {
         indexDescription?.status?.state !== 'Ready' &&
         Date.now() - startTime < maxWaitTime
       ) {
-        console.log(
-          `Index status: ${indexDescription?.status?.state || 'Unknown'}. Waiting...`,
-        );
         await new Promise((resolve) => setTimeout(resolve, 10000)); // Poll every 10 seconds.
         indexDescription = await pinecone.describeIndex(indexName);
       }
-      console.timeEnd(`Pinecone Index Wait (${indexName})`); // End wait timer
 
       // Check if the index became ready within the timeout period.
-      if (indexDescription?.status?.state === 'Ready') {
-        console.log(`Index ${indexName} created and ready.`);
-      } else {
+      if (indexDescription?.status?.state !== 'Ready') {
         throw new Error(
           `Index ${indexName} did not become ready within the timeout period.`,
         );
       }
-    } else {
-      // If the index already exists, log that it will be used.
-      console.log(`Using existing Pinecone index: ${indexName}`);
     }
 
     // Get a reference to the index (either newly created or existing).
     pineconeIndex = pinecone.index(indexName);
-    console.timeEnd(`Pinecone Index Setup (${indexName})`); // End timer for index setup
     return pineconeIndex;
   } catch (error) {
     // Log and handle errors during index access or creation.
@@ -305,7 +269,6 @@ async function getPineconeIndex(): Promise<PineconeIndex> {
     // Reset index state on error.
     pineconeIndex = null;
     currentPineconeIndexName = null;
-    console.timeEnd(`Pinecone Index Setup (${indexName})`); // Ensure timer ends on error too
     throw error; // Re-throw the error to signal failure.
   }
 }
@@ -343,7 +306,6 @@ async function getBatchEmbeddings(texts: string[]): Promise<number[][]> {
     return [];
   }
 
-  console.time(`OpenAI Batch Embeddings (${validTexts.length} texts)`); // Start timer
   try {
     // Clean the texts by replacing newlines
     const cleanedTexts = validTexts.map((text) => text.replace(/\n/g, ' '));
@@ -354,12 +316,10 @@ async function getBatchEmbeddings(texts: string[]): Promise<number[][]> {
       input: cleanedTexts,
     });
 
-    console.timeEnd(`OpenAI Batch Embeddings (${validTexts.length} texts)`); // End timer
     // Return the array of embedding vectors
     return response.data.map((item) => item.embedding);
   } catch (error) {
     console.error('Error getting batch embeddings from OpenAI:', error);
-    console.timeEnd(`OpenAI Batch Embeddings (${validTexts.length} texts)`); // End timer on error
     throw error;
   }
 }
@@ -381,7 +341,6 @@ async function getEmbedding(text: string): Promise<number[]> {
     console.warn('Attempted to get embedding for empty text.');
     return []; // Return an empty array as embedding cannot be generated.
   }
-  console.time('OpenAI Single Embedding'); // Start timer
   try {
     // Clean the text by replacing newlines, which can negatively affect embedding quality.
     const cleanedText = text.replace(/\n/g, ' ');
@@ -390,12 +349,10 @@ async function getEmbedding(text: string): Promise<number[]> {
       model: embeddingModel, // Use the globally defined model.
       input: cleanedText,
     });
-    console.timeEnd('OpenAI Single Embedding'); // End timer
     // Return the generated embedding vector.
     return response.data[0].embedding;
   } catch (error) {
     console.error('Error getting embedding from OpenAI:', error);
-    console.timeEnd('OpenAI Single Embedding'); // End timer on error
     // Rethrow the error for upstream handling.
     throw error;
   }
@@ -438,35 +395,24 @@ export async function upsertEmbeddings(
     return;
   }
 
-  const timerLabel = `Upsert Embeddings (${validQuestions.length} questions, ${providedEmbeddings ? 'provided' : 'generated'})`;
-  console.time(timerLabel); // Start overall timer
-
   try {
     let embeddings: number[][];
 
     if (providedEmbeddings) {
       // Validate provided embeddings
       if (providedEmbeddings.length !== validQuestions.length) {
-        console.timeEnd(timerLabel);
         throw new Error(
           `upsertEmbeddings: Mismatch between questions (${validQuestions.length}) and provided embeddings (${providedEmbeddings.length}).`,
         );
       }
-      console.log(
-        `Using ${providedEmbeddings.length} provided embeddings for upsert.`,
-      );
       embeddings = providedEmbeddings;
     } else {
       // Generate embeddings if not provided
       const textsToEmbed = validQuestions.map((q) => q.question);
-      console.log(
-        `Generating embeddings internally for ${textsToEmbed.length} questions...`,
-      );
       // Timer for batch embeddings is within getBatchEmbeddings itself
       embeddings = await getBatchEmbeddings(textsToEmbed);
       // Basic validation after internal generation
       if (embeddings.length !== validQuestions.length) {
-        console.timeEnd(timerLabel);
         throw new Error(
           `upsertEmbeddings: Mismatch after internal generation between questions (${validQuestions.length}) and embeddings (${embeddings.length}).`,
         );
@@ -500,13 +446,8 @@ export async function upsertEmbeddings(
       return;
     }
 
-    console.log(
-      `Attempting to upsert ${vectors.length} vectors into Pinecone index: ${currentPineconeIndexName}`,
-    );
-
     // Upsert vectors to Pinecone in batches
     const batchSize = 100; // Pinecone recommends batch sizes of 100 or fewer
-    console.time(`Pinecone Upsert Loop (${vectors.length} vectors)`); // Timer for the loop
     for (let i = 0; i < vectors.length; i += batchSize) {
       const batch = vectors.slice(i, i + batchSize);
       // Perform the upsert operation for the current batch
@@ -520,23 +461,10 @@ export async function upsertEmbeddings(
 
       for (let attempt = 1; attempt <= maxUpsertRetries; attempt++) {
         try {
-          console.time(
-            `Pinecone Upsert Batch ${batchNum}/${totalBatches} (${batch.length} vectors) - Attempt ${attempt}`,
-          );
           await pineconeIndex.upsert(batch);
-          console.timeEnd(
-            `Pinecone Upsert Batch ${batchNum}/${totalBatches} (${batch.length} vectors) - Attempt ${attempt}`,
-          );
-          console.log(
-            `Upserted batch ${batchNum}/${totalBatches} (size: ${batch.length}) into Pinecone.`,
-          );
           upsertSuccess = true;
           break; // Exit retry loop on success
         } catch (upsertError: any) {
-          console.timeEnd(
-            `Pinecone Upsert Batch ${batchNum}/${totalBatches} (${batch.length} vectors) - Attempt ${attempt}`,
-          );
-
           // Check for retryable errors
           const errorMessage = String(upsertError?.message || upsertError);
           const causedBy = upsertError?.cause
@@ -575,14 +503,11 @@ export async function upsertEmbeddings(
         );
       }
     }
-    console.timeEnd(`Pinecone Upsert Loop (${vectors.length} vectors)`); // End loop timer
   } catch (error) {
     // Log and rethrow errors encountered during the Pinecone upsert operation
     console.error('Error upserting embeddings to Pinecone:', error);
-    console.timeEnd(timerLabel); // End overall timer on error
     throw error;
   }
-  console.timeEnd(timerLabel); // End overall timer on success
 }
 
 // --- Related Questions Retrieval (Firestore) ---
@@ -598,12 +523,9 @@ export async function getRelatedQuestions(
 ): Promise<Answer[]> {
   // Ensure Firestore DB is available.
   checkDbAvailable();
-  console.time(`getRelatedQuestions (${questionId})`); // Start timer
 
-  console.time(`Firestore Get Doc (${questionId})`);
   const docRef = db!.collection(getAnswersCollectionName()).doc(questionId);
   const doc = await docRef.get();
-  console.timeEnd(`Firestore Get Doc (${questionId})`);
 
   // Handle cases where the source document doesn't exist.
   if (!doc.exists) {
@@ -630,20 +552,12 @@ export async function getRelatedQuestions(
 
   // If no related IDs found, return empty array.
   if (relatedQuestionIds.length === 0) {
-    console.timeEnd(`getRelatedQuestions (${questionId})`); // End timer early
     return [];
   }
 
   try {
     // Fetch the full details of the related questions using their IDs.
-    console.time(
-      `Firestore getAnswersByIds (${relatedQuestionIds.length} IDs)`,
-    );
     const relatedQuestions = await getAnswersByIds(relatedQuestionIds);
-    console.timeEnd(
-      `Firestore getAnswersByIds (${relatedQuestionIds.length} IDs)`,
-    );
-    console.timeEnd(`getRelatedQuestions (${questionId})`); // End timer on success
     return relatedQuestions;
   } catch (error) {
     // Log errors during the fetching of full answer details.
@@ -651,7 +565,6 @@ export async function getRelatedQuestions(
       `Error fetching full answers for related IDs [${relatedQuestionIds.join(', ')}]:`,
       error,
     );
-    console.timeEnd(`getRelatedQuestions (${questionId})`); // End timer on error
     return []; // Return empty array on error.
   }
 }
@@ -669,9 +582,6 @@ async function getQuestionsBatch(
   batchSize: number,
 ): Promise<Answer[]> {
   checkDbAvailable();
-  const logSuffix = lastProcessedId ? `after ${lastProcessedId}` : 'from start';
-  console.log(`Fetching batch of ${batchSize} questions ${logSuffix}...`);
-  console.time(`getQuestionsBatch (${batchSize} questions, ${logSuffix})`); // Start timer
 
   try {
     // Build the base query for the answers collection.
@@ -683,14 +593,12 @@ async function getQuestionsBatch(
     // If a lastProcessedId is provided, start the query after that document.
     if (lastProcessedId) {
       // Get a reference to the document to start after.
-      console.time(`Firestore Get Cursor Doc (${lastProcessedId})`);
       const lastProcessedDoc = await performFirestoreOperation(
         () =>
           db!.collection(getAnswersCollectionName()).doc(lastProcessedId).get(),
         'document get for cursor',
         `lastProcessedId: ${lastProcessedId}`,
       );
-      console.timeEnd(`Firestore Get Cursor Doc (${lastProcessedId})`);
 
       // Handle case where the lastProcessedId document no longer exists.
       if (!lastProcessedDoc.exists) {
@@ -707,13 +615,11 @@ async function getQuestionsBatch(
     query = query.limit(batchSize);
 
     // Execute the query with error handling
-    console.time(`Firestore Batch Query (${batchSize}, ${logSuffix})`);
     const querySnapshot = await performFirestoreOperation(
       () => query.get(),
       'batch query',
       `batchSize: ${batchSize}, after: ${lastProcessedId || 'START'}`,
     );
-    console.timeEnd(`Firestore Batch Query (${batchSize}, ${logSuffix})`);
 
     // Extract the complete question data from the query results.
     const questions = querySnapshot.docs.map(
@@ -723,13 +629,9 @@ async function getQuestionsBatch(
           id: doc.id,
         }) as Answer,
     );
-
-    console.log(`Successfully fetched ${questions.length} questions.`);
-    console.timeEnd(`getQuestionsBatch (${batchSize} questions, ${logSuffix})`); // End timer on success
     return questions;
   } catch (error) {
     console.error('Error during question batch retrieval:', error);
-    console.timeEnd(`getQuestionsBatch (${batchSize} questions, ${logSuffix})`); // End timer on error
     throw error; // Re-throw the error to be handled by the caller.
   }
 }
@@ -761,7 +663,6 @@ export async function findRelatedQuestionsPinecone(
       'findRelatedQuestionsPinecone: SITE_ID environment variable is not set.',
     );
   }
-  console.time(`findRelatedQuestionsPinecone (${questionId})`); // Start timer
 
   // Constants for filtering
   const topK = 20; // Request more initial candidates from Pinecone
@@ -771,14 +672,11 @@ export async function findRelatedQuestionsPinecone(
 
   let queryEmbedding: number[];
   try {
-    console.time(`Get Query Embedding (${questionId})`);
     queryEmbedding = await getEmbedding(questionText);
-    console.timeEnd(`Get Query Embedding (${questionId})`);
     if (queryEmbedding.length === 0) {
       console.warn(
         `Could not generate embedding for question ID ${questionId}. Skipping search.`,
       );
-      console.timeEnd(`findRelatedQuestionsPinecone (${questionId})`); // End timer early
       return [];
     }
   } catch (error) {
@@ -786,7 +684,6 @@ export async function findRelatedQuestionsPinecone(
       `Embedding generation failed for query ${questionId}:`,
       error,
     );
-    console.timeEnd(`findRelatedQuestionsPinecone (${questionId})`); // End timer on error
     return [];
   }
 
@@ -797,14 +694,7 @@ export async function findRelatedQuestionsPinecone(
 
     for (let attempt = 1; attempt <= maxSourceMetaRetries; attempt++) {
       try {
-        console.time(
-          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
-        );
         const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
-        console.timeEnd(
-          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
-        );
-
         const sourceRecord = sourceFetchResponse.records[questionId];
         if (
           sourceRecord?.metadata?.title &&
@@ -822,10 +712,6 @@ export async function findRelatedQuestionsPinecone(
           retryDelay *= 2; // Exponential backoff
         }
       } catch (fetchError: any) {
-        console.timeEnd(
-          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
-        );
-
         if (attempt < maxSourceMetaRetries) {
           console.log(
             `Error fetching source metadata on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry...`,
@@ -860,14 +746,10 @@ export async function findRelatedQuestionsPinecone(
 
     for (let attempt = 1; attempt <= maxQueryRetries; attempt++) {
       try {
-        console.time(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
         queryResponse = await pineconeIndex.query(pineconeQuery);
-        console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
         querySuccess = true;
         break;
       } catch (queryError: any) {
-        console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
-
         const errorMessage = String(queryError?.message || queryError);
         const causedBy = queryError?.cause
           ? String(queryError.cause?.message || queryError.cause)
@@ -954,14 +836,12 @@ export async function findRelatedQuestionsPinecone(
 
     // Sort by similarity score and return top N results
     related.sort((a, b) => b.similarity - a.similarity);
-    console.timeEnd(`findRelatedQuestionsPinecone (${questionId})`);
     return related.slice(0, resultsLimit);
   } catch (error) {
     console.error(
       `Error querying Pinecone for question ID ${questionId}:`,
       error,
     );
-    console.timeEnd(`findRelatedQuestionsPinecone (${questionId})`);
     throw error; // Re-throw to be handled by caller
   }
 }
@@ -997,7 +877,6 @@ async function findRelatedQuestionsPineconeWithEmbedding(
       'findRelatedQuestionsPineconeWithEmbedding: SITE_ID environment variable is not set.',
     );
   }
-  console.time(`findRelatedQuestionsPineconeWithEmbedding (${questionId})`); // Start timer
 
   // Constants for filtering
   const topK = 20; // Request more initial candidates from Pinecone
@@ -1008,9 +887,6 @@ async function findRelatedQuestionsPineconeWithEmbedding(
     console.warn(
       `[findRelatedQuestionsPineconeWithEmbedding] Empty embedding provided for question ID ${questionId}. Skipping search.`,
     );
-    console.timeEnd(
-      `findRelatedQuestionsPineconeWithEmbedding (${questionId})`,
-    ); // End timer early
     return [];
   }
 
@@ -1025,14 +901,7 @@ async function findRelatedQuestionsPineconeWithEmbedding(
 
     for (let attempt = 1; attempt <= maxMetadataRetries; attempt++) {
       try {
-        console.time(
-          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
-        );
         const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
-        console.timeEnd(
-          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
-        );
-
         const sourceRecord = sourceFetchResponse.records[questionId];
         if (
           sourceRecord?.metadata?.title &&
@@ -1047,10 +916,6 @@ async function findRelatedQuestionsPineconeWithEmbedding(
         metadataFetchSuccess = true;
         break; // Exit retry loop on success
       } catch (fetchError: any) {
-        console.timeEnd(
-          `Pinecone Fetch Source Meta (${questionId}) - Attempt ${attempt}`,
-        );
-
         // Check for retryable errors (like DNS, connection, EBUSY)
         const errorMessage = String(fetchError?.message || fetchError);
         const causedBy = fetchError?.cause
@@ -1105,14 +970,10 @@ async function findRelatedQuestionsPineconeWithEmbedding(
 
     for (let attempt = 1; attempt <= maxQueryRetries; attempt++) {
       try {
-        console.time(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
         queryResponse = await pineconeIndex.query(pineconeQuery);
-        console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
         querySuccess = true;
         break; // Exit retry loop on success
       } catch (queryError: any) {
-        console.timeEnd(`Pinecone Query (${questionId}) - Attempt ${attempt}`);
-
         // Check for retryable errors
         const errorMessage = String(queryError?.message || queryError);
         const causedBy = queryError?.cause
@@ -1197,18 +1058,12 @@ async function findRelatedQuestionsPineconeWithEmbedding(
 
     // Sort and slice
     related.sort((a, b) => b.similarity - a.similarity);
-    console.timeEnd(
-      `findRelatedQuestionsPineconeWithEmbedding (${questionId})`,
-    ); // End timer on success
     return related.slice(0, resultsLimit);
   } catch (error) {
     console.error(
       `[findRelatedQuestionsPineconeWithEmbedding] Error querying Pinecone for question ID ${questionId}:`,
       error,
     );
-    console.timeEnd(
-      `findRelatedQuestionsPineconeWithEmbedding (${questionId})`,
-    ); // End timer on error
     return [];
   }
 }
@@ -1222,13 +1077,10 @@ async function findRelatedQuestionsPineconeWithEmbedding(
 export async function updateRelatedQuestionsBatch(
   batchSize: number,
 ): Promise<void> {
-  console.time(`updateRelatedQuestionsBatch (Size: ${batchSize})`); // Start overall timer
   // Ensure database and clients are ready before starting.
   checkDbAvailable();
   try {
-    console.time(`Batch Init Clients`);
     await initializeClients();
-    console.timeEnd(`Batch Init Clients`);
   } catch (initError) {
     console.error(
       'updateRelatedQuestionsBatch: Aborting due to client initialization failure.',
@@ -1261,21 +1113,16 @@ export async function updateRelatedQuestionsBatch(
   // --- Progress Tracking ---
   let lastProcessedId: string | null = null;
   try {
-    console.time(`Batch Read Progress`);
     // Attempt to read the last processed ID from the progress document.
     const progressDoc = await performFirestoreOperation(
       () => progressDocRef.get(),
       'progress document get',
       `progressDocId: ${progressDocId}`,
     );
-    console.timeEnd(`Batch Read Progress`);
 
     lastProcessedId = progressDoc.exists
       ? progressDoc.data()?.lastProcessedId
       : null;
-    console.log(
-      `Starting batch update. Progress Doc ID: ${progressDocId}. Last processed question ID: ${lastProcessedId}`,
-    );
   } catch (error) {
     console.error('Error reading progress document:', error);
     // Decide whether to proceed without progress or halt. Proceeding might reprocess data.
@@ -1286,12 +1133,9 @@ export async function updateRelatedQuestionsBatch(
   // --- Fetch Initial Batch ---
   let questions: Answer[];
   try {
-    console.time(`Batch Fetch Initial Questions`);
     questions = await getQuestionsBatch(lastProcessedId, batchSize);
-    console.timeEnd(`Batch Fetch Initial Questions`);
   } catch (error) {
     console.error('Failed to fetch initial batch of questions:', error);
-    console.timeEnd(`updateRelatedQuestionsBatch (Size: ${batchSize})`); // End overall timer on error
     return; // Cannot proceed without the first batch.
   }
 
@@ -1304,21 +1148,16 @@ export async function updateRelatedQuestionsBatch(
     lastProcessedId = null; // Reset progress marker to null.
     try {
       // Persist the reset progress marker to Firestore.
-      console.time(`Batch Reset Progress`);
       await performFirestoreOperation(
         () => progressDocRef.set({ lastProcessedId: null }),
         'progress reset',
         `progressDocId: ${progressDocId}`,
       );
-      console.timeEnd(`Batch Reset Progress`);
 
       // Fetch the first batch again from the beginning.
-      console.time(`Batch Fetch Questions After Reset`);
       questions = await getQuestionsBatch(null, batchSize);
-      console.timeEnd(`Batch Fetch Questions After Reset`);
     } catch (error) {
       console.error('Failed to fetch batch after resetting progress:', error);
-      console.timeEnd(`updateRelatedQuestionsBatch (Size: ${batchSize})`); // End overall timer on error
       return; // Abort if fetching fails after reset.
     }
   } else if (!questions.length && !lastProcessedId) {
@@ -1326,23 +1165,15 @@ export async function updateRelatedQuestionsBatch(
     console.log(
       'updateRelatedQuestionsBatch: No questions found in the collection to process.',
     );
-    console.timeEnd(`updateRelatedQuestionsBatch (Size: ${batchSize})`); // End overall timer early
     return; // Nothing to do.
   }
 
   // --- Process Batch ---
   // 1. Generate ALL embeddings needed for this batch upfront.
-  console.log(
-    `Batch Step 1: Generating embeddings for ${questions.length} questions (for upsert & query)...`,
-  );
   let allEmbeddings: number[][] = [];
   try {
     const textsToEmbed = questions.map((q) => q.question || ''); // Ensure non-null strings
-    console.time(`Batch Generate All Embeddings (${questions.length} texts)`);
     allEmbeddings = await getBatchEmbeddings(textsToEmbed);
-    console.timeEnd(
-      `Batch Generate All Embeddings (${questions.length} texts)`,
-    );
 
     // Basic validation
     if (allEmbeddings.length !== questions.length) {
@@ -1355,14 +1186,10 @@ export async function updateRelatedQuestionsBatch(
       `CRITICAL: Failed to generate initial embeddings for batch. Aborting.`,
       error,
     );
-    console.timeEnd(`updateRelatedQuestionsBatch (Size: ${batchSize})`);
     throw error; // Re-throw the error
   }
 
   // 2. Upsert Embeddings for the current batch, providing the generated embeddings.
-  console.log(
-    `Batch Step 2: Upserting embeddings for ${questions.length} questions...`,
-  );
   try {
     // Pass the pre-generated embeddings to upsertEmbeddings
     await upsertEmbeddings(questions, allEmbeddings);
@@ -1371,21 +1198,15 @@ export async function updateRelatedQuestionsBatch(
       'CRITICAL: Failed to upsert embeddings for batch. Aborting related question updates for this batch to prevent inconsistency.',
       error,
     );
-    console.timeEnd(`updateRelatedQuestionsBatch (Size: ${batchSize})`); // End overall timer on error
     throw error;
   }
 
   // 3. Find related questions via Pinecone (in parallel) and update Firestore (in batch)
-  console.log(
-    `Batch Step 3: Finding related questions & updating Firestore...`,
-  );
-  console.time(`Batch Find & Update Loop (${questions.length} questions)`);
   let updatedCount = 0;
   let errorCount = 0;
 
   // --- Parallel Pinecone Queries ---
   // NOTE: Linter may incorrectly flag allQueryEmbeddings here, but it's defined in the outer scope.
-  console.time(`Parallel Pinecone Queries (${questions.length} items)`);
   const pineconePromises = questions.map((question, index) => {
     // Explicitly type the return structure for clarity within the promise
     type PromiseResult =
@@ -1431,15 +1252,11 @@ export async function updateRelatedQuestionsBatch(
 
   // Wait for all Pinecone queries to settle (either succeed or fail)
   const pineconeResults = await Promise.allSettled(pineconePromises);
-  console.timeEnd(`Parallel Pinecone Queries (${questions.length} items)`);
 
   // --- Batched Firestore Updates ---
   const itemsToUpdate: { id: string; data: RelatedQuestion[] }[] = []; // Store successful updates
   const itemsWithErrors: string[] = []; // Store IDs of items that failed Pinecone query
 
-  console.log(
-    `Processing ${pineconeResults.length} Pinecone results for Firestore batch...`,
-  );
   pineconeResults.forEach((result, index) => {
     const question = questions[index]; // Get the original question
 
@@ -1461,26 +1278,6 @@ export async function updateRelatedQuestionsBatch(
       } else if ('results' in value && value.questionId) {
         // Successfully found related questions
         itemsToUpdate.push({ id: value.questionId, data: value.results });
-
-        // Optional: Keep debug logging if needed, referencing the original question
-        // const previousRelatedQuestions = question.relatedQuestionsV2 || []; // Removed unused assignment inside comment
-        /* // Keep debug logs commented out unless needed
-        console.log(`--- Related Questions Update Debug (Batch Item) ---`);
-        console.log(
-          `Question: ${value.questionId}: ${(question.question || '').slice(0, 120)}`,
-        );
-        console.log(`Previous Related (${previousRelatedQuestions.length}):`);
-        previousRelatedQuestions.forEach((q: RelatedQuestion) =>
-          console.log(`  - ${q.id}: ${q.title.slice(0, 120)}`),
-        );
-        console.log(`Current Related (${value.results.length}):`);
-        value.results.forEach((q: RelatedQuestion) =>
-          console.log(
-            `  - ${q.id}: ${q.title.slice(0, 120)} (Score: ${q.similarity.toFixed(4)})`,
-          ),
-        );
-        console.log(`--- End Debug ---`);
-        */
       } else {
         // Should not happen if structure is correct, but handle defensively
         console.error(
@@ -1510,10 +1307,6 @@ export async function updateRelatedQuestionsBatch(
   const firestoreChunkSize = 400; // Keep below Firestore's 500 limit
   let lastSuccessfulChunkProcessedId: string | null = lastProcessedId; // Initialize with the ID we started this batch from
 
-  console.log(
-    `Attempting to commit ${itemsToUpdate.length} Firestore updates in chunks of ${firestoreChunkSize}...`,
-  );
-
   for (let i = 0; i < itemsToUpdate.length; i += firestoreChunkSize) {
     const chunk = itemsToUpdate.slice(i, i + firestoreChunkSize);
     if (chunk.length === 0) continue; // Skip empty chunks (shouldn't happen with loop condition)
@@ -1535,20 +1328,16 @@ export async function updateRelatedQuestionsBatch(
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.time(`${chunkLogPrefix} - Attempt ${attempt}`);
         await performFirestoreOperation(
           () => firestoreBatch.commit(),
           'batch commit',
           `${chunk.length} documents in chunk ${chunkNumber}`,
         );
-        console.timeEnd(`${chunkLogPrefix} - Attempt ${attempt}`);
         commitSuccessful = true;
         updatedCount += chunk.length; // Increment successful count only on success
         lastSuccessfulChunkProcessedId = chunk[chunk.length - 1].id; // Update progress marker *after* successful commit
-        console.log(`${chunkLogPrefix}: Commit successful.`);
         break; // Exit retry loop on success
       } catch (error: any) {
-        console.timeEnd(`${chunkLogPrefix} - Attempt ${attempt}`);
         console.error(
           `${chunkLogPrefix}: Commit attempt ${attempt} failed.`,
           error,
@@ -1588,12 +1377,6 @@ export async function updateRelatedQuestionsBatch(
       // --- Update Progress Marker After Successful Chunk Commit ---
       // Only update if the commit for this chunk was successful
       try {
-        console.log(
-          `Updating progress marker after successful chunk ${chunkNumber} to: ${lastSuccessfulChunkProcessedId}`,
-        );
-        console.time(
-          `Update Progress After Chunk ${chunkNumber} (${lastSuccessfulChunkProcessedId})`,
-        );
         await performFirestoreOperation(
           () =>
             progressDocRef.set({
@@ -1601,9 +1384,6 @@ export async function updateRelatedQuestionsBatch(
             }),
           'progress update',
           `lastProcessedId: ${lastSuccessfulChunkProcessedId} (after chunk ${chunkNumber})`,
-        );
-        console.timeEnd(
-          `Update Progress After Chunk ${chunkNumber} (${lastSuccessfulChunkProcessedId})`,
         );
       } catch (progressError) {
         console.error(
@@ -1615,44 +1395,9 @@ export async function updateRelatedQuestionsBatch(
     }
   } // End of chunk loop
 
-  console.timeEnd(`Batch Find & Update Loop (${questions.length} questions)`);
   console.log(
     `Batch finished. Successfully updated related questions for ${updatedCount} items, encountered errors for ${errorCount} items (including commit failures and Pinecone query issues).`,
   );
-
-  // 3. Update Progress Marker (REMOVED - now happens after each successful chunk).
-  /*
-  // Only update if the batch actually contained questions and some updates were attempted.
-  if (questions.length > 0 && itemsToUpdate.length > 0) {
-    const lastSuccessfullyProcessedItem = itemsToUpdate.findLast(item => !itemsWithErrors.includes(item.id) && /* check if committed * /);
-    // This logic is complex because commit failures might happen mid-batch.
-    // The new logic updates progress marker based on last *successful* chunk commit ID.
-
-    if (lastSuccessfulChunkProcessedId && lastSuccessfulChunkProcessedId !== lastProcessedId) { // Check if progress actually advanced
-      console.log(
-        `Final check: Updating progress marker to last successfully processed ID from chunks: ${lastSuccessfulChunkProcessedId}`,
-      );
-      try {
-        console.time(`Batch Final Progress Update Check`);
-        await performFirestoreOperation(
-          () => progressDocRef.set({ lastProcessedId: lastSuccessfulChunkProcessedId }),
-          'progress update',
-          `lastProcessedId: ${lastSuccessfulChunkProcessedId} (final check)`,
-        );
-        console.timeEnd(`Batch Final Progress Update Check`);
-      } catch (error) {
-        console.error('Failed to update progress document at the very end:', error);
-      }
-    } else if (!lastSuccessfulChunkProcessedId || lastSuccessfulChunkProcessedId === lastProcessedId) {
-       console.log('No successful chunk commits occurred, or progress did not advance. Final progress marker not updated.');
-    }
-  } else {
-    console.log(
-      'No questions processed or no items to update in this batch, progress marker not updated.',
-    );
-  }
-  */
-  console.timeEnd(`updateRelatedQuestionsBatch (Size: ${batchSize})`); // End overall timer on success/partial failure
 }
 
 // --- Single Question Update ---
@@ -1669,13 +1414,10 @@ export async function updateRelatedQuestionsBatch(
 export async function updateRelatedQuestions(
   questionId: string,
 ): Promise<{ previous: RelatedQuestion[]; current: RelatedQuestion[] }> {
-  console.time(`updateRelatedQuestions (${questionId})`); // Start overall timer
   // Ensure database and clients are ready.
   checkDbAvailable();
   try {
-    console.time(`Single Init Clients (${questionId})`);
     await initializeClients();
-    console.timeEnd(`Single Init Clients (${questionId})`);
   } catch (initError) {
     console.error(
       'updateRelatedQuestions: Aborting due to client initialization failure.',
@@ -1693,18 +1435,15 @@ export async function updateRelatedQuestions(
   }
 
   // 1. Fetch the target question text from Firestore.
-  console.log(`Updating related questions for single ID: ${questionId}`);
   let questionText: string;
   let previousRelatedQuestions: RelatedQuestion[] = [];
   try {
-    console.time(`Single Fetch Question (${questionId})`);
     // Use the performFirestoreOperation utility for better error handling and timeout detection
     const questionDoc = await performFirestoreOperation(
       () => db!.collection(getAnswersCollectionName()).doc(questionId).get(),
       'document get',
       `questionId: ${questionId}`,
     );
-    console.timeEnd(`Single Fetch Question (${questionId})`);
 
     // Handle case where the specified question document doesn't exist.
     if (!questionDoc.exists) {
@@ -1728,7 +1467,6 @@ export async function updateRelatedQuestions(
 
   // 2. Ensure the embedding for this question exists in Pinecone.
   // This involves generating and upserting the embedding. If it already exists, upsert updates it.
-  console.log(`Ensuring embedding exists in Pinecone for ${questionId}...`);
   try {
     // Construct a minimal Answer object required by upsertEmbeddings.
     const now = Timestamp.now();
@@ -1743,7 +1481,6 @@ export async function updateRelatedQuestions(
     // Call upsertEmbeddings with a single-item array.
     // Timer is inside upsertEmbeddings
     await upsertEmbeddings([minimalAnswer]);
-    console.log(`Ensured embedding exists for ${questionId}.`);
   } catch (error) {
     console.error(
       `Failed to upsert embedding for ${questionId} before finding related:`,
@@ -1756,7 +1493,6 @@ export async function updateRelatedQuestions(
   }
 
   // 3. Find related questions using Pinecone search (now with new logic).
-  console.log(`Finding related questions via Pinecone for ${questionId}...`);
   // Timer is inside findRelatedQuestionsPinecone
   const currentRelatedQuestions = await findRelatedQuestionsPinecone(
     questionId,
@@ -1765,12 +1501,7 @@ export async function updateRelatedQuestions(
   );
 
   // 4. Update the Firestore document with proper error handling
-  console.log(
-    `Updating Firestore for ${questionId} with ${currentRelatedQuestions.length} related questions.`,
-  );
-
   try {
-    console.time(`Single Firestore Update (${questionId})`);
     // Use the performFirestoreOperation utility with a timeout
     await performFirestoreOperation(
       () =>
@@ -1780,8 +1511,6 @@ export async function updateRelatedQuestions(
       'document update',
       `questionId: ${questionId}`,
     );
-    console.timeEnd(`Single Firestore Update (${questionId})`);
-    console.log(`Firestore update successful for ${questionId}`);
   } catch (error) {
     // Log but continue since we have the calculated results
     console.error(`Error updating Firestore for ${questionId}:`, error);
@@ -1790,7 +1519,6 @@ export async function updateRelatedQuestions(
     );
   }
 
-  console.timeEnd(`updateRelatedQuestions (${questionId})`); // End overall timer on success/partial failure
   // Return the previous and current lists of related questions.
   return {
     previous: previousRelatedQuestions,

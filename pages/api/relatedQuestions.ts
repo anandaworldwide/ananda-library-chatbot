@@ -72,19 +72,14 @@ function withJwtOrCronAuth(
   handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void,
 ) {
   return async (req: NextApiRequest, res: NextApiResponse) => {
-    console.log('[withJwtOrCronAuth] Checking auth...');
     const userAgent = req.headers['user-agent'] || '';
-    console.log(`[withJwtOrCronAuth] User-Agent: "${userAgent}"`);
     const isVercelCron = userAgent.startsWith('vercel-cron/');
-    console.log(`[withJwtOrCronAuth] Is Vercel Cron: ${isVercelCron}`);
 
     if (isVercelCron) {
       // Allow Vercel cron requests through
-      console.log('[withJwtOrCronAuth] Allowing Vercel cron request.');
       return handler(req, res);
     } else {
       // For all other requests, require JWT authentication
-      console.log('[withJwtOrCronAuth] Applying JWT authentication.');
       return withJwtAuth(handler)(req, res);
     }
   };
@@ -104,13 +99,6 @@ async function handler(
     operationId?: string;
   }>,
 ) {
-  // Generate an operation ID for tracking this request
-  const operationId = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  console.log(
-    `[${operationId}] Starting related questions operation for ${req.method} ${req.url}`,
-  );
-  console.time(`[${operationId}] Total Request Time`); // Start total request timer
-
   // Apply rate limiting. This method is called when a new question answer pair is added and it is
   // also called by a periodic cron job because the cron job can't do JWT tokens we keep the rate
   // limit very low here for security.
@@ -123,7 +111,6 @@ async function handler(
   if (!isAllowed) {
     return; // Response is already sent by the rate limiter
   }
-  console.time(`[${operationId}] Handler Logic`); // Start handler logic timer
 
   if (req.method === 'GET') {
     // Handle batch update of related questions
@@ -134,7 +121,6 @@ async function handler(
       return res.status(400).json({
         message: 'updateBatch parameter is required and must be a string.',
         errorType: ERROR_TYPES.VALIDATION,
-        operationId,
       });
     }
 
@@ -143,15 +129,8 @@ async function handler(
       return res.status(400).json({
         message: 'updateBatch must be a valid number.',
         errorType: ERROR_TYPES.VALIDATION,
-        operationId,
       });
     }
-
-    console.log(
-      `[${operationId}] Batch updating related questions with batch size:`,
-      batchSize,
-    );
-    console.time(`[${operationId}] updateRelatedQuestionsBatch Execution`); // Timer for batch update function
 
     try {
       // Start a timeout that will respond early if operation approaches Vercel's limit
@@ -161,9 +140,7 @@ async function handler(
         const timeoutMs = 280 * 1000;
         setTimeout(() => {
           reject(
-            new Error(
-              `[${operationId}] API timeout safety triggered after ${timeoutMs}ms`,
-            ),
+            new Error(`API timeout safety triggered after ${timeoutMs}ms`),
           );
         }, timeoutMs);
       });
@@ -171,20 +148,16 @@ async function handler(
       // Race between the actual operation and the timeout
       const batchPromise = updateRelatedQuestionsBatch(batchSize);
       await Promise.race([batchPromise, timeoutPromise]);
-      console.timeEnd(`[${operationId}] updateRelatedQuestionsBatch Execution`); // End timer for batch update function
 
-      console.timeEnd(`[${operationId}] Handler Logic`); // End handler logic timer
-      console.timeEnd(`[${operationId}] Total Request Time`); // End total request timer
       return res.status(200).json({
         message: 'Related questions batch update successful',
-        operationId,
       });
     } catch (error: unknown) {
       // Handle and log errors during batch update
       const { type, message } = categorizeError(error);
 
       // Log detailed error information
-      console.error(`[${operationId}] Error updating related questions:`, {
+      console.error(`Error updating related questions:`, {
         errorType: type,
         errorMessage: message,
         error,
@@ -200,14 +173,10 @@ async function handler(
             ? 404
             : 500;
 
-      console.timeEnd(`[${operationId}] updateRelatedQuestionsBatch Execution`); // End timer here too on error
-      console.timeEnd(`[${operationId}] Handler Logic`); // End handler logic timer
-      console.timeEnd(`[${operationId}] Total Request Time`); // End total request timer
       return res.status(statusCode).json({
         message: 'Error updating related questions',
         error: message,
         errorType: type,
-        operationId,
       });
     }
   } else if (req.method === 'POST') {
@@ -219,36 +188,27 @@ async function handler(
       return res.status(400).json({
         message: 'docId is required and must be a string.',
         errorType: ERROR_TYPES.VALIDATION,
-        operationId,
       });
     }
 
-    console.time(`[${operationId}] updateRelatedQuestions Execution`); // Timer for single update function
     try {
       // Update related questions for the specified document
       const result = await updateRelatedQuestions(docId);
-      console.timeEnd(`[${operationId}] updateRelatedQuestions Execution`); // End timer for single update function
-      console.timeEnd(`[${operationId}] Handler Logic`); // End handler logic timer
-      console.timeEnd(`[${operationId}] Total Request Time`); // End total request timer
       return res.status(200).json({
         message: 'Related questions updated successfully',
         relatedQuestions: result.current,
-        operationId,
       });
     } catch (error: unknown) {
       // Handle and log errors during individual update
       const { type, message } = categorizeError(error);
 
-      console.error(
-        `[${operationId}] Error updating related questions for document ${docId}:`,
-        {
-          errorType: type,
-          errorMessage: message,
-          error,
-          docId,
-          timestamp: new Date().toISOString(),
-        },
-      );
+      console.error(`Error updating related questions for document ${docId}:`, {
+        errorType: type,
+        errorMessage: message,
+        error,
+        docId,
+        timestamp: new Date().toISOString(),
+      });
 
       // Determine appropriate status code
       const statusCode =
@@ -258,21 +218,16 @@ async function handler(
             ? 404
             : 500;
 
-      console.timeEnd(`[${operationId}] updateRelatedQuestions Execution`); // End timer here too on error
-      console.timeEnd(`[${operationId}] Handler Logic`); // End handler logic timer
-      console.timeEnd(`[${operationId}] Total Request Time`); // End total request timer
       return res.status(statusCode).json({
         message: 'Error updating related questions',
         error: message,
         errorType: type,
-        operationId,
       });
     }
   } else {
     // Handle unsupported HTTP methods
     res.status(405).json({
       message: 'Method not allowed',
-      operationId,
     });
   }
 }
