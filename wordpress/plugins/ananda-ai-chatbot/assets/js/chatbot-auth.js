@@ -70,14 +70,10 @@ async function fetchNewToken() {
   const tokenUrl = aichatbotData.ajaxUrl + '?action=aichatbot_get_token';
 
   try {
-    console.log('Fetching token from WordPress backend: ' + tokenUrl);
-
     const response = await fetch(tokenUrl, {
       method: 'GET',
       credentials: 'same-origin', // Include cookies for WordPress nonce validation
     });
-
-    console.log('Token response status:', response.status);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch token: HTTP ${response.status}`);
@@ -85,12 +81,6 @@ async function fetchNewToken() {
 
     // Get the raw text first to check for issues
     const rawText = await response.text();
-
-    // Debug: Log a snippet of the raw text to see what's coming back
-    console.log(
-      'Raw response text (first 100 chars):',
-      rawText.length > 100 ? rawText.substring(0, 100) + '...' : rawText,
-    );
 
     // Check for HTTP Basic Auth error
     if (
@@ -113,8 +103,6 @@ async function fetchNewToken() {
         'Invalid JSON in response. Check WordPress PHP errors or warnings that might be included in the output.',
       );
     }
-
-    console.log('Token response data received:', JSON.stringify(data));
 
     // WordPress's wp_send_json_success wraps the data in a 'data' property
     // and sets 'success' to true
@@ -168,7 +156,6 @@ async function fetchNewToken() {
       expiresAt: parseJwtExpiration(token),
     };
 
-    console.log('Token successfully retrieved and stored');
     return token;
   } catch (error) {
     // Add more context to the error message
@@ -263,8 +250,6 @@ window.aichatbotAuth = {
   if (!window.aichatbotAuth) {
     console.error('Error: aichatbotAuth failed to initialize properly');
   } else {
-    console.log('aichatbotAuth initialized successfully');
-
     // For developers: Add test button if URL has test=true
     if (window.location.search.includes('test=true')) {
       setTimeout(() => {

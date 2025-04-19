@@ -630,24 +630,6 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update clear history button visibility
       updateClearHistoryButton();
 
-      // Add this right before sending the request
-      console.log(
-        'Request payload:',
-        JSON.stringify({
-          question: message,
-          history: chatHistory
-            .map(([userMsg, botMsg]) => [
-              { role: 'user', content: userMsg },
-              { role: 'assistant', content: botMsg },
-            ])
-            .flat(),
-          collection: defaultCollection,
-          privateSession: privateSession,
-          mediaTypes: mediaTypes,
-          sourceCount: sourceCount,
-        }),
-      );
-
       // Send to Vercel with streaming support
       const response = await window.aichatbotAuth.fetchWithAuth(
         aichatbotData.vercelUrl,
