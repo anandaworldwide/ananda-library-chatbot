@@ -88,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
     0,
   );
   let npsUserUuid = getLocalStorageItem('npsUserUuid', null);
+  let npsDismissReason = getLocalStorageItem('npsDismissReason', null);
 
   // Generate and save UUID if it doesn't exist
   if (!npsUserUuid) {
@@ -103,21 +104,51 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Trigger Logic Start ---
     const NPS_QUERY_THRESHOLD = 5;
     const THREE_MONTHS_IN_MS = 3 * 30 * 24 * 60 * 60 * 1000; // Approximate
+    const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
     const now = Date.now();
+
+    // Determine the required delay based on the dismiss reason
+    let requiredDelay = THREE_MONTHS_IN_MS; // Default to 3 months
+    if (npsDismissReason === 'later' || npsDismissReason === 'no_thanks') {
+      requiredDelay = THREE_DAYS_IN_MS;
+    }
 
     let shouldShow = false;
 
-    // Condition 1: Initial trigger (no previous survey, threshold met)
+    // Condition 1: Initial trigger (no previous survey interaction recorded)
     if (!npsLastSurveyTimestamp && npsQueryCount >= NPS_QUERY_THRESHOLD) {
       shouldShow = true;
     }
-    // Condition 2: Recurrence trigger (3 months passed, threshold met since last survey)
-    else if (
-      npsLastSurveyTimestamp &&
-      now - npsLastSurveyTimestamp >= THREE_MONTHS_IN_MS &&
-      npsQueryCount - npsLastSurveyQueryCount >= NPS_QUERY_THRESHOLD
-    ) {
-      shouldShow = true;
+    // Condition 2: Recurrence trigger
+    else if (npsLastSurveyTimestamp) {
+      const timeSinceLastInteraction = now - npsLastSurveyTimestamp;
+      const queriesSinceLastSubmission =
+        npsQueryCount - npsLastSurveyQueryCount;
+
+      // Check if enough time has passed based on the reason
+      if (timeSinceLastInteraction >= requiredDelay) {
+        // If it was dismissed ('later' or 'no_thanks'), show immediately after 3 days (ignore query threshold)
+        if (npsDismissReason === 'later' || npsDismissReason === 'no_thanks') {
+          shouldShow = true;
+        }
+        // If it was submitted, also check the query threshold
+        else if (
+          npsDismissReason === 'submitted' &&
+          queriesSinceLastSubmission >= NPS_QUERY_THRESHOLD
+        ) {
+          shouldShow = true;
+        }
+        // Handle cases where dismissReason might be null/unexpected (treat as submitted/default)
+        else if (
+          !npsDismissReason &&
+          queriesSinceLastSubmission >= NPS_QUERY_THRESHOLD
+        ) {
+          console.warn(
+            'NPS check: dismissReason missing, applying default 3-month/5-query rule.',
+          );
+          shouldShow = true;
+        }
+      }
     }
 
     if (shouldShow) {
@@ -1371,6 +1402,9 @@ document.addEventListener('DOMContentLoaded', () => {
       npsLastSurveyQueryCount = npsQueryCount; // Record count *at time of submission*
       setLocalStorageItem('npsLastSurveyTimestamp', npsLastSurveyTimestamp);
       setLocalStorageItem('npsLastSurveyQueryCount', npsLastSurveyQueryCount);
+      // Set dismiss reason to 'submitted'
+      npsDismissReason = 'submitted';
+      setLocalStorageItem('npsDismissReason', npsDismissReason);
 
       // Show success message and hide form
       if (messageArea && formContent) {
@@ -1406,6 +1440,9 @@ document.addEventListener('DOMContentLoaded', () => {
             'npsLastSurveyQueryCount',
             npsLastSurveyQueryCount,
           );
+          // Also mark as 'submitted' if rate limited
+          npsDismissReason = 'submitted';
+          setLocalStorageItem('npsDismissReason', npsDismissReason);
         } else {
           messageArea.textContent =
             'Error submitting survey. Please try again later.';
@@ -1448,15 +1485,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function handleNpsDismiss(reason) {
     console.log(`NPS Dismissed: Reason=${reason}`);
-    if (reason === 'no_thanks') {
-      // Treat "No Thanks" like a submission for tracking purposes (prevents immediate re-prompt)
+    if (reason === 'later' || reason === 'no_thanks') {
+      // Set timestamp to now for the 3-day cooldown start
       const now = Date.now();
       npsLastSurveyTimestamp = now;
-      npsLastSurveyQueryCount = npsQueryCount;
       setLocalStorageItem('npsLastSurveyTimestamp', npsLastSurveyTimestamp);
-      setLocalStorageItem('npsLastSurveyQueryCount', npsLastSurveyQueryCount);
+
+      // Set the dismiss reason
+      npsDismissReason = reason;
+      setLocalStorageItem('npsDismissReason', npsDismissReason);
+
+      // IMPORTANT: Do NOT update npsLastSurveyQueryCount here.
+      // This ensures the 5-query threshold only applies after a 'submitted' event.
     }
-    // 'later' requires no state update, just hide (already handled by listener).
+    // Hide modal (already handled by listener calling this).
   }
 
   // --- NPS Survey Logic: Modal UI End ---
