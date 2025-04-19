@@ -20,6 +20,8 @@ const allowedOrigins = [
   'http://localhost:3000', // Local Next.js dev
   'http://chatbot-test.local', // Local WordPress dev origin
   'http://localhost', // Add more variants
+  'https://vayudev.ananda.org', // staging Ananda domain
+  'https://ananda.org', // Ananda main domain
 ].filter(Boolean) as string[]; // Filter out undefined/null values
 
 /**
