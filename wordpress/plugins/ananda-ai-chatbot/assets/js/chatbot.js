@@ -480,78 +480,108 @@ document.addEventListener('DOMContentLoaded', () => {
   let accumulatedResponse = '';
   let currentBotMessage = null;
 
-  // Simple markdown parser function
+  /**
+   * Renders markdown text into HTML with support for:
+   * - Paragraphs (separated by double newlines)
+   * - Unordered lists (using * or - as markers)
+   * - Bold text (**text** or __text__)
+   * - Italic text (*text* or _text_)
+   * - Inline code (`code`)
+   * - Links ([text](url))
+   * - Special GETHUMAN links for Intercom integration
+   * 
+   * @param {string} text - The markdown text to convert to HTML
+   * @returns {string} The rendered HTML
+   */
   function renderMarkdown(text) {
     if (!text) return '';
 
-    // Pre-process: Convert double line breaks to paragraph markers without adding extra newlines
-    text = text.replace(/\n\s*\n/g, '<p-break>');
+    // Normalize line endings and clean up excessive whitespace:
+    // - Convert Windows line endings to Unix
+    // - Collapse 3+ newlines into 2 (standard markdown paragraph break)
+    text = text.trim()
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n');
 
-    // Handle Intercom links if integration is enabled - BEFORE other link processing
-    if (intercomEnabled) {
-      // Look for markdown links with GETHUMAN as the URL: [any text](GETHUMAN)
-      text = text.replace(
-        /\[(.*?)\]\(GETHUMAN\)/g,
-        '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
-      );
+    // Split text into logical blocks (paragraphs and lists)
+    // Double newlines are used as block separators in markdown
+    const blocks = text.split('\n\n');
+    let html = '';
+    let inList = false; // Tracks whether we're currently processing a list
+
+    for (let block of blocks) {
+      block = block.trim();
+      
+      // Check if this block starts with a list marker (* or -)
+      if (block.match(/^[*-]\s/m)) {
+        // Start a new list if we're not already in one
+        if (!inList) {
+          html += '<ul>';
+          inList = true;
+        }
+        // Split the block into individual list items
+        const items = block.split('\n');
+        for (let item of items) {
+          if (item.trim()) {
+            // Process each list item:
+            // 1. Remove the list marker
+            // 2. Process inline markdown (bold, italic, code)
+            // 3. Handle special GETHUMAN links
+            // 4. Process regular links
+            const listContent = item
+              .replace(/^[*-]\s+/, '') // Remove list marker
+              // Process inline markdown within list items
+              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+              .replace(/__(.*?)__/g, '<strong>$1</strong>')
+              .replace(/\*(.*?)\*/g, '<em>$1</em>')
+              .replace(/_(.*?)_/g, '<em>$1</em>')
+              .replace(/`(.*?)`/g, '<code>$1</code>')
+              // Handle links - special case for GETHUMAN
+              .replace(/\[(.*?)\]\(GETHUMAN\)/g, '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>')
+              // Regular links
+              .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+            
+            html += `<li>${listContent}</li>`;
+          }
+        }
+      } else {
+        // This is a regular paragraph block
+        
+        // Close any open list before starting a new paragraph
+        if (inList) {
+          html += '</ul>';
+          inList = false;
+        }
+        
+        // Process the paragraph block:
+        // 1. Handle inline markdown (bold, italic, code)
+        // 2. Process special GETHUMAN links
+        // 3. Process regular links
+        // 4. Convert single newlines to <br /> tags
+        let paragraph = block
+          // Process inline markdown
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/__(.*?)__/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+          .replace(/_(.*?)_/g, '<em>$1</em>')
+          .replace(/`(.*?)`/g, '<code>$1</code>')
+          // Handle links - special case for GETHUMAN
+          .replace(/\[(.*?)\]\(GETHUMAN\)/g, '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>')
+          // Regular links
+          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')
+          // Handle line breaks within paragraphs
+          .replace(/\n/g, '<br />');
+
+        html += `<p>${paragraph}</p>`;
+      }
     }
 
-    // Handle basic markdown
-    return (
-      text
-        // Headers: # Header 1, ## Header 2, etc.
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    // Ensure any open list is properly closed
+    if (inList) {
+      html += '</ul>';
+    }
 
-        // Bold: **text** or __text__
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/__(.*?)__/g, '<strong>$1</strong>')
-
-        // Italic: *text* or _text_
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/_(.*?)_/g, '<em>$1</em>')
-
-        // Links: [title](url)
-        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')
-
-        // Lists: - item or * item
-        .replace(/^\s*-\s*(.*$)/gim, '<ul><li>$1</li></ul>')
-        .replace(/^\s*\*\s*(.*$)/gim, '<ul><li>$1</li></ul>')
-
-        // Numbered lists: 1. item
-        .replace(/^\s*\d+\.\s*(.*$)/gim, '<ol><li>$1</li></ol>')
-
-        // Blockquotes: > text
-        .replace(/^\s*>\s*(.*$)/gim, '<blockquote>$1</blockquote>')
-
-        // Code blocks
-        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-
-        // Inline code: `code`
-        .replace(/`(.*?)`/g, '<code>$1</code>')
-
-        // Line breaks (but not before or after paragraph breaks)
-        .replace(/\n(?!<p-break>|<\/?(ul|ol|li|h|p|bl|code|table))/gm, '<br />')
-        .replace(/<br \/>(<p-break>)/g, '$1')
-        .replace(/(<p-break>)<br \/>/g, '$1')
-
-        // Merge adjacent list items
-        .replace(/<\/ul>\s*<ul>/g, '')
-        .replace(/<\/ol>\s*<ol>/g, '')
-
-        // Fix extra breaks in lists
-        .replace(/<\/li><br \/><li>/g, '</li><li>')
-
-        // Post-process: Convert paragraph markers to actual paragraphs with moderate margin
-        // and ensure no extra BR tags are around paragraph breaks
-        .replace(/<br \/>*<p-break>/g, '<p-break>')
-        .replace(/<p-break><br \/>*/g, '<p-break>')
-        .replace(/<p-break>/g, '</p><p>')
-
-        // Wrap content in paragraph tags if not already wrapped
-        .replace(/^(.+?)(?=<p|$)/s, '<p>$1</p>')
-    );
+    return html;
   }
 
   async function sendMessage() {
