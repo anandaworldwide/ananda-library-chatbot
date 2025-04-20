@@ -31,6 +31,36 @@ export interface AnswerItemProps {
   showRelatedQuestions?: boolean;
 }
 
+// Define a simple component for the comment modal
+interface CommentModalProps {
+  comment: string;
+  onClose: () => void;
+}
+
+const CommentModal: React.FC<CommentModalProps> = ({ comment, onClose }) => {
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4"
+      onClick={onClose} // Click outside to close
+    >
+      <div
+        className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg relative"
+        onClick={(e) => e.stopPropagation()} // Prevent click inside from closing
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl leading-none"
+          aria-label="Close"
+        >
+          &times;
+        </button>
+        <h3 className="text-lg font-semibold mb-3">Feedback Comment</h3>
+        <p className="text-gray-700 whitespace-pre-wrap">{comment}</p>
+      </div>
+    </div>
+  );
+};
+
 const SIMILARITY_THRESHOLD = 0.15;
 
 const AnswerItem: React.FC<AnswerItemProps> = ({
@@ -51,6 +81,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
   const [expanded, setExpanded] = useState(isFullPage);
   const [likeError, setLikeError] = useState<string | null>(null);
   const [forceShowRelated, setForceShowRelated] = useState(false);
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
 
   // Renders a truncated version of the question with line breaks
   const renderTruncatedQuestion = (question: string, maxLength: number) => {
@@ -254,68 +285,92 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
               </div>
             )}
 
-          {/* Action buttons section */}
-          <div className="flex flex-wrap items-center mt-2">
-            {/* Copy button */}
+          {/* Action buttons section - Reverted Copy Link button style/position */}
+          <div className="flex items-center space-x-4 mt-3 text-sm flex-wrap gap-y-2">
+            {/* Copy Content Button */}
             <CopyButton
               markdown={answer.answer}
               answerId={answer.id}
               sources={answer.sources as Document<DocMetadata>[] | undefined}
-              question={answer.question}
+              question={answer.question ?? ''}
               siteConfig={siteConfig}
             />
-
-            {/* Copy link button */}
-            <button
-              onClick={() => handleCopyLink && handleCopyLink(answer.id)}
-              className="ml-2 sm:ml-4 text-black-600 hover:underline flex items-center"
-              title="Copy link to clipboard"
-            >
-              <span className="material-icons">
-                {linkCopied === answer.id ? 'check' : 'link'}
-              </span>
-            </button>
-
-            {/* Like button - only show if handleLikeCountChange is provided (controlled by parent) */}
-            {handleLikeCountChange && (
-              <div className="ml-2 sm:ml-4">
-                <LikeButton
-                  answerId={answer.id}
-                  initialLiked={likeStatuses[answer.id] || false}
-                  likeCount={answer.likeCount}
-                  onLikeCountChange={onLikeButtonClick}
-                />
-                {likeError && (
-                  <span className="text-red-500 text-sm ml-2">{likeError}</span>
-                )}
-              </div>
+            {/* Copy Link Button (Icon only, next to Copy Content) */}
+            {handleCopyLink && (
+              <button
+                onClick={() => handleCopyLink(answer.id)}
+                className="text-gray-600 hover:text-gray-900 flex items-center p-1 rounded hover:bg-gray-200"
+                title="Copy link to clipboard"
+              >
+                <span className="material-icons">
+                  {linkCopied === answer.id ? 'check' : 'link'}
+                </span>
+              </button>
             )}
-
-            {/* Admin-only actions */}
-            {isSudoUser && (
-              <>
-                {/* Delete button */}
-                <button
-                  onClick={() => handleDelete && handleDelete(answer.id)}
-                  className="ml-4 text-red-600"
-                >
-                  <span className="material-icons">delete</span>
-                </button>
-
-                {/* Display IP address */}
-                <span className="ml-6">IP: ({answer.ip})</span>
-
-                {/* Display downvote indicator if applicable */}
-                {answer.vote === -1 && (
-                  <button className="ml-4 text-red-600" title="Downvote">
-                    <span className="material-icons">thumb_down</span>
-                  </button>
-                )}
-              </>
+            {/* Like Button */}
+            {handleLikeCountChange && (
+              <LikeButton
+                answerId={answer.id}
+                initialLiked={likeStatuses[answer.id] || false}
+                likeCount={answer.likeCount || 0}
+                onLikeCountChange={onLikeButtonClick}
+                showLikeCount={true}
+              />
+            )}
+            {/* Delete Button */}
+            {handleDelete && isSudoUser && (
+              <button
+                onClick={() => handleDelete(answer.id)}
+                className="text-red-600 hover:text-red-800 flex items-center text-lg"
+                title="Delete this answer"
+              >
+                <span className="material-icons text-lg mr-1">delete</span>
+                Delete
+              </button>
+            )}
+            {/* Like Error */}
+            {likeError && (
+              <span className="text-red-500 text-xs">{likeError}</span>
+            )}
+            {/* IP Address (Aligned Right) */}
+            {isSudoUser && answer.ip && (
+              <span className="text-base text-gray-400 ml-auto">
+                IP: {answer.ip}
+              </span>
             )}
           </div>
+
+          {/* Sudo Feedback Display Section */}
+          {isSudoUser && answer.vote === -1 && answer.feedbackReason && (
+            <div className="mt-3 pt-3 border-t border-gray-200 flex items-center space-x-2 text-sm text-gray-600 bg-yellow-50 p-2 rounded">
+              <span className="material-icons text-red-600 text-base">
+                thumb_down
+              </span>
+              <span className="font-medium">Reason:</span>
+              <span>{answer.feedbackReason}</span>
+              {answer.feedbackComment && (
+                <button
+                  onClick={() => setIsCommentModalOpen(true)}
+                  className="text-blue-600 hover:text-blue-800 ml-2"
+                  title="View Comment"
+                >
+                  <span className="material-icons text-base align-middle">
+                    chat_bubble_outline
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Render Comment Modal */}
+      {isCommentModalOpen && answer.feedbackComment && (
+        <CommentModal
+          comment={answer.feedbackComment}
+          onClose={() => setIsCommentModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

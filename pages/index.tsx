@@ -15,6 +15,7 @@ import Popup from '@/components/popup';
 import LikePrompt from '@/components/LikePrompt';
 import { ChatInput } from '@/components/ChatInput';
 import MessageItem from '@/components/MessageItem';
+import FeedbackModal from '@/components/FeedbackModal';
 
 // Hook imports
 import usePopup from '@/hooks/usePopup';
@@ -37,6 +38,7 @@ import { Document } from 'langchain/document';
 
 // Third-party library imports
 import Cookies from 'js-cookie';
+import { toast } from 'react-toastify';
 
 import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
@@ -650,9 +652,85 @@ export default function Home({
   const [votes, setVotes] = useState<Record<string, number>>({});
   const [voteError, setVoteError] = useState<string | null>(null);
 
-  // Function to handle voting on answers
+  // State for the feedback modal
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] =
+    useState<boolean>(false);
+  const [currentFeedbackDocId, setCurrentFeedbackDocId] = useState<
+    string | null
+  >(null);
+  const [feedbackSubmitError, setFeedbackSubmitError] = useState<string | null>(
+    null,
+  );
+
+  // Function to handle voting on answers - MODIFIED
   const handleVote = (docId: string, isUpvote: boolean) => {
-    handleVoteUtil(docId, isUpvote, votes, setVotes, setVoteError);
+    setVoteError(null); // Clear previous errors
+    setFeedbackSubmitError(null); // Clear feedback error
+
+    const currentVote = votes[docId] || 0; // Get current vote status
+
+    if (isUpvote) {
+      // Upvote logic remains the same: uses handleVoteUtil which handles toggling 1 <-> 0
+      handleVoteUtil(docId, isUpvote, votes, setVotes, setVoteError);
+    } else {
+      // Downvote logic:
+      if (currentVote === -1) {
+        // If already downvoted, clicking again should clear the vote (set to 0)
+        // Use handleVoteUtil, passing isUpvote=false correctly triggers the toggle logic 0 <-> -1
+        handleVoteUtil(docId, isUpvote, votes, setVotes, setVoteError);
+        logEvent('clear_downvote', 'Engagement', docId);
+      } else {
+        // If not currently downvoted (-1), open the feedback modal
+        setCurrentFeedbackDocId(docId);
+        setIsFeedbackModalOpen(true);
+      }
+    }
+  };
+
+  // Function to submit feedback - NEW
+  const submitFeedback = async (
+    docId: string,
+    reason: string,
+    comment: string,
+  ) => {
+    setFeedbackSubmitError(null); // Clear previous errors before trying
+    try {
+      const response = await fetchWithAuth('/api/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docId, vote: -1, reason, comment }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.error || `Failed to submit feedback (${response.status})`,
+        );
+      }
+
+      // If successful:
+      setVotes((prev) => ({ ...prev, [docId]: -1 })); // Update UI to show downvote
+      setIsFeedbackModalOpen(false); // Close modal
+      setCurrentFeedbackDocId(null);
+      logEvent('submit_feedback', 'Engagement', reason); // Log feedback event
+
+      // Show a success toast
+      toast.success('Feedback submitted. Thank you!');
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'An unknown error occurred.';
+      setFeedbackSubmitError(errorMessage); // Show error in the modal
+      // Keep the modal open for the user to see the error
+    }
+  };
+
+  // Function to cancel feedback - NEW
+  const cancelFeedback = () => {
+    setIsFeedbackModalOpen(false);
+    setCurrentFeedbackDocId(null);
+    setFeedbackSubmitError(null); // Clear any errors shown in modal
+    logEvent('cancel_feedback', 'Engagement', '');
   };
 
   // Function to handle copying answer links
@@ -842,6 +920,24 @@ export default function Home({
               </div>
             )}
           </div>
+
+          {/* Render the Feedback Modal */}
+          <FeedbackModal
+            isOpen={isFeedbackModalOpen}
+            docId={currentFeedbackDocId}
+            onConfirm={submitFeedback}
+            onCancel={cancelFeedback}
+            error={feedbackSubmitError} // Pass feedback-specific error
+          />
+
+          {/* Display general like/vote errors (e.g., from upvoting) */}
+          {voteError &&
+            !isFeedbackModalOpen && ( // Don't show if feedback modal is open showing its own error
+              <div className="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-md z-50">
+                <strong className="font-bold">Error: </strong>
+                <span className="block sm:inline">{voteError}</span>
+              </div>
+            )}
           {/* Display like error if any */}
           {likeError && (
             <div className="text-red-500 text-sm mt-2">{likeError}</div>

@@ -90,6 +90,9 @@ async function getAnswers(
       adminAction: data.adminAction,
       adminActionTimestamp: data.adminActionTimestamp,
       history: data.history || undefined,
+      feedbackReason: data.feedbackReason,
+      feedbackComment: data.feedbackComment,
+      feedbackTimestamp: data.feedbackTimestamp,
     } as Answer;
   });
 

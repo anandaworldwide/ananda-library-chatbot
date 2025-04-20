@@ -14,7 +14,6 @@ import { SiteConfig } from '@/types/siteConfig';
 import { ExtendedAIMessage } from '@/types/ExtendedAIMessage';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 import { useSudo } from '@/contexts/SudoContext';
-import { useVote } from '@/hooks/useVote';
 import { logEvent } from '@/utils/client/analytics';
 import { Components } from 'react-markdown';
 import Link from 'next/link';
@@ -66,29 +65,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
   showRelatedQuestions,
 }) => {
   const { isSudoUser } = useSudo();
-  const voteMutation = useVote();
   const [forceShowRelated, setForceShowRelated] = useState(false);
-
-  const [currentVotes, setCurrentVotes] =
-    useState<Record<string, number>>(votes);
-
-  const handleVoteWithHook = (docId: string, isUpvote: boolean) => {
-    const currentVote = currentVotes[docId] || 0;
-    let vote: 0 | 1 | -1;
-    if ((isUpvote && currentVote === 1) || (!isUpvote && currentVote === -1)) {
-      vote = 0;
-    } else {
-      vote = isUpvote ? 1 : -1;
-    }
-    setCurrentVotes((prev) => ({ ...prev, [docId]: vote }));
-    logEvent(
-      isUpvote ? 'upvote_answer' : 'downvote_answer',
-      'Engagement',
-      docId,
-      vote,
-    );
-    voteMutation.mutate({ docId, vote });
-  };
 
   const onLikeButtonClick = (answerId: string) => {
     // Update like status immediately for UI responsiveness
@@ -207,17 +184,25 @@ const MessageItem: React.FC<MessageItemProps> = ({
   };
 
   const renderDownvoteButton = (docId: string) => {
-    if (!docId || !handleVote) return null;
-    const vote = currentVotes[docId] || 0;
+    if (!docId) return null;
+
+    const vote = votes[docId] || 0;
+
+    if (!handleVote) {
+      console.warn(
+        'MessageItem: handleVote prop is missing for downvote button.',
+      );
+      return null;
+    }
+
     return (
       <div className="flex items-center">
         <button
-          onClick={() => handleVoteWithHook(docId, false)}
+          onClick={() => handleVote(docId, false)}
           className={`${styles.voteButton} ${
             vote === -1 ? styles.voteButtonDownActive : ''
           } hover:bg-gray-200 flex items-center`}
-          title="Downvote (private) for system training"
-          disabled={voteMutation.isPending}
+          title={vote === -1 ? 'Clear downvote' : 'Downvote (provide feedback)'}
         >
           <span className="material-icons text-black">
             {vote === -1 ? 'thumb_down' : 'thumb_down_off_alt'}

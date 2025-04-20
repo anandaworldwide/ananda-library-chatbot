@@ -48,6 +48,10 @@ export async function getAnswersByIds(ids: string[]): Promise<Answer[]> {
           id: doc.id,
           ...data,
           relatedQuestionsV2: relatedQuestions,
+          // Explicitly include feedback fields from data if they exist
+          feedbackReason: data.feedbackReason,
+          feedbackComment: data.feedbackComment,
+          feedbackTimestamp: data.feedbackTimestamp,
         });
       });
     } catch (error) {

@@ -39,6 +39,12 @@ export type Answer = {
   adminActionTimestamp?: Timestamp;
   // Optional conversation history leading up to this answer
   history?: { role: string; content: string }[];
+  // Optional feedback reason for downvotes
+  feedbackReason?: string;
+  // Optional feedback comment for downvotes
+  feedbackComment?: string;
+  // Optional timestamp for feedback submission
+  feedbackTimestamp?: Timestamp;
 };
 
 // Structure for timestamp data

@@ -1,6 +1,7 @@
 // This file handles API requests for recording user votes on answers.
 // It implements rate limiting to prevent abuse and uses JWT authentication for security.
-// The endpoint accepts POST requests with document ID and vote value, updating the vote in Firestore.
+// The endpoint accepts POST requests with document ID and vote value.
+// If vote is -1, it can optionally include feedbackReason and feedbackComment.
 // Vote values can be: 1 (upvote), 0 (neutral), or -1 (downvote).
 
 import type { NextApiRequest, NextApiResponse } from 'next';
@@ -9,6 +10,18 @@ import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
+import { FieldValue } from 'firebase-admin/firestore';
+
+// Define valid feedback reasons
+const validReasons = [
+  'Incorrect Information',
+  'Off-Topic Response',
+  'Bad Links',
+  'Vague or Unhelpful',
+  'Technical Issue',
+  'Poor Style or Tone',
+  'Other',
+];
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -25,27 +38,67 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return; // Rate limiter already sent the response
   }
 
-  const { docId, vote } = req.body;
+  const { docId, vote, reason, comment } = req.body;
 
-  if (!docId || (vote !== 1 && vote !== 0 && vote !== -1)) {
-    return res
-      .status(400)
-      .json({ error: 'Missing document ID or invalid vote' });
+  // --- Validation ---
+  if (!docId || typeof docId !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid document ID' });
   }
 
-  // Check if db is available
+  if (vote !== 1 && vote !== 0 && vote !== -1) {
+    return res.status(400).json({ error: 'Invalid vote value' });
+  }
+
+  // Validate feedback fields only if vote is -1 and reason is provided
+  if (vote === -1 && reason) {
+    if (!validReasons.includes(reason)) {
+      return res.status(400).json({ error: 'Invalid feedback reason' });
+    }
+    if (comment && typeof comment !== 'string') {
+      return res.status(400).json({ error: 'Invalid comment format' });
+    }
+    if (comment && comment.length > 1000) {
+      return res
+        .status(400)
+        .json({ error: 'Comment exceeds maximum length of 1000 characters' });
+    }
+  }
+  // --- End Validation ---
+
   if (!db) {
-    return res.status(503).json({ error: 'Database not available' });
+    console.error('Database service unavailable');
+    return res.status(503).json({ error: 'Database service unavailable' });
   }
 
   try {
     const docRef = db.collection(getAnswersCollectionName()).doc(docId);
-    // Set the vote to 1 for upvote or -1 for downvote
-    await docRef.update({ vote });
-    res.status(200).json({ message: 'Vote recorded' });
+    let updateData: { [key: string]: any } = { vote }; // Default update only includes vote
+
+    // If it's a downvote and a reason was provided, add feedback fields
+    if (vote === -1 && reason) {
+      updateData = {
+        ...updateData,
+        feedbackReason: reason,
+        feedbackComment: comment || '',
+        feedbackTimestamp: new Date(),
+      };
+    } else if (vote === 1 || vote === 0) {
+      // Clear feedback fields if vote is changed to upvote/neutral
+      updateData = {
+        ...updateData,
+        feedbackReason: FieldValue.delete(),
+        feedbackComment: FieldValue.delete(),
+        feedbackTimestamp: FieldValue.delete(),
+      };
+    }
+
+    await docRef.update(updateData);
+    res
+      .status(200)
+      .json({ message: 'Vote and feedback recorded successfully' });
   } catch (error) {
-    console.error('Error recording vote:', error);
-    res.status(500).json({ error: 'Failed to record vote' });
+    console.error('Error recording vote/feedback:', error);
+    res.status(500).json({ error: 'Failed to record vote/feedback' });
   }
 }
 
