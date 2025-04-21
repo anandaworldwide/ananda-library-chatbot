@@ -1878,6 +1878,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (chatWindow.style.display === 'none') {
         e.preventDefault(); // Prevent default browser behavior (e.g., quick find)
         bubble.click(); // Simulate clicking the bubble to open
+        // Focus the input after opening
+        setTimeout(() => input.focus(), 0);
       }
     }
 

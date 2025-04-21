@@ -369,55 +369,66 @@ function aichatbot_add_custom_css() {
     // Add Font Awesome directly to ensure it loads
     echo '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />';
     
-    // Output custom CSS for chatbot appearance
+    // Output only the dynamic CSS values
     echo '<style type="text/css">
         #aichatbot-window {
             width: ' . $window_width . 'px;
             height: ' . $window_height . 'px;
             font-size: ' . $font_size . 'px !important;
         }
+        
         #aichatbot-messages, 
         #aichatbot-input,
         .aichatbot-user-message, 
         .aichatbot-bot-message, 
         .aichatbot-error-message, 
-        .aichatbot-typing {
-            font-size: ' . $font_size . 'px !important;
-        }
-        
-        /* Make sure message content respects font size */
-        .aichatbot-message-content {
-            font-size: ' . $font_size . 'px !important;
-        }
-        
+        .aichatbot-typing,
+        .aichatbot-message-content,
         .aichatbot-message-content *,
         .aichatbot-message-content p,
         .aichatbot-message-content li,
         .aichatbot-message-content a {
-            font-size: inherit !important;
+            font-size: ' . $font_size . 'px !important;
         }
         
-        /* Responsive adjustments for mobile */
+        /* Style adjustments when Intercom is active */
+        .intercom-enabled #aichatbot-bubble {
+            right: 20px;
+            bottom: 20px;
+        }
+        
+        /* Ensure proper z-index stacking */
+        .intercom-enabled #intercom-container {
+            z-index: 9999 !important;
+        }
+        
+        /* Force our chatbot window above everything */
+        .intercom-enabled #aichatbot-window {
+            right: 20px;
+            z-index: 2147483647 !important;
+            position: fixed !important;
+        }
+        
+        /* Hide Intercom initially if enabled - using all known selectors */
+        ' . ($enable_intercom ? '
+        .intercom-lightweight-app-launcher,
+        .intercom-launcher,
+        #intercom-container .intercom-launcher,
+        .intercom-launcher-frame,
+        #intercom-container {
+            display: none !important;
+        }' : '') . '
+        
         @media (max-width: 480px) {
             #aichatbot-window {
                 width: 100%;
                 height: 100%;
-                bottom: 0;
-                left: 0;
-                border-radius: 0;
+            }
+            
+            .intercom-enabled #aichatbot-bubble {
+                right: 20px;
             }
         }
-
-        /* REMOVED CSS rule for hiding Intercom launcher - Use JS settings instead */
-        /* ' . ($enable_intercom ? 
-            '/* Default Intercom launcher - common selector */
-             .intercom-lightweight-app-launcher, /* Newer selector */
-             .intercom-launcher, /* Older selector */
-             #intercom-container .intercom-launcher /* More specific selector */ { 
-                display: none !important; 
-             }' 
-            : '') . ' */
-
     </style>';
 }
 add_action('wp_head', 'aichatbot_add_custom_css');
@@ -438,7 +449,9 @@ function aichatbot_add_chat_bubble() {
                 <!-- Fallback icon if wand-magic-sparkles isn\'t available -->
                 <i class="fas fa-magic fa-stack-1x fa-inverse" style="display:none;"></i>
             </span>
+            <span class="aichatbot-tooltip">Click to chat with Vivek (press / for shortcut)</span>
           </div>';
+
     echo '<div id="aichatbot-window" style="display:none;">
             <div id="aichatbot-header">
                 <h3>Vivek - Ananda Intelligence</h3>
