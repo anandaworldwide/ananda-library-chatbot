@@ -41,7 +41,11 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
       <SudoProvider>
         <Layout siteConfig={siteConfig}>
           <div className="flex justify-center items-center min-h-screen">
-            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
+            <div
+              role="status"
+              className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"
+              aria-label="Loading"
+            ></div>
           </div>
         </Layout>
       </SudoProvider>
@@ -101,7 +105,7 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
                 Previous
               </button>
               <span className="px-4 py-2">
-                Page {page} of {data.totalPages}
+                Page {data.currentPage} of {data.totalPages}
               </span>
               <button
                 onClick={() => handlePageChange(page + 1)}

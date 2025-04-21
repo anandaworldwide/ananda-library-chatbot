@@ -45,6 +45,8 @@ export interface SiteConfig {
   allowAllAnswersPage: boolean;
   npsSurveyFrequencyDays: number;
   queriesPerUserPerDay: number;
+  showSourceContent: boolean;
+  showVoting: boolean;
   includedLibraries?: Array<string | { name: string; weight?: number }>; // Updated
   enabledMediaTypes?: ('text' | 'audio' | 'youtube')[];
   enableModelComparison?: boolean;
