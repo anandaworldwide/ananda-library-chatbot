@@ -92,7 +92,7 @@ describe('Login API', () => {
 
     await handler(req, res);
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(204);
     expect(res._isEndCalled()).toBe(true);
   });
 

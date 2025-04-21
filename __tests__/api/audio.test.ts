@@ -59,6 +59,7 @@ jest.mock('@/utils/server/corsMiddleware', () => ({
     // Just resolve immediately without actually running the middleware
     return Promise.resolve();
   }),
+  setCorsHeaders: jest.fn(),
 }));
 
 // Mock AWS SDK
@@ -110,7 +111,7 @@ describe('Audio API', () => {
 
     await handler(req, res);
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(204);
     expect(res._isEndCalled()).toBe(true);
   }, 10000);
 

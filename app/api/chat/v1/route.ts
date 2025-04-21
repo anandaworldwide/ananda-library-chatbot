@@ -72,6 +72,22 @@ import * as corsMiddleware from '@/utils/server/corsMiddleware';
 export const runtime = 'nodejs';
 export const maxDuration = 240;
 
+// Add OPTIONS handler for CORS preflight requests
+export const OPTIONS = async (req: NextRequest) => {
+  const siteConfig = loadSiteConfigSync();
+
+  if (!siteConfig) {
+    return NextResponse.json(
+      { error: 'Failed to load site configuration' },
+      { status: 500 },
+    );
+  }
+
+  // Create a response with proper CORS headers instead of using handleCorsOptions
+  const response = new NextResponse(null, { status: 204 });
+  return corsMiddleware.addCorsHeaders(response, req, siteConfig);
+};
+
 interface MediaTypes {
   text?: boolean;
   image?: boolean;
@@ -145,25 +161,7 @@ async function validateAndPreprocessInput(
 
   const { collection, question } = requestBody;
 
-  // Validate question length
-  if (
-    typeof question !== 'string' ||
-    !validator.isLength(question, { min: 1, max: 4000 })
-  ) {
-    const response = NextResponse.json(
-      { error: 'Invalid question. Must be between 1 and 4000 characters.' },
-      { status: 400 },
-    );
-    return corsMiddleware.addCorsHeaders(response, req, siteConfig);
-  }
-
-  const originalQuestion = question;
-  // Sanitize the input to prevent XSS attacks
-  const sanitizedQuestion = validator
-    .escape(question.trim())
-    .replaceAll('\n', ' ');
-
-  // Validate collection - only if collectionConfig has multiple options
+  // Validate collection first - it's expected by tests
   if (typeof collection !== 'string') {
     const response = NextResponse.json(
       { error: 'Collection must be a string value' },
@@ -189,6 +187,24 @@ async function validateAndPreprocessInput(
     );
     return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
+
+  // Validate question length last - tests expect collection errors to take precedence
+  if (
+    typeof question !== 'string' ||
+    !validator.isLength(question, { min: 1, max: 4000 })
+  ) {
+    const response = NextResponse.json(
+      { error: 'Invalid question. Must be between 1 and 4000 characters.' },
+      { status: 400 },
+    );
+    return corsMiddleware.addCorsHeaders(response, req, siteConfig);
+  }
+
+  const originalQuestion = question;
+  // Sanitize the input to prevent XSS attacks
+  const sanitizedQuestion = validator
+    .escape(question.trim())
+    .replaceAll('\n', ' ');
 
   return {
     sanitizedInput: {
@@ -687,6 +703,18 @@ async function handleChatRequest(req: NextRequest) {
   // Store the model name for logging
   const modelName = siteConfig.modelName || 'unknown';
 
+  // Check CORS restrictions
+  const corsCheckResult = corsMiddleware.handleCors(req, siteConfig);
+  if (corsCheckResult) {
+    return corsCheckResult;
+  }
+
+  // Apply rate limiting before validating the input
+  const rateLimitResult = await applyRateLimiting(req, siteConfig);
+  if (rateLimitResult) {
+    return corsMiddleware.addCorsHeaders(rateLimitResult, req, siteConfig);
+  }
+
   // Validate and preprocess the input
   const validationResult = await validateAndPreprocessInput(req, siteConfig);
   if (validationResult instanceof NextResponse) {
@@ -698,24 +726,12 @@ async function handleChatRequest(req: NextRequest) {
   // Check if this is a comparison request
   const isComparison = 'modelA' in sanitizedInput;
 
-  // Check CORS restrictions
-  const corsCheckResult = corsMiddleware.handleCors(req, siteConfig);
-  if (corsCheckResult) {
-    return corsCheckResult;
-  }
-
   if (isComparison) {
     return handleComparisonRequest(
       req,
       sanitizedInput as ComparisonRequestBody,
       siteConfig,
     );
-  }
-
-  // Apply rate limiting
-  const rateLimitResult = await applyRateLimiting(req, siteConfig);
-  if (rateLimitResult) {
-    return corsMiddleware.addCorsHeaders(rateLimitResult, req, siteConfig);
   }
 
   // Get client IP for logging purposes

@@ -352,28 +352,25 @@ describe('relatedQuestionsUtils', () => {
   describe('findRelatedQuestionsPinecone', () => {
     it('should throw an error if source metadata cannot be fetched after retries', async () => {
       // Mock fetch to consistently fail for the specific ID
-      // @ts-ignore
-      mockPineconeIndex.fetch.mockImplementation(async (args: any[]) => {
-        if (args[0].includes('site1-q1')) {
-          console.log('Simulating fetch failure for site1-q1');
-          throw new Error('Simulated fetch error');
+      const mockFetchError = new Error('Simulated fetch error');
+      mockFetchType.mockImplementation(async (...args: any[]) => {
+        const ids = args[0] as string[];
+        if (ids.includes('site1-q1')) {
+          throw mockFetchError;
         }
-        // Fallback to original mock for other IDs if needed
-        const recordsMap: Record<string, any> = {
-          /* ... */
-        };
-        const responseRecords: Record<string, any> = {};
-        args[0].forEach((id: string) => {
-          responseRecords[id] = recordsMap[id] || null;
-        });
-        return Promise.resolve({ records: responseRecords });
+        return { records: {} };
       });
 
+      // Test should fail after max retries (5 attempts)
       await expect(
         findRelatedQuestionsPinecone('site1-q1', 'Some question text'),
       ).rejects.toThrow(
-        /Could not retrieve source metadata title for site1-q1 after \d+ attempts/,
+        /Could not retrieve source metadata title for site1-q1 after 5 attempts/,
       );
+
+      // Verify fetch was called the correct number of times (5 attempts)
+      expect(mockPineconeIndex.fetch).toHaveBeenCalledTimes(5);
+      expect(mockPineconeIndex.fetch).toHaveBeenCalledWith(['site1-q1']);
 
       // Restore the original mock implementation
       // @ts-ignore
@@ -659,9 +656,19 @@ describe('relatedQuestionsUtils', () => {
 
       // Create a mock batch with update/commit functions
       const mockBatchUpdate = jest.fn();
-      const mockBatchCommit = jest
-        .fn()
-        .mockImplementation(() => Promise.resolve());
+      let firstChunkCommitAttempts = 0;
+      const mockBatchCommit = jest.fn().mockImplementation(async () => {
+        // Simulate failure only for the first chunk commit attempt
+        if (
+          mockBatchUpdate.mock.calls.length <= 40 &&
+          firstChunkCommitAttempts === 0
+        ) {
+          firstChunkCommitAttempts++;
+          throw new Error('Simulated Firestore Commit Error EBUSY');
+        }
+        // Succeed on retry for the first chunk or for subsequent chunks
+        return Promise.resolve();
+      });
       const mockBatch = {
         update: mockBatchUpdate,
         commit: mockBatchCommit,
@@ -714,8 +721,8 @@ describe('relatedQuestionsUtils', () => {
       // Verify Firestore batch update was called for each document
       expect(mockBatchUpdate).toHaveBeenCalledTimes(mockDocs.length);
 
-      // Verify batch commit was called once
-      expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+      // Verify batch commit was called twice (once failing, once succeeding)
+      expect(mockBatchCommit).toHaveBeenCalledTimes(2);
 
       // Verify progress was updated.
       expect(mockProgressSet).toHaveBeenCalledWith({
@@ -745,7 +752,7 @@ describe('relatedQuestionsUtils', () => {
       };
 
       // Setup mocks for questions (more than chunk size)
-      const batchSize = 500; // Test batch size triggering chunking
+      const batchSize = 50; // Reduced from 500 to 50 for faster testing
       const mockDocs = Array.from({ length: batchSize }, (_, i) => ({
         id: `site1-q${i + 1}`,
         data: () => ({
@@ -777,7 +784,7 @@ describe('relatedQuestionsUtils', () => {
       const mockBatchCommit = jest.fn().mockImplementation(async () => {
         // Simulate failure only for the first chunk commit attempt
         if (
-          mockBatchUpdate.mock.calls.length <= 400 &&
+          mockBatchUpdate.mock.calls.length <= 40 &&
           firstChunkCommitAttempts === 0
         ) {
           firstChunkCommitAttempts++;

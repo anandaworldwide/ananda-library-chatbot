@@ -15,6 +15,7 @@ import {
 } from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
+import { createMocks } from 'node-mocks-http';
 
 // Mock dependencies
 jest.mock('@/utils/server/jwtUtils', () => ({
@@ -32,8 +33,8 @@ jest.mock('@/utils/server/loadSiteConfig', () => ({
 }));
 
 describe('API Middleware', () => {
-  let mockReq: Partial<NextApiRequest>;
-  let mockRes: Partial<NextApiResponse>;
+  let mockReq: any;
+  let mockRes: any;
   let mockHandler: jest.Mock;
   let originalEnv: NodeJS.ProcessEnv;
 
@@ -44,19 +45,30 @@ describe('API Middleware', () => {
     // Reset mocks
     jest.clearAllMocks();
 
-    // Create mock request and response.
-    mockReq = {
-      method: 'GET',
+    const { req, res } = createMocks({
+      method: 'POST',
       url: '/api/test',
-      socket: {
-        remoteAddress: '127.0.0.1',
-      } as Partial<Socket> as Socket,
       headers: {},
-    };
+      socket: { remoteAddress: '127.0.0.1' },
+      query: {},
+      env: {},
+    });
 
+    // Add required Next.js API methods
+    mockReq = {
+      ...req,
+      env: {},
+    };
     mockRes = {
+      ...res,
+      setDraftMode: jest.fn(),
+      setPreviewData: jest.fn(),
+      clearPreviewData: jest.fn(),
+      revalidate: jest.fn(),
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
+      send: jest.fn(),
+      redirect: jest.fn(),
     };
 
     // Create a mock handler
@@ -93,7 +105,7 @@ describe('API Middleware', () => {
     const wrappedHandler = withApiMiddleware(mockHandler);
 
     // Call the handler
-    await wrappedHandler(mockReq as NextApiRequest, mockRes as NextApiResponse);
+    await wrappedHandler(mockReq, mockRes);
 
     // Verify that withJwtAuth was not called
     expect(withJwtAuth).not.toHaveBeenCalled();
@@ -113,7 +125,7 @@ describe('API Middleware', () => {
     const wrappedHandler = withApiMiddleware(mockHandler);
 
     // Call the handler
-    await wrappedHandler(mockReq as NextApiRequest, mockRes as NextApiResponse);
+    await wrappedHandler(mockReq, mockRes);
 
     // Verify that withJwtAuth was called
     expect(withJwtAuth).toHaveBeenCalled();
@@ -133,7 +145,7 @@ describe('API Middleware', () => {
     const wrappedHandler = withApiMiddleware(mockHandler, { forceAuth: true });
 
     // Call the handler
-    await wrappedHandler(mockReq as NextApiRequest, mockRes as NextApiResponse);
+    await wrappedHandler(mockReq, mockRes);
 
     // Verify that withJwtAuth was called
     expect(withJwtAuth).toHaveBeenCalled();
@@ -153,7 +165,7 @@ describe('API Middleware', () => {
     const wrappedHandler = withApiMiddleware(mockHandler, { skipAuth: true });
 
     // Call the handler
-    await wrappedHandler(mockReq as NextApiRequest, mockRes as NextApiResponse);
+    await wrappedHandler(mockReq, mockRes);
 
     // Verify that withJwtAuth was not called
     expect(withJwtAuth).not.toHaveBeenCalled();
@@ -180,7 +192,7 @@ describe('API Middleware', () => {
     const wrappedHandler = withApiMiddleware(mockHandler);
 
     // Call the handler
-    await wrappedHandler(mockReq as NextApiRequest, mockRes as NextApiResponse);
+    await wrappedHandler(mockReq, mockRes);
 
     // Verify that the handler was called (referer is valid)
     expect(mockHandler).toHaveBeenCalled();
@@ -205,7 +217,7 @@ describe('API Middleware', () => {
     const wrappedHandler = withApiMiddleware(mockHandler);
 
     // Call the handler
-    await wrappedHandler(mockReq as NextApiRequest, mockRes as NextApiResponse);
+    await wrappedHandler(mockReq, mockRes);
 
     // Verify that response was 403
     expect(mockRes.status).toHaveBeenCalledWith(403);
@@ -228,8 +240,8 @@ describe('API Middleware Utilities', () => {
    * behavior for security checks.
    */
   const mockHandler = jest.fn();
-  let mockReq: Partial<NextApiRequest>;
-  let mockRes: Partial<NextApiResponse>;
+  let mockReq: any;
+  let mockRes: any;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
@@ -239,18 +251,30 @@ describe('API Middleware Utilities', () => {
     jest.clearAllMocks();
     mockHandler.mockReset();
 
-    mockReq = {
+    const { req, res } = createMocks({
       method: 'GET',
       url: '/api/test',
       headers: {},
       socket: {
         remoteAddress: '127.0.0.1',
       } as Partial<Socket> as Socket,
-    };
+    });
 
+    // Add required Next.js API methods
+    mockReq = {
+      ...req,
+      env: {},
+    };
     mockRes = {
+      ...res,
+      setDraftMode: jest.fn(),
+      setPreviewData: jest.fn(),
+      clearPreviewData: jest.fn(),
+      revalidate: jest.fn(),
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
+      send: jest.fn(),
+      redirect: jest.fn(),
     };
 
     // Set environment variables using object assignment to avoid direct property mutation

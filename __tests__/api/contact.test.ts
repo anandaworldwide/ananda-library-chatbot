@@ -35,6 +35,7 @@ jest.mock('@/utils/server/corsMiddleware', () => ({
   __esModule: true,
   default: jest.fn(),
   runMiddleware: jest.fn().mockResolvedValue(undefined),
+  setCorsHeaders: jest.fn(),
 }));
 
 // Mock rate limiter
