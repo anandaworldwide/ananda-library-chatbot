@@ -10,12 +10,14 @@ import {
 } from '@tanstack/react-query';
 import { queryFetch } from '@/utils/client/reactQueryConfig';
 import { Answer } from '@/types/answer';
+import { fetchWithAuth } from '@/utils/client/tokenManager';
 
 // Query keys for React Query cache
 export const queryKeys = {
   answers: (page?: number, sortBy?: string) =>
     ['answers', page, sortBy].filter(Boolean),
-  downvotedAnswers: () => ['downvotedAnswers'],
+  downvotedAnswers: (page?: number) =>
+    ['downvotedAnswers', page].filter(Boolean),
   relatedQuestions: (docId?: string) =>
     ['relatedQuestions', docId].filter(Boolean),
 };
@@ -72,28 +74,25 @@ export const useAnswers = (
 /**
  * Hook for fetching downvoted answers
  */
-export function useDownvotedAnswers(options?: {
-  enabled?: boolean;
-  onSuccess?: (data: Answer[]) => void;
-  onError?: (error: Error) => void;
-}) {
+export function useDownvotedAnswers(page: number = 1) {
   return useQuery({
-    queryKey: queryKeys.downvotedAnswers(),
+    queryKey: queryKeys.downvotedAnswers(page),
     queryFn: async () => {
-      const response = await queryFetch('/api/downvotedAnswers');
-
+      const response = await fetchWithAuth(
+        `/api/downvotedAnswers?page=${page}`,
+      );
       if (!response.ok) {
         const error = new Error(
           'Failed to fetch downvoted answers',
-        ) as Error & { status?: number };
+        ) as Error & {
+          status?: number;
+        };
         error.status = response.status;
         throw error;
       }
-
       return response.json();
     },
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-    ...options,
   });
 }
 

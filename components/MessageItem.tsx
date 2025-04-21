@@ -256,46 +256,43 @@ const MessageItem: React.FC<MessageItemProps> = ({
             <div className="mt-2 flex items-center space-x-2">
               {message.type === 'apiMessage' &&
                 index !== 0 &&
-                !loading &&
-                message.docId &&
-                isLastMessage && (
+                (!loading || !isLastMessage) && (
                   <>
+                    {/* Copy content button always shown when message is complete */}
                     <CopyButton
                       markdown={message.message}
-                      answerId={message.docId}
+                      answerId={message.docId || 'private'}
                       sources={message.sourceDocs}
                       question={previousMessage?.message ?? ''}
                       siteConfig={siteConfig}
                     />
-                  </>
-                )}
-              {!privateSession &&
-                message.type === 'apiMessage' &&
-                message.docId &&
-                !loading &&
-                isLastMessage && (
-                  <>
-                    <button
-                      onClick={() => handleCopyLink(message.docId ?? '')}
-                      className="text-black-600 hover:underline flex items-center"
-                      title="Copy link to clipboard"
-                    >
-                      <span className="material-icons">
-                        {linkCopied === message.docId ? 'check' : 'link'}
-                      </span>
-                    </button>
-                    <div className="flex items-center">
-                      <LikeButton
-                        answerId={message.docId ?? ''}
-                        initialLiked={
-                          likeStatuses[message.docId ?? ''] || false
-                        }
-                        likeCount={0} // likeCount comes from AnswerItem now
-                        onLikeCountChange={onLikeButtonClick}
-                        showLikeCount={false}
-                      />
-                    </div>
-                    {renderDownvoteButton(message.docId ?? '')}
+
+                    {/* Link, like, and downvote buttons only for non-private sessions with docId */}
+                    {!privateSession && message.docId && (
+                      <>
+                        <button
+                          onClick={() => handleCopyLink(message.docId ?? '')}
+                          className="text-black-600 hover:underline flex items-center"
+                          title="Copy link to clipboard"
+                        >
+                          <span className="material-icons">
+                            {linkCopied === message.docId ? 'check' : 'link'}
+                          </span>
+                        </button>
+                        <div className="flex items-center">
+                          <LikeButton
+                            answerId={message.docId ?? ''}
+                            initialLiked={
+                              likeStatuses[message.docId ?? ''] || false
+                            }
+                            likeCount={0}
+                            onLikeCountChange={onLikeButtonClick}
+                            showLikeCount={false}
+                          />
+                        </div>
+                        {renderDownvoteButton(message.docId ?? '')}
+                      </>
+                    )}
                   </>
                 )}
             </div>

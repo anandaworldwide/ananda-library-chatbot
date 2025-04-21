@@ -885,14 +885,24 @@ async function handleChatRequest(req: NextRequest) {
           );
           sendData({ docId });
         }
-
-        // Send done event
-        sendData({ done: true });
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
         handleError(error, sendData);
       } finally {
         if (!isControllerClosed) {
+          // Send done event with final timing metrics
+          sendData({
+            done: true,
+            timing: {
+              ttfb: timingMetrics.firstByteTime
+                ? timingMetrics.firstByteTime - timingMetrics.startTime
+                : 0,
+              total: Date.now() - timingMetrics.startTime,
+              tokensPerSecond: timingMetrics.tokensPerSecond || 0,
+              totalTokens: tokensStreamed,
+              firstTokenGenerated: timingMetrics.firstTokenGenerated,
+            },
+          });
           controller.close();
           isControllerClosed = true;
         }

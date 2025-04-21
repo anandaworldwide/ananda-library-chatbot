@@ -36,11 +36,23 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = 20; // Fixed limit of 20 items per page
+    const offset = (page - 1) * limit;
+
     const answersRef = db.collection(getAnswersCollectionName());
+
+    // Get total count of downvoted answers
+    const countQuery = await answersRef.where('vote', '==', -1).count().get();
+    const total = countQuery.data().count;
+    const totalPages = Math.ceil(total / limit);
+
+    // Get paginated downvoted answers
     const downvotedAnswersSnapshot = await answersRef
       .where('vote', '==', -1)
       .orderBy('timestamp', 'desc')
-      .limit(50)
+      .offset(offset)
+      .limit(limit)
       .get();
 
     const downvotedAnswers = downvotedAnswersSnapshot.docs.map((doc) => {
@@ -58,7 +70,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       };
     });
 
-    return res.status(200).json(downvotedAnswers);
+    return res.status(200).json({
+      answers: downvotedAnswers,
+      totalPages,
+      currentPage: page,
+    });
   } catch (error) {
     console.error('Error fetching downvoted answers:', error);
     return res.status(500).json({
