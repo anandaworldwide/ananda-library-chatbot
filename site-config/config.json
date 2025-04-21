@@ -103,7 +103,7 @@
       "**-ananda-web-services-projects.vercel.app",
       "localhost:3000",
       "127.0.0.1:3000",
-      "chatbot-test.local/sample-page/"
+      "chatbot-test.local"
     ],
     "parent_site_url": "https://www.ananda.org",
     "parent_site_name": "Ananda",

@@ -67,6 +67,7 @@ import { isDevelopment } from '@/utils/env';
 import { withAppRouterJwtAuth } from '@/utils/server/appRouterJwtUtils';
 import { JwtPayload } from '@/utils/server/jwtUtils';
 import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
+import * as corsMiddleware from '@/utils/server/corsMiddleware';
 
 export const runtime = 'nodejs';
 export const maxDuration = 240;
@@ -118,135 +119,6 @@ type PineconeStoreOptions = {
   // We omit filter since we're handling it at runtime
 };
 
-// Helper function to check if a string matches a pattern with wildcards
-function matchesPattern(origin: string, pattern: string): boolean {
-  // Extract domain from origin (remove protocol)
-  const originDomain = origin.replace(/^https?:\/\//, '');
-
-  // Escape special regex characters but not the asterisk
-  const escapedPattern = pattern
-    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/\\\*/g, '.*');
-  const regex = new RegExp(`^${escapedPattern}$`, 'i');
-
-  // Check if the domain part (without protocol) matches the pattern
-  return regex.test(originDomain);
-}
-
-// Middleware to handle CORS
-function handleCors(req: NextRequest, siteConfig: SiteConfig) {
-  const origin = req.headers.get('origin');
-  const referer = req.headers.get('referer');
-
-  // If no origin header, allow the request (likely a server-side or direct API call)
-  if (!origin) {
-    // Check if this is a WordPress request (might use Referer instead of Origin)
-    if (
-      isDevelopment() &&
-      referer &&
-      (referer.includes('.local') ||
-        referer.includes('localhost') ||
-        referer.includes('wordpress'))
-    ) {
-      console.log(`Allowing request with referer: ${referer}`);
-      return null;
-    }
-    return null;
-  }
-
-  // Allow localhost and *.local domains only in development
-  if (
-    isDevelopment() &&
-    (origin.startsWith('http://localhost:') ||
-      origin === 'http://localhost' ||
-      origin.match(/^https?:\/\/[^.]+\.local(:\d+)?$/))
-  ) {
-    return null;
-  }
-
-  // Check against allowedFrontEndDomains from site config
-  const allowedDomains = siteConfig.allowedFrontEndDomains || [];
-
-  console.log(`Checking CORS for origin: ${origin}`);
-  console.log(`Allowed domains:`, allowedDomains);
-
-  for (const pattern of allowedDomains) {
-    console.log(`Testing pattern: ${pattern} against origin: ${origin}`);
-    if (matchesPattern(origin, pattern)) {
-      console.log(
-        `CORS allowed for origin: ${origin} matching pattern: ${pattern}`,
-      );
-      return null; // Origin is allowed
-    }
-  }
-
-  // If we get here, the origin is not allowed
-  console.warn(`CORS blocked request from origin: ${origin}`);
-  return NextResponse.json(
-    { error: 'CORS policy: No access from this origin' },
-    { status: 403 },
-  );
-}
-
-// Function to add CORS headers to responses for allowed origins
-function addCorsHeaders(
-  response: NextResponse,
-  req: NextRequest,
-  siteConfig: SiteConfig,
-): NextResponse {
-  const origin = req.headers.get('origin');
-  const referer = req.headers.get('referer');
-
-  // If no origin, check if it's a WordPress request using Referer
-  if (
-    !origin &&
-    isDevelopment() &&
-    referer &&
-    (referer.includes('.local') ||
-      referer.includes('localhost') ||
-      referer.includes('wordpress'))
-  ) {
-    // For WordPress requests without origin, use a wildcard or extract domain from referer
-    response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    response.headers.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization',
-    );
-    response.headers.set('Access-Control-Allow-Credentials', 'false'); // Must be false when using wildcard origin
-    return response;
-  }
-
-  // If no origin and not a WordPress request, no need to add CORS headers
-  if (!origin) {
-    return response;
-  }
-
-  // Check if origin is allowed
-  const isLocalDev =
-    isDevelopment() &&
-    (origin.startsWith('http://localhost:') ||
-      origin === 'http://localhost' ||
-      origin.match(/^https?:\/\/[^.]+\.local(:\d+)?$/));
-  const allowedDomains = siteConfig.allowedFrontEndDomains || [];
-  const isAllowedDomain = allowedDomains.some((pattern) =>
-    matchesPattern(origin, pattern),
-  );
-
-  // If origin is allowed, add CORS headers
-  if (isLocalDev || isAllowedDomain) {
-    response.headers.set('Access-Control-Allow-Origin', origin);
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    response.headers.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization',
-    );
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
-  }
-
-  return response;
-}
-
 async function validateAndPreprocessInput(
   req: NextRequest,
   siteConfig: SiteConfig,
@@ -268,7 +140,7 @@ async function validateAndPreprocessInput(
       { error: 'Invalid JSON in request body' },
       { status: 400 },
     );
-    return addCorsHeaders(response, req, siteConfig);
+    return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
   const { collection, question } = requestBody;
@@ -282,7 +154,7 @@ async function validateAndPreprocessInput(
       { error: 'Invalid question. Must be between 1 and 4000 characters.' },
       { status: 400 },
     );
-    return addCorsHeaders(response, req, siteConfig);
+    return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
   const originalQuestion = question;
@@ -297,7 +169,7 @@ async function validateAndPreprocessInput(
       { error: 'Collection must be a string value' },
       { status: 400 },
     );
-    return addCorsHeaders(response, req, siteConfig);
+    return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
   // Only validate collection against available options if there are multiple collections configured
@@ -315,7 +187,7 @@ async function validateAndPreprocessInput(
       },
       { status: 400 },
     );
-    return addCorsHeaders(response, req, siteConfig);
+    return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
   return {
@@ -349,7 +221,7 @@ async function applyRateLimiting(
       { error: 'Daily query limit reached. Please try again tomorrow.' },
       { status: 429 },
     );
-    return addCorsHeaders(response, req, siteConfig);
+    return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
   return null; // Rate limiting passed
@@ -771,7 +643,7 @@ async function handleComparisonRequest(
     },
   });
 
-  return addCorsHeaders(response, req, siteConfig);
+  return corsMiddleware.addCorsHeaders(response, req, siteConfig);
 }
 
 // Apply JWT authentication to the POST handler
@@ -785,73 +657,8 @@ export const POST = withAppRouterJwtAuth(
   },
 );
 
-// Handle OPTIONS requests for CORS preflight
-export async function OPTIONS(req: NextRequest) {
-  return handleCorsOptions(req);
-}
-
-/**
- * Handles CORS preflight requests for the chat API
- */
-async function handleCorsOptions(req: NextRequest) {
-  // Load site configuration
-  const siteConfig = loadSiteConfigSync();
-
-  if (!siteConfig) {
-    return NextResponse.json(
-      { error: 'Failed to load site configuration' },
-      { status: 500 },
-    );
-  }
-
-  // Create basic response with CORS headers
-  const response = new NextResponse(null, { status: 204 });
-
-  // Get origin from request for CORS headers
-  const origin = req.headers.get('origin');
-  const referer = req.headers.get('referer');
-
-  // Set CORS headers based on origin if available
-  if (origin) {
-    const allowedDomains = siteConfig.allowedFrontEndDomains || [];
-    const isAllowedDomain = allowedDomains.some((pattern) =>
-      matchesPattern(origin, pattern),
-    );
-
-    if (isAllowedDomain || isDevelopment()) {
-      response.headers.set('Access-Control-Allow-Origin', origin);
-      response.headers.set('Access-Control-Allow-Credentials', 'true');
-      response.headers.set(
-        'Access-Control-Allow-Methods',
-        'GET, POST, OPTIONS',
-      );
-      response.headers.set(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization',
-      );
-      response.headers.set('Access-Control-Max-Age', '86400');
-    }
-  } else if (isDevelopment() && referer && referer.includes('wordpress')) {
-    // Special case for WordPress in development
-    response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    response.headers.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization',
-    );
-    response.headers.set('Access-Control-Allow-Credentials', 'false');
-    response.headers.set('Access-Control-Max-Age', '86400');
-  }
-  // For any other case (no origin, not dev WordPress), don't set CORS headers
-
-  return response;
-}
-
 /**
  * Main handler for chat requests
- * This contains the original implementation of the POST handler
- *
- * TODO: remove comparison functionality here if it is not needed. confirm it is not needed.
  */
 async function handleChatRequest(req: NextRequest) {
   // Start timing with stages for component timing
@@ -869,10 +676,12 @@ async function handleChatRequest(req: NextRequest) {
   const siteConfig = loadSiteConfigSync();
 
   if (!siteConfig) {
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: 'Failed to load site configuration' },
       { status: 500 },
     );
+    // Return without CORS headers since we don't have site config
+    return response;
   }
 
   // Store the model name for logging
@@ -881,7 +690,7 @@ async function handleChatRequest(req: NextRequest) {
   // Validate and preprocess the input
   const validationResult = await validateAndPreprocessInput(req, siteConfig);
   if (validationResult instanceof NextResponse) {
-    return validationResult;
+    return corsMiddleware.addCorsHeaders(validationResult, req, siteConfig);
   }
 
   const { sanitizedInput, originalQuestion } = validationResult;
@@ -890,7 +699,7 @@ async function handleChatRequest(req: NextRequest) {
   const isComparison = 'modelA' in sanitizedInput;
 
   // Check CORS restrictions
-  const corsCheckResult = handleCors(req, siteConfig);
+  const corsCheckResult = corsMiddleware.handleCors(req, siteConfig);
   if (corsCheckResult) {
     return corsCheckResult;
   }
@@ -906,7 +715,7 @@ async function handleChatRequest(req: NextRequest) {
   // Apply rate limiting
   const rateLimitResult = await applyRateLimiting(req, siteConfig);
   if (rateLimitResult) {
-    return rateLimitResult;
+    return corsMiddleware.addCorsHeaders(rateLimitResult, req, siteConfig);
   }
 
   // Get client IP for logging purposes
@@ -1085,7 +894,7 @@ async function handleChatRequest(req: NextRequest) {
     },
   });
 
-  return addCorsHeaders(response, req, siteConfig);
+  return corsMiddleware.addCorsHeaders(response, req, siteConfig);
 }
 
 function normalizeMediaTypes(

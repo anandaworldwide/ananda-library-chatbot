@@ -13,6 +13,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import jwt from 'jsonwebtoken';
+import { createErrorCorsHeaders } from './corsMiddleware';
 
 /**
  * Interface defining the structure of the JWT payload
@@ -107,7 +108,17 @@ export function withJwtAuth(
   return async (req: NextApiRequest, res: NextApiResponse, ...args: any[]) => {
     try {
       // Get and verify the token
-      getTokenFromRequest(req);
+      const token = getTokenFromRequest(req);
+      if (!token) {
+        // Apply CORS headers to error response
+        const corsHeaders = createErrorCorsHeaders(req);
+        Object.entries(corsHeaders).forEach(([key, value]) => {
+          res.setHeader(key, value);
+        });
+
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
       // If verification succeeds, call the original handler
       return handler(req, res, ...args);
     } catch (error) {

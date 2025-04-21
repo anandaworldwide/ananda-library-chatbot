@@ -4,6 +4,7 @@ import { isTokenValid } from '@/utils/server/passwordUtils';
 import CryptoJS from 'crypto-js';
 import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 import { getClientIp } from '@/utils/server/ipUtils';
+import { createErrorCorsHeaders } from '@/utils/server/corsMiddleware';
 
 // Log suspicious activity with details
 const logSuspiciousActivity = (req: NextRequest, reason: string) => {
@@ -194,12 +195,7 @@ export function middleware(req: NextRequest) {
           }),
           {
             status: 401,
-            headers: {
-              'content-type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'POST, OPTIONS',
-              'Access-Control-Allow-Headers': 'Content-Type',
-            },
+            headers: createErrorCorsHeaders(req),
           },
         );
         return response;

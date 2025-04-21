@@ -20,8 +20,24 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // API endpoint paths
+  const API_PATHS = {
+    CHAT: '/api/chat/v1',
+    VOTE: '/api/vote',
+    NPS: '/api/submitNpsSurvey',
+  };
+
+  // Default base URL
+  const DEFAULT_BASE_URL = 'https://chat.ananda.org';
+
+  // Clean the base URL by removing trailing slashes
+  function getBaseUrl() {
+    const configuredUrl = aichatbotData.vercelUrl || DEFAULT_BASE_URL;
+    return configuredUrl.replace(/\/+$/, '');
+  }
+
   // Simple UUID generator (needed by original script and NPS)
-  function generateUuid() {
+  function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
       /[xy]/g,
       function (c) {
@@ -92,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Generate and save UUID if it doesn't exist
   if (!npsUserUuid) {
-    npsUserUuid = generateUuid(); // Use the globally available function
+    npsUserUuid = generateUUID(); // Use the globally available function
     setLocalStorageItem('npsUserUuid', npsUserUuid);
   }
 
@@ -489,7 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
    * - Inline code (`code`)
    * - Links ([text](url))
    * - Special GETHUMAN links for Intercom integration
-   * 
+   *
    * @param {string} text - The markdown text to convert to HTML
    * @returns {string} The rendered HTML
    */
@@ -499,7 +515,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Normalize line endings and clean up excessive whitespace:
     // - Convert Windows line endings to Unix
     // - Collapse 3+ newlines into 2 (standard markdown paragraph break)
-    text = text.trim()
+    text = text
+      .trim()
       .replace(/\r\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n');
 
@@ -511,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     for (let block of blocks) {
       block = block.trim();
-      
+
       // Check if this block starts with a list marker (* or -)
       if (block.match(/^[*-]\s/m)) {
         // Start a new list if we're not already in one
@@ -537,22 +554,28 @@ document.addEventListener('DOMContentLoaded', () => {
               .replace(/_(.*?)_/g, '<em>$1</em>')
               .replace(/`(.*?)`/g, '<code>$1</code>')
               // Handle links - special case for GETHUMAN
-              .replace(/\[(.*?)\]\(GETHUMAN\)/g, '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>')
+              .replace(
+                /\[(.*?)\]\(GETHUMAN\)/g,
+                '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+              )
               // Regular links
-              .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
-            
+              .replace(
+                /\[(.*?)\]\((.*?)\)/g,
+                '<a href="$2" target="_blank">$1</a>',
+              );
+
             html += `<li>${listContent}</li>`;
           }
         }
       } else {
         // This is a regular paragraph block
-        
+
         // Close any open list before starting a new paragraph
         if (inList) {
           html += '</ul>';
           inList = false;
         }
-        
+
         // Process the paragraph block:
         // 1. Handle inline markdown (bold, italic, code)
         // 2. Process special GETHUMAN links
@@ -566,7 +589,10 @@ document.addEventListener('DOMContentLoaded', () => {
           .replace(/_(.*?)_/g, '<em>$1</em>')
           .replace(/`(.*?)`/g, '<code>$1</code>')
           // Handle links - special case for GETHUMAN
-          .replace(/\[(.*?)\]\(GETHUMAN\)/g, '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>')
+          .replace(
+            /\[(.*?)\]\(GETHUMAN\)/g,
+            '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+          )
           // Regular links
           .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')
           // Handle line breaks within paragraphs
@@ -614,20 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
     resetTextareaHeight();
 
     // Create bot message container but don't add to DOM yet
-    currentBotMessage = document.createElement('div');
-    currentBotMessage.className = 'aichatbot-bot-message';
-
-    // Add message content directly (no sources info)
-    const messageContent = document.createElement('div');
-    messageContent.className = 'aichatbot-message-content';
-    // Ensure font size is properly applied
-    const fontSize =
-      typeof aichatbotData !== 'undefined' && aichatbotData.fontSizePx
-        ? aichatbotData.fontSizePx + 'px'
-        : '16px';
-    messageContent.style.cssText = `font-size: ${fontSize} !important; line-height: 1.5;`;
-    currentBotMessage.appendChild(messageContent);
-    // We'll add the bot message to the DOM only when content starts streaming
+    currentBotMessage = createBotMessage(message);
 
     // Show typing indicator
     const typingIndicator = document.createElement('div');
@@ -643,47 +656,44 @@ document.addEventListener('DOMContentLoaded', () => {
     sendButton.style.display = 'none';
     stopButton.style.display = 'inline-block';
 
-    // Set streaming flag to true
     isStreaming = true;
 
-    // Update clear history button state
-    updateClearHistoryButton();
+    // Update chat history with user message
+    chatHistory.push([message, '']);
 
     try {
-      // Create new abort controller
+      // Get token for API call
+      const token = await getToken();
+      if (!token) {
+        throw new Error('Failed to get authentication token');
+      }
+
+      // Create new abort controller for this request
       currentAbortController = new AbortController();
 
-      // Update chat history with user message (empty bot response for now)
-      chatHistory.push([message, '']);
-      // Save state after adding user message
-      saveChatState();
-      // Update clear history button visibility
-      updateClearHistoryButton();
-
-      // Send to Vercel with streaming support
-      const response = await window.aichatbotAuth.fetchWithAuth(
-        aichatbotData.vercelUrl,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: message,
-            history: chatHistory
-              .map(([userMsg, botMsg]) => [
-                { role: 'user', content: userMsg },
-                { role: 'assistant', content: botMsg },
-              ])
-              .flat(), // Convert to role-based format for API compatibility
-            collection: defaultCollection,
-            privateSession: privateSession,
-            mediaTypes: mediaTypes,
-            sourceCount: sourceCount,
-          }),
-          signal: currentAbortController.signal,
+      // Make API call
+      const response = await fetch(`${getBaseUrl()}${API_PATHS.CHAT}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-      );
-
-      // Don't remove typing indicator yet - keep it until we get actual content
+        body: JSON.stringify({
+          question: message,
+          history: chatHistory
+            .slice(0, -1)
+            .map(([userMsg, botMsg]) => [
+              { role: 'user', content: userMsg },
+              { role: 'assistant', content: botMsg },
+            ])
+            .flat(),
+          collection: defaultCollection,
+          privateSession: privateSession,
+          mediaTypes: mediaTypes,
+          sourceCount: sourceCount,
+        }),
+        signal: currentAbortController.signal,
+      });
 
       if (!response.ok) {
         try {
@@ -717,7 +727,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // Check if user is near the bottom BEFORE adding the new chunk
           const wasScrolledToBottom =
             messages.scrollHeight - messages.clientHeight <=
-            messages.scrollTop + 10; // 10px tolerance
+            messages.scrollTop + 10;
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
@@ -813,6 +823,20 @@ document.addEventListener('DOMContentLoaded', () => {
                   }
                   throw new Error(jsonData.error);
                 }
+
+                // Handle docId
+                if (jsonData.docId) {
+                  console.log(
+                    `Received valid docId from server: ${jsonData.docId}`,
+                  );
+                  currentBotMessage.setAttribute('data-doc-id', jsonData.docId);
+                  // Add vote buttons if not already added
+                  if (
+                    !currentBotMessage.querySelector('.aichatbot-vote-buttons')
+                  ) {
+                    addVoteButtons(currentBotMessage, jsonData.docId);
+                  }
+                }
               } catch (parseError) {
                 console.error('Error parsing JSON:', parseError);
               }
@@ -825,7 +849,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
       } else {
-        // Fallback for non-streaming responses
+        // Handle non-streaming response
         const data = await response.json();
         const messageContent = currentBotMessage.querySelector(
           '.aichatbot-message-content',
@@ -853,6 +877,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
           // Update clear history button
           updateClearHistoryButton();
+        }
+
+        // Set docId if provided and add vote buttons
+        if (data.docId) {
+          console.log(`Received valid docId from server: ${data.docId}`);
+          currentBotMessage.setAttribute('data-doc-id', data.docId);
+          addVoteButtons(currentBotMessage, data.docId);
+        } else {
+          console.warn(
+            'No docId received from server - vote functionality will be disabled for this message',
+          );
         }
       }
     } catch (error) {
@@ -1088,14 +1123,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           // Add bot message
           if (botMsg) {
-            const botMessage = document.createElement('div');
-            botMessage.className = 'aichatbot-bot-message';
-
-            const messageContent = document.createElement('div');
-            messageContent.className = 'aichatbot-message-content';
-            messageContent.innerHTML = renderMarkdown(botMsg);
-
-            botMessage.appendChild(messageContent);
+            const botMessage = createBotMessage(botMsg);
             messages.appendChild(botMessage);
           }
         });
@@ -1383,7 +1411,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let npsApiUrl;
       try {
         const baseUrl = new URL(window.aichatbotData.vercelUrl).origin;
-        npsApiUrl = `${baseUrl}/api/submitNpsSurvey`;
+        npsApiUrl = `${baseUrl}${API_PATHS.NPS}`;
       } catch (urlError) {
         console.error(
           'Invalid vercelUrl format:',
@@ -1518,4 +1546,365 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- NPS Survey Logic: Modal Creation Call ---
   createNpsModalHtml();
   // --- NPS Survey Logic: Modal Creation Call End ---
+
+  // Track votes
+  let votes = {};
+
+  // Add vote buttons to bot message
+  function addVoteButtons(botMessage, messageId) {
+    const voteButtons = document.createElement('div');
+    voteButtons.className = 'aichatbot-vote-buttons';
+
+    const upvoteButton = document.createElement('button');
+    upvoteButton.className = 'aichatbot-vote-button';
+    upvoteButton.innerHTML = '<i class="fas fa-thumbs-up"></i>';
+
+    const downvoteButton = document.createElement('button');
+    downvoteButton.className = 'aichatbot-vote-button';
+    downvoteButton.innerHTML = '<i class="fas fa-thumbs-down"></i>';
+
+    // Add event listeners
+    upvoteButton.addEventListener('click', () => handleVote(messageId, true));
+    downvoteButton.addEventListener('click', () =>
+      handleVote(messageId, false),
+    );
+
+    voteButtons.appendChild(upvoteButton);
+    voteButtons.appendChild(downvoteButton);
+    botMessage.appendChild(voteButtons);
+
+    // Update button states based on current vote
+    updateVoteButtonStates(messageId, upvoteButton, downvoteButton);
+  }
+
+  // Handle voting
+  async function handleVote(messageId, isUpvote) {
+    try {
+      const currentVote = votes[messageId] || 0;
+      let newVote;
+      let isUpvoteAction = false; // Flag to track if this is an upvote action
+
+      if (isUpvote) {
+        // Toggle between 1 and 0
+        newVote = currentVote === 1 ? 0 : 1;
+        isUpvoteAction = newVote === 1; // Only animate when voting *up*
+      } else {
+        if (currentVote === -1) {
+          // If already downvoted, clear the vote
+          newVote = 0;
+        } else {
+          // Show feedback modal for downvote
+          showFeedbackModal(messageId);
+          return; // Exit early, feedback modal handles the rest
+        }
+      }
+
+      // Find the specific bot message UI element
+      const botMessage = document.querySelector(`[data-doc-id="${messageId}"]`);
+      const upvoteButton = botMessage?.querySelector(
+        '.aichatbot-vote-button:first-child',
+      );
+      const downvoteButton = botMessage?.querySelector(
+        '.aichatbot-vote-button:last-child',
+      );
+
+      // Make API call to record vote using the auth helper
+      const response = await window.aichatbotAuth.fetchWithAuth(
+        `${getBaseUrl()}${API_PATHS.VOTE}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            docId: messageId,
+            vote: newVote,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to record vote');
+      }
+
+      // Update local state
+      votes[messageId] = newVote;
+
+      // Update UI (button states)
+      if (upvoteButton && downvoteButton) {
+        updateVoteButtonStates(messageId, upvoteButton, downvoteButton);
+      }
+
+      // Trigger animation ONLY on successful upvote (transition to voted state)
+      if (isUpvoteAction && upvoteButton) {
+        upvoteButton.classList.add('upvote-success-animation');
+        // Remove the class after the animation duration (500ms)
+        setTimeout(() => {
+          upvoteButton.classList.remove('upvote-success-animation');
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error handling vote:', error);
+      // Show error message to user
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'aichatbot-error-message';
+      errorMessage.textContent = 'Failed to record vote. Please try again.';
+      messages.appendChild(errorMessage);
+      setTimeout(() => {
+        if (messages.contains(errorMessage)) {
+          messages.removeChild(errorMessage);
+        }
+      }, 3000);
+    }
+  }
+
+  // Update vote button states
+  function updateVoteButtonStates(messageId, upvoteButton, downvoteButton) {
+    const currentVote = votes[messageId] || 0;
+
+    upvoteButton.classList.toggle('voted', currentVote === 1);
+    downvoteButton.classList.toggle('downvoted', currentVote === -1);
+  }
+
+  // Show feedback modal
+  function showFeedbackModal(messageId) {
+    // Create modal if it doesn't exist
+    let modal = document.querySelector('.aichatbot-feedback-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.className = 'aichatbot-feedback-modal';
+      modal.innerHTML = `
+        <div class="modal-content">
+          <h3>Help us improve</h3>
+          <form class="feedback-form">
+            <div class="feedback-reason">
+              <label>
+                <input type="radio" name="reason" value="Incorrect Information">
+                Incorrect Information
+              </label>
+              <label>
+                <input type="radio" name="reason" value="Off-Topic Response">
+                Off-Topic Response
+              </label>
+              <label>
+                <input type="radio" name="reason" value="Bad Links">
+                Bad Links
+              </label>
+              <label>
+                <input type="radio" name="reason" value="Vague or Unhelpful">
+                Vague or Unhelpful
+              </label>
+              <label>
+                <input type="radio" name="reason" value="Technical Issue">
+                Technical Issue
+              </label>
+              <label>
+                <input type="radio" name="reason" value="Poor Style or Tone">
+                Poor Style or Tone
+              </label>
+              <label>
+                <input type="radio" name="reason" value="Other">
+                Other
+              </label>
+            </div>
+            <textarea placeholder="Additional comments (optional)"></textarea>
+            <div class="error-message"></div>
+            <div class="feedback-buttons">
+              <button type="button" class="cancel-button">Cancel</button>
+              <button type="submit" class="submit-button">Submit</button>
+            </div>
+          </form>
+        </div>
+      `;
+      const chatWindowElement = document.getElementById('aichatbot-window');
+      if (chatWindowElement) {
+        chatWindowElement.appendChild(modal);
+      } else {
+        console.error(
+          'Chat window element #aichatbot-window not found. Cannot append feedback modal.',
+        );
+        return;
+      }
+
+      // Add event listeners
+      const form = modal.querySelector('.feedback-form');
+      const cancelButton = modal.querySelector('.cancel-button');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await submitFeedback(messageId, modal);
+      });
+
+      cancelButton.addEventListener('click', () => {
+        modal.style.display = 'none';
+      });
+    }
+
+    // Reset form
+    const form = modal.querySelector('.feedback-form');
+    form.reset();
+    modal.querySelector('.error-message').style.display = 'none';
+
+    // Show modal
+    modal.style.display = 'flex';
+  }
+
+  // Submit feedback
+  async function submitFeedback(messageId, modal) {
+    const form = modal.querySelector('.feedback-form');
+    const errorMessage = modal.querySelector('.error-message');
+    const selectedReason = form.querySelector('input[name="reason"]:checked');
+    const comment = form.querySelector('textarea').value.trim();
+    const submitButton = form.querySelector('.submit-button');
+    const cancelButton = form.querySelector('.cancel-button');
+    const formElements = modal.querySelectorAll(
+      '.feedback-reason, textarea, .feedback-buttons',
+    );
+    const modalTitle = modal.querySelector('h3'); // Get the title element
+
+    // Disable buttons during submission
+    submitButton.disabled = true;
+    cancelButton.disabled = true;
+    errorMessage.style.display = 'none'; // Clear previous error messages
+    errorMessage.classList.remove('success'); // Ensure success class is removed initially
+
+    try {
+      if (!selectedReason) {
+        throw new Error('Please select a reason for your feedback');
+      }
+
+      // Make API call to submit feedback using the auth helper
+      const response = await window.aichatbotAuth.fetchWithAuth(
+        `${getBaseUrl()}${API_PATHS.VOTE}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            docId: messageId,
+            vote: -1, // Downvote
+            reason: selectedReason.value,
+            comment: comment,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ message: 'Failed to submit feedback' }));
+        throw new Error(errorData.message || 'Failed to submit feedback');
+      }
+
+      // Update local state
+      votes[messageId] = -1;
+
+      // Update UI (vote buttons)
+      const botMessage = document.querySelector(`[data-doc-id="${messageId}"]`);
+      if (botMessage) {
+        const upvoteButton = botMessage.querySelector(
+          '.aichatbot-vote-button:first-child',
+        );
+        const downvoteButton = botMessage.querySelector(
+          '.aichatbot-vote-button:last-child',
+        );
+        updateVoteButtonStates(messageId, upvoteButton, downvoteButton);
+      }
+
+      // Show success message and hide form
+      errorMessage.textContent = 'Thanks for your feedback!';
+      errorMessage.classList.add('success');
+      errorMessage.style.display = 'block';
+      formElements.forEach((el) => (el.style.display = 'none'));
+      if (modalTitle) modalTitle.style.display = 'none'; // Hide the title on success
+
+      // Close modal automatically after 2 seconds
+      setTimeout(() => {
+        modal.style.display = 'none';
+        // Reset modal for next use (show form, hide message, re-enable buttons)
+        formElements.forEach((el) => (el.style.display = '')); // Use empty string to reset to default display
+        errorMessage.style.display = 'none';
+        errorMessage.classList.remove('success');
+        if (modalTitle) modalTitle.style.display = ''; // Restore the title display
+        submitButton.disabled = false;
+        cancelButton.disabled = false;
+      }, 2000);
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      errorMessage.textContent = error.message;
+      errorMessage.classList.remove('success'); // Ensure no success style on error
+      errorMessage.style.display = 'block';
+      // Re-enable buttons on error
+      if (modalTitle) modalTitle.style.display = ''; // Ensure title is visible on error too
+      submitButton.disabled = false;
+      cancelButton.disabled = false;
+    }
+  }
+
+  // Modify the bot message creation to include vote buttons with the right ID
+  function createBotMessage(message) {
+    const botMessage = document.createElement('div');
+    botMessage.className = 'aichatbot-bot-message';
+
+    // We'll use a message-id attribute for local tracking
+    const localMessageId = generateUUID();
+    botMessage.setAttribute('data-message-id', localMessageId);
+
+    // But we don't set data-doc-id yet - that will come from the server response
+    // botMessage.setAttribute('data-doc-id', ''); // Don't set this yet
+
+    const messageContent = document.createElement('div');
+    messageContent.className = 'aichatbot-message-content';
+    messageContent.innerHTML = renderMarkdown(message);
+
+    botMessage.appendChild(messageContent);
+
+    // Don't add vote buttons yet - wait for the actual docId from server
+    // addVoteButtons(botMessage, messageId);
+
+    return botMessage;
+  }
+
+  // Add global keyboard listeners
+  document.addEventListener('keydown', (e) => {
+    const target = e.target;
+    const isInputFocused =
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement;
+
+    // Handle '/' key to open chat
+    if (e.key === '/' && !isInputFocused) {
+      if (chatWindow.style.display === 'none') {
+        e.preventDefault(); // Prevent default browser behavior (e.g., quick find)
+        bubble.click(); // Simulate clicking the bubble to open
+      }
+    }
+
+    // Handle 'Escape' key to close chat
+    if (e.key === 'Escape') {
+      if (chatWindow.style.display === 'flex') {
+        // Check if any modal is open within the chat window
+        const feedbackModal = chatWindow.querySelector(
+          '.aichatbot-feedback-modal',
+        );
+        const npsModal = chatWindow.querySelector('#nps-survey-modal');
+        const languageModal = chatWindow.querySelector(
+          '.aichatbot-language-modal',
+        );
+
+        // Close modals first if they are open
+        if (feedbackModal && feedbackModal.style.display === 'flex') {
+          feedbackModal.style.display = 'none';
+        } else if (npsModal && npsModal.style.display === 'block') {
+          hideNpsSurveyModal(); // Use existing function for NPS modal
+        } else if (languageModal && languageModal.style.display === 'flex') {
+          languageModal.style.display = 'none';
+        } else {
+          // If no modals are open, close the chat window
+          document.getElementById('aichatbot-close').click(); // Simulate clicking the close button
+        }
+      }
+    }
+  });
 });

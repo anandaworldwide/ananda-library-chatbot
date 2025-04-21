@@ -2,6 +2,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { withJwtAuth } from './jwtUtils';
 import { loadSiteConfigSync } from './loadSiteConfig';
+import { createErrorCorsHeaders, setCorsHeaders } from './corsMiddleware';
 
 type ApiHandler = (req: NextApiRequest, res: NextApiResponse) => Promise<void>;
 
@@ -57,54 +58,95 @@ export function withJwtOnlyAuth(handler: ApiHandler): ApiHandler {
   return withJwtAuth(securityHandler);
 }
 
+// Add CORS handling to request processing chain
+function applyCors(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  handler: ApiHandler,
+): Promise<void> {
+  const siteConfig = loadSiteConfigSync();
+
+  if (siteConfig) {
+    setCorsHeaders(req, res, siteConfig);
+  } else {
+    console.warn('Site config not available for CORS');
+  }
+
+  // Handle OPTIONS requests before continuing
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return Promise.resolve();
+  }
+
+  return handler(req, res);
+}
+
 /**
  * Applies security checks for POST requests
  */
 function applySecurityChecks(handler: ApiHandler): ApiHandler {
   return async (req: NextApiRequest, res: NextApiResponse) => {
-    const referer = req.headers.referer || req.headers.referrer;
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    const siteConfig = loadSiteConfigSync();
+    // Apply CORS first before any security checks
+    return applyCors(req, res, async (req, res) => {
+      // Then continue with the original security checks
+      const referer = req.headers.referer || req.headers.referrer;
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const siteConfig = loadSiteConfigSync();
 
-    // Perform security checks for POST requests in non-development environments
-    if (req.method === 'POST' && !isDevelopment) {
-      // Check for missing referer
-      if (!referer) {
-        console.info(
-          `POST request to ${req.url} without referer. IP: ${req.socket.remoteAddress}`,
-        );
-      } else if (typeof referer === 'string' && siteConfig) {
-        try {
-          // Validate referer against allowed domains
-          const refererUrl = new URL(referer);
-          const allowedDomains = siteConfig.allowedFrontEndDomains || [];
+      // Perform security checks for POST requests in non-development environments
+      if (req.method === 'POST' && !isDevelopment) {
+        // Check for missing referer
+        if (!referer) {
+          console.info(
+            `POST request to ${req.url} without referer. IP: ${req.socket.remoteAddress}`,
+          );
+        } else if (typeof referer === 'string' && siteConfig) {
+          try {
+            // Validate referer against allowed domains
+            const refererUrl = new URL(referer);
+            const allowedDomains = siteConfig.allowedFrontEndDomains || [];
 
-          // Check if referer matches any allowed domain pattern
-          const isAllowedDomain = allowedDomains.some((domain) => {
-            // Handle wildcard patterns (e.g., **-ananda-web-services-projects.vercel.app)
-            if (domain.includes('**')) {
-              const pattern = domain.replace('**', '.*');
-              return new RegExp(`^${pattern}$`).test(refererUrl.hostname);
+            // Check if referer matches any allowed domain pattern
+            const isAllowedDomain = allowedDomains.some((domain) => {
+              // Handle wildcard patterns (e.g., **-ananda-web-services-projects.vercel.app)
+              if (domain.includes('**')) {
+                const pattern = domain.replace('**', '.*');
+                return new RegExp(`^${pattern}$`).test(refererUrl.hostname);
+              }
+              return refererUrl.hostname === domain;
+            });
+
+            if (!isAllowedDomain) {
+              console.warn(
+                `POST request to ${req.url} with invalid referer. IP: ${req.socket.remoteAddress}, Referer: ${referer}`,
+              );
+
+              // Apply CORS headers to error response
+              const corsHeaders = createErrorCorsHeaders(req);
+              Object.entries(corsHeaders).forEach(([key, value]) => {
+                res.setHeader(key, value);
+              });
+
+              return res
+                .status(403)
+                .json({ message: 'Forbidden: Invalid referer' });
             }
-            return refererUrl.hostname === domain;
-          });
+          } catch (error) {
+            console.warn(`Error parsing referer URL: ${referer}`, error);
 
-          if (!isAllowedDomain) {
-            console.warn(
-              `POST request to ${req.url} with invalid referer. IP: ${req.socket.remoteAddress}, Referer: ${referer}`,
-            );
-            return res
-              .status(403)
-              .json({ message: 'Forbidden: Invalid referer' });
+            // Apply CORS headers to error response
+            const corsHeaders = createErrorCorsHeaders(req);
+            Object.entries(corsHeaders).forEach(([key, value]) => {
+              res.setHeader(key, value);
+            });
+
+            return res.status(403).json({ message: 'Invalid referer format' });
           }
-        } catch (error) {
-          console.warn(`Error parsing referer URL: ${referer}`, error);
-          return res.status(403).json({ message: 'Invalid referer format' });
         }
       }
-    }
 
-    // If all checks pass, call the original handler
-    await handler(req, res);
+      // If all checks pass, call the original handler
+      await handler(req, res);
+    });
   };
 }

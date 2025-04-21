@@ -12,8 +12,8 @@ if (!defined('ABSPATH')) {
 }
 
 // Define default API URLs
-define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://chat.ananda.org/api/chat/v1');
-define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000/api/chat/v1');
+define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://chat.ananda.org');
+define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000');
 
 // Define plugin version at the top with other constants
 define('AICHATBOT_VERSION', '1.0.31');
@@ -22,7 +22,8 @@ define('AICHATBOT_VERSION', '1.0.31');
 function aichatbot_get_api_url() {
     $configured_url = get_option('aichatbot_vercel_url');
     if (!empty($configured_url)) {
-        return $configured_url;
+        // Remove trailing slashes
+        return rtrim($configured_url, '/');
     }
     return AICHATBOT_DEFAULT_PRODUCTION_URL;
 }
@@ -59,7 +60,11 @@ function aichatbot_register_settings() {
 add_action('admin_menu', 'aichatbot_register_settings');
 
 function aichatbot_register_options() {
-    register_setting('aichatbot_settings_group', 'aichatbot_vercel_url');
+    // Register Vercel URL with sanitization
+    register_setting('aichatbot_settings_group', 'aichatbot_vercel_url', array(
+        'type' => 'string',
+        'sanitize_callback' => 'aichatbot_sanitize_base_url',
+    ));
     
     // Register new setting for the expected site ID
     register_setting('aichatbot_settings_group', 'aichatbot_expected_site_id', array(
@@ -123,6 +128,32 @@ function aichatbot_validate_window_height($input) {
     return max(400, min(800, $input)); // Limit height between 400px and 800px
 }
 
+// Sanitize the base URL by removing trailing slashes and paths
+function aichatbot_sanitize_base_url($url) {
+    if (empty($url)) {
+        return '';
+    }
+    
+    // Remove trailing slashes and whitespace
+    $url = trim($url, "/ \t\n\r\0\x0B");
+    
+    // Ensure the URL has a protocol
+    if (!preg_match('~^(?:f|ht)tps?://~i', $url)) {
+        $url = 'https://' . $url;
+    }
+    
+    // Remove any paths after the domain
+    $parsed = parse_url($url);
+    if ($parsed) {
+        $url = $parsed['scheme'] . '://' . $parsed['host'];
+        if (isset($parsed['port'])) {
+            $url .= ':' . $parsed['port'];
+        }
+    }
+    
+    return $url;
+}
+
 function aichatbot_settings_page() {
     ?>
     <div class="wrap">
@@ -131,13 +162,14 @@ function aichatbot_settings_page() {
             <?php settings_fields('aichatbot_settings_group'); ?>
             <table class="form-table">
                 <tr>
-                    <th><label for="aichatbot_vercel_url">Vercel API URL</label></th>
+                    <th><label for="aichatbot_vercel_url">API Base URL</label></th>
                     <td>
                         <input type="url" id="aichatbot_vercel_url" name="aichatbot_vercel_url" 
                                value="<?php echo esc_attr(get_option('aichatbot_vercel_url')); ?>" size="50" />
                         <p class="description">
-                            Enter the full URL to your Vercel API endpoint. If left empty, the plugin will use
-                            <code><?php echo htmlspecialchars(AICHATBOT_DEFAULT_PRODUCTION_URL, ENT_QUOTES, 'UTF-8'); ?></code> by default.
+                            Enter the base URL of your API (e.g., 'https://chat.ananda.org' or 'http://localhost:3000'). 
+                            This should be just the domain without any paths or trailing slashes. If left empty, 
+                            <code><?php echo htmlspecialchars(AICHATBOT_DEFAULT_PRODUCTION_URL, ENT_QUOTES, 'UTF-8'); ?></code> will be used.
                         </p>
                     </td>
                 </tr>

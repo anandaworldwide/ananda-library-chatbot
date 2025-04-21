@@ -11,6 +11,11 @@ import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { withApiMiddleware } from '@/utils/server/apiMiddleware';
 import { withJwtAuth } from '@/utils/server/jwtUtils';
 import { FieldValue } from 'firebase-admin/firestore';
+import {
+  setCorsHeaders,
+  handleCorsOptions,
+} from '@/utils/server/corsMiddleware';
+import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 
 // Define valid feedback reasons
 const validReasons = [
@@ -23,7 +28,26 @@ const validReasons = [
   'Other',
 ];
 
+// Define a regex pattern for valid Firestore document IDs
+// Firestore auto IDs are typically 20 characters of letters and numbers
+const validFirestoreIdPattern = /^[a-zA-Z0-9]{20}$/;
+
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Load site configuration
+  const siteConfig = loadSiteConfigSync();
+  if (!siteConfig) {
+    return res.status(500).json({ error: 'Failed to load site configuration' });
+  }
+
+  // Set CORS headers for all requests
+  setCorsHeaders(req, res, siteConfig);
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    handleCorsOptions(req, res, siteConfig);
+    return;
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -43,6 +67,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   // --- Validation ---
   if (!docId || typeof docId !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid document ID' });
+  }
+
+  // Validate the document ID format - but make this more flexible
+  // Allow both Firestore auto IDs (20 chars) and other possible ID formats
+  // Just log a warning if it's not the expected format
+  if (!validFirestoreIdPattern.test(docId)) {
+    console.warn(`Unusual document ID format: ${docId}`);
+    // We'll continue processing but log this for debugging
   }
 
   if (vote !== 1 && vote !== 0 && vote !== -1) {

@@ -221,12 +221,18 @@ async function getToken() {
 async function fetchWithAuth(url, options = {}) {
   const token = await getToken();
 
+  // Ensure headers object exists
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+    Authorization: `Bearer ${token}`,
+  };
+
+  // Make the request with credentials included
   return fetch(url, {
     ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
+    credentials: 'include', // Include cookies for CORS
   });
 }
 
