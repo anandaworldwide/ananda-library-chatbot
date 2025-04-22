@@ -20,3 +20,8 @@ alwaysApply: false
 - Use Tailwind
 - Suspense for client components, `next-safe-action` for server actions.
 - Optimize images (WebP, lazy loading).
+
+## Update tests
+- After changing code, be sure to review and update related tests. 
+- Run `npm run test:all` to make sure everything is working before you conclude your effort. 
+- After creating new files or functions, ask the user whether they want you to add test coverage 
