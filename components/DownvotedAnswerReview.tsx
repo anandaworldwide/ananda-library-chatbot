@@ -112,6 +112,22 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
           isSudoAdmin={isSudoAdmin}
         />
       )}
+      {(answer.feedbackReason || answer.feedbackComment) && (
+        <div className="mt-3 p-3 bg-red-50 rounded-md border border-red-100">
+          {answer.feedbackReason && (
+            <div className="mb-2">
+              <span className="font-medium text-red-700">Reason:</span>{' '}
+              <span className="text-gray-800">{answer.feedbackReason}</span>
+            </div>
+          )}
+          {answer.feedbackComment && (
+            <div>
+              <span className="font-medium text-red-700">Comments:</span>{' '}
+              <span className="text-gray-800">{answer.feedbackComment}</span>
+            </div>
+          )}
+        </div>
+      )}
       <div className="mt-2 text-sm text-gray-600">
         Downvoted on: {formatTimestamp(answer.timestamp)}
       </div>

@@ -39,6 +39,8 @@ const createMockDb = (
                         adminAction: null,
                         adminActionTimestamp: null,
                         sources: [],
+                        feedbackReason: 'Inaccurate information',
+                        feedbackComment: 'The answer contains factual errors',
                       }),
                     },
                     {
@@ -54,6 +56,9 @@ const createMockDb = (
                           toDate: () => new Date('2024-01-03'),
                         },
                         sources: [],
+                        feedbackReason: 'Missing context',
+                        feedbackComment:
+                          'The answer is misleading without proper context',
                       }),
                     },
                   ],
@@ -179,6 +184,24 @@ describe('Downvoted Answers API', () => {
         question: 'Test question 1',
         vote: -1,
       });
+
+      // Check that feedback fields are included in the response
+      expect(data.answers[0]).toHaveProperty(
+        'feedbackReason',
+        'Inaccurate information',
+      );
+      expect(data.answers[0]).toHaveProperty(
+        'feedbackComment',
+        'The answer contains factual errors',
+      );
+      expect(data.answers[1]).toHaveProperty(
+        'feedbackReason',
+        'Missing context',
+      );
+      expect(data.answers[1]).toHaveProperty(
+        'feedbackComment',
+        'The answer is misleading without proper context',
+      );
     });
 
     it('should return first page when page parameter is missing', async () => {

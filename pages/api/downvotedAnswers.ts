@@ -67,6 +67,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         adminAction: data.adminAction,
         adminActionTimestamp: data.adminActionTimestamp,
         sources: data.sources || [],
+        feedbackReason: data.feedbackReason || '',
+        feedbackComment: data.feedbackComment || '',
       };
     });
 
