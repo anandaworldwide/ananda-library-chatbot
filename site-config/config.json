@@ -96,6 +96,7 @@
     "chatPlaceholder": "Where can I find info on Sunday services?",
     "allowedFrontEndDomains": [
       "ananda.org",
+      "www.ananda.org",
       "chat.ananda.org",
       "staging.ananda.org",
       "vayudev.ananda.org",

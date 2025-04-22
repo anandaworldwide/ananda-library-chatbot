@@ -4,6 +4,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { NextRequest, NextResponse } from 'next/server';
 import { isDevelopment } from '@/utils/env';
 import { SiteConfig } from '@/types/siteConfig';
+import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 
 // Configure CORS options
 const cors = Cors({
@@ -34,10 +35,127 @@ export function runMiddleware(
 
 // Helper function to check if origin matches allowed patterns
 function isAllowedOrigin(origin: string, allowedDomains: string[]) {
-  return allowedDomains.some((pattern) => {
-    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-    return regex.test(origin);
-  });
+  if (!origin) return false;
+
+  // Check if verbose logging is enabled (either in dev mode or via env var)
+  const verboseLogging =
+    isDevelopment() || process.env.NEXT_PUBLIC_VERBOSE_CORS === 'true';
+
+  try {
+    // Extract hostname from origin
+    const originUrl = new URL(origin);
+    const hostname = originUrl.hostname;
+
+    // Log debug info in verbose mode
+    if (verboseLogging) {
+      console.log(
+        `Checking hostname: ${hostname} against allowed domains: ${JSON.stringify(allowedDomains)}`,
+      );
+    }
+
+    // Check direct matches
+    if (allowedDomains.includes(hostname)) {
+      if (verboseLogging)
+        console.log(`CORS allowed: exact match for ${hostname}`);
+      return true;
+    }
+
+    // Handle domain suffix matching (for subdomains)
+    for (const pattern of allowedDomains) {
+      // Exact match
+      if (pattern === hostname) {
+        if (verboseLogging)
+          console.log(`CORS allowed: exact match for ${hostname}`);
+        return true;
+      }
+
+      // Handle wildcard prefix (e.g., "**-subdomain.example.com")
+      if (pattern.startsWith('**')) {
+        const patternBase = pattern.substring(2);
+        if (hostname.endsWith(patternBase)) {
+          if (verboseLogging)
+            console.log(
+              `CORS allowed: wildcard prefix match ${hostname} with pattern ${pattern}`,
+            );
+          return true;
+        }
+      }
+
+      // Handle wildcard suffix (e.g., "example.com/**")
+      if (pattern.endsWith('**')) {
+        const patternBase = pattern.substring(0, pattern.length - 2);
+        if (hostname.startsWith(patternBase)) {
+          if (verboseLogging)
+            console.log(
+              `CORS allowed: wildcard suffix match ${hostname} with pattern ${pattern}`,
+            );
+          return true;
+        }
+      }
+
+      // Simple domain suffix match for subdomains (e.g. example.com matches sub.example.com)
+      // But only if the pattern doesn't already have a subdomain specified
+      if (
+        !pattern.startsWith('www.') &&
+        pattern.includes('.') &&
+        !pattern.includes('*')
+      ) {
+        if (hostname === pattern || hostname.endsWith('.' + pattern)) {
+          if (verboseLogging)
+            console.log(
+              `CORS allowed: domain suffix match ${hostname} with pattern ${pattern}`,
+            );
+          return true;
+        }
+      }
+
+      // Handle www variants
+      if (pattern.startsWith('www.') && hostname === pattern.substring(4)) {
+        if (verboseLogging)
+          console.log(
+            `CORS allowed: www variant match ${hostname} with pattern ${pattern}`,
+          );
+        return true;
+      }
+
+      if (!pattern.startsWith('www.') && hostname === 'www.' + pattern) {
+        if (verboseLogging)
+          console.log(
+            `CORS allowed: www variant match ${hostname} with pattern ${pattern}`,
+          );
+        return true;
+      }
+
+      // Regex pattern match as a fallback
+      try {
+        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+        if (regex.test(hostname)) {
+          if (verboseLogging)
+            console.log(
+              `CORS allowed: regex match ${hostname} with pattern ${pattern}`,
+            );
+          return true;
+        }
+      } catch (e) {
+        // If regex is invalid, do a simple string inclusion check
+        if (hostname.includes(pattern)) {
+          if (verboseLogging)
+            console.log(
+              `CORS allowed: substring match ${hostname} with pattern ${pattern}`,
+            );
+          return true;
+        }
+      }
+    }
+
+    // If we got here, no matches were found
+    if (verboseLogging)
+      console.warn(`CORS rejected: no pattern matched ${hostname}`);
+    return false;
+  } catch (e) {
+    console.error(`Error parsing origin: ${origin}`, e);
+    return false;
+  }
 }
 
 // Helper to check development origins
@@ -105,6 +223,7 @@ export function setCorsHeaders(
 export function handleCors(req: NextRequest, siteConfig: SiteConfig) {
   const origin = req.headers.get('origin');
   const referer = req.headers.get('referer');
+  const method = req.method;
 
   if (!siteConfig) {
     console.error('Failed to load site configuration');
@@ -114,18 +233,46 @@ export function handleCors(req: NextRequest, siteConfig: SiteConfig) {
     );
   }
 
+  // Special handling for OPTIONS requests
+  if (method === 'OPTIONS') {
+    return null; // Allow OPTIONS and let the response handler add proper headers
+  }
+
+  // Always allow development environments
   if (isAllowedDevOrigin(origin, referer)) {
     return null; // Allow the request in development
   }
 
-  if (!origin) return null; // Allow requests without origin
+  if (!origin) {
+    // Origin-less requests are typically from same origin or server-to-server
+    return null;
+  }
 
   const allowedDomains = siteConfig.allowedFrontEndDomains || [];
+
+  // Log domain lists for debugging
+  if (isDevelopment()) {
+    console.log(`Checking origin: ${origin}`);
+    console.log(`Allowed domains: ${JSON.stringify(allowedDomains)}`);
+  }
+
   if (isAllowedOrigin(origin, allowedDomains)) {
     return null; // Allow the request
   }
 
+  // If we get here, the origin is not allowed
   console.warn(`CORS blocked request from origin: ${origin}`);
+  console.warn(
+    `Method: ${method}, Allowed domains: ${allowedDomains.join(', ')}`,
+  );
+
+  try {
+    const originUrl = new URL(origin);
+    console.warn(`Origin hostname: ${originUrl.hostname}`);
+  } catch (e) {
+    console.warn(`Invalid origin URL: ${origin}`);
+  }
+
   return NextResponse.json(
     { error: 'CORS policy: No access from this origin' },
     { status: 403 },
@@ -140,7 +287,77 @@ export function addCorsHeaders(
 ): NextResponse {
   const origin = req.headers.get('origin');
   const referer = req.headers.get('referer');
+  const method = req.method;
 
+  // Special handling for OPTIONS requests (preflight) - always more permissive
+  if (method === 'OPTIONS') {
+    // For preflight requests, allow if origin matches allowed domains or is development
+    if (origin) {
+      const allowedDomains = siteConfig.allowedFrontEndDomains || [];
+
+      // Check if this origin should be allowed
+      const originAllowed =
+        isAllowedOrigin(origin, allowedDomains) ||
+        isAllowedDevOrigin(origin, referer) ||
+        isDevelopment();
+
+      if (originAllowed) {
+        response.headers.set('Access-Control-Allow-Origin', origin);
+        response.headers.set(
+          'Access-Control-Allow-Methods',
+          'GET, POST, OPTIONS',
+        );
+        response.headers.set(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization, X-Requested-With',
+        );
+        response.headers.set('Access-Control-Max-Age', '86400');
+        response.headers.set('Access-Control-Allow-Credentials', 'true');
+
+        // Add debugging header for tracing in production (safe to expose)
+        response.headers.set(
+          'X-CORS-Debug',
+          `allowed:${new URL(origin).hostname}`,
+        );
+      } else {
+        // Log debug info for rejected preflight requests
+        console.warn(`CORS preflight rejected for origin: ${origin}`);
+        try {
+          const originUrl = new URL(origin);
+          console.warn(`Origin hostname: ${originUrl.hostname}`);
+          console.warn(`Allowed domains: ${JSON.stringify(allowedDomains)}`);
+        } catch (e) {
+          console.warn(`Invalid origin URL: ${origin}`);
+        }
+
+        // Add debug header with rejection reason (only contains the hostname, not the full origin)
+        try {
+          response.headers.set(
+            'X-CORS-Debug',
+            `rejected:${new URL(origin).hostname}`,
+          );
+        } catch (e) {
+          response.headers.set('X-CORS-Debug', 'rejected:invalid_origin_url');
+        }
+      }
+    } else if (isDevelopment()) {
+      // In development, if no origin, be permissive
+      response.headers.set('Access-Control-Allow-Origin', '*');
+      response.headers.set(
+        'Access-Control-Allow-Methods',
+        'GET, POST, OPTIONS',
+      );
+      response.headers.set(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, X-Requested-With',
+      );
+      response.headers.set('Access-Control-Max-Age', '86400');
+    }
+
+    return response;
+  }
+
+  // Regular cross-origin requests (non-preflight)
   if (isAllowedDevOrigin(origin, referer)) {
     response.headers.set('Access-Control-Allow-Origin', origin || '*');
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -166,6 +383,9 @@ export function addCorsHeaders(
       'Content-Type, Authorization',
     );
     response.headers.set('Access-Control-Allow-Credentials', 'true');
+  } else {
+    // Log when origins are rejected for debugging
+    console.warn(`Rejected CORS for origin: ${origin} - not in allowed list`);
   }
 
   return response;
@@ -214,5 +434,33 @@ export function createErrorCorsHeaders(
     'Access-Control-Allow-Credentials': 'true',
   };
 }
+
+// Log allowed domains on deploy or server restart (helps with debugging)
+// This runs once when the module is loaded/server starts
+(function logCorsConfigOnDeploy() {
+  // Only do this in production and if debug logging is active
+  if (!isDevelopment() || process.env.NEXT_PUBLIC_VERBOSE_CORS === 'true') {
+    // Use setTimeout to ensure this runs after all initialization
+    setTimeout(() => {
+      try {
+        // Try to load site config
+        const siteConfig = loadSiteConfigSync();
+
+        if (siteConfig) {
+          console.log('=== CORS CONFIGURATION LOADED (PRODUCTION) ===');
+          console.log(`Site ID: ${siteConfig.siteId}`);
+          console.log('Allowed domains:');
+          const allowedDomains = siteConfig.allowedFrontEndDomains || [];
+          allowedDomains.forEach((domain: string) =>
+            console.log(`  - ${domain}`),
+          );
+          console.log('===========================================');
+        }
+      } catch (e) {
+        console.warn('Could not log CORS configuration on deploy:', e);
+      }
+    }, 1000);
+  }
+})();
 
 export default cors;

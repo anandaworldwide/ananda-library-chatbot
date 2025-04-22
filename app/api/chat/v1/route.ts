@@ -83,8 +83,10 @@ export const OPTIONS = async (req: NextRequest) => {
     );
   }
 
-  // Create a response with proper CORS headers instead of using handleCorsOptions
+  // Create a response with proper CORS headers for preflight request
   const response = new NextResponse(null, { status: 204 });
+
+  // Use the centralized CORS handler to add headers consistently
   return corsMiddleware.addCorsHeaders(response, req, siteConfig);
 };
 

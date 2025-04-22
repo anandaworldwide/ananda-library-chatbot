@@ -672,28 +672,30 @@ document.addEventListener('DOMContentLoaded', () => {
       currentAbortController = new AbortController();
 
       // Make API call
-      const response = await fetch(`${getBaseUrl()}${API_PATHS.CHAT}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const response = await window.aichatbotAuth.fetchWithAuth(
+        `${getBaseUrl()}${API_PATHS.CHAT}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            question: message,
+            history: chatHistory
+              .slice(0, -1)
+              .map(([userMsg, botMsg]) => [
+                { role: 'user', content: userMsg },
+                { role: 'assistant', content: botMsg },
+              ])
+              .flat(),
+            collection: defaultCollection,
+            privateSession: privateSession,
+            mediaTypes: mediaTypes,
+            sourceCount: sourceCount,
+          }),
+          signal: currentAbortController.signal,
         },
-        body: JSON.stringify({
-          question: message,
-          history: chatHistory
-            .slice(0, -1)
-            .map(([userMsg, botMsg]) => [
-              { role: 'user', content: userMsg },
-              { role: 'assistant', content: botMsg },
-            ])
-            .flat(),
-          collection: defaultCollection,
-          privateSession: privateSession,
-          mediaTypes: mediaTypes,
-          sourceCount: sourceCount,
-        }),
-        signal: currentAbortController.signal,
-      });
+      );
 
       if (!response.ok) {
         try {
