@@ -123,6 +123,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
     const now = Date.now();
 
+    // Track current session exchanges - using chatHistory length
+    // This variable needs to be incremented only once we've completed a full Q&A exchange
+    const currentSessionExchanges = chatHistory.filter(
+      (pair) => pair[0] && pair[1],
+    ).length;
+
+    // Don't show NPS survey if there are no completed exchanges in the current session
+    if (currentSessionExchanges < 1) {
+      return;
+    }
+
     // Determine the required delay based on the dismiss reason
     let requiredDelay = THREE_MONTHS_IN_MS; // Default to 3 months
     if (npsDismissReason === 'later' || npsDismissReason === 'no_thanks') {
@@ -622,9 +633,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // --- NPS Survey Logic Start ---
-    handleNpsSurveyCheck();
-    // --- NPS Survey Logic End ---
+    // Don't check for NPS survey yet - we'll check after receiving an answer
+    // (NPS Survey check moved to the completion handler below)
 
     // Reset accumulated response
     accumulatedResponse = '';
@@ -807,6 +817,16 @@ document.addEventListener('DOMContentLoaded', () => {
                   currentAbortController = null;
                   sendButton.style.display = 'inline-block';
                   stopButton.style.display = 'none';
+
+                  // A complete Q&A exchange has happened
+                  // Only check if we received a non-empty response
+                  if (accumulatedResponse.trim().length > 0) {
+                    // Always wait 20 seconds after any completed exchange
+                    // before checking for NPS survey to give user time to read
+                    setTimeout(() => {
+                      handleNpsSurveyCheck();
+                    }, 20000); // 20 seconds delay
+                  }
 
                   // Set streaming flag to false
                   isStreaming = false;
