@@ -458,7 +458,7 @@ export function createErrorCorsHeaders(
 }
 
 // Log allowed domains on deploy or server restart (helps with debugging)
-// This runs once when the module is loaded/server starts
+// This runs once when the module is loaded/server starts.
 (function logCorsConfigOnDeploy() {
   // Skip in test environment
   if (
