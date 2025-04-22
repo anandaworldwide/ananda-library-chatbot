@@ -364,7 +364,7 @@
   background: white;
   padding: 24px;
   border-radius: 8px;
-  max-width: 320px;
+  max-width: 460px; /* Increased from 320px to make the modal wider */
   width: 90%;
   text-align: left;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -417,7 +417,7 @@
 .aichatbot-feedback-modal .feedback-buttons {
   display: flex;
   gap: 8px;
-  justify-content: flex-end;
+  justify-content: space-between; /* Changed from flex-end to space-between to distribute buttons evenly */
   margin-top: 16px;
 }
 
@@ -428,6 +428,7 @@
   cursor: pointer;
   font-size: 14px;
   transition: background-color 0.2s;
+  flex: 1; /* Make buttons take equal width */
 }
 
 .aichatbot-feedback-modal .cancel-button {
