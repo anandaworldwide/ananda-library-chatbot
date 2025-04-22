@@ -292,12 +292,8 @@
   display: flex;
   gap: 8px;
   margin-top: 8px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.aichatbot-bot-message:hover .aichatbot-vote-buttons {
   opacity: 1;
+  transition: opacity 0.2s ease;
 }
 
 .aichatbot-vote-button {
@@ -351,13 +347,13 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  /* background: rgba(0, 0, 0, 0.5); */ /* Remove background overlay */
+  background: rgba(0, 0, 0, 0.2); /* Added light overlay background */
   display: none;
   align-items: center;
   justify-content: center;
   z-index: 10002; /* Ensure it's above other chat window content */
-  /* width: 100%; */ /* No longer needed, width determined by content */
-  /* height: 100%; */ /* No longer needed */
+  width: 100%; /* Take full width of the chat window */
+  height: 100%; /* Take full height of the chat window */
 }
 
 .aichatbot-feedback-modal .modal-content {
@@ -367,7 +363,8 @@
   max-width: 460px; /* Increased from 320px to make the modal wider */
   width: 90%;
   text-align: left;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3); /* Enhanced shadow: increased spread, blur and opacity */
+  border: 1px solid #e0e0e0; /* Subtle border to define edges */
 }
 
 .aichatbot-feedback-modal h3 {
