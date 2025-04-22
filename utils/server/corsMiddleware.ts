@@ -173,6 +173,14 @@ function isAllowedDevOrigin(
   return isLocalOrigin || isLocalReferer;
 }
 
+// Helper to check if the request is from WordPress
+function isWordPressRequest(referer: string | undefined | null): boolean {
+  return (
+    !!referer &&
+    (referer.includes('/wordpress') || referer.includes('/wp-admin'))
+  );
+}
+
 // For Pages Router
 export function setCorsHeaders(
   req: NextApiRequest,
@@ -291,6 +299,21 @@ export function addCorsHeaders(
 
   // Special handling for OPTIONS requests (preflight) - always more permissive
   if (method === 'OPTIONS') {
+    // Handle WordPress requests in development mode
+    if (isDevelopment() && !origin && isWordPressRequest(referer)) {
+      response.headers.set('Access-Control-Allow-Origin', '*');
+      response.headers.set(
+        'Access-Control-Allow-Methods',
+        'GET, POST, OPTIONS',
+      );
+      response.headers.set(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization',
+      );
+      response.headers.set('Access-Control-Allow-Credentials', 'false');
+      return response;
+    }
+
     // For preflight requests, allow if origin matches allowed domains or is development
     if (origin) {
       const allowedDomains = siteConfig.allowedFrontEndDomains || [];
@@ -298,8 +321,7 @@ export function addCorsHeaders(
       // Check if this origin should be allowed
       const originAllowed =
         isAllowedOrigin(origin, allowedDomains) ||
-        isAllowedDevOrigin(origin, referer) ||
-        isDevelopment();
+        isAllowedDevOrigin(origin, referer);
 
       if (originAllowed) {
         response.headers.set('Access-Control-Allow-Origin', origin);
@@ -309,7 +331,7 @@ export function addCorsHeaders(
         );
         response.headers.set(
           'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, X-Requested-With',
+          'Content-Type, Authorization',
         );
         response.headers.set('Access-Control-Max-Age', '86400');
         response.headers.set('Access-Control-Allow-Credentials', 'true');
@@ -340,7 +362,7 @@ export function addCorsHeaders(
           response.headers.set('X-CORS-Debug', 'rejected:invalid_origin_url');
         }
       }
-    } else if (isDevelopment()) {
+    } else if (isDevelopment() && !isWordPressRequest(referer)) {
       // In development, if no origin, be permissive
       response.headers.set('Access-Control-Allow-Origin', '*');
       response.headers.set(
@@ -349,7 +371,7 @@ export function addCorsHeaders(
       );
       response.headers.set(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, X-Requested-With',
+        'Content-Type, Authorization',
       );
       response.headers.set('Access-Control-Max-Age', '86400');
     }
@@ -438,6 +460,14 @@ export function createErrorCorsHeaders(
 // Log allowed domains on deploy or server restart (helps with debugging)
 // This runs once when the module is loaded/server starts
 (function logCorsConfigOnDeploy() {
+  // Skip in test environment
+  if (
+    process.env.NODE_ENV === 'test' ||
+    process.env.JEST_WORKER_ID !== undefined
+  ) {
+    return;
+  }
+
   // Only do this in production and if debug logging is active
   if (!isDevelopment() || process.env.NEXT_PUBLIC_VERBOSE_CORS === 'true') {
     // Use setTimeout to ensure this runs after all initialization
