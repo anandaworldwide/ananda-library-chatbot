@@ -369,12 +369,6 @@ export default function Home({
       }
 
       if (data.sourceDocs) {
-        console.log(
-          `[${timestamp}] Received sourceDocs:`,
-          typeof data.sourceDocs,
-          Array.isArray(data.sourceDocs) ? data.sourceDocs.length : 'non-array',
-          Array.isArray(data.sourceDocs) ? data.sourceDocs.length : 'non-array',
-        );
         try {
           setTimeout(() => {
             const immutableSourceDocs = Array.isArray(data.sourceDocs)
