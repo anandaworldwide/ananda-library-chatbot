@@ -1,3 +1,6 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
 # Run lint-staged for formatting and linting
 echo "🔍 Running lint-staged for code quality checks..."
-npx lint-staged 
+npx lint-staged
