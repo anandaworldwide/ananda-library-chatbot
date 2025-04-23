@@ -114,6 +114,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
   ) => {
     if (!allowAllAnswersPage) return null;
     if (!relatedQuestions || !Array.isArray(relatedQuestions)) return null;
+    // Don't show related questions if we're loading and this is the last message
+    if (loading && isLastMessage) return null;
 
     const SIMILARITY_THRESHOLD = 0.15;
     const filteredQuestions = relatedQuestions.filter(
@@ -261,19 +263,30 @@ const MessageItem: React.FC<MessageItemProps> = ({
                     {/* Copy content button always shown when message is complete */}
                     <CopyButton
                       markdown={message.message}
-                      answerId={message.docId || 'private'}
+                      answerId={message.docId || 'unknown'}
                       sources={message.sourceDocs}
                       question={previousMessage?.message ?? ''}
                       siteConfig={siteConfig}
                     />
 
-                    {/* Link, like, and downvote buttons only for non-private sessions with docId */}
-                    {!privateSession && message.docId && (
+                    {/* Link, like, and downvote buttons - always visible after loading, but disabled until docId available */}
+                    {!privateSession && (
                       <>
                         <button
-                          onClick={() => handleCopyLink(message.docId ?? '')}
-                          className="text-black-600 hover:underline flex items-center"
-                          title="Copy link to clipboard"
+                          onClick={() =>
+                            message.docId && handleCopyLink(message.docId)
+                          }
+                          className={`text-black-600 hover:underline flex items-center ${
+                            !message.docId
+                              ? 'opacity-50 cursor-not-allowed'
+                              : ''
+                          }`}
+                          title={
+                            message.docId
+                              ? 'Copy link to clipboard'
+                              : 'Waiting for link...'
+                          }
+                          disabled={!message.docId}
                         >
                           <span className="material-icons">
                             {linkCopied === message.docId ? 'check' : 'link'}
@@ -281,16 +294,38 @@ const MessageItem: React.FC<MessageItemProps> = ({
                         </button>
                         <div className="flex items-center">
                           <LikeButton
-                            answerId={message.docId ?? ''}
+                            answerId={message.docId || ''}
                             initialLiked={
-                              likeStatuses[message.docId ?? ''] || false
+                              message.docId
+                                ? likeStatuses[message.docId] || false
+                                : false
                             }
                             likeCount={0}
-                            onLikeCountChange={onLikeButtonClick}
+                            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                            onLikeCountChange={(answerId, _) => {
+                              if (message.docId) {
+                                onLikeButtonClick(answerId);
+                              }
+                            }}
                             showLikeCount={false}
+                            disabled={!message.docId}
                           />
                         </div>
-                        {renderDownvoteButton(message.docId ?? '')}
+                        {message.docId ? (
+                          renderDownvoteButton(message.docId)
+                        ) : (
+                          <div className="flex items-center">
+                            <button
+                              disabled
+                              className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"
+                              title="Waiting for document ID..."
+                            >
+                              <span className="material-icons text-black">
+                                thumb_down_off_alt
+                              </span>
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </>

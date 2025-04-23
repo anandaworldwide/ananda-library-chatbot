@@ -810,6 +810,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Handle completion
                 if (jsonData.done) {
+                  console.log('STREAM COMPLETE: "done" message received');
+
                   // Make sure typing indicator is removed when done
                   if (messages.contains(typingIndicator)) {
                     messages.removeChild(typingIndicator);
@@ -836,6 +838,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
                   // Update clear history button
                   updateClearHistoryButton();
+
+                  // Now that streaming is COMPLETELY done, show the vote buttons immediately
+                  if (currentBotMessage.hasAttribute('data-doc-id')) {
+                    const voteButtons = currentBotMessage.querySelector(
+                      '.aichatbot-vote-buttons',
+                    );
+                    if (voteButtons) {
+                      voteButtons.style.visibility = 'visible';
+                      console.log(
+                        'Making preemptively added vote buttons visible',
+                      );
+                    } else {
+                      // As a fallback, create vote buttons if they don't exist
+                      const docId =
+                        currentBotMessage.getAttribute('data-doc-id');
+                      console.log(
+                        `Adding vote buttons for docId: ${docId} now that ALL streaming is DONE`,
+                      );
+                      addVoteButtons(currentBotMessage, docId);
+                    }
+                  } else {
+                    console.error('No docId available when stream completed');
+                  }
                 }
 
                 // Handle errors
@@ -846,17 +871,24 @@ document.addEventListener('DOMContentLoaded', () => {
                   throw new Error(jsonData.error);
                 }
 
-                // Handle docId
+                // Handle docId - ONLY store it, don't add vote buttons yet
                 if (jsonData.docId) {
                   console.log(
                     `Received valid docId from server: ${jsonData.docId}`,
                   );
                   currentBotMessage.setAttribute('data-doc-id', jsonData.docId);
-                  // Add vote buttons if not already added
-                  if (
-                    !currentBotMessage.querySelector('.aichatbot-vote-buttons')
-                  ) {
-                    addVoteButtons(currentBotMessage, jsonData.docId);
+
+                  // Preemptively add vote buttons but keep them hidden
+                  // This eliminates the delay between streaming completion and button display
+                  const voteButtons = currentBotMessage.querySelector(
+                    '.aichatbot-vote-buttons',
+                  );
+                  if (!voteButtons) {
+                    const docId = jsonData.docId;
+                    addVoteButtons(currentBotMessage, docId, true); // true = hidden initially
+                    console.log(
+                      'Vote buttons preemptively added but hidden until streaming completes',
+                    );
                   }
                 }
               } catch (parseError) {
@@ -901,15 +933,23 @@ document.addEventListener('DOMContentLoaded', () => {
           updateClearHistoryButton();
         }
 
-        // Set docId if provided and add vote buttons
+        // Set docId if provided
         if (data.docId) {
           console.log(`Received valid docId from server: ${data.docId}`);
           currentBotMessage.setAttribute('data-doc-id', data.docId);
-          addVoteButtons(currentBotMessage, data.docId);
         } else {
           console.warn(
             'No docId received from server - vote functionality will be disabled for this message',
           );
+        }
+
+        // Non-streaming processing is complete, now we can add vote buttons
+        if (currentBotMessage.hasAttribute('data-doc-id')) {
+          const docId = currentBotMessage.getAttribute('data-doc-id');
+          console.log(
+            `Adding vote buttons for non-streaming response with docId: ${docId}`,
+          );
+          addVoteButtons(currentBotMessage, docId);
         }
       }
     } catch (error) {
@@ -1573,9 +1613,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let votes = {};
 
   // Add vote buttons to bot message
-  function addVoteButtons(botMessage, messageId) {
+  function addVoteButtons(botMessage, messageId, hidden = false) {
+    console.log(`addVoteButtons called with messageId: ${messageId}`);
+
     const voteButtons = document.createElement('div');
     voteButtons.className = 'aichatbot-vote-buttons';
+
+    // If hidden is true, hide buttons until streaming is complete
+    if (hidden) {
+      voteButtons.style.visibility = 'hidden';
+    }
 
     const upvoteButton = document.createElement('button');
     upvoteButton.className = 'aichatbot-vote-button';
@@ -1602,6 +1649,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Handle voting
   async function handleVote(messageId, isUpvote) {
     try {
+      // If messageId is empty, the message is still being generated
+      if (!messageId) {
+        console.log("Can't vote yet - message is still being generated");
+        return;
+      }
+
       const currentVote = votes[messageId] || 0;
       let newVote;
       let isUpvoteAction = false; // Flag to track if this is an upvote action
@@ -1882,9 +1935,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     botMessage.appendChild(messageContent);
 
-    // Don't add vote buttons yet - wait for the actual docId from server
-    // addVoteButtons(botMessage, messageId);
-
+    // We'll add vote buttons when the stream is complete
     return botMessage;
   }
 

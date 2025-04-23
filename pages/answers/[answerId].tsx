@@ -117,7 +117,7 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
       try {
         const uuid = getOrCreateUUID();
         // Pass the site config to determine appropriate auth handling
-        const statuses = await checkUserLikes(answerIds, uuid, siteConfig);
+        const statuses = await checkUserLikes(answerIds, uuid);
 
         // Important: completely replace the state, don't merge with previous
         setLikeStatuses(statuses);
@@ -135,10 +135,11 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
       }
     };
 
+    // Ensure answer is not null before fetching like statuses
     if (answer) {
       fetchLikeStatuses([answer.id]);
     }
-  }, [answer, siteConfig, allowLikes]);
+  }, [answer, allowLikes]);
 
   // Scroll the main answer item into view after it's loaded/rendered
   // NOTE: Moved before early returns to satisfy rules-of-hooks

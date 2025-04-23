@@ -233,6 +233,9 @@ export default function Home({
     string | null
   >(null);
 
+  // Add a state variable to track the docId separately
+  const [savedDocId, setSavedDocId] = useState<string | null>(null);
+
   const accumulatedResponseRef = useRef('');
 
   const fetchRelatedQuestions = useCallback(async (docId: string) => {
@@ -277,19 +280,22 @@ export default function Home({
         const lastMessage = updatedMessages[updatedMessages.length - 1];
 
         if (lastMessage.type === 'apiMessage') {
+          // Preserve the docId if it exists when updating the message
+          const existingDocId = lastMessage.docId;
           updatedMessages[updatedMessages.length - 1] = {
             ...lastMessage,
             message: newResponse,
             sourceDocs: newSourceDocs
               ? [...newSourceDocs]
               : lastMessage.sourceDocs || [],
+            // Keep the docId if it was already set
+            ...(existingDocId && { docId: existingDocId }),
           };
         } else {
-          updatedMessages.push({
-            type: 'apiMessage',
-            message: newResponse,
-            sourceDocs: newSourceDocs ? [...newSourceDocs] : [],
-          } as ExtendedAIMessage);
+          console.warn(
+            'Expected last message to be apiMessage but found:',
+            lastMessage.type,
+          );
         }
 
         // Update the last assistant message in the history
@@ -343,7 +349,7 @@ export default function Home({
         console.log(
           'Received sourceDocs:',
           typeof data.sourceDocs,
-          data.sourceDocs,
+          Array.isArray(data.sourceDocs) ? data.sourceDocs.length : 'non-array',
         );
         try {
           setTimeout(() => {
@@ -372,32 +378,101 @@ export default function Home({
       }
 
       if (data.done) {
+        // Check for docId one more time right when done is received.
+        // Immediately set loading to false so the buttons appear right away
+        setLoading(false);
+
         // Reset accumulated response when done
         accumulatedResponseRef.current = '';
-        setLoading(false);
+
+        // Force a state update to ensure UI re-renders immediately with buttons and correct docId
+        setMessageState((prevState) => {
+          // Check all messages to find the API message we need to update
+          let apiMessageIndex = prevState.messages.length - 1;
+          let apiMessage = prevState.messages[apiMessageIndex];
+
+          // If the last message isn't an API message, look for the most recent one
+          if (
+            apiMessage.type !== 'apiMessage' &&
+            prevState.messages.length >= 2
+          ) {
+            for (let i = prevState.messages.length - 1; i >= 0; i--) {
+              if (prevState.messages[i].type === 'apiMessage') {
+                apiMessageIndex = i;
+                apiMessage = prevState.messages[i];
+                break;
+              }
+            }
+          }
+
+          // If we have a saved docId but the API message doesn't have one, update it
+          if (
+            apiMessage.type === 'apiMessage' &&
+            !apiMessage.docId &&
+            savedDocId
+          ) {
+            // Create a new messages array with the updated API message
+            const updatedMessages = [...prevState.messages];
+            updatedMessages[apiMessageIndex] = {
+              ...apiMessage,
+              docId: savedDocId,
+            };
+
+            return {
+              ...prevState,
+              messages: updatedMessages,
+            };
+          }
+
+          return { ...prevState };
+        });
       }
 
       if (data.error) {
+        console.error(`Stream ERROR:`, data.error);
         setError(data.error);
       }
 
       if (data.docId) {
+        // Save the docId in a separate state variable for later reference
+        // This ensures we have it even if the message object wasn't ready when it arrived
+        setSavedDocId(data.docId);
+
+        // Store the docId with the message immediately (buttons won't show until loading=false)
         setMessageState((prevState) => {
           const updatedMessages = [...prevState.messages];
+          // Make sure we're getting the API message (it should be the last one)
           const lastMessage = updatedMessages[updatedMessages.length - 1];
+
           if (lastMessage.type === 'apiMessage') {
+            // Update the API message with the docId
             updatedMessages[updatedMessages.length - 1] = {
               ...lastMessage,
               docId: data.docId,
             };
+          } else if (prevState.messages.length >= 2) {
+            // If the last message isn't an API message, find the most recent API message
+            for (let i = updatedMessages.length - 1; i >= 0; i--) {
+              if (updatedMessages[i].type === 'apiMessage') {
+                updatedMessages[i] = {
+                  ...updatedMessages[i],
+                  docId: data.docId,
+                };
+                break;
+              }
+            }
+          } else {
+            console.warn(`No API message found to attach docId to`);
           }
+
           return {
             ...prevState,
             messages: updatedMessages,
           };
         });
 
-        // Fetch related questions after receiving docId
+        // Start fetching related questions in the background
+
         fetchRelatedQuestions(data.docId).then((relatedQuestions) => {
           if (relatedQuestions) {
             setMessageState((prevState) => ({
@@ -419,6 +494,8 @@ export default function Home({
       setMessageState,
       fetchRelatedQuestions,
       siteConfig?.siteId,
+      savedDocId,
+      setSavedDocId,
     ],
   );
 
@@ -461,6 +538,12 @@ export default function Home({
       messages: [
         ...prevState.messages,
         { type: 'userMessage', message: submittedQuery } as ExtendedAIMessage,
+        // Add an empty API message immediately so it's ready for the docId
+        {
+          type: 'apiMessage',
+          message: '',
+          sourceDocs: [],
+        } as ExtendedAIMessage,
       ],
       history: [
         ...prevState.history,
@@ -514,7 +597,9 @@ export default function Home({
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
 
         const chunk = decoder.decode(value);
         const lines = chunk.split('\n');

@@ -368,6 +368,78 @@ async function setupVectorStoreAndRetriever(
   return { vectorStore, retriever, documentPromise, resolveWithDocuments };
 }
 
+// Function to create an empty document and return its ID
+async function createEmptyDocument(
+  originalQuestion: string,
+  collection: string,
+  history: ChatMessage[],
+  clientIP: string,
+): Promise<string> {
+  // Check if db is available
+  if (!db) {
+    console.warn(
+      'Firestore database not initialized, skipping document creation',
+    );
+    return '';
+  }
+
+  try {
+    const answerRef = db.collection(getAnswersCollectionName());
+    const emptyEntry = {
+      question: originalQuestion,
+      answer: '', // Empty answer - will be updated later
+      collection: collection,
+      sources: '[]', // Empty sources - will be updated later
+      likeCount: 0,
+      history: history,
+      ip: clientIP,
+      timestamp: fbadmin.firestore.FieldValue.serverTimestamp(),
+      relatedQuestionsV2: [],
+    };
+    const docRef = await answerRef.add(emptyEntry);
+    console.log(`Created empty document with ID: ${docRef.id}`);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating empty document:', error);
+    return '';
+  }
+}
+
+// Function to update an existing document with the full answer and sources
+async function updateDocument(
+  docId: string,
+  fullResponse: string,
+  promiseDocuments: Document[],
+): Promise<boolean> {
+  // Check if db is available
+  if (!db) {
+    console.warn(
+      'Firestore database not initialized, skipping document update',
+    );
+    return false;
+  }
+
+  // If no docId, can't update
+  if (!docId) {
+    console.warn('No docId provided for update, skipping');
+    return false;
+  }
+
+  try {
+    // Use a timeout to ensure this doesn't block the main thread
+    const docRef = db.collection(getAnswersCollectionName()).doc(docId);
+    await docRef.update({
+      answer: fullResponse,
+      sources: JSON.stringify(promiseDocuments),
+    });
+    console.log(`Updated document with ID: ${docId}`);
+    return true;
+  } catch (error) {
+    console.error(`Error updating document ${docId}:`, error);
+    return false;
+  }
+}
+
 // Function to save the answer and related information to Firestore
 async function saveAnswerToFirestore(
   originalQuestion: string,
@@ -828,7 +900,30 @@ async function handleChatRequest(req: NextRequest) {
         // Send site ID first
         sendData({ siteId: siteConfig.siteId });
 
-        // Set up Pinecone and filter
+        // Start document creation in parallel without blocking
+        let docIdPromise = Promise.resolve('');
+        if (!sanitizedInput.privateSession) {
+          // Create empty document in background - don't await here
+          docIdPromise = createEmptyDocument(
+            originalQuestion,
+            sanitizedInput.collection || 'whole_library',
+            sanitizedInput.history || [],
+            clientIP,
+          )
+            .then((id) => {
+              // Send docId as soon as we have it, without blocking the main flow
+              if (id) {
+                sendData({ docId: id });
+              }
+              return id;
+            })
+            .catch((error) => {
+              console.error('Error creating empty document:', error);
+              return ''; // Return empty string on error
+            });
+        }
+
+        // Set up Pinecone and filter without waiting for document creation to complete
         const { index, filter } = await setupPineconeAndFilter(
           sanitizedInput.collection || 'whole_library',
           normalizeMediaTypes(sanitizedInput.mediaTypes),
@@ -875,36 +970,67 @@ async function handleChatRequest(req: NextRequest) {
           );
         }
 
+        // Send done event immediately after final response is complete, without waiting for document updates
+        sendData({
+          done: true,
+          timing: {
+            ttfb: timingMetrics.firstByteTime
+              ? timingMetrics.firstByteTime - timingMetrics.startTime
+              : 0,
+            total: Date.now() - timingMetrics.startTime,
+            tokensPerSecond: timingMetrics.tokensPerSecond || 0,
+            totalTokens: tokensStreamed,
+            firstTokenGenerated: timingMetrics.firstTokenGenerated,
+          },
+        });
+
+        // Later, after getting the full response, update the document
         // Save answer to Firestore if not a private session
         if (!sanitizedInput.privateSession) {
-          const docId = await saveAnswerToFirestore(
-            originalQuestion,
-            fullResponse,
-            sanitizedInput.collection || 'whole_library',
-            promiseDocuments,
-            sanitizedInput.history || [],
-            clientIP,
-          );
-          sendData({ docId });
+          // Handle document update in a completely non-blocking way
+          docIdPromise
+            .then((docId) => {
+              if (docId) {
+                // Update document without blocking
+                updateDocument(docId, fullResponse, promiseDocuments)
+                  .then((success) => {
+                    if (!success) {
+                      console.warn(`Failed to update document ${docId}`);
+                    }
+                  })
+                  .catch((error) => {
+                    console.error(`Error updating document ${docId}:`, error);
+                  });
+              } else {
+                // Fall back to original method without blocking
+                saveAnswerToFirestore(
+                  originalQuestion,
+                  fullResponse,
+                  sanitizedInput.collection || 'whole_library',
+                  promiseDocuments,
+                  sanitizedInput.history || [],
+                  clientIP,
+                )
+                  .then((newDocId) => {
+                    if (newDocId) {
+                      sendData({ docId: newDocId });
+                    }
+                  })
+                  .catch((error) => {
+                    console.error('Error saving to Firestore:', error);
+                  });
+              }
+            })
+            .catch((error) => {
+              console.error('Error resolving docId promise:', error);
+            });
         }
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
         handleError(error, sendData);
       } finally {
         if (!isControllerClosed) {
-          // Send done event with final timing metrics
-          sendData({
-            done: true,
-            timing: {
-              ttfb: timingMetrics.firstByteTime
-                ? timingMetrics.firstByteTime - timingMetrics.startTime
-                : 0,
-              total: Date.now() - timingMetrics.startTime,
-              tokensPerSecond: timingMetrics.tokensPerSecond || 0,
-              totalTokens: tokensStreamed,
-              firstTokenGenerated: timingMetrics.firstTokenGenerated,
-            },
-          });
+          // Don't send done event here again - it was already sent earlier
           controller.close();
           isControllerClosed = true;
         }
@@ -952,40 +1078,45 @@ function logPerformanceMetrics(
   stages: Record<string, number>,
   modelName: string = 'unknown',
 ) {
-  const summaryMetrics = {
-    setup: stages.pineconeComplete
-      ? stages.pineconeComplete - stages.startTime
-      : 0,
-    retrieval: stages.retrievalComplete
-      ? stages.retrievalComplete - stages.pineconeComplete
-      : 0,
-    llmThinkTime:
-      metrics.firstTokenGenerated && stages.retrievalComplete
-        ? metrics.firstTokenGenerated - stages.retrievalComplete
+  // Use setTimeout to log metrics asynchronously
+  setTimeout(() => {
+    const summaryMetrics = {
+      setup: stages.pineconeComplete
+        ? stages.pineconeComplete - stages.startTime
         : 0,
-    tokenDelivery:
-      metrics.firstByteTime && metrics.firstTokenGenerated
-        ? metrics.firstByteTime - metrics.firstTokenGenerated
+      retrieval: stages.retrievalComplete
+        ? stages.retrievalComplete - stages.pineconeComplete
         : 0,
-    ttfb: metrics.firstByteTime ? metrics.firstByteTime - metrics.startTime : 0,
-    streaming:
-      metrics.firstByteTime && metrics.totalTime
-        ? metrics.totalTime - (metrics.firstByteTime - metrics.startTime)
+      llmThinkTime:
+        metrics.firstTokenGenerated && stages.retrievalComplete
+          ? metrics.firstTokenGenerated - stages.retrievalComplete
+          : 0,
+      tokenDelivery:
+        metrics.firstByteTime && metrics.firstTokenGenerated
+          ? metrics.firstByteTime - metrics.firstTokenGenerated
+          : 0,
+      ttfb: metrics.firstByteTime
+        ? metrics.firstByteTime - metrics.startTime
         : 0,
-    total: metrics.totalTime || 0,
-    tokensPerSecond: metrics.tokensPerSecond || 0,
-    totalTokens: metrics.totalTokens || 0,
-  };
+      streaming:
+        metrics.firstByteTime && metrics.totalTime
+          ? metrics.totalTime - (metrics.firstByteTime - metrics.startTime)
+          : 0,
+      total: metrics.totalTime || 0,
+      tokensPerSecond: metrics.tokensPerSecond || 0,
+      totalTokens: metrics.totalTokens || 0,
+    };
 
-  console.log(`
-  ⚡️ Chat Performance:
-    Model: ${modelName}
-    Setup: ${(summaryMetrics.setup / 1000).toFixed(2)}s
-    Retrieval: ${(summaryMetrics.retrieval / 1000).toFixed(2)}s
-    LLM think time: ${(summaryMetrics.llmThinkTime / 1000).toFixed(2)}s
-    Token delivery: ${(summaryMetrics.tokenDelivery / 1000).toFixed(2)}s
-    (Time to first byte: ${(summaryMetrics.ttfb / 1000).toFixed(2)}s)
-    Streaming: ${(summaryMetrics.streaming / 1000).toFixed(2)}s (${summaryMetrics.tokensPerSecond} chars/sec)
-    Total time: ${(summaryMetrics.total / 1000).toFixed(2)}s (${summaryMetrics.totalTokens} total tokens)
-    `);
+    console.log(`
+    ⚡️ Chat Performance:
+      Model: ${modelName}
+      Setup: ${(summaryMetrics.setup / 1000).toFixed(2)}s
+      Retrieval: ${(summaryMetrics.retrieval / 1000).toFixed(2)}s
+      LLM think time: ${(summaryMetrics.llmThinkTime / 1000).toFixed(2)}s
+      Token delivery: ${(summaryMetrics.tokenDelivery / 1000).toFixed(2)}s
+      (Time to first byte: ${(summaryMetrics.ttfb / 1000).toFixed(2)}s)
+      Streaming: ${(summaryMetrics.streaming / 1000).toFixed(2)}s (${summaryMetrics.tokensPerSecond} chars/sec)
+      Total time: ${(summaryMetrics.total / 1000).toFixed(2)}s (${summaryMetrics.totalTokens} total tokens)
+      `);
+  }, 0); // Using setTimeout with 0 delay to execute after the current execution stack
 }

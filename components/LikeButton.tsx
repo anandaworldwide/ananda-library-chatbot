@@ -8,6 +8,7 @@ interface LikeButtonProps {
   likeCount: number;
   onLikeCountChange?: (answerId: string, newLikeCount: number) => void;
   showLikeCount?: boolean;
+  disabled?: boolean;
 }
 
 const LikeButton: React.FC<LikeButtonProps> = ({
@@ -16,6 +17,7 @@ const LikeButton: React.FC<LikeButtonProps> = ({
   likeCount,
   onLikeCountChange,
   showLikeCount = true,
+  disabled = false,
 }) => {
   // Use a ref to track if this is the first render
   const isFirstRender = useRef(true);
@@ -54,8 +56,8 @@ const LikeButton: React.FC<LikeButtonProps> = ({
   }, [likeCount, answerId, likes]);
 
   const handleLike = async () => {
-    // Safety check - don't proceed if no callback is provided
-    if (!onLikeCountChange) return;
+    // Don't proceed if disabled or no callback is provided
+    if (disabled || !onLikeCountChange) return;
 
     // Set flag to prevent external prop changes from conflicting with our action
     isLikeInProgress.current = true;
@@ -111,10 +113,11 @@ const LikeButton: React.FC<LikeButtonProps> = ({
       <button
         className={`heart-button ${isLiked ? 'liked' : ''} ${
           animate ? 'animate-pulse' : ''
-        } flex items-center`}
+        } flex items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         onClick={handleLike}
         aria-label={isLiked ? 'Unlike this answer' : 'Like this answer'}
         title="Like this answer to show it was helpful"
+        disabled={disabled}
       >
         <span className="material-icons text-xl leading-none">
           {isLiked ? 'favorite' : 'favorite_border'}
