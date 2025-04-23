@@ -24,6 +24,17 @@ jest.mock('@/services/likeService', () => ({
   updateLike: jest.fn(),
 }));
 
+// Mock tokenManager's fetchWithAuth to prevent errors in SudoContext
+jest.mock('@/utils/client/tokenManager', () => ({
+  ...jest.requireActual('@/utils/client/tokenManager'),
+  fetchWithAuth: jest.fn().mockImplementation(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ sudoCookieValue: false }),
+    }),
+  ),
+}));
+
 describe('LikeButton', () => {
   // Setup common test variables
   const mockAnswerId = 'answer123';

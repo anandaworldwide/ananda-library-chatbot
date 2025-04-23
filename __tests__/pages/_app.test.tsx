@@ -19,6 +19,12 @@ jest.mock('next/font/google', () => ({
 
 jest.mock('../../utils/client/tokenManager', () => ({
   initializeTokenManager: jest.fn(() => Promise.resolve('token')),
+  fetchWithAuth: jest.fn().mockImplementation(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ sudoCookieValue: false }),
+    }),
+  ),
 }));
 
 jest.mock('react-toastify', () => ({

@@ -46,6 +46,17 @@ jest.mock('@/contexts/SudoContext', () => ({
   useSudo: jest.fn().mockReturnValue({ isSudoUser: false }),
 }));
 
+// Mock the fetchWithAuth function used by SudoContext
+jest.mock('@/utils/client/tokenManager', () => ({
+  ...jest.requireActual('@/utils/client/tokenManager'),
+  fetchWithAuth: jest.fn().mockImplementation(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ sudoCookieValue: false }),
+    }),
+  ),
+}));
+
 // Mock dependencies
 jest.mock('next/image', () => ({
   __esModule: true,
