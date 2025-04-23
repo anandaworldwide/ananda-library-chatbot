@@ -310,4 +310,32 @@ describe('LikeButton', () => {
     // Check updated count
     expect(screen.getByText('10')).toBeInTheDocument();
   });
+
+  it('does not trigger action when disabled prop is true', async () => {
+    render(
+      <LikeButton
+        answerId={mockAnswerId}
+        initialLiked={false}
+        likeCount={5}
+        onLikeCountChange={mockOnLikeCountChange}
+        disabled={true}
+      />,
+    );
+
+    // Find and click the button
+    const likeButton = screen.getByRole('button', {
+      name: /like this answer/i,
+    });
+    await act(async () => {
+      fireEvent.click(likeButton);
+    });
+
+    // Verify button is visually disabled
+    expect(likeButton).toHaveAttribute('disabled');
+
+    // Check that likeCount wasn't updated and service wasn't called
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(updateLike).not.toHaveBeenCalled();
+    expect(mockOnLikeCountChange).not.toHaveBeenCalled();
+  });
 });

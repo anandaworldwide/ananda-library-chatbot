@@ -325,6 +325,12 @@ export default function Home({
 
   const handleStreamingResponse = useCallback(
     (data: StreamingResponseData) => {
+      // Log every message that comes through with a timestamp
+      const timestamp = new Date().toISOString().substr(11, 12); // HH:MM:SS.mmm format
+      console.log(
+        `[${timestamp}] Stream message type: ${Object.keys(data).join(', ')}`,
+      );
+
       if (
         data.siteId &&
         siteConfig?.siteId &&
@@ -337,17 +343,24 @@ export default function Home({
 
       // Capture timing information
       if (data.timing) {
+        console.log(`[${timestamp}] Timing info:`, data.timing);
         setTimingMetrics(data.timing);
       }
 
       if (data.token) {
+        // Log only occasionally to avoid flooding console
+        if (accumulatedResponseRef.current.length % 100 === 0) {
+          console.log(
+            `[${timestamp}] Received token, accumulated length: ${accumulatedResponseRef.current.length}`,
+          );
+        }
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
       }
 
       if (data.sourceDocs) {
         console.log(
-          'Received sourceDocs:',
+          `[${timestamp}] Received sourceDocs:`,
           typeof data.sourceDocs,
           Array.isArray(data.sourceDocs) ? data.sourceDocs.length : 'non-array',
         );
@@ -474,6 +487,10 @@ export default function Home({
         // Start fetching related questions in the background
 
         fetchRelatedQuestions(data.docId).then((relatedQuestions) => {
+          const completionTimestamp = new Date().toISOString().substr(11, 12);
+          console.log(
+            `[${completionTimestamp}] Completed fetching related questions for docId: ${data.docId}`,
+          );
           if (relatedQuestions) {
             setMessageState((prevState) => ({
               ...prevState,
@@ -594,6 +611,9 @@ export default function Home({
 
       const reader = data.getReader();
       const decoder = new TextDecoder();
+      console.log(
+        `[${new Date().toISOString().substr(11, 12)}] Starting to read streaming response...`,
+      );
 
       while (true) {
         const { done, value } = await reader.read();
@@ -602,6 +622,9 @@ export default function Home({
         }
 
         const chunk = decoder.decode(value);
+        console.log(
+          `[${new Date().toISOString().substr(11, 12)}] Received chunk of size ${value.length} bytes`,
+        );
         const lines = chunk.split('\n');
 
         for (const line of lines) {
@@ -618,6 +641,9 @@ export default function Home({
         }
       }
 
+      console.log(
+        `[${new Date().toISOString().substr(11, 12)}] Stream reading complete, setting loading=false`,
+      );
       setLoading(false);
     } catch (error) {
       console.error('Error in handleSubmit:', error);

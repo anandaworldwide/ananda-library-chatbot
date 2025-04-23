@@ -545,4 +545,27 @@ describe('MessageItem', () => {
       screen.queryByText(/Admin: show related Questions/i),
     ).not.toBeInTheDocument();
   });
+
+  it('does not display related questions when loading is true and isLastMessage is true', () => {
+    const relatedQuestions = [
+      { id: 'rel1', title: 'Related Question 1', similarity: 0.8 },
+    ];
+    const messageWithRelated = {
+      ...aiMessage,
+      relatedQuestions: relatedQuestions,
+    };
+    const props = {
+      ...defaultProps,
+      message: messageWithRelated,
+      allowAllAnswersPage: true,
+      loading: true,
+      isLastMessage: true,
+    };
+
+    renderWithQueryClient(<MessageItem {...props} />);
+
+    // Related questions should not be displayed while loading the last message
+    expect(screen.queryByText('Related Questions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Related Question 1')).not.toBeInTheDocument();
+  });
 });
