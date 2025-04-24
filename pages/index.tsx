@@ -235,9 +235,6 @@ export default function Home({
 
   // Add a state variable to track the docId separately
   const [savedDocId, setSavedDocId] = useState<string | null>(null);
-
-  // Add a state variable to track the docId separately
-  const [savedDocId, setSavedDocId] = useState<string | null>(null);
   const accumulatedResponseRef = useRef('');
 
   const fetchRelatedQuestions = useCallback(async (docId: string) => {
@@ -284,8 +281,6 @@ export default function Home({
         if (lastMessage.type === 'apiMessage') {
           // Preserve the docId if it exists when updating the message
           const existingDocId = lastMessage.docId;
-          // Preserve the docId if it exists when updating the message
-          const existingDocId = lastMessage.docId;
           updatedMessages[updatedMessages.length - 1] = {
             ...lastMessage,
             message: newResponse,
@@ -294,14 +289,8 @@ export default function Home({
               : lastMessage.sourceDocs || [],
             // Keep the docId if it was already set
             ...(existingDocId && { docId: existingDocId }),
-            // Keep the docId if it was already set
-            ...(existingDocId && { docId: existingDocId }),
           };
         } else {
-          console.warn(
-            'Expected last message to be apiMessage but found:',
-            lastMessage.type,
-          );
           console.warn(
             'Expected last message to be apiMessage but found:',
             lastMessage.type,
@@ -460,11 +449,9 @@ export default function Home({
         setMessageState((prevState) => {
           const updatedMessages = [...prevState.messages];
           // Make sure we're getting the API message (it should be the last one)
-          // Make sure we're getting the API message (it should be the last one)
           const lastMessage = updatedMessages[updatedMessages.length - 1];
 
           if (lastMessage.type === 'apiMessage') {
-            // Update the API message with the docId
             // Update the API message with the docId
             updatedMessages[updatedMessages.length - 1] = {
               ...lastMessage,
@@ -562,12 +549,6 @@ export default function Home({
       messages: [
         ...prevState.messages,
         { type: 'userMessage', message: submittedQuery } as ExtendedAIMessage,
-        // Add an empty API message immediately so it's ready for the docId
-        {
-          type: 'apiMessage',
-          message: '',
-          sourceDocs: [],
-        } as ExtendedAIMessage,
         // Add an empty API message immediately so it's ready for the docId
         {
           type: 'apiMessage',
