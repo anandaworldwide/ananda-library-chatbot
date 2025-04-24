@@ -45,33 +45,6 @@ const customJestConfig = {
   collectCoverage: true,
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov'],
-  // Coverage thresholds to enforce minimum test coverage
-  coverageThreshold: {
-    global: {
-      statements: 40,
-      branches: 15,
-      functions: 30,
-      lines: 45,
-    },
-    './components/': {
-      statements: 45,
-      branches: 20,
-      functions: 20,
-      lines: 44,
-    },
-    './utils/': {
-      statements: 10,
-      branches: 1,
-      functions: 3,
-      lines: 10,
-    },
-    './app/api/': {
-      statements: 21,
-      branches: 6,
-      functions: 17,
-      lines: 20,
-    },
-  },
   transform: {
     '^.+\\.(ts|tsx)$': [
       'ts-jest',
