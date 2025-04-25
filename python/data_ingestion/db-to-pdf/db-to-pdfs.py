@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# TODO: Deprecate this method of converting a database to pdf files to then be ingested is old now we have a
+# separate script that ingests directly from mysql database into pinecone so this is no longer needed we 
+# should delete this as soon as we're sure that the new method is stable. 4/25/2025
 
 import os
 import shutil
