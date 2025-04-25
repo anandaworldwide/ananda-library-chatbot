@@ -205,37 +205,77 @@ debugging, and to avoid charges for using the Firebase services.
 
 ## Data Ingestion
 
-### Optional: Generate PDF files from Wordpress Database
+This project supports ingesting data from multiple sources:
 
-If you don't already have PDF files, you can generate them from a Wordpress
-database.
+1. **WordPress MySQL Database:** Directly ingest text content, metadata, and categories into Pinecone.
+2. **Standalone PDF Files:** Ingest text content from PDF files.
+3. **Websites:** Crawl and ingest website content.
+4. **Audio/Video Files:** Transcribe MP3s and YouTube videos, then ingest transcripts.
 
-#### Import MySQL database dump into local MySQL
+### Ingesting from WordPress Database (Recommended for WP Sites)
 
-First, you need to import a MySQL data dump from wordpress into local MySQL
-(or set up access to the DB).
+This is the primary method for ingesting content originating from a WordPress database. It directly transfers
+content, calculated metadata (author, permalink), and **categories** (from specified taxonomies) into Pinecone.
 
-You can use the `python/bin/process_anandalib_dump.py` script to process and import an Ananda Library SQL dump:
+**(Optional) Import MySQL Dump Details:**
+
+The `python/bin/process_anandalib_dump.py` script helps prepare and import a WordPress SQL dump:
 
 ```bash
 python python/bin/process_anandalib_dump.py -u [mysql_username] [path_to_sql_dump]
 ```
 
-This script:
+This script (originally for Ananda Library) creates a dated database (e.g., `anandalib-YYYY-MM-DD`), performs some
+preprocessing, and imports the data. It can be adapted for other WordPress dumps.
 
-- Creates a new database with name format `anandalib-YYYY-MM-DD`
-- Processes the SQL dump to fix date formats and add necessary columns
-- Imports the processed SQL into the new database
+**Main Steps:**
 
-While this script is specifically tuned for the Ananda Library database structure,
-it can be modified to work with other WordPress or MySQL database dumps. The core
-functionality of creating a dated database, processing SQL to fix compatibility
-issues, and importing the data can be adapted to different schema requirements.
+1. **Ensure Database Access:** Make sure the MySQL connection details (`DB_USER`, `DB_PASSWORD`, `DB_HOST`) are
+   correctly configured in your `.env.[site]` file for the target database.
+2. **Import Dump (if necessary):** If working with a dump file, use the `python/bin/process_anandalib_dump.py`
+   script to import it into a local MySQL database (see details below).
+3. **Run the Ingestion Script:** Execute the `ingest-db-text.py` script:
 
-#### Convert to PDFs
+   ```bash
+   python python/data_ingestion/sql-to-vector-db/ingest-db-text.py --site [site] --database [database_name] \
+     --library-name "[Library Name]"
+   ```
 
-Second, you run _python db-to-pdfs.py_ from the `python/data-ingestion/db-to-pdf/`
-directory to generate PDF files.
+   - `--site`: Your site configuration name (e.g., `ananda`) used for `.env` loading and site-specific settings
+     (like base URL, post types, category taxonomy).
+   - `--database`: The name of the MySQL database containing the WordPress data.
+   - `--library-name`: The name to assign to this library within Pinecone metadata.
+   - `--keep-data` (optional): Add this flag to resume ingestion from the last checkpoint. If omitted (or `False`),
+     the script will prompt you to confirm deletion of existing vectors for the specified library name before
+     starting fresh.
+   - `--batch-size` (optional): Number of documents to process in each embedding/upsert batch (default: 50).
+
+4. **Monitor Progress:** The script will show progress bars for data preparation and batch processing.
+5. **Verify in Pinecone:** Check your Pinecone dashboard to confirm vectors have been added with the correct
+   metadata, including the `categories` field.
+
+### Ingesting Standalone PDF Files
+
+Use this method for PDF files that _do not_ originate from the WordPress database.
+
+1. Place your PDF files (or folders containing them) inside a designated directory (e.g., create `pdf-docs/[library-name]/`).
+2. Run the `ingest-text-data.ts` script (via npm):
+
+   ```bash
+   # Example: Ingest PDFs from pdf-docs/my-library/
+   npm run ingest -- --file-path ./pdf-docs/my-library --site [site] --library-name "My Library Name"
+   ```
+
+   - `--file-path`: Path to the directory containing the PDFs.
+   - `--site`: Your site configuration name (for `.env` loading).
+   - `--library-name`: Name for this library in Pinecone.
+   - `--keep-data` (optional): Resume from checkpoint.
+
+3. Check Pinecone dashboard to verify vectors.
+
+_(Note: The `npm run ingest` command likely needs adjustment in `package.json` if it currently points to the TS script
+with different default arguments or assumptions. Alternatively, run the TS script directly with `ts-node` and the
+required arguments.)_
 
 ### Crawl Websites and Convert to Embeddings
 
@@ -255,22 +295,6 @@ This repo includes a script to crawl websites and ingest their content.
    - `--report`: Generate a report of failed URLs from the last checkpoint and exit.
 
 2. Check Pinecone dashboard to verify vectors have been added for the crawled content.
-
-### Convert your PDF files to embeddings
-
-This repo can load multiple PDF files.
-
-1. Inside `python/data-ingestion/docs` folder, add your pdf files or folders that contain pdf files.
-
-1. Run the script `npm run ingest` to 'ingest' and embed your docs. If you run into errors troubleshoot below.
-
-You can add arguments like this:
-
-```bash
-npm run ingest --dryrun --site [site]
-```
-
-1. Check Pinecone dashboard to verify your namespace and vectors have been added.
 
 ### Transcribe MP3 files and YouTube videos and convert to embeddings
 

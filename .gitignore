@@ -8,6 +8,7 @@
 /python/data_ingestion/scripts/queue/
 /python/data_ingestion/scripts/queue-*/
 /python/data_ingestion/scripts/data/
+**/ingestion_checkpoints/
 
 # supercut
 /python/supercut/cache/
