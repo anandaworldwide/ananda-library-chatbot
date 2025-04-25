@@ -137,6 +137,13 @@ type PineconeStoreOptions = {
   // We omit filter since we're handling it at runtime
 };
 
+// Define a custom type for our filter structure
+type PineconeFilter = {
+  $and: Array<{
+    [key: string]: { $in: string[] } | { $nin: string[] } | any; // Allow more operators like $nin and make it more flexible
+  }>;
+};
+
 async function validateAndPreprocessInput(
   req: NextRequest,
   siteConfig: SiteConfig,
@@ -245,15 +252,6 @@ async function applyRateLimiting(
   return null; // Rate limiting passed
 }
 
-// Define a custom type for our filter structure
-type PineconeFilter = {
-  $and: Array<{
-    [key: string]: {
-      $in: string[];
-    };
-  }>;
-};
-
 async function setupPineconeAndFilter(
   collection: string,
   mediaTypes: Record<string, boolean>,
@@ -288,6 +286,12 @@ async function setupPineconeAndFilter(
     );
     filter.$and.push({ library: { $in: libraryNames } });
   }
+
+  // === START TEST FILTER ===
+  // Hardcoded filter to exclude the "Ministry" category
+  // filter.$and.push({ categories: { $nin: ['Ministry'] } });
+  // console.log("🧪 TEST FILTER APPLIED: Excluding 'Ministry' category.");
+  // === END TEST FILTER ===
 
   const enabledMediaTypes = siteConfig.enabledMediaTypes || [
     'text',
