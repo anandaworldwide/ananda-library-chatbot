@@ -33,8 +33,15 @@ Known bugs:
 
 import os
 import argparse
+import sys
+from pathlib import Path
 from pinecone import Pinecone
 from typing import Optional
+from tqdm import tqdm
+
+# Add project root to sys.path
+project_root = Path(__file__).resolve().parents[2]
+sys.path.append(str(project_root))
 
 from util.env_utils import load_env
 
@@ -70,10 +77,11 @@ def delete_records_by_prefix(index, prefix: str) -> None:
     if confirmation in ["yes", "y"]:
         # Delete records in batches of 100 to avoid timeout
         batch_size = 100
-        for i in range(0, len(record_ids), batch_size):
+        num_batches = (len(record_ids) + batch_size - 1) // batch_size
+        print(f"Deleting {len(record_ids)} records in {num_batches} batches...")
+        for i in tqdm(range(0, len(record_ids), batch_size), total=num_batches, desc="Deleting batches"):
             batch = record_ids[i:i + batch_size]
             index.delete(ids=batch)
-            print(f"Deleted batch {i//batch_size + 1}/{(len(record_ids) + batch_size - 1)//batch_size}")
         print(f"Successfully deleted {len(record_ids)} records with prefix '{prefix}'")
     else:
         print("Deletion aborted.")
