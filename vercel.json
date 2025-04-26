@@ -7,10 +7,10 @@
   ],
   "builds": [
     {
-      "src": "web/package.json",
+      "src": "package.json",
       "use": "@vercel/next",
       "config": {
-        "buildCommand": "cd web && npm run build-with-api-tests"
+        "buildCommand": "npm run build-web"
       }
     }
   ],
