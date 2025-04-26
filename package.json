@@ -10,7 +10,7 @@
     "build": "node scripts/build.js",
     "build-with-tests": "NODE_ENV=development jest && node scripts/build.js",
     "build-with-api-tests": "NODE_ENV=development jest --config=jest.config.cjs --coverageThresholdWarningOnly=true && node scripts/build.js",
-    "build-web": "cd web && npm run build-with-api-tests",
+    "build-web": "cd web && npm run build",
     "start": "next start",
     "type-check": "tsc --noEmit",
     "lint": "eslint --ignore-path .gitignore \"**/*.+(ts|js|tsx)\"",

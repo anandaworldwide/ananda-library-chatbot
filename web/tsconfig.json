@@ -30,7 +30,7 @@
       "@/components/*": ["./src/components/*"]
     },
     "typeRoots": ["./node_modules/@types", "./src/types"],
-    "types": ["jest", "node", "@testing-library/jest-dom"]
+    "types": ["jest", "node"]
   },
   "include": [
     "next-env.d.ts",
