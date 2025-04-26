@@ -129,7 +129,7 @@ After each checkpoint:
 
 1. Tasks:
 
-   - [x] Create directory structure
+   - [x] Create directory structure.
    - [x] Setup initial configuration files
    - [x] Update path aliases
    - [x] Create minimal home page for testing
