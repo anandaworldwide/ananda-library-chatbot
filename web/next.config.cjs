@@ -2,7 +2,7 @@
 async function loadEnvAsync() {
   if (process.env.NODE_ENV === 'development') {
     try {
-      const { loadEnv } = await import('../utils/server/loadEnv.js');
+      const { loadEnv } = await import('./utils/server/loadEnv.js');
       loadEnv();
     } catch (error) {
       console.error('Failed to load environment variables:', error);
