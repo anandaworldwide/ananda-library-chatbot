@@ -9,6 +9,7 @@ for other sites.
 
 - [ ] Discuss with leadership opening up the site
 - [ ] Investigate Ananda.org WordPress as OAuth Identity Provider
+- [ ] Investigate PassKey login
 
 ## Phase 1: Basic Authentication Setup
 
