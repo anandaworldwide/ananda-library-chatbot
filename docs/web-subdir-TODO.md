@@ -41,10 +41,12 @@ subdirectory while maintaining functionality and minimizing disruption to the de
 
 1. Initial Setup:
 
-   - Create a new git branch: `web-migration`
-   - Copy files to `/web` directory while keeping originals
-   - Update import paths in copied files
-   - Configure new Next.js app to run on different port (e.g., 3001)
+   - [x] Create a new git branch: `web-migration`
+   - [x] Create initial `/web` directory structure
+   - [x] Configure environment loading from parent directory
+   - [ ] Copy files to `/web/src` directory while keeping originals
+   - [ ] Update import paths in copied files
+   - [x] Configure new Next.js app to run on different port (3001)
 
 1. Dual-Running Setup:
 
@@ -98,28 +100,45 @@ After each checkpoint:
 ├── package.json
 ├── tsconfig.json
 ├── next.config.js
-└── .env.example
+└── src/
+    ├── components/
+    ├── pages/
+    ├── utils/
+    ├── types/
+    ├── services/
+    └── styles/
 ```
 
 1. Setup package.json:
 
-   - Copy Next.js related dependencies
-   - Update scripts for new path structure
-   - Maintain test configurations
+   - [x] Copy Next.js related dependencies
+   - [x] Update scripts for new path structure
+   - [x] Maintain test configurations
 
-1. Create new tsconfig.json with updated paths
+1. Create new tsconfig.json with updated paths:
+
+   - [x] Update path aliases for new structure
+   - [x] Configure for src directory
+   - [x] Maintain existing compiler options
+
+1. Configure environment and shared utilities:
+
+   - [x] Set up environment loading from parent directory
+   - [ ] Identify shared utilities between web and other services
+   - [ ] Plan strategy for shared code (symlinks vs copying)
 
 1. Tasks:
 
-   - [ ] Create directory structure
-   - [ ] Setup initial configuration files
-   - [ ] Update path aliases
-   - [ ] Test basic Next.js setup in new location
+   - [x] Create directory structure
+   - [x] Setup initial configuration files
+   - [x] Update path aliases
+   - [x] Create minimal home page for testing
+   - [x] Test basic Next.js setup in new location
 
 1. Testing Checkpoint 1:
-   - [ ] Configure dual-port setup
-   - [ ] Verify Next.js boots in new location
-   - [ ] Test basic page rendering
+   - [x] Configure dual-port setup
+   - [x] Verify Next.js boots in new location
+   - [x] Test basic page rendering
    - [ ] Create first Vercel preview
 
 ### Phase 2: Static Assets & Styles

@@ -1,0 +1,33 @@
+# Next.js
+/.next/
+/out/
+
+# Local Environment Files
+.env*
+!.env.example
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Cache
+.swc/
+.vercel/
+
+# Node
+node_modules/
+
+# Build artifacts
+*.gz
+*.pack
+build-manifest.json
+react-loadable-manifest.json
+middleware-build-manifest.json
+middleware-manifest.json
+middleware-react-loadable-manifest.json
+next-font-manifest.json
+pages-manifest.json
+webpack-runtime.js
+*.pack.gz
+**/trace-*.json
+**/*.trace
