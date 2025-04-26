@@ -184,6 +184,13 @@ export function middleware(req: NextRequest) {
     const cookie = req.cookies.get('siteAuth');
     const storedHashedToken = process.env.SECURE_TOKEN_HASH; // Ensure this env var is available to the /web build
 
+    // Enhanced debugging for auth issues
+    console.log(`[Web Middleware] Checking auth for: ${url.pathname}`);
+    console.log(`[Web Middleware] Cookie present: ${!!cookie}`);
+    console.log(
+      `[Web Middleware] SECURE_TOKEN_HASH present: ${!!storedHashedToken}`,
+    );
+
     let authFailed = false;
     if (!cookie) {
       console.log('[Web Middleware] Auth check: Missing siteAuth cookie.');
@@ -191,6 +198,10 @@ export function middleware(req: NextRequest) {
     } else {
       const tokenValue = cookie.value.split(':')[0];
       const hashedTokenValue = CryptoJS.SHA256(tokenValue).toString();
+
+      console.log(
+        `[Web Middleware] Token timestamp check: ${isTokenValid(cookie.value)}`,
+      );
 
       if (hashedTokenValue !== storedHashedToken) {
         console.log('[Web Middleware] Auth check: Token hash mismatch.');

@@ -11,7 +11,7 @@ const Navbar = () => {
     await fetchWithAuth('/api/logout', {
       method: 'POST',
     });
-    Cookies.remove('siteAuth');
+    Cookies.remove('siteAuth', { path: '/' });
     router.push('/login');
   };
 

@@ -102,6 +102,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         secure: isSecure,
         expires: expiryDate,
         sameSite: 'lax',
+        path: '/',
       });
       // Less secure cookie that can be used for some things on the front end
       cookies.set('isLoggedIn', 'true', {
@@ -109,6 +110,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         secure: isSecure,
         expires: expiryDate,
         sameSite: 'lax',
+        path: '/',
       });
 
       // Delete the rate limit counter after successful login
