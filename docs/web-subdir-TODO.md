@@ -139,7 +139,7 @@ After each checkpoint:
    - [x] Configure dual-port setup
    - [x] Verify Next.js boots in new location
    - [x] Test basic page rendering
-   - [ ] Create first Vercel preview
+   - [?] Create first Vercel preview
 
 ### Phase 2: Static Assets & Styles
 

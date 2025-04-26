@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
+    "build-with-api-tests": "cd .. && NODE_ENV=development jest --config=jest.config.cjs --coverageThresholdWarningOnly=true && cd web && next build",
     "start": "next start",
     "type-check": "tsc --noEmit",
     "lint": "eslint --ignore-path .gitignore \"**/*.+(ts|js|tsx)\"",
