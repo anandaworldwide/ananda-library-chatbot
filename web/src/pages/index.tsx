@@ -906,149 +906,148 @@ export default function Home({
 
   // Main component render
   return (
-    <>
-      {/* Popup component for new user messages */}
-      {showPopup && popupMessage && (
-        <Popup
-          message={popupMessage}
-          onClose={closePopup}
-          siteConfig={siteConfig}
-        />
-      )}
-      <SudoProvider>
-        <Layout siteConfig={siteConfig}>
-          <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />
-          <div className="flex flex-col h-full">
-            {/* Private session banner */}
-            {privateSession && (
-              <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-                <span className="material-icons text-2xl mr-2">lock</span>
-                You are in a Private Session (
-                <button
-                  onClick={handlePrivateSessionChange}
-                  className="underline hover:text-purple-900"
-                >
-                  end private session
-                </button>
-                )
-              </div>
-            )}
-            <div className="flex-grow overflow-hidden answers-container">
-              <div ref={messageListRef} className="h-full overflow-y-auto">
-                {/* Render chat messages */}
-                {messages.map((message, index) => (
-                  <MessageItem
-                    key={`chatMessage-${index}`}
-                    messageKey={`chatMessage-${index}`}
-                    message={message}
-                    previousMessage={
-                      index > 0 ? messages[index - 1] : undefined
-                    }
-                    index={index}
-                    isLastMessage={index === messages.length - 1}
-                    loading={loading}
-                    privateSession={privateSession}
-                    collectionChanged={collectionChanged}
-                    hasMultipleCollections={hasMultipleCollections}
-                    likeStatuses={likeStatuses}
-                    linkCopied={linkCopied}
-                    votes={votes}
-                    siteConfig={siteConfig}
-                    handleLikeCountChange={handleLikeCountChange}
-                    handleCopyLink={handleCopyLink}
-                    handleVote={handleVote}
-                    lastMessageRef={lastMessageRef}
-                    voteError={voteError}
-                    allowAllAnswersPage={
-                      siteConfig?.allowAllAnswersPage ?? false
-                    }
-                    showRelatedQuestions={showRelatedQuestions}
-                  />
-                ))}
-                {/* Display timing metrics for sudo users */}
-                {isSudoUser &&
-                  timingMetrics &&
-                  !loading &&
-                  messages.length > 0 && (
-                    <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded m-2">
-                      {formatTimingMetrics()}
-                    </div>
-                  )}
-                <div ref={bottomOfListRef} style={{ height: '1px' }} />
-              </div>
+    <SudoProvider>
+      <Layout siteConfig={siteConfig}>
+        {/* Banner for Web Subdirectory */}
+        <div className="bg-yellow-200 text-yellow-800 text-center p-2 text-sm font-semibold">
+          Note: You are viewing the site from the /web subdirectory.
+        </div>
+        {/* End Banner */}
+
+        {showPopup && popupMessage && (
+          <Popup
+            message={popupMessage}
+            onClose={closePopup}
+            siteConfig={siteConfig}
+          />
+        )}
+        <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />
+        <div className="flex flex-col h-full">
+          {/* Private session banner */}
+          {privateSession && (
+            <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
+              <span className="material-icons text-2xl mr-2">lock</span>
+              You are in a Private Session (
+              <button
+                onClick={handlePrivateSessionChange}
+                className="underline hover:text-purple-900"
+              >
+                end private session
+              </button>
+              )
             </div>
-            <div className="mt-4 px-2 md:px-0">
-              {/* Render chat input component */}
-              {isLoadingQueries ? null : (
-                <ChatInput
+          )}
+          <div className="flex-grow overflow-hidden answers-container">
+            <div ref={messageListRef} className="h-full overflow-y-auto">
+              {/* Render chat messages */}
+              {messages.map((message, index) => (
+                <MessageItem
+                  key={`chatMessage-${index}`}
+                  messageKey={`chatMessage-${index}`}
+                  message={message}
+                  previousMessage={index > 0 ? messages[index - 1] : undefined}
+                  index={index}
+                  isLastMessage={index === messages.length - 1}
                   loading={loading}
-                  handleSubmit={handleSubmit}
-                  handleEnter={handleEnter}
-                  handleClick={handleClick}
-                  handleCollectionChange={handleCollectionChange}
-                  handlePrivateSessionChange={handlePrivateSessionChange}
-                  collection={collection}
                   privateSession={privateSession}
-                  error={chatError}
-                  setError={setError}
-                  randomQueries={randomQueries}
-                  shuffleQueries={shuffleQueries}
-                  textAreaRef={textAreaRef}
-                  mediaTypes={mediaTypes}
-                  handleMediaTypeChange={handleMediaTypeChange}
+                  collectionChanged={collectionChanged}
+                  hasMultipleCollections={hasMultipleCollections}
+                  likeStatuses={likeStatuses}
+                  linkCopied={linkCopied}
+                  votes={votes}
                   siteConfig={siteConfig}
-                  input={query}
-                  handleInputChange={handleInputChange}
-                  setQuery={setQuery}
-                  setShouldAutoScroll={setIsNearBottom}
-                  handleStop={handleStop}
-                  isNearBottom={isNearBottom}
-                  setIsNearBottom={setIsNearBottom}
-                  isLoadingQueries={isLoadingQueries}
-                  sourceCount={sourceCount}
-                  setSourceCount={setSourceCount}
+                  handleLikeCountChange={handleLikeCountChange}
+                  handleCopyLink={handleCopyLink}
+                  handleVote={handleVote}
+                  lastMessageRef={lastMessageRef}
+                  voteError={voteError}
+                  allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
+                  showRelatedQuestions={showRelatedQuestions}
                 />
-              )}
+              ))}
+              {/* Display timing metrics for sudo users */}
+              {isSudoUser &&
+                timingMetrics &&
+                !loading &&
+                messages.length > 0 && (
+                  <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded m-2">
+                    {formatTimingMetrics()}
+                  </div>
+                )}
+              <div ref={bottomOfListRef} style={{ height: '1px' }} />
             </div>
-            {/* Private session banner (bottom) */}
-            {privateSession && (
-              <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-                <span className="material-icons text-2xl mr-2">lock</span>
-                You are in a Private Session (
-                <button
-                  onClick={handlePrivateSessionChange}
-                  className="underline hover:text-purple-900"
-                >
-                  end private session
-                </button>
-                )
-              </div>
+          </div>
+          <div className="mt-4 px-2 md:px-0">
+            {/* Render chat input component */}
+            {isLoadingQueries ? null : (
+              <ChatInput
+                loading={loading}
+                handleSubmit={handleSubmit}
+                handleEnter={handleEnter}
+                handleClick={handleClick}
+                handleCollectionChange={handleCollectionChange}
+                handlePrivateSessionChange={handlePrivateSessionChange}
+                collection={collection}
+                privateSession={privateSession}
+                error={chatError}
+                setError={setError}
+                randomQueries={randomQueries}
+                shuffleQueries={shuffleQueries}
+                textAreaRef={textAreaRef}
+                mediaTypes={mediaTypes}
+                handleMediaTypeChange={handleMediaTypeChange}
+                siteConfig={siteConfig}
+                input={query}
+                handleInputChange={handleInputChange}
+                setQuery={setQuery}
+                setShouldAutoScroll={setIsNearBottom}
+                handleStop={handleStop}
+                isNearBottom={isNearBottom}
+                setIsNearBottom={setIsNearBottom}
+                isLoadingQueries={isLoadingQueries}
+                sourceCount={sourceCount}
+                setSourceCount={setSourceCount}
+              />
             )}
           </div>
-
-          {/* Render the Feedback Modal */}
-          <FeedbackModal
-            isOpen={isFeedbackModalOpen}
-            docId={currentFeedbackDocId}
-            onConfirm={submitFeedback}
-            onCancel={cancelFeedback}
-            error={feedbackSubmitError} // Pass feedback-specific error
-          />
-
-          {/* Display general like/vote errors (e.g., from upvoting) */}
-          {voteError &&
-            !isFeedbackModalOpen && ( // Don't show if feedback modal is open showing its own error
-              <div className="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-md z-50">
-                <strong className="font-bold">Error: </strong>
-                <span className="block sm:inline">{voteError}</span>
-              </div>
-            )}
-          {/* Display like error if any */}
-          {likeError && (
-            <div className="text-red-500 text-sm mt-2">{likeError}</div>
+          {/* Private session banner (bottom) */}
+          {privateSession && (
+            <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
+              <span className="material-icons text-2xl mr-2">lock</span>
+              You are in a Private Session (
+              <button
+                onClick={handlePrivateSessionChange}
+                className="underline hover:text-purple-900"
+              >
+                end private session
+              </button>
+              )
+            </div>
           )}
-        </Layout>
-      </SudoProvider>
-    </>
+        </div>
+
+        {/* Render the Feedback Modal */}
+        <FeedbackModal
+          isOpen={isFeedbackModalOpen}
+          docId={currentFeedbackDocId}
+          onConfirm={submitFeedback}
+          onCancel={cancelFeedback}
+          error={feedbackSubmitError} // Pass feedback-specific error
+        />
+
+        {/* Display general like/vote errors (e.g., from upvoting) */}
+        {voteError &&
+          !isFeedbackModalOpen && ( // Don't show if feedback modal is open showing its own error
+            <div className="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-md z-50">
+              <strong className="font-bold">Error: </strong>
+              <span className="block sm:inline">{voteError}</span>
+            </div>
+          )}
+        {/* Display like error if any */}
+        {likeError && (
+          <div className="text-red-500 text-sm mt-2">{likeError}</div>
+        )}
+      </Layout>
+    </SudoProvider>
   );
 }

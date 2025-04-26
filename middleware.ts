@@ -285,16 +285,7 @@ export function middleware(req: NextRequest) {
   return response;
 }
 
-// Configure which routes the middleware should run on
+// Matcher configuration - Disabled
 export const config = {
-  matcher: [
-    /**
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|api/).*)', // Exclude API and static routes in one pattern
-  ],
+  matcher: [], // Empty array disables the middleware
 };
