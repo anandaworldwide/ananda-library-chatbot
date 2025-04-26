@@ -130,7 +130,7 @@ After each checkpoint:
 1. Tasks:
 
    - [x] Create directory structure.
-   - [x] Setup initial configuration files
+   - [x] Setup initial configuration files.
    - [x] Update path aliases
    - [x] Create minimal home page for testing
    - [x] Test basic Next.js setup in new location
