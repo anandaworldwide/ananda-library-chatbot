@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import bcrypt from 'bcryptjs';
 import Cookies from 'cookies';
 import crypto from 'crypto';
-import cors, { runMiddleware } from 'utils/server/corsMiddleware';
+import cors, { runMiddleware } from '@/utils/server/corsMiddleware';
 import {
   genericRateLimiter,
   deleteRateLimitCounter,

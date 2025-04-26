@@ -45,7 +45,7 @@ subdirectory while maintaining functionality and minimizing disruption to the de
    - [x] Create initial `/web` directory structure
    - [x] Configure environment loading from parent directory
    - [?] Copy files to `/web/src` directory while keeping originals
-   - [?] Update import paths in copied files
+   - [ ] Update import paths in copied files
    - [x] Configure new Next.js app to run on different port (3001)
 
 1. Dual-Running Setup:
@@ -279,6 +279,8 @@ After each checkpoint:
    - [ ] Commit the `git mv` changes.
    - [ ] Remove original configuration files (`next.config.js`, `tsconfig.json`, etc.) from root if they are now solely
          managed within `/web`. (Double-check shared dependencies first).
+   - [ ] Address `config` directory duplication: Decide final location (root, `/web/src/config`, shared pkg) and remove
+         the unused copy. Revisit path aliases if needed.
    - [ ] Update root `README.md` to reflect new structure.
 
 ## Special Considerations
