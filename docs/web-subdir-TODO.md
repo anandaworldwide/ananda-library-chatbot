@@ -44,8 +44,8 @@ subdirectory while maintaining functionality and minimizing disruption to the de
    - [x] Create a new git branch: `web-migration`
    - [x] Create initial `/web` directory structure
    - [x] Configure environment loading from parent directory
-   - [ ] Copy files to `/web/src` directory while keeping originals
-   - [ ] Update import paths in copied files
+   - [?] Copy files to `/web/src` directory while keeping originals
+   - [?] Update import paths in copied files
    - [x] Configure new Next.js app to run on different port (3001)
 
 1. Dual-Running Setup:
@@ -265,6 +265,21 @@ After each checkpoint:
    - [ ] Test deployment pipeline
    - [ ] Check all environment configurations
    - [ ] Final Vercel preview test
+
+### Phase 7: Finalize & Cleanup
+
+1. Prerequisites:
+
+   - [ ] All items in Validation Checklist are confirmed [x].
+
+2. Tasks:
+   - [ ] Delete copied files from `/web/src`. (Ensure originals are still at root).
+   - [ ] Use `git mv` to move original source directories (`app`, `components`, `hooks`, `lib`, `pages`, `services`,
+         `styles`, `types`, `utils`) into `/web/src` to preserve Git history.
+   - [ ] Commit the `git mv` changes.
+   - [ ] Remove original configuration files (`next.config.js`, `tsconfig.json`, etc.) from root if they are now solely
+         managed within `/web`. (Double-check shared dependencies first).
+   - [ ] Update root `README.md` to reflect new structure.
 
 ## Special Considerations
 
