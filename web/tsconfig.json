@@ -30,7 +30,7 @@
       "@/components/*": ["./src/components/*"]
     },
     "typeRoots": ["./node_modules/@types", "./src/types"],
-    "types": ["node"]
+    "types": []
   },
   "include": [
     "next-env.d.ts",
