@@ -16,7 +16,7 @@ import sys
 from requests import RequestException
 from tqdm import tqdm
 import warnings
-from util.env_utils import load_env
+from pyutil.env_utils import load_env
 import argparse
 from PyPDF2 import PdfReader, PdfWriter
 from PyPDF2.generic import TextStringObject

@@ -13,19 +13,17 @@ import argparse
 from pinecone import Pinecone, NotFoundException
 # OpenAIEmbeddings no longer needed
 import time
-import numpy as np # For creating a zero vector
 
 # Add the python directory to the path so we can import util
-# Assumes the script is run from the workspace root or the python/bin directory
-# Adjust if necessary based on execution context
+# Assumes the script is run from the workspace root or the bin directory
 try:
     # Running from workspace root
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-    from util.env_utils import load_env
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
+    from pyutil.env_utils import load_env
 except ImportError:
-    # Running from python/bin
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-    from util.env_utils import load_env
+    # Running from bin directory
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from pyutil.env_utils import load_env
 
 # --- Argument Parsing ---
 def parse_arguments():

@@ -2,18 +2,18 @@
 
 # data ingestion specific
 /pdf-docs/*
-/python/data_ingestion/db-to-pdf/docs-*/
-/python/data_ingestion/db-to-pdf/freejoehunt/
-/python/data_ingestion/media/
-/python/data_ingestion/scripts/queue/
-/python/data_ingestion/scripts/queue-*/
-/python/data_ingestion/scripts/data/
+/data_ingestion/db-to-pdf/docs-*/
+/data_ingestion/db-to-pdf/freejoehunt/
+/data_ingestion/media/
+/data_ingestion/scripts/queue/
+/data_ingestion/scripts/queue-*/
+/data_ingestion/scripts/data/
 **/ingestion_checkpoints/
 
 # supercut
-/python/supercut/cache/
-/python/supercut/temp/
-/python/supercut/silence_cache.json
+/supercut/cache/
+/supercut/temp/
+/supercut/silence_cache.json
 
 # firestore
 /*-debug.log

@@ -29,13 +29,21 @@ ananda-library-chatbot/
 │       └── chat/v1/              # Version 1 of the chat API endpoint.
 │           └── route.ts          # Handler for the /api/chat/v1 route.
 │
-├── bin/                          # Utility scripts for various development/operational tasks (e.g., deployment, data handling).
+├── bin/                          # Utility scripts for various development/operational tasks.
 │
 ├── components/                   # Reusable React components used across the application UI.
 │   └── CollectionSelector.jsx    # A specific UI component for selecting collections.
 │
 ├── config/                       # Configuration files for the application.
 │   └── pinecone.ts               # Configuration related to the Pinecone vector database.
+│
+├── data_ingestion/               # Scripts and modules related to ingesting data from various sources.
+│   ├── audio/                   # Scripts for processing and ingesting audio content.
+│   ├── db-to-pdf/               # Scripts to convert database content to PDFs.
+│   ├── crawler/                 # Web crawler for ingesting website content.
+│   ├── scripts/                 # Other data ingestion scripts (processing, queue management).
+│   ├── sql_to_vector_db/       # Scripts for converting SQL database content to vector embeddings.
+│   └── tests/                   # Tests for the data ingestion scripts.
 │
 ├── declarations/                 # TypeScript declaration files (.d.ts) for libraries without native types.
 │   └── pdf-parse.d.ts          # Type definitions for the 'pdf-parse' library.
@@ -53,15 +61,7 @@ ananda-library-chatbot/
 │       │   └── [filename].ts     # Dynamic route for specific audio files.
 │       ├── *.ts                  # Various API endpoints (e.g., login, vote, contact, answers).
 │
-├── python/                       # Python scripts and modules, likely for backend tasks, data processing, or ML models.
-│   ├── bin/                      # Python utility scripts.
-│   ├── data_ingestion/           # Scripts and modules related to ingesting data from various sources.
-│   │   ├── db-to-pdf/            # Scripts to convert database content to PDFs.
-│   │   ├── crawler/              # Web crawler for ingesting website content.
-│   │   ├── scripts/              # Other data ingestion scripts (processing, queue management).
-│   │   └── tests/                # Tests for the data ingestion scripts.
-│   ├── supercut/                 # Python scripts possibly related to creating "supercuts" from media.
-│   └── util/                     # Utility functions specific to Python scripts.
+├── pyutil/                       # Python utility functions used across Python scripts.
 │
 ├── public/                       # Static assets accessible directly via URL.
 │   ├── data/                     # Sample data or query files for different libraries/configurations.
@@ -81,6 +81,8 @@ ananda-library-chatbot/
 │   └── README.md                 # Documentation for site configuration.
 │
 ├── styles/                       # CSS files, including global styles, module-specific styles, and component styles.
+│
+├── supercut/                     # Python scripts related to creating "supercuts" from media.
 │
 ├── types/                        # TypeScript type definitions used throughout the project.
 │

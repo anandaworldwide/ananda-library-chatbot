@@ -219,10 +219,10 @@ content, calculated metadata (author, permalink), and **categories** (from speci
 
 **(Optional) Import MySQL Dump Details:**
 
-The `python/bin/process_anandalib_dump.py` script helps prepare and import a WordPress SQL dump:
+The `bin/process_anandalib_dump.py` script helps prepare and import a WordPress SQL dump:
 
 ```bash
-python python/bin/process_anandalib_dump.py -u [mysql_username] [path_to_sql_dump]
+python bin/process_anandalib_dump.py -u [mysql_username] [path_to_sql_dump]
 ```
 
 This script (originally for Ananda Library) creates a dated database (e.g., `anandalib-YYYY-MM-DD`), performs some
@@ -232,7 +232,7 @@ preprocessing, and imports the data. It can be adapted for other WordPress dumps
 
 1. **Ensure Database Access:** Make sure the MySQL connection details (`DB_USER`, `DB_PASSWORD`, `DB_HOST`) are
    correctly configured in your `.env.[site]` file for the target database.
-2. **Import Dump (if necessary):** If working with a dump file, use the `python/bin/process_anandalib_dump.py`
+2. **Import Dump (if necessary):** If working with a dump file, use the `bin/process_anandalib_dump.py`
    script to import it into a local MySQL database (see details below).
 3. **Run the Ingestion Script:** Execute the `ingest-db-text.py` script:
 

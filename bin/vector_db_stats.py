@@ -8,10 +8,10 @@ specifically counting occurrences of metadata fields (author, library, type). It
 vectors in batches for efficiency using `index.list()` and `index.fetch()`.
 
 Usage:
-    python python/bin/vector_db_stats.py --site <site_id> [--prefix <id_prefix>]
+    python bin/vector_db_stats.py --site <site_id> [--prefix <id_prefix>]
 
 Example:
-    python python/bin/vector_db_stats.py --site mysite --prefix book_
+    python bin/vector_db_stats.py --site mysite --prefix book_
 """
 
 import os
@@ -25,8 +25,8 @@ import time
 import random
 
 # Add parent directory to Python path for importing utility modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from util.env_utils import load_env
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from pyutil.env_utils import load_env
 
 def get_pinecone_stats(id_prefix=None):
     """

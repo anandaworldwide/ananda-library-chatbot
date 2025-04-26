@@ -25,7 +25,7 @@ understanding and future development.
     potentially ingestion queue state (`firestoreUtils.ts`, `services/firebase.ts`).
   - **Redis:** In-memory data store used primarily for API rate limiting (`redisUtils.ts`, `genericRateLimiter.ts`).
   - **AWS S3:** Object storage used for hosting source audio files (`awsConfig.ts`,
-    `python/data_ingestion/scripts/s3_utils.py`).
+    `data_ingestion/scripts/s3_utils.py`).
   - **AssemblyAI / Whisper:** Likely used for audio transcription within the Python ingestion scripts.
 
 ---
@@ -228,7 +228,7 @@ Data is stored across multiple services:
     4. Calls the LLM (e.g., OpenAI) to generate an answer.
     5. Streams the answer back to the client.
   - Handles source document formatting and logging.
-- **Data Ingestion (`python/data_ingestion/`):**
+- **Data Ingestion (`data_ingestion/`):**
   - A collection of Python scripts responsible for populating the Pinecone vector database.
   - `transcribe_and_ingest_media.py`: Main script orchestrating the process for various media types.
   - **Steps:**

@@ -11,8 +11,8 @@ import json
 from pathlib import Path
 
 # Database and transcription file locations relative to script location
-TRANSCRIPTIONS_DB_PATH = Path(__file__).parent.parent / "data_ingestion" / "media" / "transcriptions.db"
-TRANSCRIPTIONS_DIR = Path(__file__).parent.parent / "data_ingestion" / "media" / "transcriptions"
+TRANSCRIPTIONS_DB_PATH = Path(__file__).parent.parent.parent / "data_ingestion" / "media" / "transcriptions.db"
+TRANSCRIPTIONS_DIR = Path(__file__).parent.parent.parent / "data_ingestion" / "media" / "transcriptions"
 
 def migrate_json_files():
     """
