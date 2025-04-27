@@ -170,28 +170,20 @@ After each checkpoint:
 
 ### Phase 3: Components & Hooks
 
-1. Move React-specific code:
-
-```plaintext
-/web
-├── components/
-└── hooks/
-```
-
 1. Tasks:
 
-   - 🐣 Move component files
-   - 🐣 Move hook files
-   - 🐣 Update import paths
+   - 🐥 Move component files
+   - 🐥 Move hook files
+   - 🐥 Update import paths
    - 🐣 Test component rendering
    - 🐣 Update test configurations
 
 1. Testing Checkpoint 3:
-   - 🥚 Compare component rendering
-   - 🥚 Test component interactions
-   - 🥚 Verify hook functionality
-   - 🥚 Check component tests
-   - 🥚 Update and test Vercel preview
+   - 🐣 Compare component rendering
+   - 🐣 Test component interactions
+   - 🐣 Verify hook functionality
+   - 🐣 Check component tests
+   - 🐣 Update and test Vercel preview
 
 ### Phase 4: Pages & App Router
 

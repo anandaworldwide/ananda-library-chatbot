@@ -30,7 +30,6 @@ import { SudoProvider } from '@/contexts/SudoContext';
 import { useAnswers } from '@/hooks/useAnswers';
 import { useMutation } from '@tanstack/react-query';
 import { queryFetch } from '@/utils/client/reactQueryConfig';
-import { Answer } from '@/types/answer';
 
 interface AllAnswersProps {
   siteConfig: SiteConfig | null;
@@ -275,17 +274,19 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   }, [answersData]);
 
   // Handle like count changes
-  const handleLikeCountChange = (answerId: string, newLikeCount: number) => {
+  const handleLikeCountChange = (answerId: string) => {
     try {
       // Update the like status immediately (don't wait for server refresh)
-      const newLikeStatus = !likeStatuses[answerId];
+      setLikeStatuses((prevStatuses) => {
+        const currentStatus = prevStatuses[answerId] || false;
+        return {
+          ...prevStatuses,
+          [answerId]: !currentStatus,
+        };
+      });
 
       // Log the event
       logEvent('like_answer', 'Engagement', answerId);
-
-      // Don't refresh like statuses immediately - let the component state handle it
-      // The status will be refreshed on the next page load anyway
-      // This avoids the blinking effect
     } catch (error) {
       setLikeError(
         error instanceof Error ? error.message : 'An error occurred',
