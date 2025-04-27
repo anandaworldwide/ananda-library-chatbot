@@ -136,7 +136,7 @@ function isAllowedOrigin(origin: string, allowedDomains: string[]) {
             );
           return true;
         }
-      } catch (e) {
+      } catch (_e) {
         // If regex is invalid, do a simple string inclusion check
         if (hostname.includes(pattern)) {
           if (verboseLogging)
@@ -277,7 +277,8 @@ export function handleCors(req: NextRequest, siteConfig: SiteConfig) {
   try {
     const originUrl = new URL(origin);
     console.warn(`Origin hostname: ${originUrl.hostname}`);
-  } catch (e) {
+    console.warn(`Allowed domains: ${JSON.stringify(allowedDomains)}`);
+  } catch (_e) {
     console.warn(`Invalid origin URL: ${origin}`);
   }
 
@@ -348,7 +349,7 @@ export function addCorsHeaders(
           const originUrl = new URL(origin);
           console.warn(`Origin hostname: ${originUrl.hostname}`);
           console.warn(`Allowed domains: ${JSON.stringify(allowedDomains)}`);
-        } catch (e) {
+        } catch (_e) {
           console.warn(`Invalid origin URL: ${origin}`);
         }
 
@@ -358,7 +359,7 @@ export function addCorsHeaders(
             'X-CORS-Debug',
             `rejected:${new URL(origin).hostname}`,
           );
-        } catch (e) {
+        } catch (_e) {
           response.headers.set('X-CORS-Debug', 'rejected:invalid_origin_url');
         }
       }
@@ -486,8 +487,8 @@ export function createErrorCorsHeaders(
           );
           console.log('===========================================');
         }
-      } catch (e) {
-        console.warn('Could not log CORS configuration on deploy:', e);
+      } catch (_e) {
+        console.warn('Could not log CORS configuration on deploy:', _e);
       }
     }, 1000);
   }
