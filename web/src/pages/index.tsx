@@ -326,9 +326,6 @@ export default function Home({
     (data: StreamingResponseData) => {
       // Log every message that comes through with a timestamp
       const timestamp = new Date().toISOString().substr(11, 12); // HH:MM:SS.mmm format
-      console.log(
-        `[${timestamp}] Stream message type: ${Object.keys(data).join(', ')}`,
-      );
 
       if (
         data.siteId &&
@@ -347,12 +344,6 @@ export default function Home({
       }
 
       if (data.token) {
-        // Log only occasionally to avoid flooding console
-        if (accumulatedResponseRef.current.length % 100 === 0) {
-          console.log(
-            `[${timestamp}] Received token, accumulated length: ${accumulatedResponseRef.current.length}`,
-          );
-        }
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
       }
@@ -605,10 +596,6 @@ export default function Home({
 
       const reader = data.getReader();
       const decoder = new TextDecoder();
-      console.log(
-        `[${new Date().toISOString().substr(11, 12)}] Starting to read streaming response...`,
-      );
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
@@ -616,9 +603,6 @@ export default function Home({
         }
 
         const chunk = decoder.decode(value);
-        console.log(
-          `[${new Date().toISOString().substr(11, 12)}] Received chunk of size ${value.length} bytes`,
-        );
         const lines = chunk.split('\n');
 
         for (const line of lines) {
@@ -635,9 +619,6 @@ export default function Home({
         }
       }
 
-      console.log(
-        `[${new Date().toISOString().substr(11, 12)}] Stream reading complete, setting loading=false`,
-      );
       setLoading(false);
     } catch (error) {
       console.error('Error in handleSubmit:', error);
@@ -722,19 +703,16 @@ export default function Home({
   const [likeError, setLikeError] = useState<string | null>(null);
 
   // Function to handle like count changes
-  const handleLikeCountChange = (answerId: string, liked: boolean) => {
-    try {
-      setLikeStatuses((prevStatuses) => ({
-        ...prevStatuses,
-        [answerId]: liked,
-      }));
-      logEvent('like_answer', 'Engagement', answerId);
-    } catch (error) {
-      setLikeError(
-        error instanceof Error ? error.message : 'An error occurred',
-      );
-      setTimeout(() => setLikeError(null), 3000);
-    }
+  const handleLikeCountChange = (answerId: string, newLikeCount: number) => {
+    // Update the like status in state
+    const newLikeStatus = newLikeCount > 0;
+    setLikeStatuses((prev) => ({
+      ...prev,
+      [answerId]: newLikeStatus,
+    }));
+
+    // Log the event
+    logEvent('like_answer', 'Engagement', answerId);
   };
 
   // Function to handle private session changes

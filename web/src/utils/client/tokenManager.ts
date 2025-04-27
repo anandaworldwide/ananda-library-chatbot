@@ -94,6 +94,12 @@ async function fetchNewToken(): Promise<string> {
         return placeholderToken;
       }
 
+      if (response.status === 401 && window.location.pathname !== '/login') {
+        // Save current location for redirect after login
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+        return ''; // Return empty token or placeholder
+      }
+
       throw new Error(`Failed to fetch token: ${response.status}`);
     }
 
@@ -260,6 +266,12 @@ async function fetchWithRetry(
 
       // Retry with a new token
       return fetchWithRetry(url, options, retryCount + 1);
+    }
+
+    if (response.status === 401 && window.location.pathname !== '/login') {
+      // Save current location for redirect after login
+      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      return new Response('', { status: 401 });
     }
 
     return response;

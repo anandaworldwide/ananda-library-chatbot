@@ -31,7 +31,7 @@ interface MessageItemProps {
   linkCopied: string | null;
   votes?: Record<string, number>;
   siteConfig: SiteConfig | null;
-  handleLikeCountChange: (answerId: string, liked: boolean) => void;
+  handleLikeCountChange: (answerId: string, newLikeCount: number) => void;
   handleCopyLink: (answerId: string) => void;
   handleVote?: (docId: string, isUpvote: boolean) => void;
   lastMessageRef: React.RefObject<HTMLDivElement> | null;
@@ -70,7 +70,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
   const onLikeButtonClick = (answerId: string) => {
     // Update like status immediately for UI responsiveness
     const newLikeStatus = !likeStatuses[answerId];
-    handleLikeCountChange(answerId, newLikeStatus);
+    const newLikeCount = newLikeStatus ? 1 : 0; // Messages start with 0 likes
+    handleLikeCountChange(answerId, newLikeCount);
 
     // Log the event (optimistically)
     logEvent('like_answer', 'Engagement', answerId);

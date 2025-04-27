@@ -153,7 +153,9 @@ After each checkpoint:
 
 1. Tasks:
 
-   - [ ] Move public directory
+   - [x] Create symlinks from root public directory to web/public
+   - [x] Link data files from public/data to web/public/data
+   - [x] Copy site-config directory to web/site-config
    - [ ] Move style files
    - [ ] Update style imports
    - [ ] Test static asset serving
@@ -353,6 +355,23 @@ After each checkpoint:
 1. Maintain comprehensive testing throughout
 1. Document any deviations from plan
 1. Update documentation as needed
+
+## Post-Migration Cleanup
+
+- [ ] Clean up old code structure after web subdirectory migration is fully stable
+  - [ ] Remove duplicate API endpoints from root structure
+  - [ ] Clean up unused dependencies in root package.json
+  - [ ] Update documentation to reflect new structure
+  - [ ] Consider moving remaining root utilities to web directory
+  - [ ] Remove dev:root script once no longer needed
+  - [ ] Update build scripts to exclusively use web directory
+  - [ ] Remove temporary symlinks between root and web/node_modules after dependency conflicts are resolved
+
+## Authentication Improvements
+
+- [ ] Ensure consistent authentication handling between environments
+- [ ] Verify cookie path handling is correct in all login/logout flows
+- [ ] Add thorough tests for authentication token flow
 
 ## References
 

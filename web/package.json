@@ -6,7 +6,8 @@
   "author": "Michael Olivier",
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "cd .. && node scripts/web-dev.js",
+    "install-deps": "cd .. && npm install",
     "build": "next build",
     "build-with-api-tests": "cd .. && NODE_ENV=development jest --config=jest.config.cjs --coverageThresholdWarningOnly=true && cd web && next build",
     "start": "next start",
@@ -27,12 +28,15 @@
     "framer-motion": "^11.18.2",
     "next": "14.2.24",
     "nextjs-google-analytics": "^2.3.3",
-    "react": "^18.3.1",
-    "react-dom": "^18.2.0",
     "react-intersection-observer": "^9.16.0",
     "react-markdown": "^9.1.0",
     "react-toastify": "^10.0.6",
     "tailwind-merge": "^2.6.0"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.2.0",
+    "styled-jsx": "5.1.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.16.5",

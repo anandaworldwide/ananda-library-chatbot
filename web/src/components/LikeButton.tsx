@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { getOrCreateUUID } from '@/utils/client/uuid';
-import { updateLike } from '@/services/likeService';
+import { updateLike, getLikeCounts } from '@/services/likeService';
 
 interface LikeButtonProps {
   answerId: string;
@@ -74,11 +74,18 @@ const LikeButton: React.FC<LikeButtonProps> = ({
     setLikes(newLikeCount);
 
     try {
-      // Notify parent about the change - pass the answerId and the new like count
-      onLikeCountChange(answerId, newLikeCount);
-
-      // Save to the server
+      // Update the server first
       await updateLike(answerId, uuid, newLikedState);
+
+      // Get the actual like count from the server
+      const likeCounts = await getLikeCounts([answerId]);
+      const serverLikeCount = likeCounts[answerId] || 0;
+
+      // Update local state with the server's count
+      setLikes(serverLikeCount);
+
+      // Notify parent with the server's count
+      onLikeCountChange(answerId, serverLikeCount);
 
       // Short delay to let the server update complete
       setTimeout(() => {
@@ -89,7 +96,16 @@ const LikeButton: React.FC<LikeButtonProps> = ({
 
       // Revert local state
       setIsLiked(!newLikedState);
-      setLikes(newLikedState ? likes : likes + 1);
+
+      // Get the current like count from server to ensure accuracy
+      try {
+        const likeCounts = await getLikeCounts([answerId]);
+        const serverLikeCount = likeCounts[answerId] || 0;
+        setLikes(serverLikeCount);
+        onLikeCountChange(answerId, serverLikeCount);
+      } catch (countError) {
+        console.error('Error fetching like count:', countError);
+      }
 
       // Show error
       setError(error instanceof Error ? error.message : 'An error occurred');
