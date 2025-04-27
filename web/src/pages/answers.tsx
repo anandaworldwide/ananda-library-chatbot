@@ -54,7 +54,6 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   const [likeStatuses, setLikeStatuses] = useState<Record<string, boolean>>({});
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
   const [likeError, setLikeError] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Answer[]>([]);
 
   // Refs for scroll management
   const scrollPositionRef = useRef<number>(0);
@@ -280,21 +279,6 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     try {
       // Update the like status immediately (don't wait for server refresh)
       const newLikeStatus = !likeStatuses[answerId];
-
-      // Create a new object to ensure React detects the state change
-      setLikeStatuses({
-        ...likeStatuses,
-        [answerId]: newLikeStatus,
-      });
-
-      // Update the answer's like count in the answers list
-      setAnswers((prevAnswers: Answer[]) =>
-        prevAnswers.map((answer: Answer) =>
-          answer.id === answerId
-            ? { ...answer, likeCount: newLikeCount }
-            : answer,
-        ),
-      );
 
       // Log the event
       logEvent('like_answer', 'Engagement', answerId);

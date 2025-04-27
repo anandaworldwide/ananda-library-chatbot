@@ -11,7 +11,7 @@ import { useEffect, useState, useRef } from 'react';
 import Layout from '@/components/layout';
 import AnswerItem from '@/components/AnswerItem';
 import { Answer } from '@/types/answer';
-import { checkUserLikes, updateLike } from '@/services/likeService';
+import { checkUserLikes } from '@/services/likeService';
 import { getOrCreateUUID } from '@/utils/client/uuid';
 import { logEvent } from '@/utils/client/analytics';
 import Head from 'next/head';

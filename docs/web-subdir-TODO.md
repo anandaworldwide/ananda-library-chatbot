@@ -41,12 +41,12 @@ subdirectory while maintaining functionality and minimizing disruption to the de
 
 1. Initial Setup:
 
-   - [x] Create a new git branch: `web-migration`
-   - [x] Create initial `/web` directory structure
-   - [x] Configure environment loading from parent directory
-   - [?] Copy files to `/web/src` directory while keeping originals
-   - [ ] Update import paths in copied files
-   - [x] Configure new Next.js app to run on different port (3001)
+   - 🐥 Create a new git branch: `web-migration`
+   - 🐥 Create initial `/web` directory structure
+   - 🐥 Configure environment loading from parent directory
+   - 🐣 Copy files to `/web/src` directory while keeping originals
+   - 🥚 Update import paths in copied files
+   - 🐥 Configure new Next.js app to run on different port (3001)
 
 1. Dual-Running Setup:
 
@@ -111,35 +111,35 @@ After each checkpoint:
 
 1. Setup package.json:
 
-   - [x] Copy Next.js related dependencies
-   - [x] Update scripts for new path structure
-   - [x] Maintain test configurations
+   - 🐥 Copy Next.js related dependencies
+   - 🐥 Update scripts for new path structure
+   - 🐥 Maintain test configurations
 
 1. Create new tsconfig.json with updated paths:
 
-   - [x] Update path aliases for new structure
-   - [x] Configure for src directory
-   - [x] Maintain existing compiler options
+   - 🐥 Update path aliases for new structure
+   - 🐥 Configure for src directory
+   - 🐥 Maintain existing compiler options
 
 1. Configure environment and shared utilities:
 
-   - [x] Set up environment loading from parent directory
-   - [ ] Identify shared utilities between web and other services
-   - [ ] Plan strategy for shared code (symlinks vs copying)
+   - 🐥 Set up environment loading from parent directory
+   - 🥚 Identify shared utilities between web and other services
+   - 🥚 Plan strategy for shared code (symlinks vs copying)
 
 1. Tasks:
 
-   - [x] Create directory structure.
-   - [x] Setup initial configuration files.
-   - [x] Update path aliases
-   - [x] Create minimal home page for testing
-   - [x] Test basic Next.js setup in new location
+   - 🐥 Create directory structure.
+   - 🐥 Setup initial configuration files.
+   - 🐥 Update path aliases
+   - 🐥 Create minimal home page for testing
+   - 🐥 Test basic Next.js setup in new location
 
 1. Testing Checkpoint 1:
-   - [x] Configure dual-port setup
-   - [x] Verify Next.js boots in new location
-   - [x] Test basic page rendering
-   - [?] Create first Vercel preview
+   - 🐥 Configure dual-port setup
+   - 🐥 Verify Next.js boots in new location
+   - 🐥 Test basic page rendering
+   - 🐣 Create first Vercel preview
 
 ### Phase 2: Static Assets & Styles
 
@@ -153,20 +153,20 @@ After each checkpoint:
 
 1. Tasks:
 
-   - [x] Create symlinks from root public directory to web/public
-   - [x] Link data files from public/data to web/public/data
-   - [x] Copy site-config directory to web/site-config
-   - [ ] Move style files
-   - [ ] Update style imports
-   - [ ] Test static asset serving
-   - [ ] Update paths in existing components
+   - 🐥 Create symlinks from root public directory to web/public
+   - 🐥 Link data files from public/data to web/public/data
+   - 🐥 Copy site-config directory to web/site-config
+   - 🐥 Move style files
+   - 🐥 Update style imports
+   - 🐣 Test static asset serving
+   - 🥚 Update paths in existing components
 
 1. Testing Checkpoint 2:
-   - [ ] Verify static assets load in new location
-   - [ ] Compare styling between old and new
-   - [ ] Test public file access
-   - [ ] Verify image optimization
-   - [ ] Update and test Vercel preview
+   - 🐥 Verify static assets load in new location
+   - 🐥 Compare styling between old and new
+   - 🐥 Test public file access
+   - 🐥 Verify image optimization
+   - 🐥 Update and test Vercel preview
 
 ### Phase 3: Components & Hooks
 
@@ -180,18 +180,18 @@ After each checkpoint:
 
 1. Tasks:
 
-   - [ ] Move component files
-   - [ ] Move hook files
-   - [ ] Update import paths
-   - [ ] Test component rendering
-   - [ ] Update test configurations
+   - 🐣 Move component files
+   - 🐣 Move hook files
+   - 🐣 Update import paths
+   - 🐣 Test component rendering
+   - 🐣 Update test configurations
 
 1. Testing Checkpoint 3:
-   - [ ] Compare component rendering
-   - [ ] Test component interactions
-   - [ ] Verify hook functionality
-   - [ ] Check component tests
-   - [ ] Update and test Vercel preview
+   - 🥚 Compare component rendering
+   - 🥚 Test component interactions
+   - 🥚 Verify hook functionality
+   - 🥚 Check component tests
+   - 🥚 Update and test Vercel preview
 
 ### Phase 4: Pages & App Router
 
@@ -205,18 +205,18 @@ After each checkpoint:
 
 1. Tasks:
 
-   - [ ] Move app router files
-   - [ ] Move pages router files
-   - [ ] Update API routes
-   - [ ] Test routing functionality
+   - 🥚 Move app router files
+   - 🥚 Move pages router files
+   - 🥚 Update API routes
+   - 🥚 Test routing functionality
 
 1. Testing Checkpoint 4:
-   - [ ] Test all routes in new structure
-   - [ ] Verify API endpoints
-   - [ ] Check middleware functionality
-   - [ ] Test authentication flows
-   - [ ] Compare API responses between old/new
-   - [ ] Update and test Vercel preview
+   - 🥚 Test all routes in new structure
+   - 🥚 Verify API endpoints
+   - 🥚 Check middleware functionality
+   - 🥚 Test authentication flows
+   - 🥚 Compare API responses between old/new
+   - 🥚 Update and test Vercel preview
 
 ### Phase 5: Shared Code
 
@@ -232,58 +232,58 @@ After each checkpoint:
 
 1. Tasks:
 
-   - [ ] Identify truly shared utilities
-   - [ ] Create shared package structure
-   - [ ] Move web-specific utilities
-   - [ ] Update import paths
-   - [ ] Test utility functions
+   - 🥚 Identify truly shared utilities
+   - 🥚 Create shared package structure
+   - 🥚 Move web-specific utilities
+   - 🥚 Update import paths
+   - 🥚 Test utility functions
 
 1. Testing Checkpoint 5:
-   - [ ] Verify utility functions
-   - [ ] Test shared code imports
-   - [ ] Check Firebase integration
-   - [ ] Verify environment variables
-   - [ ] Update and test Vercel preview
+   - 🥚 Verify utility functions
+   - 🥚 Test shared code imports
+   - 🥚 Check Firebase integration
+   - 🥚 Verify environment variables
+   - 🥚 Update and test Vercel preview
 
 ### Phase 6: Build & Deploy Configuration
 
 1. Update build configuration:
 
-   - [ ] Modify next.config.js for new path
-   - [ ] Update Vercel configuration
-   - [ ] Adjust build scripts
-   - [ ] Test build process
+   - 🥚 Modify next.config.js for new path
+   - 🥚 Update Vercel configuration
+   - 🥚 Adjust build scripts
+   - 🥚 Test build process
 
 1. Update deployment configuration:
 
-   - [ ] Update Vercel deployment settings
-   - [ ] Modify GitHub Actions workflows
-   - [ ] Test deployment process
-   - [ ] Update cron job configurations
+   - 🥚 Update Vercel deployment settings
+   - 🥚 Modify GitHub Actions workflows
+   - 🥚 Test deployment process
+   - 🥚 Update cron job configurations
 
 1. Testing Checkpoint 6:
-   - [ ] Full comparison of both versions
-   - [ ] Verify build process
-   - [ ] Test deployment pipeline
-   - [ ] Check all environment configurations
-   - [ ] Final Vercel preview test
+   - 🥚 Full comparison of both versions
+   - 🥚 Verify build process
+   - 🥚 Test deployment pipeline
+   - 🥚 Check all environment configurations
+   - 🥚 Final Vercel preview test
 
 ### Phase 7: Finalize & Cleanup
 
 1. Prerequisites:
 
-   - [ ] All items in Validation Checklist are confirmed [x].
+   - 🥚 All items in Validation Checklist are confirmed 🐥.
 
 2. Tasks:
-   - [ ] Delete copied files from `/web/src`. (Ensure originals are still at root).
-   - [ ] Use `git mv` to move original source directories (`app`, `components`, `hooks`, `lib`, `pages`, `services`,
-         `styles`, `types`, `utils`) into `/web/src` to preserve Git history.
-   - [ ] Commit the `git mv` changes.
-   - [ ] Remove original configuration files (`next.config.js`, `tsconfig.json`, etc.) from root if they are now solely
-         managed within `/web`. (Double-check shared dependencies first).
-   - [ ] Address `config` directory duplication: Decide final location (root, `/web/src/config`, shared pkg) and remove
-         the unused copy. Revisit path aliases if needed.
-   - [ ] Update root `README.md` to reflect new structure.
+   - 🥚 Delete copied files from `/web/src`. (Ensure originals are still at root).
+   - 🥚 Use `git mv` to move original source directories (`app`, `components`, `hooks`, `lib`, `pages`, `services`,
+     `styles`, `types`, `utils`) into `/web/src` to preserve Git history.
+   - 🥚 Commit the `git mv` changes.
+   - 🥚 Remove original configuration files (`next.config.js`, `tsconfig.json`, etc.) from root if they are now solely
+     managed within `/web`. (Double-check shared dependencies first).
+   - 🥚 Address `config` directory duplication: Decide final location (root, `/web/src/config`, shared pkg) and remove
+     the unused copy. Revisit path aliases if needed.
+   - 🥚 Update root `README.md` to reflect new structure.
 
 ## Special Considerations
 
@@ -336,16 +336,16 @@ After each checkpoint:
 
 ## Validation Checklist
 
-- [ ] All tests passing
-- [ ] Build succeeding locally
-- [ ] Vercel deployment working
-- [ ] Firebase integration functional
-- [ ] API routes responding correctly
-- [ ] Static assets serving properly
-- [ ] Environment-specific builds working
-- [ ] Cron jobs operational
-- [ ] Test coverage maintained
-- [ ] Development workflow verified
+- 🥚 All tests passing
+- 🥚 Build succeeding locally
+- 🥚 Vercel deployment working
+- 🥚 Firebase integration functional
+- 🥚 API routes responding correctly
+- 🥚 Static assets serving properly
+- 🥚 Environment-specific builds working
+- 🥚 Cron jobs operational
+- 🥚 Test coverage maintained
+- 🥚 Development workflow verified
 
 ## Next Steps
 
@@ -358,20 +358,20 @@ After each checkpoint:
 
 ## Post-Migration Cleanup
 
-- [ ] Clean up old code structure after web subdirectory migration is fully stable
-  - [ ] Remove duplicate API endpoints from root structure
-  - [ ] Clean up unused dependencies in root package.json
-  - [ ] Update documentation to reflect new structure
-  - [ ] Consider moving remaining root utilities to web directory
-  - [ ] Remove dev:root script once no longer needed
-  - [ ] Update build scripts to exclusively use web directory
-  - [ ] Remove temporary symlinks between root and web/node_modules after dependency conflicts are resolved
+- 🥚 Clean up old code structure after web subdirectory migration is fully stable
+  - 🥚 Remove duplicate API endpoints from root structure
+  - 🥚 Clean up unused dependencies in root package.json
+  - 🥚 Update documentation to reflect new structure
+  - 🥚 Consider moving remaining root utilities to web directory
+  - 🥚 Remove dev:root script once no longer needed
+  - 🥚 Update build scripts to exclusively use web directory
+  - 🥚 Remove temporary symlinks between root and web/node_modules after dependency conflicts are resolved
 
 ## Authentication Improvements
 
-- [ ] Ensure consistent authentication handling between environments
-- [ ] Verify cookie path handling is correct in all login/logout flows
-- [ ] Add thorough tests for authentication token flow
+- 🥚 Ensure consistent authentication handling between environments
+- 🥚 Verify cookie path handling is correct in all login/logout flows
+- 🥚 Add thorough tests for authentication token flow
 
 ## References
 

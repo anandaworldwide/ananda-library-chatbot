@@ -699,9 +699,6 @@ export default function Home({
     3,
   );
 
-  // State for managing like functionality
-  const [likeError, setLikeError] = useState<string | null>(null);
-
   // Function to handle like count changes
   const handleLikeCountChange = (answerId: string, newLikeCount: number) => {
     // Update the like status in state
@@ -1021,10 +1018,6 @@ export default function Home({
               <span className="block sm:inline">{voteError}</span>
             </div>
           )}
-        {/* Display like error if any */}
-        {likeError && (
-          <div className="text-red-500 text-sm mt-2">{likeError}</div>
-        )}
       </Layout>
     </SudoProvider>
   );
