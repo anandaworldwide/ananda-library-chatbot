@@ -48,7 +48,7 @@ const customJestConfig = {
   ],
   collectCoverage: true,
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov'],
+  coverageReporters: ['text'],
   transform: {
     // Use babel-jest for js/jsx/ts/tsx files, letting babel handle TS/JSX compilation via Next.js preset
     '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],

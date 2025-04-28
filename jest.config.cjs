@@ -44,7 +44,7 @@ const customJestConfig = {
   ],
   collectCoverage: true,
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov'],
+  coverageReporters: ['text'],
   transform: {
     '^.+\\.(ts|tsx)$': [
       'ts-jest',
