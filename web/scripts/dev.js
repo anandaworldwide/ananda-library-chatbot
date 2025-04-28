@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 const site = process.argv[2] || 'default';
 const envFile = path.join(__dirname, '..', `.env.${site}`);
 
+// Load environment variables from site-specific file
 if (fs.existsSync(envFile)) {
   dotenv.config({ path: envFile });
   console.log(`Loaded environment from ${envFile}`);
@@ -18,7 +19,15 @@ if (fs.existsSync(envFile)) {
   dotenv.config();
 }
 
-const nextDev = spawn('next', ['dev'], { stdio: 'inherit' });
+// CRITICAL: Make sure SITE_ID is set
+process.env.SITE_ID = site;
+console.log(`Starting Next.js with SITE_ID: ${site}`);
+
+// Pass the environment to the spawned process
+const nextDev = spawn('next', ['dev'], {
+  stdio: 'inherit',
+  env: process.env,
+});
 
 nextDev.on('error', (err) => {
   console.error('Failed to start Next.js dev server:', err);

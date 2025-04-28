@@ -6,7 +6,8 @@
   "author": "Michael Olivier",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.js",
+    "dev:site": "SITE_ID=$npm_config_site next dev",
     "install-deps": "cd .. && npm install",
     "build": "next build",
     "build-with-tests": "NODE_ENV=development jest && next build",

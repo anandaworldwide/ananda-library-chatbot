@@ -4,7 +4,7 @@ import {
   PutObjectCommand,
   S3ServiceException,
 } from '@aws-sdk/client-s3';
-import { loadEnv } from '../utils/server/loadEnv';
+import { loadEnv } from '../../utils/server/loadEnv';
 import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
