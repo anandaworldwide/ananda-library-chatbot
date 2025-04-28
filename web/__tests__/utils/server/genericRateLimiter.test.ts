@@ -1,10 +1,10 @@
 import {
   genericRateLimiter,
   deleteRateLimitCounter,
-} from '../../../utils/server/genericRateLimiter';
+} from '../../../src/utils/server/genericRateLimiter';
 import { NextApiRequest, NextApiResponse } from 'next';
-import * as ipUtils from '../../../utils/server/ipUtils';
-import * as envModule from '../../../utils/env';
+import * as ipUtils from '../../../src/utils/server/ipUtils';
+import * as envModule from '../../../src/utils/env';
 
 // Mock the firebase service
 jest.mock('@/services/firebase', () => {
@@ -39,12 +39,12 @@ jest.mock('@/services/firebase', () => {
 });
 
 // Mock the ipUtils module
-jest.mock('../../../utils/server/ipUtils', () => ({
+jest.mock('../../../src/utils/server/ipUtils', () => ({
   getClientIp: jest.fn(),
 }));
 
 // Mock the env module
-jest.mock('../../../utils/env', () => ({
+jest.mock('../../../src/utils/env', () => ({
   isDevelopment: jest.fn(),
 }));
 

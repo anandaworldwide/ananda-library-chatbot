@@ -12,8 +12,8 @@
   },
   "include": [
     "__tests__/**/*",
-    "types/**/*.d.ts",
-    "components/**/*",
+    "src/types/**/*.d.ts",
+    "src/components/**/*",
     "jest.setup.ts"
   ],
   "exclude": ["node_modules"]

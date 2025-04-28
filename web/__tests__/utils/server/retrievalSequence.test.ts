@@ -76,7 +76,7 @@ describe('Document Retrieval Logic', () => {
     const mockRetriever = { vectorStore: mockVectorStore };
 
     // Import the real module now that mocks are set up
-    const { makeChain } = await import('../../../utils/server/makechain');
+    const { makeChain } = await import('../../../src/utils/server/makechain');
 
     // Call makeChain
     const chain = await makeChain(mockRetriever as any, {
@@ -151,7 +151,7 @@ describe('Document Retrieval Logic', () => {
     const mockRetriever = { vectorStore: mockVectorStore };
 
     // Import the real module now that mocks are set up
-    const { makeChain } = await import('../../../utils/server/makechain');
+    const { makeChain } = await import('../../../src/utils/server/makechain');
 
     // Call makeChain
     const chain = await makeChain(mockRetriever as any, {
@@ -229,7 +229,7 @@ describe('Document Retrieval Logic', () => {
     const baseFilter = { type: 'article' };
 
     // Import the real module now that mocks are set up
-    const { makeChain } = await import('../../../utils/server/makechain');
+    const { makeChain } = await import('../../../src/utils/server/makechain');
 
     // Call makeChain with baseFilter
     const chain = await makeChain(

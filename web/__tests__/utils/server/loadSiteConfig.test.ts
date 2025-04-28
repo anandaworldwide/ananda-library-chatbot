@@ -1,7 +1,7 @@
 import {
   loadSiteConfig,
   loadSiteConfigSync,
-} from '../../../utils/server/loadSiteConfig';
+} from '../../../src/utils/server/loadSiteConfig';
 
 describe('loadSiteConfig', () => {
   const originalEnv = process.env;

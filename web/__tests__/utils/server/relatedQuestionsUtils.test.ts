@@ -102,13 +102,13 @@ import {
   updateRelatedQuestions,
   findRelatedQuestionsPinecone,
   upsertEmbeddings,
-} from '../../../utils/server/relatedQuestionsUtils';
+} from '../../../src/utils/server/relatedQuestionsUtils';
 import { Answer } from '@/types/answer';
 import { RelatedQuestion } from '@/types/RelatedQuestion';
 import { IndexList, IndexModel, Pinecone } from '@pinecone-database/pinecone';
 
 // Import mocked modules after mocking
-import * as answersUtils from '@/utils/server/answersUtils';
+import * as answersUtils from '../../../src/utils/server/answersUtils';
 
 const mockOpenAI = {
   embeddings: {

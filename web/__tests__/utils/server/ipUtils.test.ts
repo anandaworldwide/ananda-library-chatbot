@@ -1,10 +1,10 @@
-import { getClientIp } from '../../../utils/server/ipUtils';
+import { getClientIp } from '../../../src/utils/server/ipUtils';
 import { NextApiRequest } from 'next';
 import { NextRequest } from 'next/server';
-import * as envModule from '../../../utils/env';
+import * as envModule from '../../../src/utils/env';
 
 // Mock the isDevelopment function from env module
-jest.mock('../../../utils/env', () => ({
+jest.mock('../../../src/utils/env', () => ({
   isDevelopment: jest.fn(),
 }));
 
