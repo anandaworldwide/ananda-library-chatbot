@@ -7,6 +7,6 @@
   ],
   "buildCommand": "cd web && npm run build",
   "devCommand": "cd web && npm run dev",
-  "installCommand": "cd web && npm install",
+  "installCommand": "cd web && npm install --no-package-lock --no-audit --ignore-scripts",
   "outputDirectory": "web/.next"
 }
