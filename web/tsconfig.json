@@ -23,7 +23,6 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@/config/*": ["./src/config/*"],
       "@/pages/*": ["./src/pages/*"],
       "@/utils/*": ["./src/utils/*"],
       "@/types/*": ["./src/types/*"],
@@ -31,14 +30,16 @@
       "@/components/*": ["./src/components/*"]
     },
     "typeRoots": ["./node_modules/@types", "./src/types"],
-    "types": []
+    "types": ["jest", "node", "@testing-library/jest-dom"]
   },
   "include": [
     "next-env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     ".next/types/**/*.ts",
-    "src/types/**/*.d.ts"
+    "src/utils/server/loadEnv.js",
+    "src/types/**/*.d.ts",
+    "jest.setup.ts"
   ],
   "exclude": ["node_modules"]
 }
