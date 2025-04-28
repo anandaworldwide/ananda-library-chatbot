@@ -427,13 +427,19 @@ export async function upsertEmbeddings(
 
       // Only proceed if embedding generation was successful
       if (embedding && embedding.length > 0) {
+        // Extract metadata for debugging
+        const titleForMetadata = q.question.substring(0, 140);
+        console.log(
+          `DEBUG: Preparing vector for ID ${q.id} with metadata title: "${titleForMetadata}"`,
+        );
+
         // Construct the vector object for Pinecone
         vectors.push({
           id: q.id, // Use Firestore document ID as the vector ID
           values: embedding, // The generated embedding vector
           metadata: {
             // Include relevant metadata for filtering and display
-            title: q.question.substring(0, 140), // Truncated title for potential display
+            title: titleForMetadata, // Truncated title for potential display
             siteId: currentSiteId, // Site ID for filtering search results
           },
         });
@@ -461,7 +467,44 @@ export async function upsertEmbeddings(
 
       for (let attempt = 1; attempt <= maxUpsertRetries; attempt++) {
         try {
+          console.log(
+            `DEBUG: Upserting batch ${batchNum}/${totalBatches} (${batch.length} vectors) to Pinecone`,
+          );
+
           await pineconeIndex.upsert(batch);
+          console.log(
+            `DEBUG: Successfully upserted batch ${batchNum}/${totalBatches} to Pinecone`,
+          );
+
+          // Verify the upsert by fetching the first vector
+          if (batch.length > 0) {
+            try {
+              const firstId = batch[0].id;
+              console.log(
+                `DEBUG: Verifying upsert of ID ${firstId} from batch ${batchNum}`,
+              );
+              const verifyResponse = await pineconeIndex.fetch([firstId]);
+
+              if (verifyResponse.records[firstId]) {
+                const verifiedMetadata =
+                  verifyResponse.records[firstId].metadata;
+                console.log(
+                  `DEBUG: Verification successful for ${firstId}. Metadata:`,
+                  JSON.stringify(verifiedMetadata),
+                );
+              } else {
+                console.log(
+                  `DEBUG: Verification failed - ID ${firstId} not found in Pinecone after upsert`,
+                );
+              }
+            } catch (verifyError) {
+              console.log(
+                `DEBUG: Verification failed with error:`,
+                verifyError,
+              );
+            }
+          }
+
           upsertSuccess = true;
           break; // Exit retry loop on success
         } catch (upsertError: any) {
@@ -667,8 +710,8 @@ export async function findRelatedQuestionsPinecone(
   // Constants for filtering
   const topK = 20; // Request more initial candidates from Pinecone
   const similarityThreshold = 0.62; // Minimum similarity score
-  const maxSourceMetaRetries = 5; // Maximum retries for getting source metadata
-  const initialRetryDelay = 200; // Start with 200ms delay
+  const maxSourceMetaRetries = 10; // Increased from 5 to 10 maximum retries
+  const initialRetryDelay = 500; // Increased from 200ms to 500ms initial delay
 
   let queryEmbedding: number[];
   try {
@@ -691,42 +734,196 @@ export async function findRelatedQuestionsPinecone(
     // Fetch the source question's metadata with retries and exponential backoff
     let sourceMetadataTitle: string | null = null;
     let retryDelay = initialRetryDelay;
+    const startTime = Date.now();
 
-    for (let attempt = 1; attempt <= maxSourceMetaRetries; attempt++) {
+    console.log(
+      `DEBUG: Starting source metadata fetch for question ID ${questionId} with ${maxSourceMetaRetries} retries and ${initialRetryDelay}ms initial delay`,
+    );
+
+    let attempt = 1;
+    for (attempt = 1; attempt <= maxSourceMetaRetries; attempt++) {
+      const attemptStartTime = Date.now();
+      console.log(
+        `DEBUG: Metadata fetch attempt ${attempt}/${maxSourceMetaRetries} for ${questionId} (${Date.now() - startTime}ms since start)`,
+      );
+
       try {
+        console.log(`DEBUG: Sending Pinecone fetch request for ${questionId}`);
         const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
-        const sourceRecord = sourceFetchResponse.records[questionId];
-        if (
-          sourceRecord?.metadata?.title &&
-          typeof sourceRecord.metadata.title === 'string'
-        ) {
-          sourceMetadataTitle = sourceRecord.metadata.title;
-          break; // Exit retry loop on success
+        const fetchDuration = Date.now() - attemptStartTime;
+        console.log(
+          `DEBUG: Pinecone fetch response received in ${fetchDuration}ms for attempt ${attempt}`,
+        );
+
+        // Debug full response structure
+        console.log(
+          `DEBUG: Full Pinecone response for ${questionId} (attempt ${attempt}):`,
+          JSON.stringify(sourceFetchResponse, null, 2),
+        );
+
+        // Check if the questionId exists in the records
+        if (!sourceFetchResponse.records[questionId]) {
+          console.log(
+            `DEBUG: Pinecone record for ${questionId} not found in fetch response`,
+          );
+
+          // Check if any records were returned
+          const recordsCount = Object.keys(sourceFetchResponse.records).length;
+          console.log(
+            `DEBUG: Received ${recordsCount} records from Pinecone, questionId ${questionId} not among them`,
+          );
+
+          if (recordsCount > 0) {
+            console.log(
+              `DEBUG: Record keys in response: ${Object.keys(sourceFetchResponse.records).join(', ')}`,
+            );
+          }
+        } else {
+          // Record exists, check metadata
+          const sourceRecord = sourceFetchResponse.records[questionId];
+          console.log(
+            `DEBUG: Found record for ${questionId}, metadata:`,
+            sourceRecord.metadata,
+          );
+
+          if (!sourceRecord.metadata) {
+            console.log(`DEBUG: No metadata available for ${questionId}`);
+          } else if (!sourceRecord.metadata.title) {
+            console.log(
+              `DEBUG: No title in metadata for ${questionId}. Available metadata keys:`,
+              Object.keys(sourceRecord.metadata).join(', '),
+            );
+          } else if (typeof sourceRecord.metadata.title !== 'string') {
+            console.log(
+              `DEBUG: Title is not a string for ${questionId}. Type:`,
+              typeof sourceRecord.metadata.title,
+            );
+          }
+
+          if (
+            sourceRecord?.metadata?.title &&
+            typeof sourceRecord.metadata.title === 'string'
+          ) {
+            sourceMetadataTitle = sourceRecord.metadata.title;
+            console.log(
+              `DEBUG: Successfully retrieved metadata title for ${questionId}: "${sourceMetadataTitle}" on attempt ${attempt} (total time: ${Date.now() - startTime}ms)`,
+            );
+            break; // Exit retry loop on success
+          }
         }
 
         if (attempt < maxSourceMetaRetries) {
           console.log(
-            `Source metadata title not found on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry...`,
+            `Source metadata title not found on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry... (Total time elapsed: ${Date.now() - startTime}ms)`,
           );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          const actualDelay = Date.now() - (attemptStartTime + fetchDuration);
+          console.log(
+            `DEBUG: Actual delay was ${actualDelay}ms (vs planned ${retryDelay}ms)`,
+          );
           retryDelay *= 2; // Exponential backoff
         }
       } catch (fetchError: any) {
+        const errorMessage = fetchError?.message || String(fetchError);
+        const errorStack = fetchError?.stack || '';
+        console.log(
+          `DEBUG: Error during metadata fetch attempt ${attempt}/${maxSourceMetaRetries} for ${questionId}:`,
+          errorMessage,
+        );
+        console.log(`DEBUG: Error stack:`, errorStack);
+
+        // Check if there's a cause property on the error
+        if (fetchError?.cause) {
+          console.log(`DEBUG: Error cause:`, fetchError.cause);
+        }
+
         if (attempt < maxSourceMetaRetries) {
           console.log(
-            `Error fetching source metadata on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry...`,
+            `Error fetching source metadata on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry... (Total time elapsed: ${Date.now() - startTime}ms)`,
           );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          const actualDelay = Date.now() - attemptStartTime;
+          console.log(
+            `DEBUG: Actual delay after error was ${actualDelay}ms (vs planned ${retryDelay}ms)`,
+          );
           retryDelay *= 2; // Exponential backoff
         }
       }
     }
 
+    // After all retries, log final status
+    const totalElapsedTime = Date.now() - startTime;
+    if (sourceMetadataTitle) {
+      console.log(
+        `DEBUG: Successfully retrieved metadata title after ${attempt} attempts for ${questionId} (total time: ${totalElapsedTime}ms)`,
+      );
+    } else {
+      console.log(
+        `DEBUG: Failed to retrieve metadata title after all ${attempt} attempts for ${questionId} (total time: ${totalElapsedTime}ms)`,
+      );
+
+      // Try a direct upsert of the embedding to refresh the metadata
+      console.log(
+        `DEBUG: Attempting to refresh the embedding for ${questionId} before failing`,
+      );
+      try {
+        const refreshStartTime = Date.now();
+        const now = Timestamp.now();
+        const minimalAnswer: Answer = {
+          id: questionId,
+          question: questionText,
+          answer: '',
+          timestamp: { _seconds: now.seconds, _nanoseconds: now.nanoseconds },
+          likeCount: 0,
+        };
+
+        await upsertEmbeddings([minimalAnswer]);
+        console.log(
+          `DEBUG: Successfully refreshed embedding for ${questionId} (took ${Date.now() - refreshStartTime}ms)`,
+        );
+
+        // Try one more fetch after refresh with a longer delay
+        const finalDelayMs = 5000; // 5 second delay after refresh
+        console.log(
+          `DEBUG: Waiting ${finalDelayMs}ms after refresh before final fetch attempt...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, finalDelayMs));
+
+        console.log(
+          `DEBUG: Trying one final fetch after embedding refresh for ${questionId}`,
+        );
+        const finalFetchStartTime = Date.now();
+        const finalFetchResponse = await pineconeIndex.fetch([questionId]);
+        console.log(
+          `DEBUG: Final fetch response after refresh (took ${Date.now() - finalFetchStartTime}ms):`,
+          JSON.stringify(finalFetchResponse, null, 2),
+        );
+
+        const refreshedRecord = finalFetchResponse.records[questionId];
+        if (
+          refreshedRecord?.metadata?.title &&
+          typeof refreshedRecord.metadata.title === 'string'
+        ) {
+          sourceMetadataTitle = refreshedRecord.metadata.title;
+          console.log(
+            `DEBUG: Successfully retrieved title after embedding refresh: "${sourceMetadataTitle}" (total time including refresh: ${Date.now() - startTime}ms)`,
+          );
+        } else {
+          console.log(
+            `DEBUG: Still unable to retrieve title after embedding refresh and ${finalDelayMs}ms delay`,
+          );
+        }
+      } catch (refreshError) {
+        console.log(`DEBUG: Error during embedding refresh:`, refreshError);
+      }
+    }
+
     // If we still don't have the source title after all retries, we cannot proceed
     if (!sourceMetadataTitle) {
-      throw new Error(
-        `Could not retrieve source metadata title for ${questionId} after ${maxSourceMetaRetries} attempts. Cannot guarantee title uniqueness.`,
+      console.log(
+        `DEBUG: WARNING - Proceeding without metadata title for ${questionId} after ${maxSourceMetaRetries} attempts and a refresh. Search results may include duplicate titles.`,
       );
+      // Continue with a null sourceMetadataTitle instead of throwing an error
     }
 
     // Construct the Pinecone query object
@@ -1414,10 +1611,17 @@ export async function updateRelatedQuestionsBatch(
 export async function updateRelatedQuestions(
   questionId: string,
 ): Promise<{ previous: RelatedQuestion[]; current: RelatedQuestion[] }> {
+  console.log(`DEBUG: Starting updateRelatedQuestions for ${questionId}`);
+  const startTime = Date.now();
+
   // Ensure database and clients are ready.
   checkDbAvailable();
   try {
+    console.log(`DEBUG: Initializing clients for ${questionId}`);
     await initializeClients();
+    console.log(
+      `DEBUG: Clients initialized for ${questionId} (${Date.now() - startTime}ms)`,
+    );
   } catch (initError) {
     console.error(
       'updateRelatedQuestions: Aborting due to client initialization failure.',
@@ -1438,6 +1642,7 @@ export async function updateRelatedQuestions(
   let questionText: string;
   let previousRelatedQuestions: RelatedQuestion[] = [];
   try {
+    console.log(`DEBUG: Fetching question document for ${questionId}`);
     // Use the performFirestoreOperation utility for better error handling and timeout detection
     const questionDoc = await performFirestoreOperation(
       () => db!.collection(getAnswersCollectionName()).doc(questionId).get(),
@@ -1447,16 +1652,43 @@ export async function updateRelatedQuestions(
 
     // Handle case where the specified question document doesn't exist.
     if (!questionDoc.exists) {
+      console.log(
+        `DEBUG: Question document ${questionId} not found in Firestore`,
+      );
       throw new Error(`Question not found: ${questionId}`);
     }
+
+    console.log(
+      `DEBUG: Question document ${questionId} fetched successfully (${Date.now() - startTime}ms)`,
+    );
     const questionData = questionDoc.data();
+
     // Ensure the question data and text are present.
-    if (!questionData || !questionData.question) {
+    if (!questionData) {
+      console.log(
+        `DEBUG: Question document ${questionId} exists but data is null/undefined`,
+      );
       throw new Error(`Question data or text missing for ID: ${questionId}`);
     }
+
+    if (!questionData.question) {
+      console.log(
+        `DEBUG: Question document ${questionId} missing 'question' field. Available fields:`,
+        Object.keys(questionData).join(', '),
+      );
+      throw new Error(`Question data or text missing for ID: ${questionId}`);
+    }
+
     questionText = questionData.question;
+    console.log(
+      `DEBUG: Retrieved question text for ${questionId} (${questionText.substring(0, 50)}...)`,
+    );
+
     // Capture the current related questions before calculating new ones
     previousRelatedQuestions = questionData.relatedQuestionsV2 || [];
+    console.log(
+      `DEBUG: Previous related questions count for ${questionId}: ${previousRelatedQuestions.length}`,
+    );
   } catch (error) {
     console.error(
       `Failed to fetch question ${questionId} from Firestore:`,
@@ -1468,6 +1700,7 @@ export async function updateRelatedQuestions(
   // 2. Ensure the embedding for this question exists in Pinecone.
   // This involves generating and upserting the embedding. If it already exists, upsert updates it.
   try {
+    console.log(`DEBUG: Upserting embedding for ${questionId}`);
     // Construct a minimal Answer object required by upsertEmbeddings.
     const now = Timestamp.now();
     const minimalAnswer: Answer = {
@@ -1481,6 +1714,9 @@ export async function updateRelatedQuestions(
     // Call upsertEmbeddings with a single-item array.
     // Timer is inside upsertEmbeddings
     await upsertEmbeddings([minimalAnswer]);
+    console.log(
+      `DEBUG: Successfully upserted embedding for ${questionId} (${Date.now() - startTime}ms)`,
+    );
   } catch (error) {
     console.error(
       `Failed to upsert embedding for ${questionId} before finding related:`,
@@ -1494,14 +1730,26 @@ export async function updateRelatedQuestions(
 
   // 3. Find related questions using Pinecone search (now with new logic).
   // Timer is inside findRelatedQuestionsPinecone
+  console.log(`DEBUG: Finding related questions for ${questionId}`);
   const currentRelatedQuestions = await findRelatedQuestionsPinecone(
     questionId,
     questionText,
     5, // Explicitly pass the desired final limit (5)
   );
+  console.log(
+    `DEBUG: Found ${currentRelatedQuestions.length} related questions for ${questionId} (${Date.now() - startTime}ms)`,
+  );
+  if (currentRelatedQuestions.length > 0) {
+    console.log(
+      `DEBUG: First related question: ${currentRelatedQuestions[0].id} "${currentRelatedQuestions[0].title}" (${currentRelatedQuestions[0].similarity})`,
+    );
+  }
 
   // 4. Update the Firestore document with proper error handling
   try {
+    console.log(
+      `DEBUG: Updating Firestore with related questions for ${questionId}`,
+    );
     // Use the performFirestoreOperation utility with a timeout
     await performFirestoreOperation(
       () =>
@@ -1510,6 +1758,9 @@ export async function updateRelatedQuestions(
         }),
       'document update',
       `questionId: ${questionId}`,
+    );
+    console.log(
+      `DEBUG: Successfully updated Firestore for ${questionId} (${Date.now() - startTime}ms)`,
     );
   } catch (error) {
     // Log but continue since we have the calculated results
@@ -1520,6 +1771,9 @@ export async function updateRelatedQuestions(
   }
 
   // Return the previous and current lists of related questions.
+  console.log(
+    `DEBUG: Completed updateRelatedQuestions for ${questionId} in ${Date.now() - startTime}ms`,
+  );
   return {
     previous: previousRelatedQuestions,
     current: currentRelatedQuestions,
