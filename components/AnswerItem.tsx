@@ -20,12 +20,12 @@ import { RelatedQuestion } from '@/types/RelatedQuestion';
 
 export interface AnswerItemProps {
   answer: Answer;
-  handleLikeCountChange?: (answerId: string) => void;
-  handleCopyLink?: (answerId: string) => void;
+  handleLikeCountChange?: (answerId: string, newLikeCount: number) => void;
+  handleCopyLink: (answerId: string) => void;
   handleDelete?: (answerId: string) => void;
   linkCopied: string | null;
   likeStatuses: Record<string, boolean>;
-  isSudoUser?: boolean;
+  isSudoUser: boolean;
   isFullPage?: boolean;
   siteConfig: SiteConfig | null;
   showRelatedQuestions?: boolean;
@@ -106,19 +106,12 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
   };
 
   // Handle the like button click
-  const onLikeButtonClick = (
-    answerId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    likeCount: number,
-  ) => {
+  const onLikeButtonClick = (answerId: string, newLikeCount: number) => {
     try {
       // Call the passed handler for parent component updates
       if (handleLikeCountChange) {
-        handleLikeCountChange(answerId);
+        handleLikeCountChange(answerId, newLikeCount);
       }
-
-      // Note: likeCount parameter is received but not used in this component
-      // as we only need to update the parent about which answer was liked
 
       // Log the event
       logEvent('like_answer', 'Engagement', answerId);
