@@ -28,8 +28,8 @@ export default function BaseHeader({
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
     await fetchWithAuth('/api/logout', { method: 'POST' });
-    Cookies.remove('siteAuth');
-    Cookies.remove('isLoggedIn');
+    Cookies.remove('siteAuth', { path: '/' });
+    Cookies.remove('isLoggedIn', { path: '/' });
     router.push('/');
   };
 
