@@ -918,12 +918,12 @@ export async function findRelatedQuestionsPinecone(
       }
     }
 
-    // If we still don't have the source title after all retries, we cannot proceed
+    // If we still don't have the source title after all retries, we'll proceed without it
     if (!sourceMetadataTitle) {
       console.log(
-        `DEBUG: WARNING - Proceeding without metadata title for ${questionId} after ${maxSourceMetaRetries} attempts and a refresh. Search results may include duplicate titles.`,
+        `DEBUG: Proceeding without metadata title for ${questionId} after ${maxSourceMetaRetries} attempts and a refresh. Search results may include duplicate titles.`,
       );
-      // Continue with a null sourceMetadataTitle instead of throwing an error
+      // Continue with a null sourceMetadataTitle
     }
 
     // Construct the Pinecone query object
@@ -1106,7 +1106,7 @@ async function findRelatedQuestionsPineconeWithEmbedding(
         ) {
           sourceMetadataTitle = sourceRecord.metadata.title;
         } else {
-          console.warn(
+          console.log(
             `Could not fetch or find metadata title for source question ${questionId} in Pinecone. Proceeding without exact title filtering.`,
           );
         }
@@ -1136,7 +1136,7 @@ async function findRelatedQuestionsPineconeWithEmbedding(
           );
           metadataRetryDelay *= 2; // Exponential backoff
         } else {
-          console.warn(
+          console.log(
             `Error fetching source question ${questionId} metadata from Pinecone (attempt ${attempt}/${maxMetadataRetries}): ${fetchError}. Proceeding without exact title filtering.`,
           );
           break; // Exit retry loop on non-retryable error or max retries
@@ -1145,7 +1145,7 @@ async function findRelatedQuestionsPineconeWithEmbedding(
     }
 
     if (!metadataFetchSuccess) {
-      console.warn(
+      console.log(
         `All ${maxMetadataRetries} metadata fetch attempts failed for ${questionId}. Continuing without metadata.`,
       );
     }
