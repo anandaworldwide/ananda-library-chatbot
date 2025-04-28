@@ -13,6 +13,7 @@ const envFile = path.join(__dirname, '..', `.env.${site}`);
 if (fs.existsSync(envFile)) {
   dotenv.config({ path: envFile });
   console.log(`Loaded environment from ${envFile}`);
+  console.log(`loadEnv site ${site}`);
 } else {
   console.warn(`Warning: ${envFile} not found. Using default .env`);
   dotenv.config();
@@ -21,13 +22,10 @@ if (fs.existsSync(envFile)) {
 // Change directory to web folder
 process.chdir(path.join(__dirname, '..', 'web'));
 
-// Set NODE_PATH to include the parent node_modules to resolve React properly
-const rootNodeModules = path.join(__dirname, '..', 'node_modules');
-const env = { ...process.env, NODE_PATH: rootNodeModules };
-
+// Run next dev from the web directory, using its own node_modules
 const nextDev = spawn('next', ['dev', '-p', '3000'], {
   stdio: 'inherit',
-  env,
+  env: process.env, // Use web's own dependencies
 });
 
 nextDev.on('error', (err) => {

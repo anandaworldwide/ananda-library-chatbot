@@ -1,1 +1,0 @@
-../../public/data/ananda/master_swami_queries.txt
