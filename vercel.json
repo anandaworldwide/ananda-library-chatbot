@@ -4,5 +4,9 @@
       "path": "/api/relatedQuestions?updateBatch=100",
       "schedule": "0 */2 * * *"
     }
-  ]
+  ],
+  "buildCommand": "cd web && npm run build",
+  "devCommand": "cd web && npm run dev",
+  "installCommand": "cd web && npm install",
+  "outputDirectory": "web/.next"
 }
