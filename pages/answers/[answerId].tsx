@@ -7,11 +7,11 @@
 
 import { SiteConfig } from '@/types/siteConfig';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Layout from '@/components/layout';
 import AnswerItem from '@/components/AnswerItem';
 import { Answer } from '@/types/answer';
-import { checkUserLikes, updateLike } from '@/services/likeService';
+import { checkUserLikes } from '@/services/likeService';
 import { getOrCreateUUID } from '@/utils/client/uuid';
 import { logEvent } from '@/utils/client/analytics';
 import Head from 'next/head';
@@ -37,6 +37,8 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   const { isSudoUser } = useSudo();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Add ref to track initial load
+  const initialLoadRef = useRef(true);
 
   // Custom link component to handle GETHUMAN links, similar to TruncatedMarkdown
   const LinkComponent: Components['a'] = ({ href, children, ...props }) => {
@@ -141,91 +143,55 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
     }
   }, [answer, allowLikes]);
 
-  // Scroll the main answer item into view after it's loaded/rendered
-  // NOTE: Moved before early returns to satisfy rules-of-hooks
+  // Scroll the main answer item into view only on initial load
   useEffect(() => {
-    if (answer) {
+    if (answer && initialLoadRef.current) {
       // Use a timeout to ensure the DOM is updated after state change
       const timer = setTimeout(() => {
         const mainAnswerElement = document.getElementById('main-answer-item');
         if (mainAnswerElement) {
           mainAnswerElement.scrollIntoView({
             behavior: 'smooth',
-            block: 'center', // Scroll to the center of the element
+            block: 'start', // Changed to 'start' for better UX
           });
         }
+        // Set initial load to false after first scroll
+        initialLoadRef.current = false;
       }, 150); // Delay to allow rendering
 
       return () => clearTimeout(timer); // Cleanup timeout
     }
-  }, [answer]); // Dependency array includes the answer object
+  }, [answer]); // Still depends on answer, but now checks initialLoadRef
 
   // Handle like count changes
-  const handleLikeCountChange = async (answerId: string) => {
+  const handleLikeCountChange = async (
+    answerId: string,
+    newLikeCount: number,
+  ) => {
     // Security check - don't allow likes for unauthenticated users
     if (!allowLikes) {
       console.log('User not authenticated - like action prevented');
       return;
     }
 
-    try {
-      // Get the current like status
-      const wasLiked = likeStatuses[answerId] || false;
-      const newLikeStatus = !wasLiked;
-
-      // Update the answer with the new like count
-      if (answer) {
-        // Calculate new like count based on the new status
-        const newLikeCount = wasLiked
-          ? Math.max(0, answer.likeCount - 1)
-          : answer.likeCount + 1;
-
-        setAnswer({
-          ...answer,
+    // Update the answer with the new like count, but don't trigger a re-render if only likeCount changed
+    if (answer) {
+      setAnswer((prevAnswer) => {
+        if (!prevAnswer || prevAnswer.likeCount === newLikeCount)
+          return prevAnswer;
+        return {
+          ...prevAnswer,
           likeCount: newLikeCount,
-        });
-      }
-
-      // Update the like status immediately in UI
-      setLikeStatuses({
-        ...likeStatuses,
-        [answerId]: newLikeStatus,
+        };
       });
-
-      // Log the event
-      logEvent('like_answer', 'Engagement', answerId);
-
-      // Update the like status on the server
-      const uuid = getOrCreateUUID();
-      await updateLike(answerId, uuid, newLikeStatus, siteConfig);
-    } catch (error) {
-      // Just log the error, don't display any UI error messages
-      console.error('Error updating like status:', error);
-
-      // Revert the UI state on error
-      if (
-        answer &&
-        error instanceof Error &&
-        error.message.includes('Authentication required')
-      ) {
-        // Revert the like count
-        const wasLiked = likeStatuses[answerId] || false;
-        const originalLikeCount = wasLiked
-          ? answer.likeCount + 1 // if it was liked and we "unliked" it, add 1 back
-          : Math.max(0, answer.likeCount - 1); // if it wasn't liked and we "liked" it, subtract 1
-
-        setAnswer({
-          ...answer,
-          likeCount: originalLikeCount,
-        });
-
-        // Revert the like status
-        setLikeStatuses({
-          ...likeStatuses,
-          [answerId]: wasLiked,
-        });
-      }
     }
+
+    // Update the like status immediately in UI
+    const newLikeStatus = !likeStatuses[answerId];
+    setLikeStatuses((prev) => ({
+      ...prev,
+      [answerId]: newLikeStatus,
+    }));
   };
 
   // Handle copying the answer link to clipboard

@@ -94,7 +94,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   }, [data, isChangingPage]);
 
   // Extract data from query result
-  const answers = useMemo(() => data?.answers || [], [data?.answers]);
+  const answersData = useMemo(() => data?.answers || [], [data?.answers]);
   const totalPages = useMemo(() => data?.totalPages || 1, [data?.totalPages]);
 
   // Delete mutation with React Query
@@ -250,11 +250,11 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   // Fetch like statuses for answers
   useEffect(() => {
     const fetchLikeStatuses = async () => {
-      if (answers.length === 0) return;
+      if (answersData.length === 0) return;
 
       try {
         const uuid = getOrCreateUUID();
-        const answerIds = answers.map((answer) => answer.id);
+        const answerIds = answersData.map((answer) => answer.id);
         const statuses = await checkUserLikes(answerIds, uuid);
 
         // Important: replace the state entirely, don't merge with previous
@@ -271,26 +271,22 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     };
 
     fetchLikeStatuses();
-  }, [answers]);
+  }, [answersData]);
 
   // Handle like count changes
   const handleLikeCountChange = (answerId: string) => {
     try {
       // Update the like status immediately (don't wait for server refresh)
-      const newLikeStatus = !likeStatuses[answerId];
-
-      // Create a new object to ensure React detects the state change
-      setLikeStatuses({
-        ...likeStatuses,
-        [answerId]: newLikeStatus,
+      setLikeStatuses((prevStatuses) => {
+        const currentStatus = prevStatuses[answerId] || false;
+        return {
+          ...prevStatuses,
+          [answerId]: !currentStatus,
+        };
       });
 
       // Log the event
       logEvent('like_answer', 'Engagement', answerId);
-
-      // Don't refresh like statuses immediately - let the component state handle it
-      // The status will be refreshed on the next page load anyway
-      // This avoids the blinking effect
     } catch (error) {
       setLikeError(
         error instanceof Error ? error.message : 'An error occurred',
@@ -407,7 +403,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
 
               {/* List of answers */}
               <div>
-                {answers.map((answer) => (
+                {answersData.map((answer) => (
                   <AnswerItem
                     key={answer.id}
                     answer={answer}
@@ -425,14 +421,14 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
               </div>
 
               {/* Empty state */}
-              {answers.length === 0 && !isLoading && !error && (
+              {answersData.length === 0 && !isLoading && !error && (
                 <div className="text-center py-8">
                   <p>No answers found.</p>
                 </div>
               )}
 
               {/* Pagination controls */}
-              {answers.length > 0 && (
+              {answersData.length > 0 && (
                 <div className="flex justify-center mt-4">
                   <button
                     onClick={() => handlePageChange(currentPage - 1)}
