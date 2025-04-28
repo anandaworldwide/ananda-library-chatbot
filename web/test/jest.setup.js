@@ -23,6 +23,9 @@ process.env.GOOGLE_APPLICATION_CREDENTIALS = JSON.stringify({
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 process.env.NODE_ENV = 'test';
 
+// Configure React for testing environments
+global.React = require('react');
+
 // Increase the timeout for async operations
 jest.setTimeout(30000);
 

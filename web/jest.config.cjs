@@ -17,8 +17,8 @@ const customJestConfig = {
   testEnvironment: 'jest-environment-jsdom',
   modulePaths: ['<rootDir>/src'], // Explicitly add src to module paths
   moduleNameMapper: {
-    // Update paths relative to <rootDir> which is now web/
-    '^@/(.*)$': '<rootDir>/src/$1', // Adjusted to web/src/*
+    // Update paths to ensure they resolve to web/src
+    '^@/(.*)$': '<rootDir>/src/$1',
     '^@/pages/(.*)$': '<rootDir>/src/pages/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@/types/(.*)$': '<rootDir>/src/types/$1',
@@ -84,7 +84,12 @@ const serverConfig = {
     '^@/components/(.*)$': '<rootDir>/src/components/$1',
   },
   transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest'],
+    '^.+\\.(ts|tsx)$': [
+      'ts-jest',
+      {
+        tsconfig: '<rootDir>/__tests__/tsconfig.json',
+      },
+    ],
   },
   rootDir: '.', // Also set for server config
   roots: ['<rootDir>'], // Root is now web/

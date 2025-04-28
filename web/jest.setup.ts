@@ -18,6 +18,9 @@ if (typeof global.TextDecoder === 'undefined') {
 // Make sure jest-dom matchers are properly set up
 expect.extend({});
 
+// Configure React for testing
+global.React = require('react');
+
 // Mock next/router
 jest.mock('next/router', () => ({
   useRouter() {
