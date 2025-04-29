@@ -734,44 +734,16 @@ export async function findRelatedQuestionsPinecone(
     // Fetch the source question's metadata with retries and exponential backoff
     let sourceMetadataTitle: string | null = null;
     let retryDelay = initialRetryDelay;
-    const startTime = Date.now();
-
-    console.log(
-      `DEBUG: Starting source metadata fetch for question ID ${questionId} with ${maxSourceMetaRetries} retries and ${initialRetryDelay}ms initial delay`,
-    );
 
     let attempt = 1;
     for (attempt = 1; attempt <= maxSourceMetaRetries; attempt++) {
-      const attemptStartTime = Date.now();
-      console.log(
-        `DEBUG: Metadata fetch attempt ${attempt}/${maxSourceMetaRetries} for ${questionId} (${Date.now() - startTime}ms since start)`,
-      );
-
       try {
-        console.log(`DEBUG: Sending Pinecone fetch request for ${questionId}`);
         const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
-        const fetchDuration = Date.now() - attemptStartTime;
-        console.log(
-          `DEBUG: Pinecone fetch response received in ${fetchDuration}ms for attempt ${attempt}`,
-        );
-
-        // Debug full response structure
-        console.log(
-          `DEBUG: Full Pinecone response for ${questionId} (attempt ${attempt}):`,
-          JSON.stringify(sourceFetchResponse, null, 2),
-        );
 
         // Check if the questionId exists in the records
         if (!sourceFetchResponse.records[questionId]) {
-          console.log(
-            `DEBUG: Pinecone record for ${questionId} not found in fetch response`,
-          );
-
           // Check if any records were returned
           const recordsCount = Object.keys(sourceFetchResponse.records).length;
-          console.log(
-            `DEBUG: Received ${recordsCount} records from Pinecone, questionId ${questionId} not among them`,
-          );
 
           if (recordsCount > 0) {
             console.log(
@@ -781,10 +753,6 @@ export async function findRelatedQuestionsPinecone(
         } else {
           // Record exists, check metadata
           const sourceRecord = sourceFetchResponse.records[questionId];
-          console.log(
-            `DEBUG: Found record for ${questionId}, metadata:`,
-            sourceRecord.metadata,
-          );
 
           if (!sourceRecord.metadata) {
             console.log(`DEBUG: No metadata available for ${questionId}`);
@@ -805,69 +773,31 @@ export async function findRelatedQuestionsPinecone(
             typeof sourceRecord.metadata.title === 'string'
           ) {
             sourceMetadataTitle = sourceRecord.metadata.title;
-            console.log(
-              `DEBUG: Successfully retrieved metadata title for ${questionId}: "${sourceMetadataTitle}" on attempt ${attempt} (total time: ${Date.now() - startTime}ms)`,
-            );
             break; // Exit retry loop on success
           }
         }
 
         if (attempt < maxSourceMetaRetries) {
-          console.log(
-            `Source metadata title not found on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry... (Total time elapsed: ${Date.now() - startTime}ms)`,
-          );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          const actualDelay = Date.now() - (attemptStartTime + fetchDuration);
-          console.log(
-            `DEBUG: Actual delay was ${actualDelay}ms (vs planned ${retryDelay}ms)`,
-          );
           retryDelay *= 2; // Exponential backoff
         }
       } catch (fetchError: any) {
-        const errorMessage = fetchError?.message || String(fetchError);
-        const errorStack = fetchError?.stack || '';
-        console.log(
-          `DEBUG: Error during metadata fetch attempt ${attempt}/${maxSourceMetaRetries} for ${questionId}:`,
-          errorMessage,
-        );
-        console.log(`DEBUG: Error stack:`, errorStack);
-
         // Check if there's a cause property on the error
         if (fetchError?.cause) {
           console.log(`DEBUG: Error cause:`, fetchError.cause);
         }
 
         if (attempt < maxSourceMetaRetries) {
-          console.log(
-            `Error fetching source metadata on attempt ${attempt}/${maxSourceMetaRetries}. Waiting ${retryDelay}ms before retry... (Total time elapsed: ${Date.now() - startTime}ms)`,
-          );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          const actualDelay = Date.now() - attemptStartTime;
-          console.log(
-            `DEBUG: Actual delay after error was ${actualDelay}ms (vs planned ${retryDelay}ms)`,
-          );
           retryDelay *= 2; // Exponential backoff
         }
       }
     }
 
     // After all retries, log final status
-    const totalElapsedTime = Date.now() - startTime;
-    if (sourceMetadataTitle) {
-      console.log(
-        `DEBUG: Successfully retrieved metadata title after ${attempt} attempts for ${questionId} (total time: ${totalElapsedTime}ms)`,
-      );
-    } else {
-      console.log(
-        `DEBUG: Failed to retrieve metadata title after all ${attempt} attempts for ${questionId} (total time: ${totalElapsedTime}ms)`,
-      );
-
+    if (!sourceMetadataTitle) {
       // Try a direct upsert of the embedding to refresh the metadata
-      console.log(
-        `DEBUG: Attempting to refresh the embedding for ${questionId} before failing`,
-      );
       try {
-        const refreshStartTime = Date.now();
         const now = Timestamp.now();
         const minimalAnswer: Answer = {
           id: questionId,
@@ -878,26 +808,12 @@ export async function findRelatedQuestionsPinecone(
         };
 
         await upsertEmbeddings([minimalAnswer]);
-        console.log(
-          `DEBUG: Successfully refreshed embedding for ${questionId} (took ${Date.now() - refreshStartTime}ms)`,
-        );
 
         // Try one more fetch after refresh with a longer delay
         const finalDelayMs = process.env.NODE_ENV === 'test' ? 10 : 5000; // Much shorter final delay in test
-        console.log(
-          `DEBUG: Waiting ${finalDelayMs}ms after refresh before final fetch attempt...`,
-        );
         await new Promise((resolve) => setTimeout(resolve, finalDelayMs));
 
-        console.log(
-          `DEBUG: Trying one final fetch after embedding refresh for ${questionId}`,
-        );
-        const finalFetchStartTime = Date.now();
         const finalFetchResponse = await pineconeIndex.fetch([questionId]);
-        console.log(
-          `DEBUG: Final fetch response after refresh (took ${Date.now() - finalFetchStartTime}ms):`,
-          JSON.stringify(finalFetchResponse, null, 2),
-        );
 
         const refreshedRecord = finalFetchResponse.records[questionId];
         if (
@@ -905,26 +821,13 @@ export async function findRelatedQuestionsPinecone(
           typeof refreshedRecord.metadata.title === 'string'
         ) {
           sourceMetadataTitle = refreshedRecord.metadata.title;
-          console.log(
-            `DEBUG: Successfully retrieved title after embedding refresh: "${sourceMetadataTitle}" (total time including refresh: ${Date.now() - startTime}ms)`,
-          );
-        } else {
-          console.log(
-            `DEBUG: Still unable to retrieve title after embedding refresh and ${finalDelayMs}ms delay`,
-          );
         }
       } catch (refreshError) {
-        console.log(`DEBUG: Error during embedding refresh:`, refreshError);
+        console.error(`Error during embedding refresh:`, refreshError);
       }
     }
 
     // If we still don't have the source title after all retries, we'll proceed without it
-    if (!sourceMetadataTitle) {
-      console.log(
-        `DEBUG: Proceeding without metadata title for ${questionId} after ${maxSourceMetaRetries} attempts and a refresh. Search results may include duplicate titles.`,
-      );
-      // Continue with a null sourceMetadataTitle
-    }
 
     // Construct the Pinecone query object
     const pineconeQuery = {
@@ -961,9 +864,6 @@ export async function findRelatedQuestionsPinecone(
           causedBy.includes('EBUSY');
 
         if (isRetryableError && attempt < maxQueryRetries) {
-          console.log(
-            `Retrying Pinecone query for ${questionId} after ${queryRetryDelay}ms (attempt ${attempt}/${maxQueryRetries})...`,
-          );
           await new Promise((resolve) => setTimeout(resolve, queryRetryDelay));
           queryRetryDelay *= 2;
         } else {
@@ -1054,7 +954,7 @@ export async function findRelatedQuestionsPinecone(
  * @param {number[]} queryEmbedding - The pre-computed embedding vector for the source question.
  * @param {number} [resultsLimit=5] - The maximum number of related questions to return.
  * @returns {Promise<RelatedQuestion[]>} A promise resolving to an array of related questions.
- * @throws {Error} If Pinecone index is not available or SITE_ID is missing.
+ * @throws {Error} If Pinecone index not available or SITE_ID is missing.
  */
 async function findRelatedQuestionsPineconeWithEmbedding(
   questionId: string,
@@ -1128,9 +1028,6 @@ async function findRelatedQuestionsPineconeWithEmbedding(
           causedBy.includes('EBUSY');
 
         if (isRetryableError && attempt < maxMetadataRetries) {
-          console.log(
-            `Retrying metadata fetch for ${questionId} after ${metadataRetryDelay}ms (attempt ${attempt}/${maxMetadataRetries})...`,
-          );
           await new Promise((resolve) =>
             setTimeout(resolve, metadataRetryDelay),
           );
@@ -1186,9 +1083,6 @@ async function findRelatedQuestionsPineconeWithEmbedding(
           causedBy.includes('EBUSY');
 
         if (isRetryableError && attempt < maxQueryRetries) {
-          console.log(
-            `Retrying Pinecone query for ${questionId} after ${queryRetryDelay}ms (attempt ${attempt}/${maxQueryRetries})...`,
-          );
           await new Promise((resolve) => setTimeout(resolve, queryRetryDelay));
           queryRetryDelay *= 2; // Exponential backoff
         } else {

@@ -268,14 +268,16 @@ After each checkpoint:
 
 2. Tasks:
    - 🥚 Delete copied files from `/web/src`. (Ensure originals are still at root).
-   - 🥚 Use `git mv` to move original source directories (`app`, `components`, `hooks`, `lib`, `pages`, `services`,
-     `styles`, `types`, `utils`) into `/web/src` to preserve Git history.
+   - 🐣 Use `git mv` to move original source directories (`app`, `components`, `hooks`, `lib`, `pages`, `services`, `styles`, `types`, `utils`) into `/web/src` to preserve Git history. (Appears completed based on directory structure)
    - 🥚 Commit the `git mv` changes.
-   - 🥚 Remove original configuration files (`next.config.js`, `tsconfig.json`, etc.) from root if they are now solely
-     managed within `/web`. (Double-check shared dependencies first).
-   - 🥚 Address `config` directory duplication: Decide final location (root, `/web/src/config`, shared pkg) and remove
-     the unused copy. Revisit path aliases if needed.
+   - 🥚 Remove original configuration files (`next.config.js`, `tsconfig.json`, etc.) from root if they are now solely managed within `/web`. (Double-check shared dependencies first).
+   - 🥚 Address `config` directory duplication: Decide final location (root, `/web/src/config`, shared pkg) and remove the unused copy. Revisit path aliases if needed.
    - 🥚 Update root `README.md` to reflect new structure.
+   - 🥚 Cleanup root directory clutter:
+     - 🥚 Review and potentially remove or relocate `middleware.ts` if it's now managed in `/web`.
+     - 🥚 Evaluate if `package.json` and `package-lock.json` at root are still needed or if they should be updated to reflect only shared dependencies.
+     - 🥚 Check if `vercel.json` should be moved to `/web` or updated for the new structure.
+     - 🥚 Assess other root files like `postcss.config.cjs`, `.eslintrc.json`, `next-env.d.ts` for relocation or removal.
 
 ## Special Considerations
 
