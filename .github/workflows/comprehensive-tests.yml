@@ -142,4 +142,4 @@ jobs:
           name: full-coverage
           # Path is relative to working-directory if set, otherwise workspace root
           path: web/coverage/
-          if-no-files-found: warn
+          if-no-files-found: ignore
