@@ -124,6 +124,8 @@
     "node-mocks-http": "^1.17.0",
     "postcss": "^8.5.3",
     "prettier": "^3.5.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.0",
     "showdown": "^2.1.0",
     "stylelint": "^15.11.0",
     "stylelint-config-standard": "^34.0.0",
