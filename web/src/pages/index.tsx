@@ -883,12 +883,6 @@ export default function Home({
   return (
     <SudoProvider>
       <Layout siteConfig={siteConfig}>
-        {/* Banner for Web Subdirectory */}
-        <div className="bg-yellow-200 text-yellow-800 text-center p-2 text-sm font-semibold">
-          Note: You are viewing the site from the /web subdirectory.
-        </div>
-        {/* End Banner */}
-
         {showPopup && popupMessage && (
           <Popup
             message={popupMessage}
