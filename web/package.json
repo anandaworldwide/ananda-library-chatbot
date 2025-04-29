@@ -85,6 +85,7 @@
     "@aws-sdk/s3-request-presigner": "^3.798.0",
     "@langchain/openai": "^0.5.7",
     "@langchain/pinecone": "^0.2.0",
+    "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^14.6.1",
