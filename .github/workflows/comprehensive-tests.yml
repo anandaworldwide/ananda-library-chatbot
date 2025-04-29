@@ -17,16 +17,21 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          # Cache dependencies installed in the web directory
           cache: 'npm'
+          cache-dependency-path: web/package-lock.json
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
+        working-directory: web
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+        working-directory: web
 
       - name: Run component tests
         run: npx jest --testPathPattern=__tests__/components/ --no-coverage
+        working-directory: web
         env:
           NODE_ENV: test
 
@@ -42,16 +47,21 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          # Cache dependencies installed in the web directory
           cache: 'npm'
+          cache-dependency-path: web/package-lock.json
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
+        working-directory: web
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+        working-directory: web
 
       - name: Run API tests
         run: npx jest --config=jest.config.cjs --testPathPattern=__tests__/api/ --no-coverage
+        working-directory: web
         env:
           NODE_ENV: test
           # Default to empty JSON object for credentials - Firebase client code will handle missing credentials
@@ -70,16 +80,21 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          # Cache dependencies installed in the web directory
           cache: 'npm'
+          cache-dependency-path: web/package-lock.json
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
+        working-directory: web
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+        working-directory: web
 
       - name: Run utility and other tests
         run: npx jest --config=jest.config.cjs --testPathPattern='^(?!__tests__/(components|api)/)' --no-coverage
+        working-directory: web
         env:
           NODE_ENV: test
           # Default to empty JSON object for credentials - Firebase client code will handle missing credentials
@@ -101,16 +116,21 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          # Cache dependencies installed in the web directory
           cache: 'npm'
+          cache-dependency-path: web/package-lock.json
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
+        working-directory: web
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+        working-directory: web
 
       - name: Run a full test with coverage
         run: npx jest --config=jest.config.cjs --ci
+        working-directory: web
         env:
           NODE_ENV: test
           GOOGLE_APPLICATION_CREDENTIALS: '{}'
@@ -120,5 +140,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: full-coverage
-          path: coverage/
+          # Path is relative to working-directory if set, otherwise workspace root
+          path: web/coverage/
           if-no-files-found: warn

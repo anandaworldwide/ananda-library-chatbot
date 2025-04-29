@@ -250,7 +250,7 @@ After each checkpoint:
 
    - 🥚 Update Vercel deployment settings
    - 🥚 Modify GitHub Actions workflows
-   - 🥚 Test deployment process
+   - 🐣 Test deployment process
    - 🥚 Update cron job configurations
 
 1. Testing Checkpoint 6:
