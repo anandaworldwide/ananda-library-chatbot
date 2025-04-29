@@ -462,7 +462,7 @@ export async function upsertEmbeddings(
 
       // Add retry logic for Pinecone upsert
       const maxUpsertRetries = 3;
-      let upsertRetryDelay = 1000; // Start with 1 second delay
+      let upsertRetryDelay = process.env.NODE_ENV === 'test' ? 10 : 1000; // Start with shorter delay in test
       let upsertSuccess = false;
 
       for (let attempt = 1; attempt <= maxUpsertRetries; attempt++) {
@@ -710,8 +710,8 @@ export async function findRelatedQuestionsPinecone(
   // Constants for filtering
   const topK = 20; // Request more initial candidates from Pinecone
   const similarityThreshold = 0.62; // Minimum similarity score
-  const maxSourceMetaRetries = 10; // Increased from 5 to 10 maximum retries
-  const initialRetryDelay = 500; // Increased from 200ms to 500ms initial delay
+  const maxSourceMetaRetries = process.env.NODE_ENV === 'test' ? 3 : 10; // Reduced retries in test
+  const initialRetryDelay = process.env.NODE_ENV === 'test' ? 10 : 500; // Much shorter delay in test
 
   let queryEmbedding: number[];
   try {
@@ -883,7 +883,7 @@ export async function findRelatedQuestionsPinecone(
         );
 
         // Try one more fetch after refresh with a longer delay
-        const finalDelayMs = 5000; // 5 second delay after refresh
+        const finalDelayMs = process.env.NODE_ENV === 'test' ? 10 : 5000; // Much shorter final delay in test
         console.log(
           `DEBUG: Waiting ${finalDelayMs}ms after refresh before final fetch attempt...`,
         );
@@ -936,8 +936,8 @@ export async function findRelatedQuestionsPinecone(
     };
 
     // Add retry logic for Pinecone query
-    const maxQueryRetries = 3;
-    let queryRetryDelay = 1000;
+    const maxQueryRetries = process.env.NODE_ENV === 'test' ? 2 : 3;
+    let queryRetryDelay = process.env.NODE_ENV === 'test' ? 10 : 1000; // Start with shorter delay in test
     let queryResponse;
     let querySuccess = false;
 
@@ -1093,7 +1093,7 @@ async function findRelatedQuestionsPineconeWithEmbedding(
 
     // Add retry logic for fetching source metadata
     const maxMetadataRetries = 3;
-    let metadataRetryDelay = 1000; // Start with 1 second delay
+    let metadataRetryDelay = process.env.NODE_ENV === 'test' ? 10 : 1000; // Start with shorter delay in test
     let metadataFetchSuccess = false;
 
     for (let attempt = 1; attempt <= maxMetadataRetries; attempt++) {
@@ -1160,8 +1160,8 @@ async function findRelatedQuestionsPineconeWithEmbedding(
     };
 
     // Add retry logic for Pinecone query
-    const maxQueryRetries = 3;
-    let queryRetryDelay = 1000; // Start with 1 second delay
+    const maxQueryRetries = process.env.NODE_ENV === 'test' ? 2 : 3;
+    let queryRetryDelay = process.env.NODE_ENV === 'test' ? 10 : 1000; // Start with shorter delay in test
     let queryResponse;
     let querySuccess = false;
 
@@ -1521,7 +1521,7 @@ export async function updateRelatedQuestionsBatch(
     // --- Retry Logic for Batch Commit ---
     let commitSuccessful = false;
     const maxRetries = 3;
-    let retryDelay = 1000; // Start with 1 second delay
+    let retryDelay = process.env.NODE_ENV === 'test' ? 10 : 1000; // Start with shorter delay in test
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {

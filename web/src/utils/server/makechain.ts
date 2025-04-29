@@ -653,85 +653,116 @@ export async function setupAndExecuteLanguageModelChain(
   resolveDocs?: (docs: Document[]) => void,
   siteConfig?: AppSiteConfig | null,
 ): Promise<string> {
-  try {
-    const modelName = siteConfig?.modelName || 'gpt-4o';
-    const temperature = siteConfig?.temperature || 0.3;
-    const rephraseModelName = 'gpt-3.5-turbo';
-    const rephraseTemperature = 0.1;
+  const TIMEOUT_MS = process.env.NODE_ENV === 'test' ? 1000 : 30000;
+  const RETRY_DELAY_MS = process.env.NODE_ENV === 'test' ? 10 : 1000;
+  const MAX_RETRIES = 3;
 
-    // Send site ID immediately and validate
-    if (siteConfig?.siteId) {
-      const expectedSiteId = process.env.SITE_ID || 'default';
+  let retryCount = 0;
+  let lastError: Error | null = null;
 
-      if (siteConfig.siteId !== expectedSiteId) {
-        const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ${expectedSiteId}`;
-        console.error(error);
+  while (retryCount < MAX_RETRIES) {
+    try {
+      const modelName = siteConfig?.modelName || 'gpt-4o';
+      const temperature = siteConfig?.temperature || 0.3;
+      const rephraseModelName = 'gpt-3.5-turbo';
+      const rephraseTemperature = 0.1;
+
+      // Send site ID immediately and validate
+      if (siteConfig?.siteId) {
+        const expectedSiteId = process.env.SITE_ID || 'default';
+
+        if (siteConfig.siteId !== expectedSiteId) {
+          const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ${expectedSiteId}`;
+          console.error(error);
+        }
+        sendData({ siteId: siteConfig.siteId });
       }
-      sendData({ siteId: siteConfig.siteId });
+
+      console.log(
+        `🔧 Using ${modelName} for answer generation and ${rephraseModelName} for rephrasing`,
+      );
+
+      const chainCreationStartTime = Date.now();
+      const chain = await makeChain(
+        retriever,
+        { model: modelName, temperature },
+        sourceCount,
+        filter,
+        sendData,
+        resolveDocs,
+        { model: rephraseModelName, temperature: rephraseTemperature },
+      );
+      console.log(
+        `Chain creation took ${Date.now() - chainCreationStartTime}ms`,
+      );
+
+      // Format chat history for the language model
+      const pastMessages = convertChatHistory(history);
+
+      let fullResponse = '';
+      let firstTokenTime: number | null = null;
+
+      // Create a promise that rejects after timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Operation timed out after ${TIMEOUT_MS}ms`));
+        }, TIMEOUT_MS);
+      });
+
+      // Invoke the chain with callbacks for streaming tokens
+      const chainInvocationStartTime = Date.now();
+      const chainPromise = chain.invoke(
+        {
+          question: sanitizedQuestion,
+          chat_history: pastMessages,
+        },
+        {
+          callbacks: [
+            {
+              // Callback for handling new tokens from the language model
+              handleLLMNewToken(token: string) {
+                if (!firstTokenTime) {
+                  firstTokenTime = Date.now();
+                  console.log(
+                    `Time to first token: ${firstTokenTime - chainInvocationStartTime}ms`,
+                  );
+                  // Send the firstTokenGenerated time with the first token in the timing object
+                  sendData({
+                    token,
+                    timing: {
+                      firstTokenGenerated: firstTokenTime,
+                    },
+                  });
+                } else {
+                  sendData({ token });
+                }
+                fullResponse += token;
+              },
+            } as Partial<BaseCallbackHandler>,
+          ],
+        },
+      );
+
+      // Race between the chain execution and timeout
+      await Promise.race([chainPromise, timeoutPromise]);
+
+      return fullResponse;
+    } catch (error) {
+      lastError = error as Error;
+      retryCount++;
+
+      if (retryCount < MAX_RETRIES) {
+        console.warn(
+          `Attempt ${retryCount} failed. Retrying in ${RETRY_DELAY_MS}ms...`,
+          error,
+        );
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      } else {
+        console.error('All retry attempts failed:', error);
+        throw lastError;
+      }
     }
-
-    console.log(
-      `🔧 Using ${modelName} for answer generation and ${rephraseModelName} for rephrasing`,
-    );
-
-    const chainCreationStartTime = Date.now();
-    const chain = await makeChain(
-      retriever,
-      { model: modelName, temperature },
-      sourceCount,
-      filter,
-      sendData,
-      resolveDocs,
-      { model: rephraseModelName, temperature: rephraseTemperature },
-    );
-    console.log(`Chain creation took ${Date.now() - chainCreationStartTime}ms`);
-
-    // Format chat history for the language model
-    const pastMessages = convertChatHistory(history);
-
-    let fullResponse = '';
-    let firstTokenTime: number | null = null;
-
-    // Invoke the chain with callbacks for streaming tokens
-    const chainInvocationStartTime = Date.now();
-    const chainPromise = chain.invoke(
-      {
-        question: sanitizedQuestion,
-        chat_history: pastMessages,
-      },
-      {
-        callbacks: [
-          {
-            // Callback for handling new tokens from the language model
-            handleLLMNewToken(token: string) {
-              if (!firstTokenTime) {
-                firstTokenTime = Date.now();
-                console.log(
-                  `Time to first token: ${firstTokenTime - chainInvocationStartTime}ms`,
-                );
-                // Send the firstTokenGenerated time with the first token in the timing object
-                sendData({
-                  token,
-                  timing: {
-                    firstTokenGenerated: firstTokenTime,
-                  },
-                });
-              } else {
-                sendData({ token });
-              }
-              fullResponse += token;
-            },
-          } as Partial<BaseCallbackHandler>,
-        ],
-      },
-    );
-
-    // Wait for the chain to complete
-    await chainPromise;
-
-    return fullResponse;
-  } catch (error) {
-    console.error('Error in setupAndExecuteLanguageModelChain:', error);
-    throw error;
   }
+
+  throw lastError; // This line should never be reached due to the throw in the else block above
 }

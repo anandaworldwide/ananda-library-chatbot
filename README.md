@@ -19,8 +19,6 @@ storing embeddings to later retrieve similar docs.
 
 [Tutorial video from project we forked from](https://www.youtube.com/watch?v=ih9PBGVVOO4)
 
-The visual guide of this repo and tutorial is in the `visual guide` folder.
-
 **If you run into errors, please review the troubleshooting section further down
 this page.**
 

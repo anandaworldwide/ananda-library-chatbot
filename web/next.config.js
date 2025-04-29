@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { loadEnv } from './utils/server/loadEnv.js';
+import { loadEnv } from './src/utils/server/loadEnv.js';
 
 // Only load from .env file in development
 if (process.env.NODE_ENV === 'development') {

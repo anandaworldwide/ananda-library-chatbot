@@ -280,8 +280,11 @@ async function fetchWithRetry(
     if (retryCount < MAX_RETRY_ATTEMPTS) {
       console.log(`Network error on attempt ${retryCount + 1}, retrying...`);
 
-      // Exponential backoff: 500ms, 1000ms, 2000ms...
-      const delay = Math.min(500 * Math.pow(2, retryCount), 5000);
+      // Calculate exponential backoff delay with a maximum
+      const delay =
+        process.env.NODE_ENV === 'test'
+          ? Math.min(10 * Math.pow(2, retryCount), 50) // Much shorter in test: max 50ms
+          : Math.min(500 * Math.pow(2, retryCount), 5000); // Normal: max 5000ms
       await new Promise((resolve) => setTimeout(resolve, delay));
 
       return fetchWithRetry(url, options, retryCount + 1);
