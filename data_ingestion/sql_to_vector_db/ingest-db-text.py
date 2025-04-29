@@ -29,7 +29,7 @@ import re
 import math 
 # Add the python directory to the path so we can import util
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
-from util.env_utils import load_env
+from pyutil.env_utils import load_env
 
 # Directory to store checkpoint files
 CHECKPOINT_DIR = os.path.join(os.path.dirname(__file__), 'ingestion_checkpoints')
