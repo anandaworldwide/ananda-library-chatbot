@@ -469,7 +469,7 @@ export function createErrorCorsHeaders(
   }
 
   // Only do this in production and if debug logging is active
-  if (!isDevelopment() || process.env.NEXT_PUBLIC_VERBOSE_CORS === 'true') {
+  if (!isDevelopment() && process.env.NEXT_PUBLIC_VERBOSE_CORS === 'true') {
     // Use setTimeout to ensure this runs after all initialization
     setTimeout(() => {
       try {
