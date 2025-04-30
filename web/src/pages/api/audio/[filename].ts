@@ -109,7 +109,7 @@ const handleRequest = async (
         Key: s3Key,
       });
 
-      // Generate the signed URL - use longer expiration like the original code
+      // Generate the signed URL - 21,600 seconds or six hours.
       const url = await getSignedUrl(s3Client, command, { expiresIn: 21600 });
       console.log(`Generated signed URL for: ${s3Key}`);
 

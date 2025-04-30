@@ -161,6 +161,17 @@ export function AudioPlayer({
     logEvent('seek_audio', 'Engagement', `${audioId}:${newTime}`);
   };
 
+  // Handle download button click
+  const handleDownload = () => {
+    if (audioUrl) {
+      // Open the audio URL in a new tab
+      window.open(audioUrl, '_blank');
+
+      // Log the download attempt
+      logEvent('download_audio', 'Engagement', audioId);
+    }
+  };
+
   return (
     <div className="audio-player bg-gray-100 rounded-lg w-full md:w-1/2">
       <audio
@@ -190,6 +201,18 @@ export function AudioPlayer({
         <div className="text-xs">
           {formatTime(currentTime)} / {formatTime(duration)}
         </div>
+        <button
+          onClick={handleDownload}
+          className={`text-gray-500 p-1 rounded-full hover:bg-gray-200 focus:outline-none ${
+            !audioUrl || !!error || !!audioError
+              ? 'opacity-50 cursor-not-allowed'
+              : ''
+          }`}
+          disabled={!audioUrl || !!error || !!audioError}
+          aria-label="Download audio"
+        >
+          <span className="material-icons text-2xl">download</span>
+        </button>
       </div>
       <div className="px-2 pb-2">
         <input
