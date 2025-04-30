@@ -144,6 +144,39 @@ type PineconeFilter = {
   }>;
 };
 
+// Helper function to determine active media types based on input and config
+// Export for testing
+export function determineActiveMediaTypes(
+  mediaTypes: Partial<MediaTypes> | undefined,
+  configuredEnabledTypes: string[] | undefined,
+): string[] {
+  const enabledMediaTypes = configuredEnabledTypes || [
+    'text',
+    'audio',
+    'youtube',
+  ];
+  let activeTypes: string[] = [];
+
+  if (mediaTypes) {
+    enabledMediaTypes.forEach((type) => {
+      if (mediaTypes[type] === true) {
+        activeTypes.push(type);
+      }
+    });
+  }
+
+  // If no valid types were explicitly selected or provided, default to all enabled types
+  if (activeTypes.length === 0) {
+    console.log(
+      'No valid media types selected, defaulting to all enabled types:',
+      enabledMediaTypes,
+    );
+    activeTypes = enabledMediaTypes;
+  }
+
+  return activeTypes;
+}
+
 async function validateAndPreprocessInput(
   req: NextRequest,
   siteConfig: SiteConfig,
@@ -254,7 +287,7 @@ async function applyRateLimiting(
 
 async function setupPineconeAndFilter(
   collection: string,
-  mediaTypes: Record<string, boolean>,
+  mediaTypes: Partial<MediaTypes> | undefined,
   siteConfig: SiteConfig,
 ): Promise<{ index: Index<RecordMetadata>; filter: PineconeFilter }> {
   const startTime = Date.now();
@@ -265,8 +298,14 @@ async function setupPineconeAndFilter(
     indexName,
   )) as Index<RecordMetadata>;
 
+  // Determine active types using the helper function
+  const activeTypes = determineActiveMediaTypes(
+    mediaTypes,
+    siteConfig.enabledMediaTypes,
+  );
+
   const filter: PineconeFilter = {
-    $and: [{ type: { $in: [] } }],
+    $and: [{ type: { $in: activeTypes } }],
   };
 
   // Apply collection-specific filters only if the collection exists in siteConfig
@@ -292,20 +331,6 @@ async function setupPineconeAndFilter(
   // filter.$and.push({ categories: { $nin: ['Ministry'] } });
   // console.log("🧪 TEST FILTER APPLIED: Excluding 'Ministry' category.");
   // === END TEST FILTER ===
-
-  const enabledMediaTypes = siteConfig.enabledMediaTypes || [
-    'text',
-    'audio',
-    'youtube',
-  ];
-  enabledMediaTypes.forEach((type) => {
-    if (mediaTypes[type]) {
-      filter.$and[0].type.$in.push(type);
-    }
-  });
-  if (filter.$and[0].type.$in.length === 0) {
-    filter.$and[0].type.$in = enabledMediaTypes;
-  }
 
   const setupTime = Date.now() - startTime;
   if (setupTime > 50) {
@@ -538,7 +563,7 @@ async function handleComparisonRequest(
         // Set up Pinecone and filter
         const { index } = await setupPineconeAndFilter(
           requestBody.collection || 'whole_library',
-          normalizeMediaTypes(requestBody.mediaTypes),
+          requestBody.mediaTypes,
           siteConfig,
         );
 
@@ -930,7 +955,7 @@ async function handleChatRequest(req: NextRequest) {
         // Set up Pinecone and filter without waiting for document creation to complete
         const { index, filter } = await setupPineconeAndFilter(
           sanitizedInput.collection || 'whole_library',
-          normalizeMediaTypes(sanitizedInput.mediaTypes),
+          sanitizedInput.mediaTypes,
           siteConfig,
         );
 
@@ -1053,27 +1078,6 @@ async function handleChatRequest(req: NextRequest) {
   });
 
   return corsMiddleware.addCorsHeaders(response, req, siteConfig);
-}
-
-function normalizeMediaTypes(
-  mediaTypes: Partial<MediaTypes> | undefined,
-): Record<string, boolean> {
-  const defaultTypes = {
-    text: true,
-    image: false,
-    video: false,
-    audio: false,
-  };
-
-  if (!mediaTypes) return defaultTypes;
-
-  return Object.entries(defaultTypes).reduce(
-    (acc, [key, defaultValue]) => ({
-      ...acc,
-      [key]: mediaTypes[key as keyof MediaTypes] ?? defaultValue,
-    }),
-    {} as Record<string, boolean>,
-  );
 }
 
 // Consolidated logging function for better summary messages

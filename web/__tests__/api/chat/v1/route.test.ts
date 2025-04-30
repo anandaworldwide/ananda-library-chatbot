@@ -269,8 +269,8 @@ jest.mock('@/utils/server/appRouterJwtUtils', () => ({
   },
 }));
 
-// Import POST only after all mocks are set up
-import { POST } from '@/app/api/chat/v1/route';
+// Import POST and the helper function only after all mocks are set up
+import { POST, determineActiveMediaTypes } from '@/app/api/chat/v1/route';
 
 // Setup for ReadableStream proxying
 const originalReadableStream = global.ReadableStream;
@@ -387,9 +387,8 @@ global.ReadableStream = function (
 // Add interface definition to match production code
 interface MediaTypes {
   text?: boolean;
-  image?: boolean;
-  video?: boolean;
   audio?: boolean;
+  youtube?: boolean;
   [key: string]: boolean | undefined;
 }
 
@@ -443,8 +442,8 @@ describe('Chat API Route', () => {
           privateSession: false,
           mediaTypes: {
             text: true,
-            image: false,
-            video: false,
+            // image: false,
+            // video: false,
             audio: false,
           } as Partial<MediaTypes>,
         }),
@@ -479,8 +478,6 @@ describe('Chat API Route', () => {
           privateSession: true,
           mediaTypes: {
             text: true,
-            image: false,
-            video: false,
             audio: false,
           } as Partial<MediaTypes>,
         }),
@@ -512,8 +509,6 @@ describe('Chat API Route', () => {
           privateSession: true,
           mediaTypes: {
             text: true,
-            image: false,
-            video: false,
             audio: false,
           } as Partial<MediaTypes>,
         }),
@@ -541,8 +536,6 @@ describe('Chat API Route', () => {
           privateSession: false,
           mediaTypes: {
             text: true,
-            image: false,
-            video: false,
             audio: false,
           } as Partial<MediaTypes>,
         }),
@@ -1016,8 +1009,6 @@ describe('Chat API Route', () => {
     test('processes request with mediaTypes parameter', async () => {
       const mediaTypes: Partial<MediaTypes> = {
         text: true,
-        image: false,
-        video: false,
         audio: false,
         youtube: true, // Testing index signature
       };
@@ -1042,5 +1033,85 @@ describe('Chat API Route', () => {
       const data = await response.json();
       expect(data.error).toContain('Collection must be a string value');
     });
+  });
+});
+
+// Add the describe block for the helper function tests here
+describe('determineActiveMediaTypes', () => {
+  const defaultEnabled = ['text', 'audio', 'youtube'];
+  const customEnabled = ['text', 'video'];
+
+  // Test case 1: mediaTypes is undefined
+  it('should default to configured enabled types when mediaTypes is undefined', () => {
+    expect(determineActiveMediaTypes(undefined, defaultEnabled)).toEqual(
+      defaultEnabled,
+    );
+  });
+
+  // Test case 2: mediaTypes is empty object
+  it('should default to configured enabled types when mediaTypes is empty', () => {
+    expect(determineActiveMediaTypes({}, defaultEnabled)).toEqual(
+      defaultEnabled,
+    );
+  });
+
+  // Test case 3: mediaTypes has one valid type true
+  it('should return only the selected valid type', () => {
+    expect(
+      determineActiveMediaTypes({ youtube: true }, defaultEnabled),
+    ).toEqual(['youtube']);
+  });
+
+  // Test case 4: mediaTypes has multiple valid types true
+  it('should return all selected valid types', () => {
+    expect(
+      determineActiveMediaTypes(
+        { text: true, audio: true, youtube: false },
+        defaultEnabled,
+      ),
+    ).toEqual(['text', 'audio']);
+  });
+
+  // Test case 5: mediaTypes has only invalid (not enabled) types true
+  it('should default to configured enabled types when only invalid types are selected', () => {
+    expect(determineActiveMediaTypes({ video: true }, defaultEnabled)).toEqual(
+      defaultEnabled,
+    );
+  });
+
+  // Test case 6: mediaTypes has only false values for enabled types
+  it('should default to configured enabled types when all selected types are false', () => {
+    expect(
+      determineActiveMediaTypes(
+        { text: false, audio: false, youtube: false },
+        defaultEnabled,
+      ),
+    ).toEqual(defaultEnabled);
+  });
+
+  // Test case 7: Custom enabled types - one valid selected
+  it('should respect custom enabled types and return the selected valid one', () => {
+    expect(
+      determineActiveMediaTypes({ text: true, audio: true }, customEnabled),
+    ).toEqual(['text']);
+  });
+
+  // Test case 8: Custom enabled types - none valid selected
+  it('should respect custom enabled types and default when none selected are valid', () => {
+    expect(determineActiveMediaTypes({ audio: true }, customEnabled)).toEqual(
+      customEnabled,
+    );
+  });
+
+  // Test case 9: configuredEnabledTypes is undefined
+  it('should use default ["text", "audio", "youtube"] when configuredEnabledTypes is undefined', () => {
+    // Defaults because none are selected true
+    expect(determineActiveMediaTypes({ video: true }, undefined)).toEqual(
+      defaultEnabled,
+    );
+    // Selects youtube which is in the hardcoded default
+    expect(determineActiveMediaTypes({ youtube: true }, undefined)).toEqual([
+      'youtube',
+    ]);
   });
 });
