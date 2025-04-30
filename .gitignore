@@ -11,9 +11,9 @@
 **/ingestion_checkpoints/
 
 # supercut
-/supercut/cache/
-/supercut/temp/
-/supercut/silence_cache.json
+/experiments/supercut/cache/
+/experiments/supercut/temp/
+/experiments/supercut/silence_cache.json
 
 # firestore
 /*-debug.log
