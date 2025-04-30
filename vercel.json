@@ -5,8 +5,8 @@
       "schedule": "0 */2 * * *"
     }
   ],
-  "buildCommand": "npm run build",
+  "buildCommand": "npm install dotenv && npm install --include=dev && npm run build",
   "devCommand": "npm run dev",
-  "installCommand": "npm install --no-package-lock --no-audit --ignore-scripts",
+  "installCommand": "npm install",
   "outputDirectory": ".next"
 }
