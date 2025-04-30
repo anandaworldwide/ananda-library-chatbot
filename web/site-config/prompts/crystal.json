@@ -1,8 +1,0 @@
-{
-  "variables": {},
-  "templates": {
-    "baseTemplate": {
-      "file": "crystal-prompt.txt"
-    }
-  }
-}
