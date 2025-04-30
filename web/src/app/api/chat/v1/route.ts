@@ -146,7 +146,7 @@ type PineconeFilter = {
 
 // Helper function to determine active media types based on input and config
 // Export for testing
-export function determineActiveMediaTypes(
+function determineActiveMediaTypes(
   mediaTypes: Partial<MediaTypes> | undefined,
   configuredEnabledTypes: string[] | undefined,
 ): string[] {
