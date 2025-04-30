@@ -1,8 +1,8 @@
 {
   "**/*.{ts,tsx}": [
-    "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage --config=config/jest.pre-commit.cjs"
+    "cd web && npx jest --bail --findRelatedTests --passWithNoTests --no-coverage --config=config/jest.pre-commit.cjs"
   ],
   "**/*.{js,jsx}": [
-    "npx jest --bail --findRelatedTests --passWithNoTests --no-coverage --config=config/jest.pre-commit.cjs"
+    "cd web && npx jest --bail --findRelatedTests --passWithNoTests --no-coverage --config=config/jest.pre-commit.cjs"
   ]
 }
