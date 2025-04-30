@@ -5,8 +5,8 @@
       "schedule": "0 */2 * * *"
     }
   ],
-  "buildCommand": "cd web && npm run build",
-  "devCommand": "cd web && npm run dev",
-  "installCommand": "cd web && npm install --no-package-lock --no-audit --ignore-scripts",
-  "outputDirectory": "web/.next"
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install --no-package-lock --no-audit --ignore-scripts",
+  "outputDirectory": ".next"
 }
