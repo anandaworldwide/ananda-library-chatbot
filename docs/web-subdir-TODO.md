@@ -241,7 +241,6 @@ After each checkpoint:
 
 1. Update build configuration:
 
-   - 🥚 Modify next.config.js for new path
    - 🥚 Update Vercel configuration
    - 🥚 Adjust build scripts
    - 🥚 Test build process
