@@ -19,53 +19,65 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
       {isSudoUser && (
         <div className="bg-gray-100 text-gray-700 py-2 border-t border-t-slate-200 mt-4">
           <div className="container mx-auto flex justify-center items-center">
-            <b>ADMIN:</b>
-            {!siteConfig?.allowAllAnswersPage && (
-              <Link
-                href="/answers"
-                className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
-              >
-                All Answers
-                <span className="material-icons text-sm ml-1">list_alt</span>
-              </Link>
-            )}
-            <Link
-              href="/admin/downvotes"
-              className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
-            >
-              Review Downvotes
-              <span className="material-icons text-sm ml-1">thumb_down</span>
-            </Link>
-            <Link
-              href="/admin/relatedQuestionsUpdater"
-              className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
-            >
-              Related Qs Updater
-              <span className="material-icons text-sm ml-1">update</span>
-            </Link>
-            <Link
-              href="/bless"
-              className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
-            >
-              Manage Blessing
-              <span className="material-icons text-sm ml-1">auto_fix_high</span>
-            </Link>
-            <Link
-              href="/stats"
-              className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
-            >
-              Statistics
-              <span className="material-icons text-sm ml-1">trending_up</span>
-            </Link>
-            {!siteConfig?.enableModelComparison && (
-              <Link
-                href="/compare-models"
-                className="text-sm hover:text-slate-600 cursor-pointer mx-2 flex items-center"
-              >
-                Compare Models
-                <span className="material-icons text-sm ml-1">compare</span>
-              </Link>
-            )}
+            <div className="flex flex-col items-center w-full">
+              <span className="font-bold mb-2 text-center w-full">ADMIN:</span>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full sm:flex sm:flex-row sm:space-x-2 sm:space-y-0 sm:grid-cols-1">
+                {!siteConfig?.allowAllAnswersPage && (
+                  <Link
+                    href="/answers"
+                    className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
+                  >
+                    All Answers
+                    <span className="material-icons text-sm ml-1">
+                      list_alt
+                    </span>
+                  </Link>
+                )}
+                <Link
+                  href="/admin/downvotes"
+                  className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
+                >
+                  Review Downvotes
+                  <span className="material-icons text-sm ml-1">
+                    thumb_down
+                  </span>
+                </Link>
+                <Link
+                  href="/admin/relatedQuestionsUpdater"
+                  className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
+                >
+                  Related Qs Updater
+                  <span className="material-icons text-sm ml-1">update</span>
+                </Link>
+                <Link
+                  href="/bless"
+                  className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
+                >
+                  Manage Blessing
+                  <span className="material-icons text-sm ml-1">
+                    auto_fix_high
+                  </span>
+                </Link>
+                <Link
+                  href="/stats"
+                  className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
+                >
+                  Statistics
+                  <span className="material-icons text-sm ml-1">
+                    trending_up
+                  </span>
+                </Link>
+                {!siteConfig?.enableModelComparison && (
+                  <Link
+                    href="/compare-models"
+                    className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
+                  >
+                    Compare Models
+                    <span className="material-icons text-sm ml-1">compare</span>
+                  </Link>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
