@@ -90,89 +90,12 @@ export default function Home({
   const messageListRef = useRef<HTMLDivElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const bottomOfListRef = useRef<HTMLDivElement>(null);
+  const scrollButtonContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
-  const [isAutoScrolling, setIsAutoScrolling] = useState(false);
-  const userHasScrolledUpRef = useRef(false);
+  const [showScrollDownButton, setShowScrollDownButton] = useState(false);
+  const [scrollClickState, setScrollClickState] = useState(0); // 0: initial, 1: scrolled to content
   const lastScrollTopRef = useRef(0);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Function to scroll to the bottom of the chat
-  const scrollToBottom = useCallback(() => {
-    if (
-      bottomOfListRef.current &&
-      isNearBottom &&
-      !userHasScrolledUpRef.current
-    ) {
-      setIsAutoScrolling(true);
-      bottomOfListRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'end',
-      });
-      // Reset isAutoScrolling after animation completes
-      setTimeout(() => setIsAutoScrolling(false), 1000);
-    }
-  }, [isNearBottom]);
-
-  // Effect for handling scroll behavior and user interactions
-  useEffect(() => {
-    const handleScroll = () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-
-      if (isAutoScrolling) {
-        setIsAutoScrolling(false);
-      }
-
-      const messageList = messageListRef.current;
-      if (messageList) {
-        const { scrollTop, scrollHeight, clientHeight } = messageList;
-
-        // Detect if user has scrolled up
-        if (scrollTop < lastScrollTopRef.current) {
-          userHasScrolledUpRef.current = true;
-        }
-
-        // Update last scroll position
-        lastScrollTopRef.current = scrollTop;
-
-        // Check if near bottom
-        const scrollPosition = scrollHeight - scrollTop - clientHeight;
-        const newIsNearBottom = scrollPosition < scrollHeight * 0.1; // 10% from bottom
-        setIsNearBottom(newIsNearBottom);
-
-        // Reset userHasScrolledUp if we're at the very bottom
-        if (scrollPosition === 0) {
-          userHasScrolledUpRef.current = false;
-        }
-      }
-
-      scrollTimeoutRef.current = setTimeout(() => {
-        // This timeout is just to debounce rapid scroll events
-      }, 100);
-    };
-
-    const messageList = messageListRef.current;
-    if (messageList) {
-      messageList.addEventListener('scroll', handleScroll);
-    }
-
-    return () => {
-      if (messageList) {
-        messageList.removeEventListener('scroll', handleScroll);
-      }
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, [isAutoScrolling]);
-
-  // Effect for auto-scrolling when new messages are added
-  useEffect(() => {
-    if (loading && isNearBottom && !userHasScrolledUpRef.current) {
-      scrollToBottom();
-    }
-  }, [messages, loading, isNearBottom, scrollToBottom]);
 
   // Function to handle media type selection
   const handleMediaTypeChange = (type: 'text' | 'audio' | 'youtube') => {
@@ -232,6 +155,10 @@ export default function Home({
   const [lastRelatedQuestionsUpdate, setLastRelatedQuestionsUpdate] = useState<
     string | null
   >(null);
+
+  const [contentOverflowing, setContentOverflowing] = useState(false);
+  const [messageContainerBottom, setMessageContainerBottom] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
 
   // Add a state variable to track the docId separately
   const [savedDocId, setSavedDocId] = useState<string | null>(null);
@@ -317,9 +244,50 @@ export default function Home({
         };
       });
 
-      scrollToBottom();
+      // Force a check for viewport overflow
+      setTimeout(() => {
+        const messageList = messageListRef.current;
+        if (!messageList) return;
+
+        // Get container position relative to viewport
+        const containerRect = messageList.getBoundingClientRect();
+
+        // Get current viewport height
+        const vh = window.innerHeight;
+        setViewportHeight(vh);
+
+        // Store the bottom position of the message container
+        setMessageContainerBottom(containerRect.bottom);
+
+        // Determine if the message container overflows the viewport
+        const overflowsViewport = containerRect.bottom > vh;
+
+        // Show button when the bottom of the container extends beyond viewport
+        if (overflowsViewport) {
+          // Check if we are already effectively at the bottom of the scrollable content
+          // Only show if NOT near the bottom unless the user clicked once already (state 1)
+          const { scrollTop, scrollHeight, clientHeight } = messageList;
+          const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+          const isNearContentBottom =
+            scrollHeight > clientHeight && distanceFromBottom <= 20;
+
+          if (!isNearContentBottom || scrollClickState === 1) {
+            setShowScrollDownButton(true);
+          } else {
+            // Content overflows, but we are scrolled to the bottom of it,
+            // and haven't clicked the button yet (state 0). Hide it for now.
+            // Clicking will make it reappear via handleScrollDownClick.
+            // Scrolling up will make it reappear via handleScroll.
+            setShowScrollDownButton(false);
+          }
+        } else {
+          // Hide button if content doesn't overflow viewport
+          setShowScrollDownButton(false);
+          setScrollClickState(0); // Reset click state if content fits
+        }
+      }, 50);
     },
-    [setMessageState, scrollToBottom],
+    [setMessageState, loading],
   );
 
   const handleStreamingResponse = useCallback(
@@ -339,13 +307,22 @@ export default function Home({
 
       // Capture timing information
       if (data.timing) {
-        console.log(`[${timestamp}] Timing info:`, data.timing);
         setTimingMetrics(data.timing);
       }
 
       if (data.token) {
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
+
+        // Any new content should reset the scroll state
+        // This ensures clicking the button after new content arrives
+        // will always scroll to content bottom first
+        setScrollClickState(0);
+
+        // Force scroll button to show when streaming content
+        if (!showScrollDownButton) {
+          setShowScrollDownButton(true);
+        }
       }
 
       if (data.sourceDocs) {
@@ -498,16 +475,12 @@ export default function Home({
       siteConfig?.siteId,
       savedDocId,
       setSavedDocId,
+      scrollClickState,
+      setScrollClickState,
+      showScrollDownButton,
+      setShowScrollDownButton,
     ],
   );
-
-  // Effect to scroll to bottom after related questions are added
-  useEffect(() => {
-    if (lastRelatedQuestionsUpdate) {
-      scrollToBottom();
-      setLastRelatedQuestionsUpdate(null);
-    }
-  }, [lastRelatedQuestionsUpdate, scrollToBottom]);
 
   // Main function to handle chat submission
   const handleSubmit = async (e: React.FormEvent, submittedQuery: string) => {
@@ -557,8 +530,10 @@ export default function Home({
     // Clear the input
     setQuery('');
 
-    // Scroll to bottom after adding user message
-    setTimeout(scrollToBottom, 0);
+    // Focus on the input field if not on mobile
+    if (window.innerWidth >= 768 && textAreaRef.current) {
+      textAreaRef.current.focus();
+    }
 
     try {
       const newAbortController = new AbortController();
@@ -644,6 +619,11 @@ export default function Home({
           new Event('submit') as unknown as React.FormEvent,
           submittedQuery,
         );
+
+        // Focus on the input field if not on mobile
+        if (window.innerWidth >= 768 && textAreaRef.current) {
+          textAreaRef.current.focus();
+        }
       }
     }
   };
@@ -850,6 +830,11 @@ export default function Home({
       new Event('submit') as unknown as React.FormEvent,
       clickedQuery,
     );
+
+    // Focus on the input field if not on mobile
+    if (window.innerWidth >= 768 && textAreaRef.current) {
+      textAreaRef.current.focus();
+    }
   };
 
   // Function to format timing metrics for display
@@ -866,6 +851,93 @@ export default function Home({
 
   // Get whether related questions should be shown (defaults to true)
   const showRelatedQuestions = siteConfig?.showRelatedQuestions ?? true;
+
+  // Function to handle scroll behavior and button visibility
+  useEffect(() => {
+    const messageList = messageListRef.current;
+    if (!messageList) return;
+
+    // Function to check scroll position and update button visibility
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = messageList;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      const hasScrollbar = scrollHeight > clientHeight;
+
+      // Check if we've scrolled up away from the bottom
+      if (hasScrollbar && distanceFromBottom > 20) {
+        // Only show if content is actually overflowing the viewport
+        const containerRect = messageList.getBoundingClientRect();
+        const vh = window.innerHeight;
+        if (containerRect.bottom > vh) {
+          setShowScrollDownButton(true);
+        }
+      }
+      // REMOVED: Logic that unconditionally hid the button when near the bottom
+    };
+
+    // New: Window scroll handler to show button if user scrolls up from page bottom
+    const handleWindowScroll = () => {
+      const threshold = 20;
+      const atPageBottom =
+        window.innerHeight + window.scrollY >=
+        document.body.scrollHeight - threshold;
+      const messageList = messageListRef.current;
+      if (!messageList) return;
+      const containerRect = messageList.getBoundingClientRect();
+      const vh = window.innerHeight;
+      const overflowsViewport = containerRect.bottom > vh;
+      if (overflowsViewport && !atPageBottom) {
+        setShowScrollDownButton(true);
+      } else if (atPageBottom && scrollClickState === 0) {
+        setShowScrollDownButton(false);
+      }
+    };
+
+    // Add scroll listeners
+    messageList.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleWindowScroll, { passive: true });
+
+    // Check initial scroll position
+    handleScroll();
+    handleWindowScroll();
+
+    return () => {
+      messageList.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleWindowScroll);
+    };
+  }, [loading, scrollClickState]);
+
+  // Function to scroll to bottom when button clicked
+  const handleScrollDownClick = () => {
+    if (scrollClickState === 0) {
+      // First click: Scroll to bottom of content but keep button visible
+      bottomOfListRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'end',
+      });
+      setScrollClickState(1);
+      // Explicitly ensure the button stays visible after the first click
+      setShowScrollDownButton(true);
+
+      // Focus on the input field if not on mobile
+      if (window.innerWidth >= 768 && textAreaRef.current) {
+        textAreaRef.current.focus();
+      }
+    } else {
+      // Second click: Scroll to very bottom of page and hide button
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: 'smooth',
+      });
+      setShowScrollDownButton(false);
+      setScrollClickState(0);
+
+      // Focus on the input field if not on mobile
+      if (window.innerWidth >= 768 && textAreaRef.current) {
+        textAreaRef.current.focus();
+      }
+    }
+  };
 
   // Render maintenance mode message if active
   if (isMaintenanceMode) {
@@ -944,6 +1016,24 @@ export default function Home({
                   </div>
                 )}
               <div ref={bottomOfListRef} style={{ height: '1px' }} />
+            </div>
+
+            {/* Container to anchor the scroll button at the right edge of the content */}
+            <div ref={scrollButtonContainerRef} className="relative w-full">
+              {/* Animated Scroll Down Button */}
+              <div
+                className={`fixed z-50 right-5 bottom-5 transition-all duration-300 ease-out transform 
+                  ${showScrollDownButton ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-8 opacity-0 pointer-events-none'}`}
+                style={{ willChange: 'transform, opacity' }}
+              >
+                <button
+                  onClick={handleScrollDownClick}
+                  aria-label="Scroll to bottom"
+                  className="bg-white text-gray-600 rounded-full shadow-sm hover:shadow-md p-2 border border-gray-200 focus:outline-none"
+                >
+                  <span className="material-icons text-xl">expand_more</span>
+                </button>
+              </div>
             </div>
           </div>
           <div className="mt-4 px-2 md:px-0">
