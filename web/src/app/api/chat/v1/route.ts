@@ -68,6 +68,7 @@ import { withAppRouterJwtAuth } from '@/utils/server/appRouterJwtUtils';
 import { JwtPayload } from '@/utils/server/jwtUtils';
 import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
 import * as corsMiddleware from '@/utils/server/corsMiddleware';
+import { determineActiveMediaTypes } from '@/utils/determineActiveMediaTypes';
 
 export const runtime = 'nodejs';
 export const maxDuration = 240;
@@ -146,36 +147,6 @@ type PineconeFilter = {
 
 // Helper function to determine active media types based on input and config
 // Export for testing
-function determineActiveMediaTypes(
-  mediaTypes: Partial<MediaTypes> | undefined,
-  configuredEnabledTypes: string[] | undefined,
-): string[] {
-  const enabledMediaTypes = configuredEnabledTypes || [
-    'text',
-    'audio',
-    'youtube',
-  ];
-  let activeTypes: string[] = [];
-
-  if (mediaTypes) {
-    enabledMediaTypes.forEach((type) => {
-      if (mediaTypes[type] === true) {
-        activeTypes.push(type);
-      }
-    });
-  }
-
-  // If no valid types were explicitly selected or provided, default to all enabled types
-  if (activeTypes.length === 0) {
-    console.log(
-      'No valid media types selected, defaulting to all enabled types:',
-      enabledMediaTypes,
-    );
-    activeTypes = enabledMediaTypes;
-  }
-
-  return activeTypes;
-}
 
 async function validateAndPreprocessInput(
   req: NextRequest,

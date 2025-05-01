@@ -39,6 +39,11 @@
 import { NextRequest } from 'next/server';
 import * as makeChainModule from '@/utils/server/makechain';
 import jwt from 'jsonwebtoken';
+import { POST } from '@/app/api/chat/v1/route';
+import {
+  determineActiveMediaTypes,
+  MediaTypes,
+} from '@/utils/determineActiveMediaTypes';
 
 // Ensure the SECURE_TOKEN env var is set for JWT tests
 process.env.SECURE_TOKEN = 'test-jwt-secret-key';
@@ -269,9 +274,6 @@ jest.mock('@/utils/server/appRouterJwtUtils', () => ({
   },
 }));
 
-// Import POST and the helper function only after all mocks are set up
-import { POST, determineActiveMediaTypes } from '@/app/api/chat/v1/route';
-
 // Setup for ReadableStream proxying
 const originalReadableStream = global.ReadableStream;
 global.ReadableStream = function (
@@ -383,14 +385,6 @@ global.ReadableStream = function (
     cancel: underlyingSource?.cancel,
   });
 } as unknown as typeof ReadableStream;
-
-// Add interface definition to match production code
-interface MediaTypes {
-  text?: boolean;
-  audio?: boolean;
-  youtube?: boolean;
-  [key: string]: boolean | undefined;
-}
 
 describe('Chat API Route', () => {
   beforeEach(() => {
