@@ -4,6 +4,12 @@ import { fileURLToPath } from 'url';
 import fs from 'fs'; // Import fs for file system checks
 
 export function loadEnv() {
+  // Only load from .env files in development
+  if (process.env.NODE_ENV !== 'development') {
+    console.log('Skipping .env file loading in production environment');
+    return;
+  }
+
   const site = process.env.SITE_ID || 'default';
   // Set SITE_ID early if not already set, needed for subsequent calls potentially
   if (!process.env.SITE_ID) {

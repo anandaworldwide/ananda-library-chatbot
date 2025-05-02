@@ -103,11 +103,9 @@ jest.mock('@/services/firebase', () => ({
 // Mock Pinecone to avoid loading env variables
 jest.mock('@/config/pinecone', () => ({
   getPineconeIndexName: jest.fn().mockReturnValue('test-index'),
-  loadEnvVariables: jest.fn().mockReturnValue({
-    pineconeIndex: 'test-index',
-    pineconeEnvironment: 'test-env',
-    pineconeApiKey: 'test-key',
-  }),
+  __test__: {
+    validatePineconeEnv: jest.fn(),
+  },
 }));
 
 // Mock the site config

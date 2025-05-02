@@ -2,7 +2,7 @@
 async function loadEnvAsync() {
   if (process.env.NODE_ENV === 'development') {
     try {
-      const { loadEnv } = await import('./utils/server/loadEnv.js');
+      const { loadEnv } = await import('./src/utils/server/loadEnv.js');
       loadEnv();
     } catch (error) {
       console.error('Failed to load environment variables:', error);
@@ -18,17 +18,17 @@ const path = require('path');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  
+
   // Ensure React and styled-jsx are resolved from parent node_modules
   webpack: (config, { dev, isServer }) => {
     // Resolve React and styled-jsx from parent node_modules
     config.resolve.alias = {
       ...config.resolve.alias,
-      'react': path.resolve(__dirname, '../node_modules/react'),
+      react: path.resolve(__dirname, '../node_modules/react'),
       'react-dom': path.resolve(__dirname, '../node_modules/react-dom'),
       'styled-jsx': path.resolve(__dirname, '../node_modules/styled-jsx'),
     };
-    
+
     // Force a single React instance
     config.resolve.modules = [
       path.resolve(__dirname, '../node_modules'),
@@ -49,7 +49,7 @@ const nextConfig = {
   },
 
   // Add any additional Next.js config options below
-  
+
   experimental: {
     appDir: false, // Use pages router until app router is fully implemented
   },
@@ -58,7 +58,7 @@ const nextConfig = {
   async rewrites() {
     return [];
   },
-  
+
   // Handle image domains for next/image if needed
   images: {
     domains: ['www.crystalclarity.com'],
