@@ -30,6 +30,62 @@ import { SudoProvider } from '@/contexts/SudoContext';
 import { useAnswers } from '@/hooks/useAnswers';
 import { useMutation } from '@tanstack/react-query';
 import { queryFetch } from '@/utils/client/reactQueryConfig';
+import { Answer } from '@/types/answer';
+
+// **TIMEOUT DEBUGGING START**
+// Debug helper to track API request performance
+const apiDebug = {
+  requestStartTime: 0,
+  logRequestStart: function (page: number, sortBy: string) {
+    this.requestStartTime = performance.now();
+    console.log(
+      `[API-DEBUG] Starting answers request: page=${page}, sortBy=${sortBy} at ${new Date().toISOString()}`,
+    );
+  },
+  logRequestEnd: function (success: boolean, dataSize?: number) {
+    const duration = Math.round(performance.now() - this.requestStartTime);
+    console.log(
+      `[API-DEBUG] Request ${success ? 'succeeded' : 'failed'} after ${duration}ms`,
+    );
+    if (success && dataSize !== undefined) {
+      console.log(`[API-DEBUG] Received ${dataSize} answers`);
+    }
+  },
+  logError: function (error: unknown) {
+    const duration = Math.round(performance.now() - this.requestStartTime);
+    console.error(
+      `[API-DEBUG] Request failed after ${duration}ms with error:`,
+      error,
+    );
+
+    // Try to extract more detailed error information
+    if (error instanceof Error) {
+      console.error(
+        `[API-DEBUG] Error name: ${error.name}, message: ${error.message}`,
+      );
+      console.error(`[API-DEBUG] Stack trace: ${error.stack}`);
+    }
+
+    // Try to get network information if available
+    try {
+      // Check for connection API without TypeScript errors
+      const nav = navigator as any;
+      const connectionInfo =
+        nav.connection || nav.mozConnection || nav.webkitConnection;
+      if (connectionInfo) {
+        console.log(`[API-DEBUG] Network info:`, {
+          type: connectionInfo.type,
+          effectiveType: connectionInfo.effectiveType,
+          downlink: connectionInfo.downlink,
+          rtt: connectionInfo.rtt,
+        });
+      }
+    } catch (e) {
+      // Ignore errors from accessing connection info
+    }
+  },
+};
+// **TIMEOUT DEBUGGING END**
 
 interface AllAnswersProps {
   siteConfig: SiteConfig | null;
@@ -53,31 +109,81 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   const [likeStatuses, setLikeStatuses] = useState<Record<string, boolean>>({});
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
   const [likeError, setLikeError] = useState<string | null>(null);
+  // **TIMEOUT DEBUGGING START**
+  // Add state for API errors to display more details to the user when needed
+  const [apiErrorDetails, setApiErrorDetails] = useState<string | null>(null);
+  // **TIMEOUT DEBUGGING END**
 
   // Refs for scroll management
   const scrollPositionRef = useRef<number>(0);
   const hasInitiallyFetched = useRef(false);
 
+  // **TIMEOUT DEBUGGING START**
   // State for delayed spinner
   const [showDelayedSpinner, setShowDelayedSpinner] = useState(false);
+  const [showExtendedLoadingMessage, setShowExtendedLoadingMessage] =
+    useState(false);
+
+  // Start tracking API request when parameters change
+  useEffect(() => {
+    if (isSortByInitialized && router.isReady) {
+      apiDebug.logRequestStart(currentPage, sortBy);
+    }
+  }, [currentPage, sortBy, isSortByInitialized, router.isReady]);
+  // **TIMEOUT DEBUGGING END**
 
   // Use React Query for data fetching with JWT authentication
   const { data, isLoading, error } = useAnswers(currentPage, sortBy, {
     enabled: isSortByInitialized && router.isReady,
-  });
+    onSuccess: (responseData: { answers: Answer[]; totalPages: number }) => {
+      apiDebug.logRequestEnd(true, responseData?.answers?.length);
+      setApiErrorDetails(null);
+    },
+    onError: (queryError: Error) => {
+      apiDebug.logError(queryError);
 
+      // Provide more detailed error message for timeouts and other issues
+      if (queryError instanceof Error) {
+        if (
+          queryError.message.includes('timeout') ||
+          queryError.message.includes('network')
+        ) {
+          setApiErrorDetails(
+            `Request timed out. This could be due to high server load or network issues. 
+            Please try refreshing the page or try again later. (Error: ${queryError.message})`,
+          );
+        } else {
+          setApiErrorDetails(`Error details: ${queryError.message}`);
+        }
+      }
+    },
+  } as any);
+
+  // **TIMEOUT DEBUGGING START**
   // Show delayed spinner for long-running loads
   useEffect(() => {
     // Set a timeout to show the spinner after 1.5 seconds
-    const timer = setTimeout(() => {
+    const spinner = setTimeout(() => {
       if (isLoading) {
         setShowDelayedSpinner(true);
       }
     }, 1500);
 
+    // Set a timeout to show extended loading message after 8 seconds
+    const extended = setTimeout(() => {
+      if (isLoading) {
+        setShowExtendedLoadingMessage(true);
+        console.log('[API-DEBUG] Extended loading time detected');
+      }
+    }, 8000);
+
     // Clear the timeout if the component unmounts or isLoading changes to false
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(spinner);
+      clearTimeout(extended);
+    };
   }, [isLoading]);
+  // **TIMEOUT DEBUGGING END**
 
   // Set initial load state when data is loaded
   useEffect(() => {
@@ -384,20 +490,35 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
         <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
           {/* Loading spinner */}
           {(isLoading && !initialLoadComplete) || isChangingPage ? (
-            <div className="flex justify-center items-center h-screen">
+            // **TIMEOUT DEBUGGING START**
+            <div className="flex flex-col justify-center items-center h-screen">
               <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
-              <p className="text-lg text-gray-600 ml-4">
-                {showDelayedSpinner ? 'Still loading...' : 'Loading...'}
+              <p className="text-lg text-gray-600 mt-4">
+                {showExtendedLoadingMessage
+                  ? 'Still loading... This is taking longer than expected.'
+                  : showDelayedSpinner
+                    ? 'Still loading...'
+                    : 'Loading...'}
               </p>
+              {showExtendedLoadingMessage && (
+                <p className="text-sm text-gray-500 mt-2 max-w-md text-center">
+                  We were unable to load the content. You can try refreshing the
+                  page if this continues.
+                </p>
+              )}
             </div>
           ) : (
+            // **TIMEOUT DEBUGGING END**
             <div key={`${currentPage}-${sortBy}`}>
               {/* Error state */}
               {error && (
                 <div className="text-red-500 text-center my-6">
-                  {error instanceof Error
-                    ? error.message
-                    : 'Error loading answers'}
+                  {/* **TIMEOUT DEBUGGING START** */}
+                  {apiErrorDetails ||
+                    (error instanceof Error
+                      ? error.message
+                      : 'Error loading answers')}
+                  {/* **TIMEOUT DEBUGGING END** */}
                 </div>
               )}
 

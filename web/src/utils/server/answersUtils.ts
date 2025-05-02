@@ -111,29 +111,96 @@ function getCacheKeyForDocumentCount(): string {
 export async function getTotalDocuments(): Promise<number> {
   const cacheKey = getCacheKeyForDocumentCount();
 
-  // Try to get the count from cache
-  const cachedCount = await getFromCache<string>(cacheKey);
-  if (cachedCount !== null) {
-    return parseInt(cachedCount, 10);
+  // **TIMEOUT DEBUGGING START**
+  const startTime = Date.now();
+
+  try {
+    // **TIMEOUT DEBUGGING END**
+    // Try to get the count from cache
+    const cachedCount = await getFromCache<string>(cacheKey);
+    if (cachedCount !== null) {
+      return parseInt(cachedCount, 10);
+    }
+
+    // Check if db is available
+    if (!db) {
+      throw new Error('Database not available');
+    }
+
+    // **TIMEOUT DEBUGGING START**
+    // Log the site and collection for debugging
+    console.log(
+      `[PERF-DEBUG] Getting total documents for collection: ${getAnswersCollectionName()}`,
+    );
+    console.log(`[PERF-DEBUG] Site ID: ${process.env.SITE_ID || 'default'}`);
+
+    // If not in cache, count the documents with timeout protection
+    let count = 0;
+
+    // Safety timeout - in case stream gets stuck
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Document counting operation timed out after 10s'));
+      }, 10000); // 10 second safety timeout
+    });
+
+    // Actual document counting operation
+    const countPromise = (async () => {
+      const stream = db.collection(getAnswersCollectionName()).stream();
+      // Count documents using a stream to handle large collections efficiently
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _ of stream) {
+        count++;
+      }
+      return count;
+    })();
+
+    // Race the counting operation against the timeout
+    count = await Promise.race([countPromise, timeoutPromise]);
+
+    console.log(
+      `[PERF-DEBUG] Counted ${count} documents in ${Date.now() - startTime}ms`,
+    );
+    // **TIMEOUT DEBUGGING END**
+
+    // Cache the result for future use
+    await setInCache(cacheKey, count.toString(), CACHE_EXPIRATION);
+
+    return count;
+    // **TIMEOUT DEBUGGING START**
+  } catch (error) {
+    console.error(
+      `[PERF-DEBUG] Error counting documents after ${Date.now() - startTime}ms:`,
+      error,
+    );
+
+    // Fallback to a direct count query if streaming fails
+    if (db) {
+      try {
+        console.log('[PERF-DEBUG] Attempting fallback count method');
+        const snapshot = await db
+          .collection(getAnswersCollectionName())
+          .count()
+          .get();
+        const count = snapshot.data().count;
+
+        console.log(`[PERF-DEBUG] Fallback count: ${count} documents`);
+
+        // Still cache this result
+        await setInCache(cacheKey, count.toString(), CACHE_EXPIRATION);
+
+        return count;
+      } catch (fallbackError) {
+        console.error(
+          '[PERF-DEBUG] Fallback count also failed:',
+          fallbackError,
+        );
+      }
+    }
+
+    // If all else fails, return 0 to prevent API timeout
+    console.log('[PERF-DEBUG] Returning default count of 0 to prevent timeout');
+    return 0;
   }
-
-  // Check if db is available
-  if (!db) {
-    throw new Error('Database not available');
-  }
-
-  // If not in cache, count the documents
-  let count = 0;
-  const stream = db.collection(getAnswersCollectionName()).stream();
-
-  // Count documents using a stream to handle large collections efficiently
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for await (const _ of stream) {
-    count++;
-  }
-
-  // Cache the result for future use
-  await setInCache(cacheKey, count.toString(), CACHE_EXPIRATION);
-
-  return count;
+  // **TIMEOUT DEBUGGING END**
 }
