@@ -4,20 +4,30 @@ import {
   PutObjectCommand,
   S3ServiceException,
 } from '@aws-sdk/client-s3';
-import { loadEnv } from '../../utils/server/loadEnv';
+import { loadEnv } from '../src/utils/server/loadEnv.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PROJECT_ROOT = path.join(__dirname, '..');
-const STAGING_DIR = path.join(PROJECT_ROOT, '.prompts-staging');
+const STAGING_DIR = path.join(__dirname, '.prompts-staging');
 const LOCK_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
+// Helper to directly load environment from project root
+function loadEnvironmentDirectly(site: string) {
+  const projectRoot = path.join(__dirname, '..', '..');
+  const envFile = path.join(projectRoot, `.env.${site}`);
+  const result = dotenv.config({ path: envFile });
+  if (result.error) {
+    console.error(`Error loading env file: ${result.error}`);
+  }
+}
 
 interface LockInfo {
   user: string;
@@ -25,7 +35,7 @@ interface LockInfo {
 }
 
 function createS3Client() {
-  const region = process.env.AWS_REGION || 'us-west-1'; // Changed default to match your bucket
+  const region = process.env.AWS_REGION || 'us-west-1';
   return new S3Client({
     region,
     endpoint: `https://s3.${region}.amazonaws.com`,
@@ -62,41 +72,48 @@ async function acquireLock(bucket: string, key: string): Promise<boolean> {
   const lockKey = `${key}.lock`;
   try {
     // Check if lock exists and is still valid
-    const existingLock = await s3Client.send(
-      new GetObjectCommand({
-        Bucket: bucket,
-        Key: lockKey,
-      }),
-    );
-
-    if (existingLock.Body) {
-      const lockInfo: LockInfo = JSON.parse(
-        await streamToString(existingLock.Body as Readable),
+    try {
+      const existingLock = await s3Client.send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: lockKey,
+        }),
       );
-      if (Date.now() - lockInfo.timestamp < LOCK_TIMEOUT) {
-        console.error(
-          `File is locked by ${lockInfo.user} for another ${Math.round((LOCK_TIMEOUT - (Date.now() - lockInfo.timestamp)) / 1000)} seconds`,
-        );
-        return false;
+
+      if (existingLock.Body) {
+        const lockContent = await streamToString(existingLock.Body as Readable);
+        const lockInfo: LockInfo = JSON.parse(lockContent);
+        const lockAge = Date.now() - lockInfo.timestamp;
+
+        if (lockAge < LOCK_TIMEOUT) {
+          console.error(
+            `File is locked by ${lockInfo.user} for another ${Math.round((LOCK_TIMEOUT - lockAge) / 1000)} seconds`,
+          );
+          return false;
+        }
       }
+    } catch (lockErr) {
+      // Continue if no lock exists
     }
 
     // Create/update lock
     const username = process.env.USER || 'unknown';
+    const lockContent = JSON.stringify({
+      user: username,
+      timestamp: Date.now(),
+    });
+
     await s3Client.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: lockKey,
-        Body: JSON.stringify({ user: username, timestamp: Date.now() }),
+        Body: lockContent,
       }),
     );
     return true;
   } catch (error) {
-    if (error instanceof S3ServiceException && error.name !== 'NoSuchKey') {
-      console.error('Failed to acquire lock:', error);
-      return false;
-    }
-    return true;
+    console.error('Failed to acquire lock:', error);
+    return false;
   }
 }
 
@@ -286,9 +303,9 @@ async function main() {
 
   // Set SITE_ID for loadEnv
   process.env.SITE_ID = site;
-  loadEnv();
+  // Use our direct environment loader
+  loadEnvironmentDirectly(site);
   await initS3Client();
-
   await ensureStagingDir();
 
   switch (command) {
@@ -299,13 +316,17 @@ async function main() {
       await pushPrompt(filename);
       break;
     case 'edit':
+      // First pull the file to make sure we have the latest version
+      await pullPrompt(filename);
       await editPrompt(filename);
       break;
     case 'diff':
       await diffPrompt(filename);
       break;
     default:
-      console.error('Unknown command. Use: pull, push, edit, or diff');
+      console.error(
+        `Unknown command: ${command}. Use: pull, push, edit, or diff`,
+      );
       process.exit(1);
   }
 }

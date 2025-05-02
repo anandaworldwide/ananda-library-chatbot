@@ -8,15 +8,11 @@
   "scripts": {
     "dev:root": "node scripts/dev.js",
     "ingest": "NODE_OPTIONS='--max-old-space-size=6000' tsx -r dotenv/config scripts/ingest-text-data.ts",
-    "ingest-trace": "NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' tsx -r dotenv/config scripts/ingest-text-data.ts",
-    "prompt": "tsx -r dotenv/config scripts/manage-prompts.ts"
+    "ingest-trace": "NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' tsx -r dotenv/config scripts/ingest-text-data.ts"
   },
-  "dependencies": {
-  },
-  "devDependencies": {
-  },
-  "keywords": [
-  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "keywords": [],
   "engines": {
     "node": "^20.0.0"
   }

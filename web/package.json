@@ -27,7 +27,8 @@
     "find-untested": "node ../scripts/find-untested-files.js",
     "emulator": "firebase emulators:start --import ../emulator-data --export-on-exit ../emulator-data --inspect-functions",
     "prepare": "cd .. && command -v husky >/dev/null 2>&1 && husky || true",
-    "setup-hooks": "cd .. && husky"
+    "setup-hooks": "cd .. && husky",
+    "prompt": "tsx -r dotenv/config scripts/manage-prompts.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sts": "^3.799.0",

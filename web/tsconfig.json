@@ -39,6 +39,7 @@
     ".next/types/**/*.ts",
     "src/utils/server/loadEnv.js",
     "src/types/**/*.d.ts",
+    "scripts/**/*.ts",
     "jest.setup.ts"
   ],
   "exclude": ["node_modules"]
