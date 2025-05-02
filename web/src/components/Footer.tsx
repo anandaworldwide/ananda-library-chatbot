@@ -18,7 +18,7 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
       {/* Admin section for sudo users */}
       {isSudoUser && (
         <div className="bg-gray-100 text-gray-700 py-2 border-t border-t-slate-200 mt-4">
-          <div className="container mx-auto flex justify-center items-center">
+          <div className="mx-auto max-w-[800px] px-4">
             <div className="flex flex-col items-center w-full">
               <span className="font-bold mb-2 text-center w-full">ADMIN:</span>
               <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full sm:flex sm:flex-row sm:space-x-2 sm:space-y-0 sm:grid-cols-1">
@@ -83,7 +83,7 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
       )}
       {/* Main footer section */}
       <footer className="bg-white text-gray-500 py-4 border-t border-t-slate-200">
-        <div className="container mx-auto flex justify-center items-center">
+        <div className="mx-auto max-w-[800px] px-4">
           <div className="flex flex-wrap justify-center items-center">
             {footerConfig.links.map((link, index) => {
               // Add default icons if not specified in config
