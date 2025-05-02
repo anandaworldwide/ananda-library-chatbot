@@ -97,6 +97,7 @@
     "allowedFrontEndDomains": [
       "ananda.org",
       "www.ananda.org",
+      "vivek.ananda.org",
       "chat.ananda.org",
       "staging.ananda.org",
       "vayudev.ananda.org",

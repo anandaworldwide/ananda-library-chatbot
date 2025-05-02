@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define default API URLs
-define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://chat.ananda.org');
+define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://vivek.ananda.org');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000');
 
 // Define plugin version at the top with other constants
@@ -167,7 +167,7 @@ function aichatbot_settings_page() {
                         <input type="url" id="aichatbot_vercel_url" name="aichatbot_vercel_url" 
                                value="<?php echo esc_attr(get_option('aichatbot_vercel_url')); ?>" size="50" />
                         <p class="description">
-                            Enter the base URL of your API (e.g., 'https://chat.ananda.org' or 'http://localhost:3000'). 
+                            Enter the base URL of your API (e.g., 'https://vivek.ananda.org' or 'http://localhost:3000'). 
                             This should be just the domain without any paths or trailing slashes. If left empty, 
                             <code><?php echo htmlspecialchars(AICHATBOT_DEFAULT_PRODUCTION_URL, ENT_QUOTES, 'UTF-8'); ?></code> will be used.
                         </p>

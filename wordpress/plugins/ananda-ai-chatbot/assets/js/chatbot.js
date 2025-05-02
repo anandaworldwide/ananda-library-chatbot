@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Default base URL
-  const DEFAULT_BASE_URL = 'https://chat.ananda.org';
+  const DEFAULT_BASE_URL = 'https://vivek.ananda.org';
 
   // Clean the base URL by removing trailing slashes
   function getBaseUrl() {
@@ -343,7 +343,10 @@ document.addEventListener('DOMContentLoaded', () => {
     input.style.height = 'auto';
 
     // Set the height to scrollHeight to fit all content (up to max-height in CSS)
-    input.style.height = `${Math.min(input.scrollHeight, window.innerHeight * 0.4)}px`;
+    input.style.height = `${Math.min(
+      input.scrollHeight,
+      window.innerHeight * 0.4,
+    )}px`;
 
     // If content is longer than max height, keep the scrollbar
     if (input.scrollHeight > window.innerHeight * 0.4) {
@@ -1494,7 +1497,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({})); // Try to get JSON error
         throw new Error(
-          `API Error (${response.status}): ${errorData.message || response.statusText}`,
+          `API Error (${response.status}): ${
+            errorData.message || response.statusText
+          }`,
         );
       }
 
