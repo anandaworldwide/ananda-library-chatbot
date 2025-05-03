@@ -34,6 +34,8 @@ chardet==5.2.0
     # via readability-lxml
 charset-normalizer==3.4.1
     # via requests
+click==8.1.8
+    # via nltk
 colorama==0.4.6
     # via -r requirements.in
 cryptography==44.0.2
@@ -80,6 +82,8 @@ jmespath==1.0.1
     # via
     #   boto3
     #   botocore
+joblib==1.4.2
+    # via nltk
 jsonpatch==1.33
     # via langchain-core
 jsonpointer==3.0.0
@@ -102,7 +106,9 @@ mutagen==1.47.0
     # via
     #   -r requirements.in
     #   yt-dlp
-numpy==2.2.3
+nltk==3.8.1
+    # via -r requirements.in
+numpy==1.26.4
     # via
     #   imageio
     #   moviepy
@@ -163,7 +169,9 @@ pyyaml==6.0.2
 readability-lxml==0.8.1
     # via -r requirements.in
 regex==2024.11.6
-    # via tiktoken
+    # via
+    #   nltk
+    #   tiktoken
 requests==2.32.3
     # via
     #   langsmith
@@ -196,6 +204,7 @@ tqdm==4.66.4
     # via
     #   -r requirements.in
     #   moviepy
+    #   nltk
     #   openai
     #   pinecone-client
     #   proglog
