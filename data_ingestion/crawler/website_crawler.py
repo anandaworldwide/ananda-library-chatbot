@@ -540,7 +540,7 @@ class WebsiteCrawler:
 
     def create_embeddings(self, chunks: List[str], url: str, page_title: str) -> List[Dict]:
         """Create embeddings for text chunks."""
-        embeddings = OpenAIEmbeddings()
+        embeddings = OpenAIEmbeddings({ model: 'text-embedding-ada-002' })
         vectors = []
         
         clean_title = sanitize_for_id(page_title)

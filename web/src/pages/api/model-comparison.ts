@@ -54,7 +54,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX_NAME || '');
 
     const vectorStore = await PineconeStore.fromExistingIndex(
-      new OpenAIEmbeddings({}),
+      new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
       { pineconeIndex },
     );
 

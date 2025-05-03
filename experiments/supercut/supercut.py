@@ -57,7 +57,7 @@ print(f"Connecting to Pinecone index: {index_name}")
 index = pc.Index(index_name)
 
 class SupercutGenerator:
-    def __init__(self, model="text-embedding-3-small"):
+    def __init__(self, model="text-embedding-ada-002"):
         self.client = OpenAI()
         self.model = model
         self.cache_dir = Path("cache")
@@ -97,7 +97,7 @@ class SupercutGenerator:
         """Generate embedding for search query"""
         response = self.client.embeddings.create(
             input=query,
-            model="text-embedding-3-small"
+            model="text-embedding-ada-002"
         )
         return response.data[0].embedding
     

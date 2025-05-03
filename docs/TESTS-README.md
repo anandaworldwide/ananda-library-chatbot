@@ -49,7 +49,7 @@ predefined canonical (ideal) responses.
 
 ### How It Works
 
-1. **Embedding Model**: Uses an embedding model (e.g., OpenAI's `text-embedding-3-small` via the `openai` library)
+1. **Embedding Model**: Uses an embedding model (e.g., OpenAI's `text-embedding-ada-002` via the `openai` library)
    to convert text into numerical vectors. It's crucial to use the same model family as the one
    potentially used for generating embeddings in the main application.
 2. **Canonical Responses**: For each test query, define one or more `canonical_responses` representing acceptable

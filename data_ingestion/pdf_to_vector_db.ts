@@ -477,7 +477,7 @@ export const run = async (keepData: boolean, libraryName: string) => {
 
   try {
     const vectorStore = await PineconeStore.fromExistingIndex(
-      new OpenAIEmbeddings(),
+      new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
       {
         pineconeIndex,
         textKey: 'text',
