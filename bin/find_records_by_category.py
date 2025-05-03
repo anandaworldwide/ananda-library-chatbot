@@ -11,7 +11,6 @@ import os
 import sys
 import argparse
 from pinecone import Pinecone, NotFoundException
-# OpenAIEmbeddings no longer needed
 import time
 
 # Add the python directory to the path so we can import util
