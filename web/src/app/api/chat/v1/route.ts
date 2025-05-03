@@ -69,6 +69,7 @@ import { JwtPayload } from '@/utils/server/jwtUtils';
 import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
 import * as corsMiddleware from '@/utils/server/corsMiddleware';
 import { determineActiveMediaTypes } from '@/utils/determineActiveMediaTypes';
+import * as pineconeDebug from '@/utils/server/pinecone-debug';
 
 export const runtime = 'nodejs';
 export const maxDuration = 240;
@@ -275,9 +276,13 @@ async function setupPineconeAndFilter(
     siteConfig.enabledMediaTypes,
   );
 
+  // Create a cleaner filter structure - initialize with empty $and array
   const filter: PineconeFilter = {
-    $and: [{ type: { $in: activeTypes } }],
+    $and: [],
   };
+
+  // Add media type filter
+  filter.$and.push({ type: { $in: activeTypes } });
 
   // Apply collection-specific filters only if the collection exists in siteConfig
   if (siteConfig.collectionConfig && siteConfig.collectionConfig[collection]) {
@@ -289,19 +294,16 @@ async function setupPineconeAndFilter(
     }
   }
 
-  // Apply library filter only if includedLibraries is non-empty
-  if (siteConfig.includedLibraries && siteConfig.includedLibraries.length > 0) {
-    const libraryNames = siteConfig.includedLibraries.map((lib) =>
-      typeof lib === 'string' ? lib : lib.name,
-    );
-    filter.$and.push({ library: { $in: libraryNames } });
-  }
+  // If you need to pass filter to makeChain in the future, you might need to add library filters here
+  // But don't add redundant library filters if makeChain is already handling it
 
-  // === START TEST FILTER ===
-  // Hardcoded filter to exclude the "Ministry" category
-  // filter.$and.push({ categories: { $nin: ['Ministry'] } });
-  // console.log("🧪 TEST FILTER APPLIED: Excluding 'Ministry' category.");
-  // === END TEST FILTER ===
+  // Log the finalized filter for debugging
+  console.log(`\n===== DEBUG: FINAL PINECONE FILTER =====`);
+  console.log(`Collection: ${collection}`);
+  console.log(`Media types: ${JSON.stringify(activeTypes)}`);
+  console.log(`Filter structure: ${JSON.stringify(filter, null, 2)}`);
+  console.log(`SiteID: ${siteConfig.siteId}`);
+  console.log(`=========================================\n`);
 
   const setupTime = Date.now() - startTime;
   if (setupTime > 50) {
@@ -335,9 +337,38 @@ async function setupVectorStoreAndRetriever(
   };
 
   const vectorStore = await PineconeStore.fromExistingIndex(
-    new OpenAIEmbeddings({}),
+    new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
+    // new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
     vectorStoreOptions,
   );
+
+  // DEBUG: Wrap the similarity search method to add logging
+  const originalSimilaritySearch =
+    vectorStore.similaritySearch.bind(vectorStore);
+  vectorStore.similaritySearch = async (
+    query: string,
+    k: number,
+    filter?: any,
+  ) => {
+    // Log the search parameters
+    console.log(`\n===== DEBUG: WEBSITE VECTOR STORE SEARCH =====`);
+    console.log(`Query: ${query}`);
+    console.log(`k: ${k}`);
+    console.log(`Filter: ${JSON.stringify(filter, null, 2)}`);
+
+    // Call the original method
+    const startTime = Date.now();
+    const results = await originalSimilaritySearch(query, k, filter);
+    const duration = Date.now() - startTime;
+
+    // Log the results
+    console.log(
+      `Search completed in ${duration}ms, returned ${results.length} results`,
+    );
+    pineconeDebug.logPineconeResults(results, 'WEBSITE');
+
+    return results;
+  };
 
   const retrieverStartTime = Date.now();
 
@@ -570,7 +601,8 @@ async function handleComparisonRequest(
         };
 
         const vectorStore = await PineconeStore.fromExistingIndex(
-          new OpenAIEmbeddings({}),
+          new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
+          // new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
           vectorStoreOptions,
         );
 

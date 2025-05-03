@@ -309,13 +309,31 @@ async function retrieveDocumentsByLibrary(
 
   let finalFilter: Record<string, unknown>;
   if (baseFilter) {
-    // Merge baseFilter with libraryFilter using $and
-    finalFilter = {
-      $and: [baseFilter, libraryFilter],
-    };
+    // Cleaner approach to merge filters with $and
+    if ('$and' in baseFilter) {
+      // If baseFilter already has $and, just add our library filter to it
+      finalFilter = {
+        ...baseFilter,
+        $and: [
+          ...(baseFilter.$and as Array<Record<string, unknown>>),
+          libraryFilter,
+        ],
+      };
+    } else {
+      // Otherwise create a new $and array with both filters
+      finalFilter = {
+        $and: [baseFilter, libraryFilter],
+      };
+    }
   } else {
     finalFilter = libraryFilter;
   }
+
+  // DEBUG: Log the final filter
+  console.log(
+    `Library query for "${libraryName}" with filter:`,
+    JSON.stringify(finalFilter, null, 2),
+  );
 
   const documents = await retriever.vectorStore.similaritySearch(
     query,
@@ -452,20 +470,46 @@ export const makeChain = async (
             allDocuments.push(...docs);
           });
         } else {
-          // If all libraries have equal weight or no weights, we can use a single query with $or filter
+          // If all libraries have equal weight or no weights, use a single query with library filter
           // This avoids multiple parallel queries when not needed
-          const libraryFilters = includedLibraries.map((lib) => ({
-            library: lib,
-          }));
+
+          // Extract library names for filtering
+          const libraryNames = includedLibraries.map((lib) =>
+            typeof lib === 'string' ? lib : lib.name,
+          );
+
           let finalFilter: Record<string, unknown>;
 
+          // Use a cleaner $in filter structure for libraries instead of $or with multiple conditions
+          const libraryFilter = { library: { $in: libraryNames } };
+
+          // Combine with baseFilter if it exists
           if (baseFilter) {
-            finalFilter = {
-              $and: [baseFilter, { $or: libraryFilters }],
-            };
+            if ('$and' in baseFilter) {
+              // If baseFilter already has $and, add our library filter to it
+              finalFilter = {
+                ...baseFilter,
+                $and: [
+                  ...(baseFilter.$and as Array<Record<string, unknown>>),
+                  libraryFilter,
+                ],
+              };
+            } else {
+              // Otherwise create a new $and array with both filters
+              finalFilter = {
+                $and: [baseFilter, libraryFilter],
+              };
+            }
           } else {
-            finalFilter = { $or: libraryFilters };
+            // No baseFilter, just use the library filter
+            finalFilter = libraryFilter;
           }
+
+          // DEBUG: Log the final filter
+          console.log(
+            `Non-weighted library query with filter:`,
+            JSON.stringify(finalFilter, null, 2),
+          );
 
           const docs = await retriever.vectorStore.similaritySearch(
             input.question,
@@ -473,12 +517,6 @@ export const makeChain = async (
             finalFilter,
           );
           allDocuments.push(...docs);
-
-          // Log library statistics if needed
-          includedLibraries.forEach((lib) => {
-            const name = typeof lib === 'string' ? lib : lib.name;
-            loggedLibraries.add(name);
-          });
         }
       }
 
