@@ -42,7 +42,7 @@ describe('Document Retrieval Logic', () => {
     jest.spyOn(path, 'join').mockImplementation((...args) => args.join('/'));
   });
 
-  test('should use a single query with $or filter for unweighted libraries', async () => {
+  test('should use a single query with $in filter for unweighted libraries', async () => {
     // Mock config with unweighted libraries (string array)
     const mockConfig = {
       'test-site': {
@@ -63,55 +63,44 @@ describe('Document Retrieval Logic', () => {
     });
 
     // Create a mock vectorStore with spied similaritySearch
-    const mockSimilaritySearch = jest.fn().mockResolvedValue([
-      new Document({
-        pageContent: 'test',
-        metadata: { library: 'library1' },
-      }),
-    ]);
-
+    const mockSimilaritySearch = jest
+      .fn()
+      .mockResolvedValue([
+        { pageContent: 'Test content', metadata: { library: 'library1' } },
+      ]);
     const mockVectorStore = { similaritySearch: mockSimilaritySearch };
-
     // Create a mock retriever
     const mockRetriever = { vectorStore: mockVectorStore };
 
     // Import the real module now that mocks are set up
     const { makeChain } = await import('../../../src/utils/server/makechain');
 
-    // Call makeChain
+    // Call makeChain to create the chain
     const chain = await makeChain(mockRetriever as any, {
       model: 'gpt-4o',
       temperature: 0.5,
     });
 
-    // Try to execute the chain
+    // Try to execute the chain to trigger retrieval logic
     try {
       await chain.invoke({ question: 'test question', chat_history: '' });
     } catch (error) {
       // Expected error - we're not fully mocking the chain execution
     }
 
-    // Check if a single query was made with $or filter
-    const orFilterCalls = mockSimilaritySearch.mock.calls.filter(
-      (call) => call[2] && call[2].$or,
-    );
+    expect(mockSimilaritySearch).toHaveBeenCalled();
 
-    // Verify we have at least one call with an $or filter
-    expect(orFilterCalls.length).toBeGreaterThan(0);
+    // Verify we have at least one call with an $in filter for libraries
+    const inFilterCalls = mockSimilaritySearch.mock.calls.filter(
+      (call) => call[2] && call[2].library && call[2].library.$in,
+    );
+    expect(inFilterCalls.length).toBeGreaterThan(0);
 
     // Verify all expected libraries are in the filter
-    const libraryFilters = orFilterCalls[0][2].$or.map(
-      (f: { library: string }) => f.library,
-    );
-    expect(libraryFilters).toEqual(
+    const libraryList = inFilterCalls[0][2].library.$in;
+    expect(libraryList).toEqual(
       expect.arrayContaining(['library1', 'library2', 'library3']),
     );
-
-    // Verify we don't have separate calls for individual libraries
-    const individualLibraryCalls = mockSimilaritySearch.mock.calls.filter(
-      (call) => call[2] && call[2].library,
-    );
-    expect(individualLibraryCalls.length).toBe(0);
   });
 
   test('should use multiple queries when libraries have weights', async () => {
@@ -214,52 +203,61 @@ describe('Document Retrieval Logic', () => {
 
     // Create a mock vectorStore with spied similaritySearch
     const mockSimilaritySearch = jest.fn().mockResolvedValue([
-      new Document({
-        pageContent: 'test',
-        metadata: { library: 'library1' },
-      }),
+      {
+        pageContent: 'Test content',
+        metadata: { library: 'library1', type: 'article' },
+      },
     ]);
-
     const mockVectorStore = { similaritySearch: mockSimilaritySearch };
-
     // Create a mock retriever
     const mockRetriever = { vectorStore: mockVectorStore };
-
-    // Custom baseFilter to apply
-    const baseFilter = { type: 'article' };
 
     // Import the real module now that mocks are set up
     const { makeChain } = await import('../../../src/utils/server/makechain');
 
-    // Call makeChain with baseFilter
+    // Call makeChain with a base filter
+    const baseFilter = { type: 'article' };
     const chain = await makeChain(
       mockRetriever as any,
-      { model: 'gpt-4o', temperature: 0.5 },
-      4, // sourceCount
+      {
+        model: 'gpt-4o',
+        temperature: 0.5,
+      },
+      4,
       baseFilter,
     );
 
-    // Try to execute the chain
+    // Try to execute the chain to trigger retrieval logic
     try {
       await chain.invoke({ question: 'test question', chat_history: '' });
     } catch (error) {
       // Expected error - we're not fully mocking the chain execution
     }
 
-    // Find the call with an $and filter
+    expect(mockSimilaritySearch).toHaveBeenCalled();
+
+    // Verify we have at least one call with an $and filter combining baseFilter and library $in
     const andFilterCalls = mockSimilaritySearch.mock.calls.filter(
       (call) => call[2] && call[2].$and,
     );
-
-    // Check that we have at least one call with an $and filter
     expect(andFilterCalls.length).toBeGreaterThan(0);
 
-    // Check that the baseFilter is included in the $and array
+    // Extract the $and filter
     const andFilter = andFilterCalls[0][2].$and;
     expect(andFilter).toContainEqual({ type: 'article' });
 
-    // Check that the library filter is also included
-    const hasLibraryFilter = andFilter.some((filter: any) => filter.$or);
+    // Check that the library filter is also included with $in within $and
+    const hasLibraryFilter = andFilter.some(
+      (filter: any) => filter.library && filter.library.$in,
+    );
     expect(hasLibraryFilter).toBe(true);
+
+    // Verify all expected libraries are in the filter
+    const libraryFilter = andFilter.find(
+      (filter: any) => filter.library && filter.library.$in,
+    );
+    expect(libraryFilter.library.$in).toEqual(
+      expect.arrayContaining(['library1', 'library2']),
+    );
   });
 });
