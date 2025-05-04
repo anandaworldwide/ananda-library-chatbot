@@ -17,6 +17,7 @@ import time
 import argparse
 import re
 import subprocess
+import shutil
 from typing import List, Dict, Any, Optional, Set, Tuple
 from dotenv import load_dotenv
 from pinecone import Pinecone
@@ -47,6 +48,7 @@ Review each document below and assign a relevance score:
 - **0**: Irrelevant - Not related to the query
 
 *Skip duplicate entries to avoid overfitting the model.*
+
 
 ## Documents
 
@@ -119,6 +121,10 @@ class RelevanceLabeler:
         """Ensure all necessary directories exist."""
         for directory in [self.output_dir, self.markdown_dir]:
             os.makedirs(directory, exist_ok=True)
+            
+        # Create done subfolder for processed files
+        self.done_dir = os.path.join(self.markdown_dir, "done")
+        os.makedirs(self.done_dir, exist_ok=True)
 
     def _initialize_clients(self):
         """Initialize Pinecone and OpenAI clients."""
@@ -295,9 +301,9 @@ class RelevanceLabeler:
             
             documents = []
             for match in results.matches:
-                # Filter out loc.* and pdf.* metadata fields
+                # Filter out loc.*, pdf.*, and full_info metadata fields
                 filtered_metadata = {k: v for k, v in match.metadata.items() 
-                                   if k != "text" and not k.startswith("loc.") and not k.startswith("pdf.")}
+                                   if k != "text" and not k.startswith("loc.") and not k.startswith("pdf.") and k != "full_info"}
                 
                 doc = {
                     "id": match.id,
@@ -379,9 +385,9 @@ class RelevanceLabeler:
         doc_texts = []
         for i, doc in enumerate(documents, 1):
             content = self.highlight_query_terms(doc["text"], query)
-            # Add metadata display, excluding loc.* and pdf.* fields
+            # Add metadata display, excluding loc.*, pdf.*, and full_info fields
             filtered_metadata = {k: v for k, v in doc["metadata"].items() 
-                               if not k.startswith("loc.") and not k.startswith("pdf.")}
+                               if not k.startswith("loc.") and not k.startswith("pdf.") and k != "full_info"}
             metadata_text = "\n".join([f"**{k}**: {v}" for k, v in filtered_metadata.items()])
             content_with_metadata = f"{content}\n\n*Metadata:*\n{metadata_text}"
             
@@ -616,6 +622,54 @@ class RelevanceLabeler:
             
         return evaluation_docs, fine_tuning_docs
     
+    def _move_to_done_folder(self, markdown_file: str) -> None:
+        """Move processed markdown file to the done subfolder.
+        
+        If a file with the same name exists, compares content:
+        - If identical, skips the move
+        - If different, creates a uniquely named file
+        """
+        if not os.path.exists(markdown_file):
+            print(f"Warning: Cannot move file {markdown_file} - file not found")
+            return
+            
+        # Get filename without path
+        filename = os.path.basename(markdown_file)
+        done_file_path = os.path.join(self.done_dir, filename)
+        
+        # Check if file already exists in done folder
+        if os.path.exists(done_file_path):
+            # Compare file contents
+            try:
+                with open(markdown_file, 'r') as f1, open(done_file_path, 'r') as f2:
+                    source_content = f1.read()
+                    existing_content = f2.read()
+                
+                # If files are identical, no need to move
+                if source_content == existing_content:
+                    print(f"Identical file already exists in done folder. Removing original.")
+                    os.remove(markdown_file)
+                    return
+                    
+                # Files are different, create unique filename
+                base, ext = os.path.splitext(filename)
+                timestamp = int(time.time())
+                new_filename = f"{base}_{timestamp}{ext}"
+                done_file_path = os.path.join(self.done_dir, new_filename)
+                print(f"File with same name but different content exists. Moving to {new_filename}")
+            except Exception as e:
+                print(f"Error comparing files: {e}. Creating unique filename.")
+                base, ext = os.path.splitext(filename)
+                timestamp = int(time.time())
+                done_file_path = os.path.join(self.done_dir, f"{base}_{timestamp}{ext}")
+        
+        # Move the file to done folder
+        try:
+            shutil.move(markdown_file, done_file_path)
+            print(f"Moved processed file to: {done_file_path}")
+        except Exception as e:
+            print(f"Error moving file to done folder: {e}")
+            
     def process_query(self, query: str) -> bool:
         """Process a single query through the labeling workflow."""
         print(f"\n{'='*80}\nProcessing query: {query}\n{'='*80}")
@@ -646,6 +700,9 @@ class RelevanceLabeler:
         # Save to respective output files
         self.save_to_jsonl(evaluation_docs, self.evaluation_output)
         self.save_to_jsonl(fine_tuning_docs, self.fine_tuning_output)
+        
+        # Move the processed markdown file to done folder
+        self._move_to_done_folder(markdown_file)
         
         # Update progress
         self.progress["processed_queries"].append(query)
