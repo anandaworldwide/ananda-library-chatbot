@@ -46,6 +46,8 @@ Review each document below and assign a relevance score:
 - **1**: Marginally Relevant - Mentions query topics but not directly helpful
 - **0**: Irrelevant - Not related to the query
 
+*Skip duplicate entries to avoid overfitting the model.*
+
 ## Documents
 
 {documents}
@@ -232,7 +234,8 @@ class RelevanceLabeler:
         """Retrieve documents from Pinecone using semantic search."""
         try:
             # Get embedding for the query
-            print(f"Generating embedding for query: {query}")
+            if self.debug_mode:
+                print(f"Generating embedding for query: {query}")
             query_embedding = self.get_embedding(query)
             if not query_embedding:
                 print("Warning: Empty embedding generated for query")
@@ -274,10 +277,11 @@ class RelevanceLabeler:
                 filter_condition = filter_parts[0]
             # else: empty filter_condition if no parts
                 
-            if filter_parts:
-                print(f"Querying Pinecone with filters")
-            else:
-                print("No filters applied - querying all documents")
+            if self.debug_mode:
+                if filter_parts:
+                    print(f"Querying Pinecone with filters")
+                else:
+                    print("No filters applied - querying all documents")
                 
             results = self.index.query(
                 vector=query_embedding,
@@ -286,7 +290,8 @@ class RelevanceLabeler:
                 filter=filter_condition
             )
             
-            print(f"Pinecone returned {len(results.matches)} matches")
+            if self.debug_mode:
+                print(f"Pinecone returned {len(results.matches)} matches")
             
             documents = []
             for match in results.matches:
@@ -333,8 +338,9 @@ class RelevanceLabeler:
                         print(f"Found libraries: {libraries}")
                         print(f"Found types: {types}")
                         print(f"Your filters - Libraries: {self.included_libraries}, Types: {self.enabled_media_types}")
-                
-            print(f"Retrieved {len(documents)} documents for query: {query}")
+            
+            if self.debug_mode:
+                print(f"Retrieved {len(documents)} documents for query: {query}")
             return documents
         except Exception as e:
             print(f"Error retrieving documents: {e}")
