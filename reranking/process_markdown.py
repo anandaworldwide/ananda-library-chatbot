@@ -186,6 +186,19 @@ class MarkdownProcessor:
             print(f"Error parsing file {filepath}: {e}")
             return None, None, []
             
+    def _try_convert_numeric(self, value: str) -> Any:
+        """Attempt to convert a string value to a float or int."""
+        try:
+            # Try converting to float first
+            float_val = float(value)
+            # If it's an integer, return as int
+            if float_val.is_integer():
+                return int(float_val)
+            return float_val
+        except (ValueError, TypeError):
+            # If conversion fails, return the original string
+            return value
+
     def allocate_documents(self, query: str, judge: str, labeled_docs: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Allocate documents between evaluation and fine-tuning datasets."""
         # Sort by relevance score (descending)
@@ -194,14 +207,17 @@ class MarkdownProcessor:
         # For evaluation dataset, include all documents with their scores
         evaluation_docs = []
         for doc in labeled_docs:
+            # Process metadata for potential numeric conversion
+            processed_metadata = {k: self._try_convert_numeric(v) for k, v in doc["metadata"].items()}
+            
             evaluation_docs.append({
                 "relevance": doc["relevance"],
                 "query": query,
                 "judge": judge,
                 "document": doc["text"],
-                "metadata": doc["metadata"],
+                "metadata": processed_metadata, 
                 "site_id": self.site_id,
-                "library": doc["metadata"].get("library", "UNKNOWN")
+                "library": processed_metadata.get("library", "UNKNOWN")
             })
             
         # For fine-tuning dataset, create binary labels
@@ -210,28 +226,34 @@ class MarkdownProcessor:
         # Add positive examples (scores 2-3)
         positive_docs = [doc for doc in labeled_docs if doc["relevance"] >= 2]
         for doc in positive_docs:
+            # Process metadata for potential numeric conversion
+            processed_metadata = {k: self._try_convert_numeric(v) for k, v in doc["metadata"].items()}
+            
             fine_tuning_docs.append({
                 "label": 1.0,
                 "query": query,
                 "judge": judge,
                 "document": doc["text"],
-                "metadata": doc["metadata"],
+                "metadata": processed_metadata,
                 "site_id": self.site_id,
-                "library": doc["metadata"].get("library", "UNKNOWN")
+                "library": processed_metadata.get("library", "UNKNOWN")
             })
             
         # Add negative examples (scores 0-1)
         negative_docs = [doc for doc in labeled_docs if doc["relevance"] <= 1]
         negative_count = min(len(positive_docs), len(negative_docs))
         for doc in negative_docs[:negative_count]:
+            # Process metadata for potential numeric conversion
+            processed_metadata = {k: self._try_convert_numeric(v) for k, v in doc["metadata"].items()}
+            
             fine_tuning_docs.append({
                 "label": 0.0,
                 "query": query,
                 "judge": judge,
                 "document": doc["text"],
-                "metadata": doc["metadata"],
+                "metadata": processed_metadata,
                 "site_id": self.site_id,
-                "library": doc["metadata"].get("library", "UNKNOWN")
+                "library": processed_metadata.get("library", "UNKNOWN")
             })
             
         return evaluation_docs, fine_tuning_docs
