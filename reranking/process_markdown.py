@@ -263,6 +263,14 @@ class MarkdownProcessor:
         except Exception as e:
             print(f"Error moving file to done directory: {e}")
             
+    def _count_lines(self, filepath: str) -> int:
+        """Count the number of lines in a file."""
+        try:
+            with open(filepath, 'r') as f:
+                return sum(1 for _ in f)
+        except FileNotFoundError:
+            return 0
+            
     def process_files(self):
         """Process all completed markdown files."""
         completed_files = self.find_completed_files()
@@ -273,8 +281,8 @@ class MarkdownProcessor:
             
         print(f"Found {len(completed_files)} completed files")
         
-        evaluation_count = 0
-        fine_tuning_count = 0
+        evaluation_added = 0
+        fine_tuning_added = 0
         
         for filepath in completed_files:
             filename = os.path.basename(filepath)
@@ -290,17 +298,21 @@ class MarkdownProcessor:
             self.save_to_jsonl(evaluation_docs, self.evaluation_output)
             self.save_to_jsonl(fine_tuning_docs, self.fine_tuning_output)
             
-            evaluation_count += len(evaluation_docs)
-            fine_tuning_count += len(fine_tuning_docs)
+            evaluation_added += len(evaluation_docs)
+            fine_tuning_added += len(fine_tuning_docs)
             
             self.move_to_done(filepath)
             
+        # Get total counts from files
+        total_evaluation = self._count_lines(self.evaluation_output)
+        total_fine_tuning = self._count_lines(self.fine_tuning_output)
+            
         print(f"\nProcessing complete!")
-        print(f"Total evaluation examples: {evaluation_count}")
-        print(f"Total fine-tuning examples: {fine_tuning_count}")
-        print(f"Output files:")
-        print(f"- Evaluation dataset: {self.evaluation_output}")
-        print(f"- Fine-tuning dataset: {self.fine_tuning_output}")
+        print(f"Added {evaluation_added} evaluation examples")
+        print(f"Added {fine_tuning_added} fine-tuning examples")
+        print(f"\nCurrent totals in output files:")
+        print(f"- Evaluation dataset ({self.evaluation_output}): {total_evaluation} examples")
+        print(f"- Fine-tuning dataset ({self.fine_tuning_output}): {total_fine_tuning} examples")
 
 def main():
     parser = argparse.ArgumentParser(description="Process completed markdown files for document relevance labeling")
