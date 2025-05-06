@@ -9,18 +9,18 @@
 
   - [x] Create a test set of 20-50 representative queries reflecting your spiritual writings domain
         (e.g., "What is grace in [spiritual teacher]'s teachings?", "What is love in spiritual practice?").
+        (Handled by providing input file to `generate_markdown.py`)
   - [?] Retrieve 20 documents per query from Pinecone (k=20) using your existing retriever.
-    Tool created: `label_relevance.py` handles this step automatically.
+    Tool: `generate_markdown.py` handles retrieval and markdown file creation.
   - [?] Manually label each document's relevance (e.g., 3 = highly relevant, 2 = relevant,
-    1 = marginally relevant, 0 = irrelevant).
-    Tool created: `label_relevance.py` provides a user interface for this labeling with Typora.
+    1 = marginally relevant, 0 = irrelevant) in the generated markdown files.
   - [?] Save the evaluation dataset as a CSV or JSONL file with query, document, and relevance fields.
-    Tool created: `label_relevance.py` saves to JSONL format automatically.
+    Tool: `process_markdown.py` parses labeled markdown and saves evaluation data to JSONL.
   - [?] Create a fine-tuning dataset (~100-200 query-document pairs) using 10-20 queries with 5-10
     documents each, labeled for relevance (e.g., 1.0 = relevant, 0.0 = irrelevant).
-    Tool created: `label_relevance.py` creates this dataset automatically from labeled documents.
+    Tool: `process_markdown.py` creates this dataset automatically from labeled documents.
   - [?] Save the fine-tuning dataset as JSONL with query, document, and label fields.
-    Tool created: `label_relevance.py` handles this automatically.
+    Tool: `process_markdown.py` handles this automatically.
 
 - [ ] Create the fine-tuned cross-encoder
 
@@ -28,8 +28,8 @@
         fine-tuning dataset.
   - [ ] Run training on Colab (free) or a cloud GPU (~$10) for ~10-30 minutes.
   - [ ] Save the fine-tuned model to a directory (e.g., ./fine_tuned_model).
-  - [ ] Quantize the fine-tuned model using optimum for faster inference on Vercel
-        (produces a ~15-20MB model).
+  - [?] Quantize the fine-tuned model using optimum for faster inference on Vercel
+    (produces a ~15-20MB model).
 
 - [ ] Set up the pretrained cross-encoder with test Python code
 
@@ -63,5 +63,5 @@
       if fine-tuning underperforms.
 - [ ] **Cost monitoring**: Track fine-tuning costs (~$0-$10 on Colab/GPU) and ensure evaluation
       runs locally or within Vercel's free tier.
-- [?] **Per-site implementation**: Implemented site-specific labeling and fine-tuning with `--site` parameter
-  in the `label_relevance.py` tool.
+- [?] **Per-site implementation**: Implemented site-specific labeling and data processing with `--site` parameter
+  in `generate_markdown.py` and `process_markdown.py`.

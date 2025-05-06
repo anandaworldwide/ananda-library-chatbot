@@ -1,0 +1,10 @@
+# Dependencies for the reranking fine-tuning and evaluation scripts
+# Compile using: pip-compile reranking/requirements.in -o reranking/requirements.txt
+# Install using: pip install -r reranking/requirements.txt
+
+transformers
+optimum[onnxruntime]
+torch
+scikit-learn
+numpy
+protobuf # Often a dependency for ONNX
