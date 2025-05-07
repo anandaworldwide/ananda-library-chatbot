@@ -45,6 +45,7 @@ import { PineconeStore } from '@langchain/pinecone';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { SiteConfig as AppSiteConfig } from '@/types/siteConfig';
 import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
+import { applyReranking } from '@/utils/server/reranker'; // Import reranking function
 
 // S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
@@ -78,6 +79,18 @@ interface ModelConfig {
   model: string;
   temperature: number;
   label?: string; // For identifying which model in streaming responses
+}
+
+// Define TimingMetrics interface directly here
+interface TimingMetrics {
+  startTime?: number;
+  pineconeSetupComplete?: number;
+  firstTokenGenerated?: number;
+  firstByteTime?: number;
+  totalTokens?: number;
+  tokensPerSecond?: number;
+  totalTime?: number;
+  ttfb?: number;
 }
 
 // Loads text content from local filesystem with error handling
@@ -350,7 +363,8 @@ export const makeChain = async (
   rephraseModelConfig: ModelConfig = {
     model: 'gpt-3.5-turbo',
     temperature: 0.1,
-  }, // New param for rephrasing model
+  },
+  finalDocs?: Document[],
 ) => {
   const siteId = process.env.SITE_ID || 'default';
   const configPath = path.join(process.cwd(), 'site-config/config.json');
@@ -410,6 +424,23 @@ export const makeChain = async (
   // Runnable sequence for retrieving documents
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
+      // If finalDocs are provided, use them directly
+      if (finalDocs) {
+        console.log(
+          `Using ${finalDocs.length} pre-retrieved and reranked documents.`,
+        );
+        if (sendData) {
+          sendData({ sourceDocs: finalDocs }); // Send pre-retrieved docs
+        }
+        return finalDocs;
+      }
+
+      // Fallback: If finalDocs aren't provided, perform retrieval as before
+      // (This path shouldn't ideally be hit with the new route.ts logic,
+      // but kept for robustness or potential direct use of makeChain)
+      console.log(
+        'No pre-retrieved docs found, performing standard retrieval...',
+      );
       const retrievalStartTime = Date.now();
       const allDocuments: Document[] = [];
 
@@ -508,15 +539,18 @@ export const makeChain = async (
         }
       }
 
-      // Send the documents as soon as they are retrieved
+      // Send retrieved documents if sendData is available
       if (sendData) {
         sendData({ sourceDocs: allDocuments });
       }
+
+      // Resolve the document promise if resolveDocs is provided
       if (resolveDocs) {
         resolveDocs(allDocuments);
       }
+
       console.log(
-        `Total document retrieval took ${Date.now() - retrievalStartTime}ms for ${allDocuments.length} documents`,
+        `Standard retrieval took ${Date.now() - retrievalStartTime}ms for ${allDocuments.length} documents`,
       );
       return allDocuments;
     },
@@ -673,17 +707,20 @@ export async function setupAndExecuteLanguageModelChain(
   sanitizedQuestion: string,
   history: ChatMessage[],
   sendData: (data: StreamingResponseData) => void,
-  sourceCount: number = 4,
+  finalSourceCount: number = 4,
   filter?: Record<string, unknown>,
-  resolveDocs?: (docs: Document[]) => void,
   siteConfig?: AppSiteConfig | null,
-): Promise<string> {
+  expandedSourceCount: number = Math.min(finalSourceCount * 3, 20),
+  startTime?: number,
+): Promise<{ fullResponse: string; finalDocs: Document[] }> {
   const TIMEOUT_MS = process.env.NODE_ENV === 'test' ? 1000 : 30000;
   const RETRY_DELAY_MS = process.env.NODE_ENV === 'test' ? 10 : 1000;
   const MAX_RETRIES = 3;
 
   let retryCount = 0;
   let lastError: Error | null = null;
+  let docsForLlm: Document[] = [];
+  let tokensStreamed = 0;
 
   while (retryCount < MAX_RETRIES) {
     try {
@@ -692,7 +729,7 @@ export async function setupAndExecuteLanguageModelChain(
       const rephraseModelName = 'gpt-3.5-turbo';
       const rephraseTemperature = 0.1;
 
-      // Send site ID immediately and validate
+      // Send site ID immediately
       if (siteConfig?.siteId) {
         const expectedSiteId = process.env.SITE_ID || 'default';
 
@@ -707,15 +744,72 @@ export async function setupAndExecuteLanguageModelChain(
         `🔧 Using ${modelName} for answer generation and ${rephraseModelName} for rephrasing`,
       );
 
+      // --- Integrated Retrieval & Reranking ---
+      const retrievalStartTime = Date.now();
+      try {
+        const originalK = retriever.k;
+        retriever.k = expandedSourceCount;
+        console.log(
+          `Attempting to retrieve ${expandedSourceCount} documents for reranking...`,
+        );
+        const retrievedDocs =
+          await retriever.getRelevantDocuments(sanitizedQuestion);
+        console.log(
+          `Retrieved ${retrievedDocs.length} documents in ${Date.now() - retrievalStartTime}ms`,
+        );
+        retriever.k = originalK;
+
+        if (retrievedDocs.length > finalSourceCount) {
+          const rerankingStartTime = Date.now();
+          try {
+            const { applyReranking } = await import('@/utils/server/reranker');
+            docsForLlm = await applyReranking(
+              sanitizedQuestion,
+              retriever,
+              filter,
+              expandedSourceCount,
+              finalSourceCount,
+              retrievedDocs,
+            );
+            console.log(
+              `Reranking took ${Date.now() - rerankingStartTime}ms, selected top ${docsForLlm.length} docs`,
+            );
+          } catch (rerankError) {
+            console.error(
+              'Error during reranking, falling back to top retrieved docs:',
+              rerankError,
+            );
+            docsForLlm = retrievedDocs.slice(0, finalSourceCount);
+          }
+        } else {
+          console.log(
+            `Retrieved ${retrievedDocs.length} docs, fewer than requested ${finalSourceCount}. Using all.`,
+          );
+          docsForLlm = retrievedDocs;
+        }
+      } catch (retrievalOrRerankError) {
+        console.error(
+          'Error during retrieval/reranking phase:',
+          retrievalOrRerankError,
+        );
+        // Decide fallback: empty docs, or try a simple retrieval?
+        // For now, proceed with empty docs, chain might handle it.
+        docsForLlm = [];
+      }
+      // --- End of Integrated Retrieval & Reranking ---
+
+      sendData({ sourceDocs: docsForLlm });
+
       const chainCreationStartTime = Date.now();
       const chain = await makeChain(
         retriever,
         { model: modelName, temperature },
-        sourceCount,
+        finalSourceCount,
         filter,
         sendData,
-        resolveDocs,
+        undefined,
         { model: rephraseModelName, temperature: rephraseTemperature },
+        docsForLlm,
       );
       console.log(
         `Chain creation took ${Date.now() - chainCreationStartTime}ms`,
@@ -726,6 +820,7 @@ export async function setupAndExecuteLanguageModelChain(
 
       let fullResponse = '';
       let firstTokenTime: number | null = null;
+      let firstByteTime: number | null = null;
 
       // Create a promise that rejects after timeout
       const timeoutPromise = new Promise((_, reject) => {
@@ -734,7 +829,6 @@ export async function setupAndExecuteLanguageModelChain(
         }, TIMEOUT_MS);
       });
 
-      // Invoke the chain with callbacks for streaming tokens
       const chainInvocationStartTime = Date.now();
       const chainPromise = chain.invoke(
         {
@@ -744,38 +838,61 @@ export async function setupAndExecuteLanguageModelChain(
         {
           callbacks: [
             {
-              // Callback for handling new tokens from the language model
               handleLLMNewToken(token: string) {
                 if (!firstTokenTime) {
                   firstTokenTime = Date.now();
+                  firstByteTime = Date.now();
                   console.log(
                     `Time to first token: ${firstTokenTime - chainInvocationStartTime}ms`,
                   );
-                  // Send the firstTokenGenerated time with the first token in the timing object
                   sendData({
                     token,
                     timing: {
                       firstTokenGenerated: firstTokenTime,
+                      ttfb:
+                        firstByteTime && startTime
+                          ? firstByteTime - startTime
+                          : undefined,
                     },
                   });
                 } else {
                   sendData({ token });
                 }
                 fullResponse += token;
+                tokensStreamed += token.length;
               },
             } as Partial<BaseCallbackHandler>,
           ],
         },
       );
 
-      // Race between the chain execution and timeout
       await Promise.race([chainPromise, timeoutPromise]);
 
-      return fullResponse;
+      const finalTiming: Partial<TimingMetrics> = {};
+      if (startTime) {
+        finalTiming.totalTime = Date.now() - startTime;
+        if (firstByteTime) {
+          const streamingTime =
+            finalTiming.totalTime - (firstByteTime - startTime);
+          finalTiming.ttfb = firstByteTime - startTime;
+          if (streamingTime > 0 && tokensStreamed > 0) {
+            finalTiming.tokensPerSecond = Math.round(
+              (tokensStreamed / streamingTime) * 1000,
+            );
+          }
+        }
+      }
+      finalTiming.totalTokens = tokensStreamed;
+      if (firstTokenTime) {
+        finalTiming.firstTokenGenerated = firstTokenTime;
+      }
+
+      sendData({ done: true, timing: finalTiming });
+
+      return { fullResponse, finalDocs: docsForLlm };
     } catch (error) {
       lastError = error as Error;
       retryCount++;
-
       if (retryCount < MAX_RETRIES) {
         console.warn(
           `Attempt ${retryCount} failed. Retrying in ${RETRY_DELAY_MS}ms...`,
@@ -789,5 +906,5 @@ export async function setupAndExecuteLanguageModelChain(
     }
   }
 
-  throw lastError; // This line should never be reached due to the throw in the else block above
+  throw lastError || new Error('Chain execution failed after retries');
 }
