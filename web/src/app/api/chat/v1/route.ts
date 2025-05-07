@@ -318,14 +318,15 @@ async function setupVectorStoreAndRetriever(
   index: Index<RecordMetadata>,
   filter: PineconeFilter | undefined,
   sendData: (data: StreamingResponseData) => void,
-  sourceCount: number = 4,
+  requestedSourceCount: number = 4, // Final number of sources needed
+  expandedSourceCount: number = 15, // Number to retrieve for reranking
 ): Promise<{
   vectorStore: PineconeStore;
   retriever: ReturnType<PineconeStore['asRetriever']>;
   documentPromise: Promise<Document[]>;
   resolveWithDocuments: (docs: Document[]) => void;
 }> {
-  // Create the promise and resolver in a way that TypeScript understands
+  // Create the promise and resolver
   let resolveWithDocuments!: (docs: Document[]) => void;
   const documentPromise = new Promise<Document[]>((resolve) => {
     resolveWithDocuments = resolve;
@@ -338,7 +339,6 @@ async function setupVectorStoreAndRetriever(
 
   const vectorStore = await PineconeStore.fromExistingIndex(
     new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
-    // new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
     vectorStoreOptions,
   );
 
@@ -350,50 +350,49 @@ async function setupVectorStoreAndRetriever(
     k: number,
     filter?: any,
   ) => {
-    // Log the search parameters
-    console.log(`\n===== DEBUG: WEBSITE VECTOR STORE SEARCH =====`);
+    console.log(
+      `\n===== DEBUG: WEBSITE VECTOR STORE SEARCH (for reranking) =====`,
+    );
     console.log(`Query: ${query}`);
-    console.log(`k: ${k}`);
+    console.log(`k: ${k}`); // Will now be expandedSourceCount
     console.log(`Filter: ${JSON.stringify(filter, null, 2)}`);
-
-    // Call the original method
     const startTime = Date.now();
     const results = await originalSimilaritySearch(query, k, filter);
     const duration = Date.now() - startTime;
-
-    // Log the results
     console.log(
       `Search completed in ${duration}ms, returned ${results.length} results`,
     );
     pineconeDebug.logPineconeResults(results, 'WEBSITE');
-
     return results;
   };
 
   const retrieverStartTime = Date.now();
 
+  // Configure retriever to fetch the expanded number of documents
   const retriever = vectorStore.asRetriever({
     callbacks: [
       {
         handleRetrieverError(error) {
           console.error('Retriever error:', error);
-          resolveWithDocuments([]);
+          resolveWithDocuments([]); // Resolve with empty array on error
         },
         handleRetrieverEnd(docs: Document[], runId: string) {
-          if (docs.length < sourceCount) {
-            const error = `Error: Retrieved ${docs.length} sources, but ${sourceCount} were requested. (runId: ${runId})`;
-            console.error(error);
-            sendData({ warning: error });
+          // Now, simply resolve the promise with the expanded list of documents.
+          // The actual selection/reranking will happen *after* this retrieval completes.
+          if (docs.length < expandedSourceCount) {
+            const warning = `Warning: Retrieved ${docs.length} sources, but ${expandedSourceCount} were requested for reranking. (runId: ${runId})`;
+            console.warn(warning);
+            // Send warning but still proceed with the docs we got
+            sendData({ warning: warning });
           }
-          resolveWithDocuments(docs);
-          sendData({ sourceDocs: docs });
           console.log(
-            `Document retrieval took ${Date.now() - retrieverStartTime}ms for ${docs.length} documents`,
+            `Expanded document retrieval took ${Date.now() - retrieverStartTime}ms for ${docs.length} documents`,
           );
+          resolveWithDocuments(docs); // Resolve with the full list retrieved
         },
       } as Partial<BaseCallbackHandler>,
     ],
-    k: sourceCount,
+    k: expandedSourceCount, // Retrieve the larger number for reranking
   });
 
   return { vectorStore, retriever, documentPromise, resolveWithDocuments };
@@ -418,9 +417,9 @@ async function createEmptyDocument(
     const answerRef = db.collection(getAnswersCollectionName());
     const emptyEntry = {
       question: originalQuestion,
-      answer: '', // Empty answer - will be updated later
+      answer: '', // Placeholder
       collection: collection,
-      sources: '[]', // Empty sources - will be updated later
+      sources: '[]', // Placeholder
       likeCount: 0,
       history: history,
       ip: clientIP,
@@ -436,74 +435,49 @@ async function createEmptyDocument(
   }
 }
 
-// Function to update an existing document with the full answer and sources
-async function updateDocument(
-  docId: string,
-  fullResponse: string,
-  promiseDocuments: Document[],
-): Promise<boolean> {
-  // Check if db is available
-  if (!db) {
-    console.warn(
-      'Firestore database not initialized, skipping document update',
-    );
-    return false;
-  }
-
-  // If no docId, can't update
-  if (!docId) {
-    console.warn('No docId provided for update, skipping');
-    return false;
-  }
-
-  try {
-    // Use a timeout to ensure this doesn't block the main thread
-    const docRef = db.collection(getAnswersCollectionName()).doc(docId);
-    await docRef.update({
-      answer: fullResponse,
-      sources: JSON.stringify(promiseDocuments),
-    });
-    console.log(`Updated document with ID: ${docId}`);
-    return true;
-  } catch (error) {
-    console.error(`Error updating document ${docId}:`, error);
-    return false;
-  }
-}
-
-// Function to save the answer and related information to Firestore
-async function saveAnswerToFirestore(
+// Updated function to handle both creation (if docId is missing) and update
+async function saveOrUpdateDocument(
+  docId: string | undefined | null, // Make docId optional
   originalQuestion: string,
   fullResponse: string,
+  finalDocuments: Document[], // Use the final documents
   collection: string,
-  promiseDocuments: Document[],
   history: ChatMessage[],
   clientIP: string,
-): Promise<string> {
-  // Check if db is available
+): Promise<string | null> {
   if (!db) {
-    console.warn('Firestore database not initialized, skipping save');
-    return '';
+    console.warn('Firestore db not initialized, skipping document save/update');
+    return null;
   }
+
+  const dataToSave = {
+    question: originalQuestion,
+    answer: fullResponse,
+    collection: collection,
+    sources: JSON.stringify(finalDocuments), // Save the correct final documents
+    likeCount: 0, // Reset or handle like count as needed
+    history: history,
+    ip: clientIP,
+    timestamp: fbadmin.firestore.FieldValue.serverTimestamp(), // Update timestamp on save/update
+    relatedQuestionsV2: [], // Reset or handle related questions as needed
+  };
 
   try {
     const answerRef = db.collection(getAnswersCollectionName());
-    const answerEntry = {
-      question: originalQuestion,
-      answer: fullResponse,
-      collection: collection,
-      sources: JSON.stringify(promiseDocuments),
-      likeCount: 0,
-      history: history,
-      ip: clientIP,
-      timestamp: fbadmin.firestore.FieldValue.serverTimestamp(),
-      relatedQuestionsV2: [],
-    };
-    const docRef = await answerRef.add(answerEntry);
-    return docRef.id;
+    if (docId) {
+      // Update existing document
+      await answerRef.doc(docId).set(dataToSave, { merge: true }); // Use set with merge for update or create
+      console.log(`Updated document with ID: ${docId}`);
+      return docId;
+    } else {
+      // Create new document if docId was not provided or creation failed initially
+      const newDocRef = await answerRef.add(dataToSave);
+      console.log(`Created new document with ID: ${newDocRef.id}`);
+      return newDocRef.id;
+    }
   } catch (error) {
-    console.error('Error saving to Firestore:', error);
-    return '';
+    console.error(`Error saving/updating document ${docId || '(new)'}:`, error);
+    return null;
   }
 }
 
@@ -602,7 +576,6 @@ async function handleComparisonRequest(
 
         const vectorStore = await PineconeStore.fromExistingIndex(
           new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
-          // new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
           vectorStoreOptions,
         );
 
@@ -791,7 +764,7 @@ async function handleChatRequest(req: NextRequest) {
   const stages = {
     startTime: Date.now(),
     pineconeComplete: 0,
-    retrievalComplete: 0,
+    retrievalComplete: 0, // This might not be tracked separately anymore
   };
 
   // Load site configuration
@@ -840,7 +813,13 @@ async function handleChatRequest(req: NextRequest) {
     );
   }
 
-  // Get client IP for logging purposes
+  // Determine final and expanded source counts
+  const finalSourceCount = sanitizedInput.sourceCount || 4;
+  const expandedSourceCount = Math.min(finalSourceCount * 3, 20);
+  console.log(
+    `Reranking enabled: Retrieving ${expandedSourceCount}, selecting top ${finalSourceCount}`,
+  );
+
   const clientIP = getClientIp(req);
 
   // Set up streaming response
@@ -855,7 +834,6 @@ async function handleChatRequest(req: NextRequest) {
       const sendData = (data: StreamingResponseData) => {
         if (!isControllerClosed) {
           try {
-            // Track first token generation time from LLM (now in timing object)
             if (
               data.timing?.firstTokenGenerated &&
               !timingMetrics.firstTokenGenerated
@@ -863,25 +841,17 @@ async function handleChatRequest(req: NextRequest) {
               timingMetrics.firstTokenGenerated =
                 data.timing.firstTokenGenerated;
             }
-
-            // Track first byte time (when token reaches client)
             if (!firstTokenSent && data.token) {
               firstTokenSent = true;
               timingMetrics.firstByteTime = Date.now();
-
-              // Add timing info to the response
               data.timing = {
                 ...(data.timing || {}),
                 ttfb: timingMetrics.firstByteTime - timingMetrics.startTime,
               };
             }
-
-            // Count tokens for calculating streaming rate
             if (data.token) {
               tokensStreamed += data.token.length;
             }
-
-            // Add done timing info
             if (data.done && !performanceLogged) {
               performanceLogged = true;
               timingMetrics.totalTime = Date.now() - timingMetrics.startTime;
@@ -889,18 +859,12 @@ async function handleChatRequest(req: NextRequest) {
                 ? Date.now() - timingMetrics.firstByteTime
                 : 0;
               timingMetrics.totalTokens = tokensStreamed;
-
-              // Calculate tokens per second if we have streaming time
               if (streamingTime > 0) {
                 timingMetrics.tokensPerSecond = Math.round(
                   (tokensStreamed / streamingTime) * 1000,
                 );
               }
-
-              // Log consolidated performance metrics
               logPerformanceMetrics(timingMetrics, stages, modelName);
-
-              // Add timing to the final response
               data.timing = {
                 ttfb: timingMetrics.firstByteTime
                   ? timingMetrics.firstByteTime - timingMetrics.startTime
@@ -911,7 +875,6 @@ async function handleChatRequest(req: NextRequest) {
                 firstTokenGenerated: timingMetrics.firstTokenGenerated,
               };
             }
-
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
             );
@@ -922,6 +885,8 @@ async function handleChatRequest(req: NextRequest) {
             ) {
               isControllerClosed = true;
             } else {
+              console.error('Error in sendData:', error);
+              // Re-throwing might close the stream prematurely if not caught elsewhere
               throw error;
             }
           }
@@ -932,7 +897,7 @@ async function handleChatRequest(req: NextRequest) {
         // Send site ID first
         sendData({ siteId: siteConfig.siteId });
 
-        // Start document creation in parallel without blocking
+        // Start document creation in parallel (non-blocking)
         let docIdPromise = Promise.resolve('');
         if (!sanitizedInput.privateSession) {
           // Create empty document in background - don't await here
@@ -955,114 +920,68 @@ async function handleChatRequest(req: NextRequest) {
             });
         }
 
-        // Set up Pinecone and filter without waiting for document creation to complete
+        // Set up Pinecone and filter (needed for retriever setup)
         const { index, filter } = await setupPineconeAndFilter(
           sanitizedInput.collection || 'whole_library',
           sanitizedInput.mediaTypes,
           siteConfig,
         );
+        stages.pineconeComplete = Date.now(); // Mark Pinecone setup complete
 
-        // Track pinecone setup completion time
-        stages.pineconeComplete = Date.now();
-
-        const { retriever, documentPromise, resolveWithDocuments } =
+        // --- Call the Encapsulated RAG Chain Function ---
+        const { retriever /*, documentPromise, resolveWithDocuments*/ } =
           await setupVectorStoreAndRetriever(
             index,
             filter,
+            sendData, // Pass sendData for internal progress updates
+            finalSourceCount, // Pass final count
+            expandedSourceCount, // Pass expanded count
+          );
+
+        // Execute the full chain, including internal retrieval and reranking
+        const { fullResponse, finalDocs } =
+          await setupAndExecuteLanguageModelChain(
+            retriever,
+            sanitizedInput.question,
+            sanitizedInput.history || [],
             sendData,
-            sanitizedInput.sourceCount || 4,
+            finalSourceCount,
+            filter,
+            siteConfig,
+            expandedSourceCount,
+            timingMetrics.startTime,
           );
+        // --- End of Encapsulated Call ---
 
-        // Add a callback that will be triggered when documents are ready
-        documentPromise.then(() => {
-          // Set retrieval completion time as soon as documents are resolved
-          stages.retrievalComplete = Date.now();
-        });
+        // Note: The 'done' signal is now sent inside setupAndExecuteLanguageModelChain
 
-        // Execute language model chain
-        console.log('Starting LLM chain execution');
-
-        const fullResponse = await setupAndExecuteLanguageModelChain(
-          retriever,
-          sanitizedInput.question,
-          sanitizedInput.history || [],
-          sendData,
-          sanitizedInput.sourceCount || 4,
-          filter,
-          resolveWithDocuments,
-          siteConfig,
-        );
-
-        // Wait for documents for Firestore, but sources are already sent
-        const promiseDocuments = await documentPromise;
-
-        if (promiseDocuments.length === 0) {
-          console.warn(
-            `Warning: No sources returned for query: "${sanitizedInput.question}"`,
-          );
-        }
-
-        // Send done event immediately after final response is complete, without waiting for document updates
-        sendData({
-          done: true,
-          timing: {
-            ttfb: timingMetrics.firstByteTime
-              ? timingMetrics.firstByteTime - timingMetrics.startTime
-              : 0,
-            total: Date.now() - timingMetrics.startTime,
-            tokensPerSecond: timingMetrics.tokensPerSecond || 0,
-            totalTokens: tokensStreamed,
-            firstTokenGenerated: timingMetrics.firstTokenGenerated,
-          },
-        });
-
-        // Later, after getting the full response, update the document
-        // Save answer to Firestore if not a private session
+        // Update Firestore document asynchronously after completion
         if (!sanitizedInput.privateSession) {
-          // Handle document update in a completely non-blocking way
-          docIdPromise
-            .then((docId) => {
-              if (docId) {
-                // Update document without blocking
-                updateDocument(docId, fullResponse, promiseDocuments)
-                  .then((success) => {
-                    if (!success) {
-                      console.warn(`Failed to update document ${docId}`);
-                    }
-                  })
-                  .catch((error) => {
-                    console.error(`Error updating document ${docId}:`, error);
-                  });
-              } else {
-                // Fall back to original method without blocking
-                saveAnswerToFirestore(
-                  originalQuestion,
-                  fullResponse,
-                  sanitizedInput.collection || 'whole_library',
-                  promiseDocuments,
-                  sanitizedInput.history || [],
-                  clientIP,
-                )
-                  .then((newDocId) => {
-                    if (newDocId) {
-                      sendData({ docId: newDocId });
-                    }
-                  })
-                  .catch((error) => {
-                    console.error('Error saving to Firestore:', error);
-                  });
-              }
-            })
-            .catch((error) => {
-              console.error('Error resolving docId promise:', error);
-            });
+          docIdPromise.then(async (docId) => {
+            // Make the callback async
+            // Use the new saveOrUpdateDocument function
+            const savedDocId = await saveOrUpdateDocument(
+              docId, // Pass the docId obtained from createEmptyDocument
+              originalQuestion,
+              fullResponse, // Use the destructured response
+              finalDocs, // Use the destructured final documents
+              sanitizedInput.collection || 'whole_library',
+              sanitizedInput.history || [],
+              clientIP,
+            );
+
+            if (savedDocId && !docId) {
+              // If a new document was created by saveOrUpdateDocument (because initial creation failed),
+              // send the new docId to the client.
+              sendData({ docId: savedDocId });
+            }
+          });
         }
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
         handleError(error, sendData);
       } finally {
         if (!isControllerClosed) {
-          // Don't send done event here again - it was already sent earlier
           controller.close();
           isControllerClosed = true;
         }
@@ -1071,7 +990,6 @@ async function handleChatRequest(req: NextRequest) {
     },
   });
 
-  // Return streaming response
   const response = new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
@@ -1079,7 +997,6 @@ async function handleChatRequest(req: NextRequest) {
       Connection: 'keep-alive',
     },
   });
-
   return corsMiddleware.addCorsHeaders(response, req, siteConfig);
 }
 
