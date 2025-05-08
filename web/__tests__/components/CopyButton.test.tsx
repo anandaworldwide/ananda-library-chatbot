@@ -184,7 +184,7 @@ describe('CopyButton', () => {
       fireEvent.click(button);
     });
 
-    // After implementation, the YouTube URL should be included
+    // After implementation, the YouTube URL should be included.
     expect(mockedCopyTextToClipboard).toHaveBeenCalled();
     const call = mockedCopyTextToClipboard.mock.calls[0][0];
     expect(call).toContain(
