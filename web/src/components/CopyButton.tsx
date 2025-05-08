@@ -29,20 +29,67 @@ const CopyButton: React.FC<CopyButtonProps> = ({
     return converter.makeHtml(markdown);
   };
 
+  const formatSecondsToHHMMSS = (totalSecondsInput: number): string => {
+    if (totalSecondsInput < 0) return '';
+    if (totalSecondsInput === 0) return '0:00';
+
+    let totalSeconds = Math.floor(totalSecondsInput);
+    const hours = Math.floor(totalSeconds / 3600);
+    totalSeconds %= 3600;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
   const formatSources = (sources: Document<DocMetadata>[]): string => {
     return sources
       .map((doc) => {
         const title = doc.metadata.title || 'Unknown source';
         const collection = doc.metadata.library || '';
-        const sourceUrl = doc.metadata.source;
-        const youtubeUrl = doc.metadata.url;
+        const sourceUrlProp = doc.metadata.source;
+        const youtubeUrlProp = doc.metadata.url;
+        const startTime = doc.metadata.start_time; // in seconds
+        const type = doc.metadata.type;
 
-        if (collection.includes('Youtube') && youtubeUrl) {
-          return `- [${title}](${youtubeUrl}) (${collection})`;
-        } else if (sourceUrl) {
-          return `- [${title}](${sourceUrl}) (${collection})`;
+        let markdownUrl = '';
+        let timeSuffixDisplay = '';
+
+        if (type === 'youtube' && youtubeUrlProp) {
+          markdownUrl = youtubeUrlProp;
+          if (typeof startTime === 'number' && startTime >= 0) {
+            try {
+              const urlObj = new URL(markdownUrl);
+              urlObj.searchParams.set('t', String(Math.floor(startTime)));
+              markdownUrl = urlObj.toString();
+            } catch (e) {
+              // console.warn(`Invalid YouTube URL, cannot append time: ${markdownUrl}`);
+              // If URL is invalid, markdownUrl remains the original youtubeUrlProp
+            }
+          }
+        } else if (type === 'audio') {
+          if (sourceUrlProp) {
+            markdownUrl = sourceUrlProp;
+          }
+          if (typeof startTime === 'number' && startTime >= 0) {
+            const formattedTime = formatSecondsToHHMMSS(startTime); // Handles 0 to "0:00"
+            timeSuffixDisplay = ` (starting at ${formattedTime})`;
+          }
+        } else if (sourceUrlProp) {
+          // Other types with a sourceUrl
+          markdownUrl = sourceUrlProp;
+        } else if (youtubeUrlProp) {
+          // Other types with a youtubeUrl (e.g. generic video type)
+          markdownUrl = youtubeUrlProp;
+        }
+
+        if (markdownUrl) {
+          return `- [${title}](${markdownUrl})${timeSuffixDisplay} (${collection})`;
         } else {
-          return `- ${title} (${collection})`;
+          return `- ${title}${timeSuffixDisplay} (${collection})`;
         }
       })
       .join('\n');

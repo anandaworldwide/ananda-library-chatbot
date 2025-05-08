@@ -78,6 +78,8 @@ describe('CopyButton', () => {
     allowAllAnswersPage: false,
     npsSurveyFrequencyDays: 30,
     queriesPerUserPerDay: 100,
+    showSourceContent: false,
+    showVoting: false,
   };
 
   const mockProps = {
@@ -162,9 +164,10 @@ describe('CopyButton', () => {
         pageContent: 'test youtube content',
         metadata: {
           title: 'The Healing Power of Silence',
-          type: 'video',
+          type: 'youtube',
           library: 'Ananda Youtube',
           url: 'https://www.youtube.com/watch?v=example123',
+          start_time: 512, // 8 minutes 32 seconds
         },
       },
     ];
@@ -184,7 +187,266 @@ describe('CopyButton', () => {
     // After implementation, the YouTube URL should be included
     expect(mockedCopyTextToClipboard).toHaveBeenCalled();
     const call = mockedCopyTextToClipboard.mock.calls[0][0];
-    expect(call).toContain('https://www.youtube.com/watch?v=example123');
+    expect(call).toContain(
+      '<a href="https://www.youtube.com/watch?v=example123&t=512">The Healing Power of Silence</a> (Ananda Youtube)',
+    );
+    expect(call).not.toContain('(starting at');
+  });
+
+  it('should correctly format and include start_time for an audio source', async () => {
+    const audioSourceWithStartTime: Document<DocMetadata>[] = [
+      {
+        pageContent: 'test audio content',
+        metadata: {
+          title: 'Audio Clip Title',
+          type: 'audio',
+          library: 'Audio Library',
+          source: 'https://example.com/audio.mp3',
+          start_time: 125, // 2 minutes 5 seconds
+        },
+      },
+    ];
+
+    const props = {
+      ...mockProps,
+      sources: audioSourceWithStartTime,
+    };
+
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const call = mockedCopyTextToClipboard.mock.calls[0][0];
+    expect(call).toContain(
+      '<a href="https://example.com/audio.mp3">Audio Clip Title</a> (starting at 2:05) (Audio Library)',
+    );
+  });
+
+  it('should correctly format and include start_time with hours for a video source that is youtube type', async () => {
+    const videoSourceWithHours: Document<DocMetadata>[] = [
+      {
+        pageContent: 'test video content long',
+        metadata: {
+          title: 'Long Video Title',
+          type: 'youtube',
+          library: 'Video Library',
+          url: 'https://example.com/long_video.mp4',
+          start_time: 7505,
+        },
+      },
+    ];
+
+    const props = {
+      ...mockProps,
+      sources: videoSourceWithHours,
+    };
+
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const call = mockedCopyTextToClipboard.mock.calls[0][0];
+    expect(call).toContain(
+      '<a href="https://example.com/long_video.mp4?t=7505">Long Video Title</a> (Video Library)',
+    );
+    expect(call).not.toContain('(starting at');
+  });
+
+  it('should handle start_time of zero correctly for youtube and audio', async () => {
+    const sourcesWithZeroStartTime: Document<DocMetadata>[] = [
+      {
+        pageContent: 'test youtube content with zero start',
+        metadata: {
+          title: 'YouTube Zero Start',
+          type: 'youtube',
+          library: 'YouTube Library',
+          url: 'https://www.youtube.com/watch?v=zero_start',
+          start_time: 0,
+        },
+      },
+      {
+        pageContent: 'test audio content with zero start',
+        metadata: {
+          title: 'Audio Zero Start',
+          type: 'audio',
+          library: 'Audio Library',
+          source: 'https://example.com/audio_zero_start.mp3',
+          start_time: 0,
+        },
+      },
+      {
+        pageContent: 'test youtube content without start time',
+        metadata: {
+          title: 'No Start Time Doc (YouTube)',
+          type: 'youtube',
+          library: 'Video Library',
+          url: 'https://example.com/video_no_start',
+          // start_time is undefined here
+        },
+      },
+    ];
+
+    const props = {
+      ...mockProps,
+      sources: sourcesWithZeroStartTime,
+    };
+
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callText = mockedCopyTextToClipboard.mock.calls[0][0];
+
+    // Check YouTube with start_time: 0
+    expect(callText).toContain(
+      '<a href="https://www.youtube.com/watch?v=zero_start&t=0">YouTube Zero Start</a> (YouTube Library)',
+    );
+    const youtubeZeroStartString = callText
+      .split('\n')
+      .find((line: string) => line.includes('YouTube Zero Start'));
+    expect(youtubeZeroStartString).not.toContain('(starting at');
+
+    // Check Audio with start_time: 0
+    expect(callText).toContain(
+      '<a href="https://example.com/audio_zero_start.mp3">Audio Zero Start</a> (starting at 0:00) (Audio Library)',
+    );
+
+    // Check YouTube with undefined start_time (should not have &t= or starting at)
+    expect(callText).toContain(
+      '<a href="https://example.com/video_no_start">No Start Time Doc (YouTube)</a> (Video Library)',
+    );
+    const youtubeNoStartTimeString = callText
+      .split('\n')
+      .find((line: string) => line.includes('No Start Time Doc (YouTube)'));
+    expect(youtubeNoStartTimeString).not.toContain('&t=');
+    expect(youtubeNoStartTimeString).not.toContain('(starting at');
+  });
+
+  it('should not include time parameter or suffix for undefined start_time', async () => {
+    const sourcesWithUndefinedStartTime: Document<DocMetadata>[] = [
+      {
+        pageContent: 'test youtube content without start time',
+        metadata: {
+          title: 'No Start Time Doc (YouTube Undefined)',
+          type: 'youtube',
+          library: 'Video Library',
+          url: 'https://example.com/video_no_start_undefined',
+          // start_time is undefined here
+        },
+      },
+      {
+        pageContent: 'test audio content without start time',
+        metadata: {
+          title: 'No Start Time Doc (Audio Undefined)',
+          type: 'audio',
+          library: 'Audio Library',
+          source: 'https://example.com/audio_no_start_undefined.mp3',
+          // start_time is undefined here
+        },
+      },
+    ];
+
+    const props = {
+      ...mockProps,
+      sources: sourcesWithUndefinedStartTime,
+    };
+
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callContent = mockedCopyTextToClipboard.mock.calls[0][0];
+
+    // Check YouTube with undefined start_time
+    expect(callContent).toContain(
+      '<a href="https://example.com/video_no_start_undefined">No Start Time Doc (YouTube Undefined)</a> (Video Library)',
+    );
+    const ytUndefinedString = callContent
+      .split('\n')
+      .find((line: string) =>
+        line.includes('No Start Time Doc (YouTube Undefined)'),
+      );
+    expect(ytUndefinedString).not.toContain('&t=');
+    expect(ytUndefinedString).not.toContain('?t=');
+    expect(ytUndefinedString).not.toContain('(starting at');
+
+    // Check Audio with undefined start_time
+    expect(callContent).toContain(
+      '<a href="https://example.com/audio_no_start_undefined.mp3">No Start Time Doc (Audio Undefined)</a> (Audio Library)',
+    );
+    const audioUndefinedString = callContent
+      .split('\n')
+      .find((line: string) =>
+        line.includes('No Start Time Doc (Audio Undefined)'),
+      );
+    expect(audioUndefinedString).not.toContain('(starting at');
+  });
+
+  it('should not include start time for non-audio/youtube types even if start_time is present', async () => {
+    const nonMediaSourceWithStartTime: Document<DocMetadata>[] = [
+      {
+        pageContent: 'test text content with time',
+        metadata: {
+          title: 'Text Doc With Time',
+          type: 'text', // Non-media type
+          library: 'Text Library',
+          source: 'https://example.com/text_doc',
+          start_time: 60, // 1 minute
+        },
+      },
+      {
+        pageContent: 'test generic video content with time',
+        metadata: {
+          title: 'Generic Video With Time',
+          type: 'video', // Generic video, should not include time
+          library: 'Video Library',
+          url: 'https://example.com/generic_video',
+          start_time: 120, // 2 minutes
+        },
+      },
+    ];
+
+    const props = {
+      ...mockProps,
+      sources: nonMediaSourceWithStartTime,
+    };
+
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const call = mockedCopyTextToClipboard.mock.calls[0][0];
+    expect(call).toContain(
+      '<a href="https://example.com/text_doc">Text Doc With Time</a> (Text Library)',
+    );
+    expect(call).not.toContain('(starting at');
+
+    // Check specifically for the generic video type
+    const genericVideoSourceString = call
+      .split('\n')
+      .find((line: string) => line.includes('Generic Video With Time'));
+    expect(genericVideoSourceString).toContain('(Video Library)');
+    expect(genericVideoSourceString).not.toContain('(starting at');
   });
 
   it('uses "Unknown source" for missing titles', async () => {
