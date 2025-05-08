@@ -1,6 +1,6 @@
 /**
- * React Query hook for fetching answers with JWT authentication
- * Provides pagination and sorting functionality
+ * React Query hook for fetching answers with JWT authentication.
+ * Provides pagination and sorting functionality.
  */
 
 import {
