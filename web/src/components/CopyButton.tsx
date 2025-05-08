@@ -111,7 +111,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 1000);
 
-    // Log the event to Google Analytics
+    // Log the event to Google Analytics.
     logEvent('copy_answer', 'UI', answerId || 'unknown');
   };
 
