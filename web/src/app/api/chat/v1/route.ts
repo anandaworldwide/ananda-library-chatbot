@@ -351,7 +351,7 @@ async function setupVectorStoreAndRetriever(
     console.log(
       `Search completed in ${duration}ms, returned ${results.length} results`,
     );
-    pineconeDebug.logPineconeResults(results, 'WEBSITE');
+    // pineconeDebug.logPineconeResults(results, 'WEBSITE');
 
     return results;
   };
@@ -442,19 +442,38 @@ async function updateDocument(
     return false;
   }
 
-  try {
-    // Use a timeout to ensure this doesn't block the main thread
-    const docRef = db.collection(getAnswersCollectionName()).doc(docId);
-    await docRef.update({
-      answer: fullResponse,
-      sources: JSON.stringify(promiseDocuments),
-    });
-    console.log(`Updated document with ID: ${docId}`);
-    return true;
-  } catch (error) {
-    console.error(`Error updating document ${docId}:`, error);
-    return false;
+  const MAX_RETRIES = 3;
+  const BASE_DELAY_MS = 1000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const docRef = db.collection(getAnswersCollectionName()).doc(docId);
+      await docRef.update({
+        answer: fullResponse,
+        sources: JSON.stringify(promiseDocuments),
+      });
+      console.log(`Updated document with ID: ${docId} on attempt ${attempt}`);
+      return true;
+    } catch (error) {
+      console.error(
+        `Error updating document ${docId} on attempt ${attempt}:`,
+        error,
+      );
+      if (attempt === MAX_RETRIES) {
+        console.error(
+          `Failed to update document ${docId} after ${MAX_RETRIES} attempts`,
+        );
+        return false;
+      }
+      // Exponential backoff: wait longer with each retry
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      console.log(
+        `Retrying update for document ${docId} after ${delay}ms delay`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
+  return false;
 }
 
 // Function to save the answer and related information to Firestore
