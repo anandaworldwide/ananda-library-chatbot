@@ -20,6 +20,7 @@
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage",
     "test:changed": "jest --bail --findRelatedTests",
+    "test:pre-commit": "jest --bail --passWithNoTests --no-coverage --config=src/config/jest.pre-commit.cjs" --findRelatedTests,
     "test:server": "jest --selectProjects=server",
     "test:all": "npm test && echo '✅ Client tests passed! Running server tests...' || (echo '❌ Client tests failed!' && exit 1) && npm run test:server",
     "test:server:coverage": "jest --selectProjects=server --coverage",
