@@ -164,6 +164,12 @@ export function AudioPlayer({
   // Handle download button click
   const handleDownload = () => {
     if (audioUrl) {
+      // Pause playback if currently playing
+      if (isPlaying) {
+        togglePlayPause();
+        setCurrentlyPlayingId(null);
+      }
+
       // Open the audio URL in a new tab
       window.open(audioUrl, '_blank');
 
