@@ -383,27 +383,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (intercomEnabled && typeof window.Intercom !== 'undefined') {
       // Add a class to the body for CSS targeting when Intercom is active
       document.body.classList.add('intercom-enabled');
-
-      // Inject CSS to hide Intercom container when page loads
-      const style = document.createElement('style');
-      style.id = 'aichatbot-intercom-style';
-      style.innerHTML = `#intercom-container { display: none !important; }`;
-      document.head.appendChild(style);
+      document.body.classList.add('hide-intercom');
+      console.log('Added CSS class to body to hide Intercom container.');
 
       // Add listener for when Intercom messenger is hidden by the user
       window.Intercom('onHide', function () {
         console.log('Intercom messenger hidden (onHide event).');
 
         // Re-hide the Intercom container/launcher using our CSS rule
-        let existingStyle = document.getElementById('aichatbot-intercom-style');
-        if (!existingStyle) {
-          const style = document.createElement('style');
-          style.id = 'aichatbot-intercom-style';
-          style.innerHTML = `#intercom-container { display: none !important; }`;
-          document.head.appendChild(style);
-          console.log('Re-injected CSS to hide Intercom container.');
-        } else {
-          console.log('Intercom hiding CSS already exists.');
+        if (!document.body.classList.contains('hide-intercom')) {
+          document.body.classList.add('hide-intercom');
+          console.log('Re-added CSS class to body to hide Intercom container.');
         }
 
         // Show the chatbot bubble (if it exists)
@@ -419,14 +409,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Function to show Intercom and hide chatbot
   function showIntercom() {
     if (intercomEnabled && typeof window.Intercom !== 'undefined') {
-      // Remove the CSS that hides Intercom
-      const intercomStyle = document.getElementById('aichatbot-intercom-style');
-      if (intercomStyle) {
-        intercomStyle.remove();
-        console.log('Removed CSS hiding Intercom container.');
+      // Remove the 'hide-intercom' class from the body to show Intercom
+      if (document.body.classList.contains('hide-intercom')) {
+        document.body.classList.remove('hide-intercom');
+        console.log('Removed CSS class from body to show Intercom container.');
       } else {
-        console.log('Intercom hiding CSS not found, proceeding anyway.');
-      }
+        console.log('hide-intercom class not found on body, proceeding anyway.');
+      } 
 
       // Hide chatbot window
       chatWindow.style.display = 'none';

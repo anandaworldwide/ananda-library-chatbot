@@ -409,15 +409,14 @@ function aichatbot_add_custom_css() {
             position: fixed !important;
         }
         
-        /* Hide Intercom initially if enabled - using all known selectors */
-        ' . ($enable_intercom ? '
-        .intercom-lightweight-app-launcher,
-        .intercom-launcher,
-        #intercom-container .intercom-launcher,
-        .intercom-launcher-frame,
-        #intercom-container {
-            display: none !important;
-        }' : '') . '
+        /* Hide Intercom when needed, based on body class - using all known selectors */
+        body.hide-intercom #intercom-container,
+        body.hide-intercom .intercom-lightweight-app-launcher,
+        body.hide-intercom .intercom-launcher,
+        body.hide-intercom #intercom-container .intercom-launcher, 
+        body.hide-intercom .intercom-launcher-frame { 
+            display: none !important; 
+        }
         
         @media (max-width: 480px) {
             #aichatbot-window {
