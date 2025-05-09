@@ -379,30 +379,52 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof aichatbotData !== 'undefined') {
     intercomEnabled = aichatbotData.enableIntercom === '1';
 
-    // Hide Intercom container initially if integration is enabled
-    if (intercomEnabled && typeof window.Intercom !== 'undefined') {
-      // Add a class to the body for CSS targeting when Intercom is active
-      document.body.classList.add('intercom-enabled');
-      document.body.classList.add('hide-intercom');
-      console.log('Added CSS class to body to hide Intercom container.');
+    // If the intercom integration is enabled, we need to wait for the Intercom object to be available
+    // So we check every 500ms if the Intercom object is available
+    if (intercomEnabled) {
+      let attempts = 0;
+      const maxAttempts = 10; // 5 seconds total (10 attempts * 500ms)
+      const checkInterval = 500; // 500ms = half second
 
-      // Add listener for when Intercom messenger is hidden by the user
-      window.Intercom('onHide', function () {
-        console.log('Intercom messenger hidden (onHide event).');
-
-        // Re-hide the Intercom container/launcher using our CSS rule
-        if (!document.body.classList.contains('hide-intercom')) {
+      const setupIntercom = () => {
+        if (typeof window.Intercom !== 'undefined') {
+          // Add a class to the body for CSS targeting when Intercom is active
+          document.body.classList.add('intercom-enabled');
           document.body.classList.add('hide-intercom');
-          console.log('Re-added CSS class to body to hide Intercom container.');
-        }
+          console.log('Added CSS class to body to hide Intercom container.');
 
-        // Show the chatbot bubble (if it exists)
-        const bubble = document.getElementById('aichatbot-bubble');
-        if (bubble) {
-          bubble.style.display = 'flex'; // Assuming flex is the default visible state
-          console.log('Chatbot bubble shown.');
+          // Add listener for when Intercom messenger is hidden by the user
+          window.Intercom('onHide', function () {
+            console.log('Intercom messenger hidden (onHide event).');
+
+            // Re-hide the Intercom container/launcher using our CSS rule
+            if (!document.body.classList.contains('hide-intercom')) {
+              document.body.classList.add('hide-intercom');
+              console.log('Re-added CSS class to body to hide Intercom container.');
+            }
+
+            // Show the chatbot bubble (if it exists)
+            const bubble = document.getElementById('aichatbot-bubble');
+            if (bubble) {
+              bubble.style.display = 'flex'; // Assuming flex is the default visible state
+              console.log('Chatbot bubble shown.');
+            }
+          });
+          return true; // Successfully set up Intercom
         }
-      });
+        return false; // Intercom not ready yet
+      };
+
+      // Try immediately first
+      if (!setupIntercom()) {
+        // If not ready, start polling
+        const pollInterval = setInterval(() => {
+          attempts++;
+          if (setupIntercom() || attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+          }
+        }, checkInterval);
+      }
     }
   }
 
