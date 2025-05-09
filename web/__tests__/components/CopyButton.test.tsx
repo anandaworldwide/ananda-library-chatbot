@@ -190,7 +190,6 @@ describe('CopyButton', () => {
     expect(call).toContain(
       '<a href="https://www.youtube.com/watch?v=example123&t=512">The Healing Power of Silence</a> (Ananda Youtube)',
     );
-    expect(call).not.toContain('(starting at');
   });
 
   it('should correctly format and include start_time for an audio source', async () => {
@@ -222,7 +221,7 @@ describe('CopyButton', () => {
     expect(mockedCopyTextToClipboard).toHaveBeenCalled();
     const call = mockedCopyTextToClipboard.mock.calls[0][0];
     expect(call).toContain(
-      '<a href="https://example.com/audio.mp3">Audio Clip Title</a> (starting at 2:05) (Audio Library)',
+      '<a href="https://example.com/audio.mp3">Audio Clip Title</a> (Audio Library) → 2:05',
     );
   });
 
@@ -257,7 +256,6 @@ describe('CopyButton', () => {
     expect(call).toContain(
       '<a href="https://example.com/long_video.mp4?t=7505">Long Video Title</a> (Video Library)',
     );
-    expect(call).not.toContain('(starting at');
   });
 
   it('should handle start_time of zero correctly for youtube and audio', async () => {
@@ -316,22 +314,21 @@ describe('CopyButton', () => {
     const youtubeZeroStartString = callText
       .split('\n')
       .find((line: string) => line.includes('YouTube Zero Start'));
-    expect(youtubeZeroStartString).not.toContain('(starting at');
+    expect(youtubeZeroStartString).not.toContain('[');
 
     // Check Audio with start_time: 0
     expect(callText).toContain(
-      '<a href="https://example.com/audio_zero_start.mp3">Audio Zero Start</a> (starting at 0:00) (Audio Library)',
+      '<a href="https://example.com/audio_zero_start.mp3">Audio Zero Start</a> (Audio Library) → 0:00',
     );
 
-    // Check YouTube with undefined start_time (should not have &t= or starting at)
+    // Check YouTube with undefined start_time (should not have &t= or at)
     expect(callText).toContain(
       '<a href="https://example.com/video_no_start">No Start Time Doc (YouTube)</a> (Video Library)',
     );
     const youtubeNoStartTimeString = callText
       .split('\n')
       .find((line: string) => line.includes('No Start Time Doc (YouTube)'));
-    expect(youtubeNoStartTimeString).not.toContain('&t=');
-    expect(youtubeNoStartTimeString).not.toContain('(starting at');
+    expect(youtubeNoStartTimeString).not.toContain('[');
   });
 
   it('should not include time parameter or suffix for undefined start_time', async () => {
@@ -382,9 +379,7 @@ describe('CopyButton', () => {
       .find((line: string) =>
         line.includes('No Start Time Doc (YouTube Undefined)'),
       );
-    expect(ytUndefinedString).not.toContain('&t=');
-    expect(ytUndefinedString).not.toContain('?t=');
-    expect(ytUndefinedString).not.toContain('(starting at');
+    expect(ytUndefinedString).not.toContain('[');
 
     // Check Audio with undefined start_time
     expect(callContent).toContain(
@@ -395,7 +390,7 @@ describe('CopyButton', () => {
       .find((line: string) =>
         line.includes('No Start Time Doc (Audio Undefined)'),
       );
-    expect(audioUndefinedString).not.toContain('(starting at');
+    expect(audioUndefinedString).not.toContain('[');
   });
 
   it('should not include start time for non-audio/youtube types even if start_time is present', async () => {
@@ -439,14 +434,13 @@ describe('CopyButton', () => {
     expect(call).toContain(
       '<a href="https://example.com/text_doc">Text Doc With Time</a> (Text Library)',
     );
-    expect(call).not.toContain('(starting at');
 
     // Check specifically for the generic video type
     const genericVideoSourceString = call
       .split('\n')
       .find((line: string) => line.includes('Generic Video With Time'));
     expect(genericVideoSourceString).toContain('(Video Library)');
-    expect(genericVideoSourceString).not.toContain('(starting at');
+    expect(genericVideoSourceString).not.toContain('[');
   });
 
   it('uses "Unknown source" for missing titles', async () => {

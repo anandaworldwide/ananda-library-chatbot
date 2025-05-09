@@ -76,7 +76,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({
           }
           if (typeof startTime === 'number' && startTime >= 0) {
             const formattedTime = formatSecondsToHHMMSS(startTime); // Handles 0 to "0:00"
-            timeSuffixDisplay = ` (starting at ${formattedTime})`;
+            timeSuffixDisplay = formattedTime;
           }
         } else if (sourceUrlProp) {
           // Other types with a sourceUrl
@@ -87,9 +87,9 @@ const CopyButton: React.FC<CopyButtonProps> = ({
         }
 
         if (markdownUrl) {
-          return `- [${title}](${markdownUrl})${timeSuffixDisplay} (${collection})`;
+          return `- [${title}](${markdownUrl}) (${collection})${timeSuffixDisplay ? ` → ${timeSuffixDisplay}` : ''}`;
         } else {
-          return `- ${title}${timeSuffixDisplay} (${collection})`;
+          return `- ${title} (${collection})${timeSuffixDisplay ? ` → ${timeSuffixDisplay}` : ''}`;
         }
       })
       .join('\n');
