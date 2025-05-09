@@ -429,9 +429,6 @@ export async function upsertEmbeddings(
       if (embedding && embedding.length > 0) {
         // Extract metadata for debugging
         const titleForMetadata = q.question.substring(0, 140);
-        console.log(
-          `DEBUG: Preparing vector for ID ${q.id} with metadata title: "${titleForMetadata}"`,
-        );
 
         // Construct the vector object for Pinecone
         vectors.push({
@@ -467,40 +464,16 @@ export async function upsertEmbeddings(
 
       for (let attempt = 1; attempt <= maxUpsertRetries; attempt++) {
         try {
-          console.log(
-            `DEBUG: Upserting batch ${batchNum}/${totalBatches} (${batch.length} vectors) to Pinecone`,
-          );
-
           await pineconeIndex.upsert(batch);
-          console.log(
-            `DEBUG: Successfully upserted batch ${batchNum}/${totalBatches} to Pinecone`,
-          );
 
           // Verify the upsert by fetching the first vector
           if (batch.length > 0) {
-            try {
-              const firstId = batch[0].id;
-              console.log(
-                `DEBUG: Verifying upsert of ID ${firstId} from batch ${batchNum}`,
-              );
-              const verifyResponse = await pineconeIndex.fetch([firstId]);
+            const firstId = batch[0].id;
+            const verifyResponse = await pineconeIndex.fetch([firstId]);
 
-              if (verifyResponse.records[firstId]) {
-                const verifiedMetadata =
-                  verifyResponse.records[firstId].metadata;
-                console.log(
-                  `DEBUG: Verification successful for ${firstId}. Metadata:`,
-                  JSON.stringify(verifiedMetadata),
-                );
-              } else {
-                console.log(
-                  `DEBUG: Verification failed - ID ${firstId} not found in Pinecone after upsert`,
-                );
-              }
-            } catch (verifyError) {
-              console.log(
-                `DEBUG: Verification failed with error:`,
-                verifyError,
+            if (!verifyResponse.records[firstId]) {
+              console.error(
+                `Verification failed - ID ${firstId} not found in Pinecone after upsert`,
               );
             }
           }
@@ -753,21 +726,6 @@ export async function findRelatedQuestionsPinecone(
         } else {
           // Record exists, check metadata
           const sourceRecord = sourceFetchResponse.records[questionId];
-
-          if (!sourceRecord.metadata) {
-            console.log(`DEBUG: No metadata available for ${questionId}`);
-          } else if (!sourceRecord.metadata.title) {
-            console.log(
-              `DEBUG: No title in metadata for ${questionId}. Available metadata keys:`,
-              Object.keys(sourceRecord.metadata).join(', '),
-            );
-          } else if (typeof sourceRecord.metadata.title !== 'string') {
-            console.log(
-              `DEBUG: Title is not a string for ${questionId}. Type:`,
-              typeof sourceRecord.metadata.title,
-            );
-          }
-
           if (
             sourceRecord?.metadata?.title &&
             typeof sourceRecord.metadata.title === 'string'
@@ -784,7 +742,7 @@ export async function findRelatedQuestionsPinecone(
       } catch (fetchError: any) {
         // Check if there's a cause property on the error
         if (fetchError?.cause) {
-          console.log(`DEBUG: Error cause:`, fetchError.cause);
+          console.error(`Error cause:`, fetchError.cause);
         }
 
         if (attempt < maxSourceMetaRetries) {
@@ -1505,17 +1463,12 @@ export async function updateRelatedQuestionsBatch(
 export async function updateRelatedQuestions(
   questionId: string,
 ): Promise<{ previous: RelatedQuestion[]; current: RelatedQuestion[] }> {
-  console.log(`DEBUG: Starting updateRelatedQuestions for ${questionId}`);
   const startTime = Date.now();
 
   // Ensure database and clients are ready.
   checkDbAvailable();
   try {
-    console.log(`DEBUG: Initializing clients for ${questionId}`);
     await initializeClients();
-    console.log(
-      `DEBUG: Clients initialized for ${questionId} (${Date.now() - startTime}ms)`,
-    );
   } catch (initError) {
     console.error(
       'updateRelatedQuestions: Aborting due to client initialization failure.',
@@ -1536,7 +1489,6 @@ export async function updateRelatedQuestions(
   let questionText: string;
   let previousRelatedQuestions: RelatedQuestion[] = [];
   try {
-    console.log(`DEBUG: Fetching question document for ${questionId}`);
     // Use the performFirestoreOperation utility for better error handling and timeout detection
     const questionDoc = await performFirestoreOperation(
       () => db!.collection(getAnswersCollectionName()).doc(questionId).get(),
@@ -1552,16 +1504,10 @@ export async function updateRelatedQuestions(
       throw new Error(`Question not found: ${questionId}`);
     }
 
-    console.log(
-      `DEBUG: Question document ${questionId} fetched successfully (${Date.now() - startTime}ms)`,
-    );
     const questionData = questionDoc.data();
 
     // Ensure the question data and text are present.
     if (!questionData) {
-      console.log(
-        `DEBUG: Question document ${questionId} exists but data is null/undefined`,
-      );
       throw new Error(`Question data or text missing for ID: ${questionId}`);
     }
 
@@ -1574,15 +1520,9 @@ export async function updateRelatedQuestions(
     }
 
     questionText = questionData.question;
-    console.log(
-      `DEBUG: Retrieved question text for ${questionId} (${questionText.substring(0, 50)}...)`,
-    );
 
     // Capture the current related questions before calculating new ones
     previousRelatedQuestions = questionData.relatedQuestionsV2 || [];
-    console.log(
-      `DEBUG: Previous related questions count for ${questionId}: ${previousRelatedQuestions.length}`,
-    );
   } catch (error) {
     console.error(
       `Failed to fetch question ${questionId} from Firestore:`,
@@ -1594,7 +1534,6 @@ export async function updateRelatedQuestions(
   // 2. Ensure the embedding for this question exists in Pinecone.
   // This involves generating and upserting the embedding. If it already exists, upsert updates it.
   try {
-    console.log(`DEBUG: Upserting embedding for ${questionId}`);
     // Construct a minimal Answer object required by upsertEmbeddings.
     const now = Timestamp.now();
     const minimalAnswer: Answer = {
@@ -1608,9 +1547,6 @@ export async function updateRelatedQuestions(
     // Call upsertEmbeddings with a single-item array.
     // Timer is inside upsertEmbeddings
     await upsertEmbeddings([minimalAnswer]);
-    console.log(
-      `DEBUG: Successfully upserted embedding for ${questionId} (${Date.now() - startTime}ms)`,
-    );
   } catch (error) {
     console.error(
       `Failed to upsert embedding for ${questionId} before finding related:`,
@@ -1624,26 +1560,14 @@ export async function updateRelatedQuestions(
 
   // 3. Find related questions using Pinecone search (now with new logic).
   // Timer is inside findRelatedQuestionsPinecone
-  console.log(`DEBUG: Finding related questions for ${questionId}`);
   const currentRelatedQuestions = await findRelatedQuestionsPinecone(
     questionId,
     questionText,
     5, // Explicitly pass the desired final limit (5)
   );
-  console.log(
-    `DEBUG: Found ${currentRelatedQuestions.length} related questions for ${questionId} (${Date.now() - startTime}ms)`,
-  );
-  if (currentRelatedQuestions.length > 0) {
-    console.log(
-      `DEBUG: First related question: ${currentRelatedQuestions[0].id} "${currentRelatedQuestions[0].title}" (${currentRelatedQuestions[0].similarity})`,
-    );
-  }
 
   // 4. Update the Firestore document with proper error handling
   try {
-    console.log(
-      `DEBUG: Updating Firestore with related questions for ${questionId}`,
-    );
     // Use the performFirestoreOperation utility with a timeout
     await performFirestoreOperation(
       () =>
@@ -1652,9 +1576,6 @@ export async function updateRelatedQuestions(
         }),
       'document update',
       `questionId: ${questionId}`,
-    );
-    console.log(
-      `DEBUG: Successfully updated Firestore for ${questionId} (${Date.now() - startTime}ms)`,
     );
   } catch (error) {
     // Log but continue since we have the calculated results
@@ -1665,9 +1586,6 @@ export async function updateRelatedQuestions(
   }
 
   // Return the previous and current lists of related questions.
-  console.log(
-    `DEBUG: Completed updateRelatedQuestions for ${questionId} in ${Date.now() - startTime}ms`,
-  );
   return {
     previous: previousRelatedQuestions,
     current: currentRelatedQuestions,

@@ -297,14 +297,6 @@ async function setupPineconeAndFilter(
   // If you need to pass filter to makeChain in the future, you might need to add library filters here
   // But don't add redundant library filters if makeChain is already handling it
 
-  // Log the finalized filter for debugging
-  console.log(`\n===== DEBUG: FINAL PINECONE FILTER =====`);
-  console.log(`Collection: ${collection}`);
-  console.log(`Media types: ${JSON.stringify(activeTypes)}`);
-  console.log(`Filter structure: ${JSON.stringify(filter, null, 2)}`);
-  console.log(`SiteID: ${siteConfig.siteId}`);
-  console.log(`=========================================\n`);
-
   const setupTime = Date.now() - startTime;
   if (setupTime > 50) {
     // Only log if it takes longer than 50ms
@@ -350,12 +342,6 @@ async function setupVectorStoreAndRetriever(
     k: number,
     filter?: any,
   ) => {
-    // Log the search parameters
-    console.log(`\n===== DEBUG: WEBSITE VECTOR STORE SEARCH =====`);
-    console.log(`Query: ${query}`);
-    console.log(`k: ${k}`);
-    console.log(`Filter: ${JSON.stringify(filter, null, 2)}`);
-
     // Call the original method
     const startTime = Date.now();
     const results = await originalSimilaritySearch(query, k, filter);

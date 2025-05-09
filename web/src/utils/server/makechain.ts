@@ -329,12 +329,6 @@ async function retrieveDocumentsByLibrary(
     finalFilter = libraryFilter;
   }
 
-  // DEBUG: Log the final filter
-  console.log(
-    `Library query for "${libraryName}" with filter:`,
-    JSON.stringify(finalFilter, null, 2),
-  );
-
   const documents = await retriever.vectorStore.similaritySearch(
     query,
     k,
@@ -504,12 +498,6 @@ export const makeChain = async (
             // No baseFilter, just use the library filter
             finalFilter = libraryFilter;
           }
-
-          // DEBUG: Log the final filter
-          console.log(
-            `Non-weighted library query with filter:`,
-            JSON.stringify(finalFilter, null, 2),
-          );
 
           const docs = await retriever.vectorStore.similaritySearch(
             input.question,
