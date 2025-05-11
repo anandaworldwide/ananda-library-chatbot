@@ -582,8 +582,7 @@ export const makeChain = async (
         }
 
         if (input.chat_history.trim() === '') {
-          console.log(`🔍 NO CHAT HISTORY: Using original question`);
-          return input.question; // Use original question if no chat history
+          return input.question;
         }
 
         // Debug: Show the question is being sent for reformulation
