@@ -13,7 +13,7 @@
  * - Server-side environment variables are never exposed to the client
  * - Error messages are generic to avoid leaking implementation details
  * - Requires a valid siteAuth cookie for authentication when site config requires login
- *   EXCEPT for certain public endpoints (contact form, audio files) that need JWT auth
+ *   EXCEPT for certain public endpoints (contact form) that need JWT auth
  *   but don't require user login
  */
 
@@ -60,7 +60,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // These are pages that use withJwtOnlyAuth middleware
     const publicJwtPaths = [
       '/contact', // Contact form
-      '/api/audio/', // Audio files
       '/answers/', // Public answers
     ];
 

@@ -166,7 +166,6 @@ export function middleware(req: NextRequest) {
     '/api/get-token', // Adjust if API paths change within /web
     '/api/web-token', // Adjust if API paths change within /web
     '/api/answers', // Adjust if API paths change within /web
-    '/api/audio', // Add any other public API paths
     '/api/contact', // Add any other public API paths
     // '/_next', // Usually handled by Next.js, not middleware explicitly
     '/survey',
@@ -262,7 +261,7 @@ export function middleware(req: NextRequest) {
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
       font-src 'self' https://fonts.gstatic.com data:;
       img-src 'self' https://www.google-analytics.com https://fonts.gstatic.com data: blob:;
-      media-src 'self' https://ananda-chatbot.s3.us-west-1.amazonaws.com blob:;
+      media-src 'self' blob:;
       frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com;
       worker-src 'self' blob:;
       manifest-src 'self';

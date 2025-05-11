@@ -286,26 +286,6 @@ describe('/api/web-token', () => {
 
   // Tests for public JWT-only endpoints
 
-  it('should issue token for audio API requests without siteAuth cookie', async () => {
-    // Set site config to require login
-    (loadSiteConfigSync as jest.Mock).mockReturnValue({
-      requireLogin: true,
-    });
-
-    // Setup request from audio player
-    req.cookies = {}; // No siteAuth cookie
-    req.headers = {
-      referer: 'https://example.com/api/audio/test-audio.mp3',
-    };
-
-    await handler(req as NextApiRequest, res as NextApiResponse);
-
-    // Should succeed despite missing siteAuth cookie because it's from an audio page
-    expect(statusMock).toHaveBeenCalledWith(200);
-    expect(jsonMock).toHaveBeenCalledWith({ token: 'test-jwt-token' });
-    expect(jwt.sign).toHaveBeenCalled();
-  });
-
   it('should issue token for contact form requests without siteAuth cookie', async () => {
     // Set site config to require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({

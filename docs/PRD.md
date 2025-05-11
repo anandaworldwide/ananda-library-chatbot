@@ -39,8 +39,7 @@ authentication, and integration options, including a WordPress plugin.
   - **FR1.5:** Allow users to clear the conversation history.
   - **FR1.6:** Offer mechanisms for user feedback (e.g., thumbs up/down) on individual answers (`useVote`, `/api/vote`).
   - **FR1.7:** Display related questions based on the current query (`/api/relatedQuestions`).
-  - **FR1.8:** (Optional/Configurable) Support audio playback for answers or source material (`useAudioPlayer`,
-    `/api/audio`).
+  - **FR1.8:** (Optional/Configurable) Support audio playback for answers or source material (`useAudioPlayer`).
 - **FR2: Question Answering (RAG Core)**
   - **FR2.1:** Accept user queries via the designated API endpoint (`/api/chat/v1/route.ts`).
   - **FR2.2:** Process user queries using Langchain (`makechain.ts`).
