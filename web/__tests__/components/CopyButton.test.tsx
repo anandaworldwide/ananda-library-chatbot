@@ -128,6 +128,87 @@ describe('CopyButton', () => {
     );
   });
 
+  it('should format audio source with a direct S3 link when filename and library are present', async () => {
+    const audioSourceWithFilename: Document<DocMetadata>[] = [
+      {
+        pageContent: 'audio content with filename',
+        metadata: {
+          title: 'Direct Audio Test',
+          type: 'audio',
+          library: 'My Treasures', // Mixed case library name
+          filename: 'audiofile.mp3',
+          start_time: 70, // 1:10
+        },
+      },
+    ];
+    const props = { ...mockProps, sources: audioSourceWithFilename };
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callHtml = mockedCopyTextToClipboard.mock.calls[0][0];
+    expect(callHtml).toContain(
+      '<a href="https://ananda-chatbot.s3.us-west-1.amazonaws.com/public/audio/my%20treasures/audiofile.mp3">Direct Audio Test</a> (My Treasures) → 1:10',
+    );
+  });
+
+  it('should format audio source with a direct S3 link when filename contains a path', async () => {
+    const audioSourceWithPathInFilename: Document<DocMetadata>[] = [
+      {
+        pageContent: 'audio content with path in filename',
+        metadata: {
+          title: 'Path Audio Test',
+          type: 'audio',
+          library: 'My Lectures',
+          filename: 'series1/lecture2.mp3',
+          start_time: 30,
+        },
+      },
+    ];
+    const props = { ...mockProps, sources: audioSourceWithPathInFilename };
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callHtml = mockedCopyTextToClipboard.mock.calls[0][0];
+    expect(callHtml).toContain(
+      '<a href="https://ananda-chatbot.s3.us-west-1.amazonaws.com/public/audio/series1/lecture2.mp3">Path Audio Test</a> (My Lectures) → 0:30',
+    );
+  });
+
+  it('should fall back to metadata.source for audio if filename is not present', async () => {
+    const audioSourceWithoutFilename: Document<DocMetadata>[] = [
+      {
+        pageContent: 'audio content without filename',
+        metadata: {
+          title: 'Fallback Audio Test',
+          type: 'audio',
+          library: 'Old Collection',
+          source: 'https://example.com/page-for-audio.html',
+          start_time: 90,
+        },
+      },
+    ];
+    const props = { ...mockProps, sources: audioSourceWithoutFilename };
+    const { getByTitle } = render(<CopyButton {...props} />);
+    const button = getByTitle('Copy answer to clipboard');
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callHtml = mockedCopyTextToClipboard.mock.calls[0][0];
+    expect(callHtml).toContain(
+      '<a href="https://example.com/page-for-audio.html">Fallback Audio Test</a> (Old Collection) → 1:30',
+    );
+  });
+
   it('formats sources correctly with URLs', async () => {
     const { getByTitle } = render(<CopyButton {...mockProps} />);
     const button = getByTitle('Copy answer to clipboard');

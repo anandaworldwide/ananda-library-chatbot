@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useAudioContext } from '@/contexts/AudioContext';
 import { logEvent } from '@/utils/client/analytics';
-import { fetchWithAuth } from '@/utils/client/tokenManager';
+import { getS3AudioUrl } from '@/utils/client/getS3AudioUrl';
 
 interface AudioPlayerProps {
   src: string;
@@ -34,8 +34,8 @@ export function AudioPlayer({
   const [isLoaded, setIsLoaded] = useState(!lazyLoad);
   const { currentlyPlayingId, setCurrentlyPlayingId } = useAudioContext();
   const [error, setError] = useState<string | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [showSpinner, setShowSpinner] = useState(false);
+
+  const directAudioUrl = src ? getS3AudioUrl(src, library) : null;
 
   // Custom hook for managing audio playback
   const {
@@ -48,76 +48,20 @@ export function AudioPlayer({
     error: audioError,
     isSeeking,
   } = useAudioPlayer({
-    src: audioUrl,
+    src: directAudioUrl, // Use direct S3 URL
     startTime,
   });
-
-  // Fetch the audio URL from the API
-  const fetchAudioUrl = useCallback(async () => {
-    try {
-      if (!src) {
-        throw new Error('Invalid audio source');
-      }
-
-      // Clean the src path to ensure proper formatting
-      let cleanSrc = src.replace(/^\/+/, '').replace(/^api\/audio\//, '');
-
-      // If the library is provided and the path doesn't already include a directory,
-      // add the library as a prefix directory (e.g., "treasures/file.mp3").
-      // As of 8/2024, the audio files are stored in the 'treasures' folder or bhaktan
-      // folder, but pinecone data still has unqualified filenames for treasures files.
-      if (library && !cleanSrc.includes('/')) {
-        // Convert library name to match folder structure (e.g., "Treasures" -> "treasures")
-        const libraryPath = library.toLowerCase();
-        cleanSrc = `${libraryPath}/${cleanSrc}`;
-      }
-
-      // Log the API call for debugging
-      console.log(`Fetching audio: /api/audio/${encodeURIComponent(cleanSrc)}`);
-
-      const response = await fetchWithAuth(
-        `/api/audio/${encodeURIComponent(cleanSrc)}`,
-      );
-
-      if (!response.ok) {
-        console.error('Audio API error:', response.status, response.statusText);
-        throw new Error(`Failed to fetch audio URL: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Audio API response:', data);
-
-      if (!data.url) {
-        throw new Error('Audio URL not found in response');
-      }
-
-      // Log the actual path that was used
-      if (data.path) {
-        console.log(`Audio path resolved to: ${data.path}`);
-      }
-
-      setAudioUrl(data.url);
-      setError(null);
-      setIsLoaded(true);
-    } catch (error) {
-      console.error('Error fetching audio URL:', error);
-      setError('Failed to load audio. Please try again.');
-      setAudioUrl(null);
-    }
-  }, [src, library]);
 
   // Load audio when component mounts or when lazyLoad/isExpanded change
   useEffect(() => {
     if ((!lazyLoad || isExpanded) && !isLoaded) {
-      fetchAudioUrl();
-      const timer = setTimeout(() => {
-        if (!isLoaded && !error) {
-          setShowSpinner(true);
-        }
-      }, 3000);
-      return () => clearTimeout(timer);
+      if (directAudioUrl) {
+        setIsLoaded(true); // If we have a URL, mark as loaded (or attempt to load)
+      } else {
+        setError('Invalid audio source provided.');
+      }
     }
-  }, [lazyLoad, isExpanded, isLoaded, fetchAudioUrl, error]);
+  }, [lazyLoad, isExpanded, isLoaded, directAudioUrl]);
 
   // Pause this audio if another audio starts playing
   useEffect(() => {
@@ -140,9 +84,11 @@ export function AudioPlayer({
 
   // Handle play/pause button click
   const handleTogglePlayPause = () => {
-    if (!isLoaded) {
-      setIsLoaded(true);
-    } else {
+    if (!isLoaded && directAudioUrl) {
+      // Check directAudioUrl before setting isLoaded
+      setIsLoaded(true); // This will trigger the audio element to attempt loading
+    } else if (isLoaded && directAudioUrl) {
+      // Only toggle if loaded and URL exists
       if (!isPlaying) {
         setCurrentlyPlayingId(audioId);
         logEvent('play_audio', 'Engagement', audioId);
@@ -163,7 +109,8 @@ export function AudioPlayer({
 
   // Handle download button click
   const handleDownload = () => {
-    if (audioUrl) {
+    if (directAudioUrl) {
+      // Use directAudioUrl
       // Pause playback if currently playing
       if (isPlaying) {
         togglePlayPause();
@@ -171,7 +118,7 @@ export function AudioPlayer({
       }
 
       // Open the audio URL in a new tab
-      window.open(audioUrl, '_blank');
+      window.open(directAudioUrl, '_blank'); // Use directAudioUrl
 
       // Log the download attempt
       logEvent('download_audio', 'Engagement', audioId);
@@ -190,14 +137,15 @@ export function AudioPlayer({
       {audioError && (
         <div className="text-red-500 mb-1 text-sm px-2">{audioError}</div>
       )}
-      {showSpinner && !isLoaded && !error && !audioError && <LoadingSpinner />}
       <div className="flex items-center justify-between px-2">
         <button
           onClick={handleTogglePlayPause}
           className={`text-blue-500 p-1 rounded-full hover:bg-blue-100 focus:outline-none ${
-            !isLoaded ? 'opacity-50 cursor-not-allowed' : ''
+            !isLoaded || !directAudioUrl ? 'opacity-50 cursor-not-allowed' : '' // Check directAudioUrl
           }`}
-          disabled={!isLoaded || !!error || !!audioError || isSeeking}
+          disabled={
+            !isLoaded || !!error || !!audioError || isSeeking || !directAudioUrl
+          } // Check directAudioUrl
           aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
         >
           <span className="material-icons text-2xl">
@@ -210,11 +158,11 @@ export function AudioPlayer({
         <button
           onClick={handleDownload}
           className={`text-gray-500 p-1 rounded-full hover:bg-gray-200 focus:outline-none ${
-            !audioUrl || !!error || !!audioError
+            !directAudioUrl || !!error || !!audioError // Use directAudioUrl
               ? 'opacity-50 cursor-not-allowed'
               : ''
           }`}
-          disabled={!audioUrl || !!error || !!audioError}
+          disabled={!directAudioUrl || !!error || !!audioError} // Use directAudioUrl
           aria-label="Download audio"
         >
           <span className="material-icons text-2xl">download</span>
@@ -228,7 +176,7 @@ export function AudioPlayer({
           value={currentTime}
           onChange={handleSeek}
           className="w-full"
-          disabled={!isLoaded || !!error || !!audioError}
+          disabled={!isLoaded || !!error || !!audioError || !directAudioUrl} // Check directAudioUrl
         />
       </div>
     </div>

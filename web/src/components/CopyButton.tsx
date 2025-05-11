@@ -6,6 +6,7 @@ import { Document } from 'langchain/document';
 import { DocMetadata } from '@/types/DocMetadata';
 import { getSiteName } from '@/utils/client/siteConfig';
 import { SiteConfig } from '@/types/siteConfig';
+import { getS3AudioUrl } from '@/utils/client/getS3AudioUrl';
 
 interface CopyButtonProps {
   markdown: string;
@@ -71,9 +72,16 @@ const CopyButton: React.FC<CopyButtonProps> = ({
             }
           }
         } else if (type === 'audio') {
-          if (sourceUrlProp) {
+          if (doc.metadata.filename) {
+            markdownUrl = getS3AudioUrl(
+              doc.metadata.filename,
+              doc.metadata.library,
+            );
+          } else if (sourceUrlProp) {
+            // Fallback to metadata.source if filename is not available
             markdownUrl = sourceUrlProp;
           }
+
           if (typeof startTime === 'number' && startTime >= 0) {
             const formattedTime = formatSecondsToHHMMSS(startTime); // Handles 0 to "0:00"
             timeSuffixDisplay = formattedTime;

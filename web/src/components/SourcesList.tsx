@@ -35,6 +35,7 @@ import {
 } from '@/utils/client/libraryMappings';
 import { DocMetadata } from '@/types/DocMetadata';
 import { SiteConfig } from '@/types/siteConfig';
+import { getS3AudioUrl } from '@/utils/client/getS3AudioUrl';
 
 // Helper function to extract the title from document metadata
 const extractTitle = (metadata: DocMetadata): string => {
@@ -82,13 +83,14 @@ const SourcesList: React.FC<SourcesListProps> = ({
   // Callback hooks
   const renderAudioPlayer = useCallback(
     (doc: Document<DocMetadata>, index: number, isExpanded: boolean) => {
-      if (doc.metadata.type === 'audio') {
+      if (doc.metadata.type === 'audio' && doc.metadata.filename) {
         const audioId = `audio_${doc.metadata.file_hash}_${index}`;
         return (
           <div className="pt-1 pb-2">
             <AudioPlayer
               key={audioId}
-              src={`/api/audio/${doc.metadata.filename}`}
+              src={doc.metadata.filename}
+              library={doc.metadata.library}
               startTime={doc.metadata.start_time ?? 0}
               audioId={audioId}
               lazyLoad={true}
@@ -222,20 +224,23 @@ const SourcesList: React.FC<SourcesListProps> = ({
       sourceTitle = `${doc.metadata.album} > ${sourceTitle}`;
     }
 
+    let linkUrl = doc.metadata.source; // Default to metadata.source
+    if (doc.metadata.type === 'audio' && doc.metadata.filename) {
+      linkUrl = getS3AudioUrl(doc.metadata.filename, doc.metadata.library);
+    } else if (doc.metadata.type === 'youtube' && doc.metadata.url) {
+      linkUrl = doc.metadata.url; // YouTube links should use metadata.url
+    }
+
     return (
       <span
         className={
-          doc.metadata.source
-            ? 'text-blue-600 font-medium'
-            : 'text-black font-medium'
+          linkUrl ? 'text-blue-600 font-medium' : 'text-black font-medium'
         }
       >
-        {doc.metadata.source ? (
+        {linkUrl ? (
           <a
-            href={doc.metadata.source || '#'}
-            onClick={(e) =>
-              doc.metadata.source && handleSourceClick(e, doc.metadata.source)
-            }
+            href={linkUrl || '#'}
+            onClick={(e) => linkUrl && handleSourceClick(e, linkUrl)}
             className="hover:underline"
           >
             {sourceTitle}
