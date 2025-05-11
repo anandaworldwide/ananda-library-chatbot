@@ -74,9 +74,21 @@ function withJwtOrCronAuth(
   return async (req: NextApiRequest, res: NextApiResponse) => {
     const userAgent = req.headers['user-agent'] || '';
     const isVercelCron = userAgent.startsWith('vercel-cron/');
+    const authHeader = req.headers.authorization || '';
 
     if (isVercelCron) {
-      // Allow Vercel cron requests through
+      // Verify that cron requests provide the correct secret
+      if (
+        !process.env.CRON_SECRET ||
+        authHeader !== `Bearer ${process.env.CRON_SECRET}`
+      ) {
+        return res.status(401).json({
+          message: 'Unauthorized cron request',
+          error: 'Invalid or missing cron secret',
+          errorType: 'authorization',
+        });
+      }
+      // Allow authorized Vercel cron requests through
       return handler(req, res);
     } else {
       // For all other requests, require JWT authentication
@@ -88,6 +100,9 @@ function withJwtOrCronAuth(
 /**
  * API handler for managing related questions.
  * Supports batch updates (GET) and individual question updates (POST).
+ *
+ * For cron job requests, requires CRON_SECRET env variable to be set and
+ * provided as Bearer token in the Authorization header.
  */
 async function handler(
   req: NextApiRequest,
