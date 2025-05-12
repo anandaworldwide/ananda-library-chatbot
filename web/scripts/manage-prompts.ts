@@ -7,7 +7,7 @@ import {
 import { loadEnv } from '../src/utils/server/loadEnv.js';
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
+import { exec, execSync } from 'child_process';
 import { promisify } from 'util';
 import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
@@ -18,6 +18,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const STAGING_DIR = path.join(__dirname, '.prompts-staging');
 const LOCK_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const WEB_DIR = path.join(__dirname, '..');
 
 // Helper to directly load environment from project root
 function loadEnvironmentDirectly(site: string) {
@@ -280,24 +281,39 @@ async function diffPrompt(filename: string) {
 }
 
 async function main() {
-  const site = process.argv[2];
-  const command = process.argv[3];
-  const filename = process.argv[4];
+  const args = process.argv.slice(2); // Remove node path and script path
+  const site = args[0];
+  const command = args[1];
+  const filename = args[2];
+  const skipTests = args.slice(3).includes('--skip-tests');
 
   if (!site) {
-    console.error('Please provide a site name as first argument');
-    console.error('Usage: npm run prompt [site] [command] [filename]');
+    console.error('Please provide a site name as the first argument.');
+    console.error(
+      'Usage: npm run prompt [site] [command] [filename] [--skip-tests]',
+    );
     console.error('Example: npm run prompt ananda-public pull base.txt');
+    console.error('Example: npm run prompt ananda-public push base.txt');
+    console.error(
+      'Example: npm run prompt ananda-public push base.txt --skip-tests',
+    );
     process.exit(1);
   }
 
   if (!command) {
-    console.error('Please provide a command (pull, push, edit, or diff)');
+    console.error('Please provide a command (pull, push, edit, or diff).');
+    process.exit(1);
+  }
+
+  if (!['pull', 'push', 'edit', 'diff'].includes(command)) {
+    console.error(
+      `Unknown command: ${command}. Use: pull, push, edit, or diff`,
+    );
     process.exit(1);
   }
 
   if (!filename) {
-    console.error('Please provide a filename');
+    console.error('Please provide a filename as the third argument.');
     process.exit(1);
   }
 
@@ -313,21 +329,34 @@ async function main() {
       await pullPrompt(filename);
       break;
     case 'push':
+      if (!skipTests) {
+        try {
+          console.log(
+            '\nRunning prompt validation tests before push... (use --skip-tests to bypass)',
+          );
+          execSync(`npm run test:queries:${site}`, {
+            stdio: 'inherit',
+            cwd: WEB_DIR,
+          });
+          console.log('✅ Prompt tests passed. Proceeding with push...\n');
+        } catch (error) {
+          console.error('\n❌ Prompt validation tests failed. Aborting push.');
+          process.exit(1);
+        }
+      } else {
+        console.log(
+          '\nSkipping prompt validation tests (--skip-tests provided).\n',
+        );
+      }
       await pushPrompt(filename);
       break;
     case 'edit':
-      // First pull the file to make sure we have the latest version
       await pullPrompt(filename);
       await editPrompt(filename);
       break;
     case 'diff':
       await diffPrompt(filename);
       break;
-    default:
-      console.error(
-        `Unknown command: ${command}. Use: pull, push, edit, or diff`,
-      );
-      process.exit(1);
   }
 }
 
