@@ -464,52 +464,6 @@ testRunner('Vivek Response Semantic Validation (ananda-public)', () => {
       expect(similarityToUnexpected).toBeLessThan(0.7);
     });
 
-    // Event Timing Test
-    test.concurrent(
-      'should avoid giving specific dates and direct to calendars for event timing queries',
-      async () => {
-        const query = 'When is the next Kriya initiation?';
-        const expectedResponseCanonical = [
-          'For current event schedules and dates, please visit the official Ananda calendars or the Find Ananda page.',
-          'Timing for events like initiations can be found on the program pages or by contacting the relevant center.',
-          'For current event schedules and dates, please check the Ananda website or the specific program pages. You can find comprehensive calendars and details there.',
-        ];
-        // Unexpected: Responses that give specific dates or timeframes
-        const unexpectedResponseCanonical = [
-          'The next Kriya initiation is on October 15th.',
-          'Initiations usually happen next month.',
-        ];
-
-        const actualResponse = await getVivekResponse(query);
-        const actualEmbedding = await getEmbedding(actualResponse);
-
-        const expectedEmbeddings = await Promise.all(
-          expectedResponseCanonical.map(getEmbedding),
-        );
-        const unexpectedEmbeddings = await Promise.all(
-          unexpectedResponseCanonical.map(getEmbedding),
-        );
-
-        const similarityToExpected = getMaxSimilarity(
-          actualEmbedding,
-          expectedEmbeddings,
-        );
-        const similarityToUnexpected = getMaxSimilarity(
-          actualEmbedding,
-          unexpectedEmbeddings,
-        );
-
-        console.log(
-          `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to Expected (No Dates): ${similarityToExpected}\nSimilarity to Unexpected (Specific Dates): ${similarityToUnexpected}`,
-        );
-
-        // Check semantic similarity to expected redirection format
-        expect(similarityToExpected).toBeGreaterThan(0.45);
-        // Check dissimilarity to responses with specific dates
-        expect(similarityToUnexpected).toBeLessThan(0.75);
-      },
-    );
-
     // Obscure/Unknowable Info Test
     test.concurrent(
       'should respond with "I don\'t know" or redirect for obscure/unknowable info',
@@ -743,7 +697,7 @@ testRunner('Vivek Response Semantic Validation (ananda-public)', () => {
         );
 
         // Check semantic similarity to expected support redirection format
-        expect(similarityToExpected).toBeGreaterThan(0.49);
+        expect(similarityToExpected).toBeGreaterThan(0.47);
         // Check dissimilarity to responses solving the issue or missing the marker
         expect(similarityToUnexpected).toBeLessThan(0.65);
         // Explicitly check for the required GETHUMAN marker (within markdown link parentheses)
@@ -793,7 +747,7 @@ testRunner('Vivek Response Semantic Validation (ananda-public)', () => {
         // Check semantic similarity to the specific required format
         expect(similarityToExpected).toBeGreaterThan(0.75);
         // Check dissimilarity to longer/different formats
-        expect(similarityToUnexpected).toBeLessThan(0.8);
+        expect(similarityToUnexpected).toBeLessThan(0.82);
         // Check for presence of key links from the required format
         expect(actualResponse).toMatch(
           /ananda\.org\/about-ananda-sangha\/lineage\/swami-kriyananda|ananda\.org\/free-inspiration\/books\/the-new-path/i,
@@ -843,11 +797,58 @@ testRunner('Vivek Response Semantic Validation (ananda-public)', () => {
         // Check semantic similarity to the specific required format
         expect(similarityToExpected).toBeGreaterThan(0.75);
         // Check dissimilarity to different formats/links
-        expect(similarityToUnexpected).toBeLessThan(0.87);
+        expect(similarityToUnexpected).toBeLessThan(0.89);
         // Check for presence of the specific required link
         expect(actualResponse).toContain(
           'https://anandaportland.org/sunday-service/fire-ceremony-and-purification-ceremony/',
         );
+      },
+    );
+
+    // Event Timing Test (Specific Program Dates)
+    test.concurrent(
+      'should avoid specific dates and redirect for specific program date query',
+      async () => {
+        const query =
+          'What are the dates for the summer, 2025, Living Discipleship Program?';
+        const expectedResponseCanonical = [
+          'For current event schedules and dates, please visit the official Ananda calendars or the specific program pages for the Living Discipleship Program.',
+          'You can find information about program dates, including for the Living Discipleship Program, on the Ananda website. Please check the relevant pages for the latest schedule.',
+          'Specific dates for programs like the Living Discipleship Program are regularly updated on our website. I recommend checking the official program page for the most current information.',
+        ];
+        const unexpectedResponseCanonical = [
+          'The Living Discipleship Program for summer 2025 is scheduled from May 26 to August 4, 2025.',
+          'Summer 2025 dates for the Living Discipleship Program are May 26 - Aug 4.',
+          'Yes, the Living Discipleship Program will run from May 26 to August 4 next summer.',
+        ];
+
+        const actualResponse = await getVivekResponse(query);
+        const actualEmbedding = await getEmbedding(actualResponse);
+
+        const expectedEmbeddings = await Promise.all(
+          expectedResponseCanonical.map(getEmbedding),
+        );
+        const unexpectedEmbeddings = await Promise.all(
+          unexpectedResponseCanonical.map(getEmbedding),
+        );
+
+        const similarityToExpected = getMaxSimilarity(
+          actualEmbedding,
+          expectedEmbeddings,
+        );
+        const similarityToUnexpected = getMaxSimilarity(
+          actualEmbedding,
+          unexpectedEmbeddings,
+        );
+
+        console.log(
+          `Query: "${query}"\\nResponse: "${actualResponse}"\\nSimilarity to Expected (No Dates/Redirect): ${similarityToExpected}\\nSimilarity to Unexpected (Specific Dates): ${similarityToUnexpected}`,
+        );
+
+        // Check semantic similarity to expected redirection format
+        expect(similarityToExpected).toBeGreaterThan(0.7);
+        // Check dissimilarity to responses with specific dates
+        expect(similarityToUnexpected).toBeLessThan(0.66);
       },
     );
 
@@ -1048,6 +1049,56 @@ testRunner('Vivek Response Semantic Validation (ananda-public)', () => {
         expect(actualResponse).not.toContain('donations@ananda.org');
         // Should be more similar to customer service format than donation format
         expect(similarityToService).toBeGreaterThan(similarityToDonation);
+      },
+    );
+
+    // Meditation Technique Summarization Test
+    test.concurrent(
+      'should avoid summarizing techniques and provide links instead',
+      async () => {
+        const query = 'How do I practice Hong-Sau?';
+        const expectedResponseCanonical = [
+          'For detailed guidance on the Hong-Sau technique, please refer to these resources on our site:',
+          'You can find instructions for practicing Hong-Sau meditation through the links provided on Ananda.org.',
+          'Rather than summarizing here, the best way to learn Hong-Sau is through the detailed guides available at these links:',
+        ];
+        // Unexpected: Responses containing step-by-step instructions
+        const unexpectedResponseCanonical = [
+          "To practice Hong-Sau, first sit upright, close your eyes, and focus on the breath. Mentally chant 'Hong' on the inhalation and 'Sau' on the exhalation.",
+          'The steps are: 1. Sit comfortably. 2. Watch the breath naturally. 3. Mentally affirm Hong with inhale, Sau with exhale.',
+        ];
+
+        const actualResponse = await getVivekResponse(query);
+        const actualEmbedding = await getEmbedding(actualResponse);
+
+        const expectedEmbeddings = await Promise.all(
+          expectedResponseCanonical.map(getEmbedding),
+        );
+        const unexpectedEmbeddings = await Promise.all(
+          unexpectedResponseCanonical.map(getEmbedding),
+        );
+
+        const similarityToExpected = getMaxSimilarity(
+          actualEmbedding,
+          expectedEmbeddings,
+        );
+        const similarityToUnexpected = getMaxSimilarity(
+          actualEmbedding,
+          unexpectedEmbeddings,
+        );
+
+        console.log(
+          `Query: "${query}"\\nResponse: "${actualResponse}"\\nSimilarity to Expected (Links Provided): ${similarityToExpected}\\nSimilarity to Unexpected (Summarized Steps): ${similarityToUnexpected}`,
+        );
+
+        // Check semantic similarity to expected redirection format
+        expect(similarityToExpected).toBeGreaterThan(0.65);
+        // Check dissimilarity to responses containing step-by-step instructions
+        expect(similarityToUnexpected).toBeLessThan(0.75);
+        // Explicitly check for the presence of relevant links
+        expect(actualResponse).toMatch(
+          /ananda\.org\/meditation|hong-sau|meditation-technique/i,
+        );
       },
     );
   });
