@@ -803,10 +803,11 @@ async function handleChatRequest(req: NextRequest) {
 
   // Determine final and expanded source counts
   const finalSourceCount = sanitizedInput.sourceCount || 4;
-  const expandedSourceCount = Math.min(finalSourceCount * 3, 20);
+  // const expandedSourceCount = Math.min(finalSourceCount * 3, 20);
   console.log(
-    `Reranking enabled: Retrieving ${expandedSourceCount}, selecting top ${finalSourceCount}`,
+    `Reranking is commented out. Retrieving ${finalSourceCount} sources directly.`,
   );
+  const expandedSourceCount = finalSourceCount; // No expansion if reranking is off
 
   const clientIP = getClientIp(req);
 
@@ -923,7 +924,7 @@ async function handleChatRequest(req: NextRequest) {
             filter,
             sendData, // Pass sendData for internal progress updates
             finalSourceCount, // Pass final count
-            expandedSourceCount, // Pass expanded count
+            // expandedSourceCount, // Pass expanded count -- no longer needed if reranking is Commented out
           );
 
         // Execute the full chain, including internal retrieval and reranking
@@ -936,7 +937,7 @@ async function handleChatRequest(req: NextRequest) {
             finalSourceCount,
             filter,
             siteConfig,
-            expandedSourceCount,
+            expandedSourceCount, // Pass expandedSourceCount (which is same as finalSourceCount if reranking is off)
             timingMetrics.startTime,
           );
         // --- End of Encapsulated Call ---

@@ -45,7 +45,7 @@ import { PineconeStore } from '@langchain/pinecone';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { SiteConfig as AppSiteConfig } from '@/types/siteConfig';
 import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
-import { applyReranking } from '@/utils/server/reranker'; // Import reranking function
+// import { applyReranking } from '@/utils/server/reranker'; // Import reranking function
 
 // S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
@@ -762,21 +762,24 @@ export async function setupAndExecuteLanguageModelChain(
         if (retrievedDocs.length > finalSourceCount) {
           const rerankingStartTime = Date.now();
           try {
-            const { applyReranking } = await import('@/utils/server/reranker');
-            docsForLlm = await applyReranking(
-              sanitizedQuestion,
-              retriever,
-              filter,
-              expandedSourceCount,
-              finalSourceCount,
-              retrievedDocs,
-            );
-            console.log(
-              `Reranking took ${Date.now() - rerankingStartTime}ms, selected top ${docsForLlm.length} docs`,
-            );
+            // const { applyReranking } = await import('@/utils/server/reranker');
+            // docsForLlm = await applyReranking(
+            //   sanitizedQuestion,
+            //   retriever,
+            //   filter,
+            //   expandedSourceCount,
+            //   finalSourceCount,
+            //   retrievedDocs,
+            // );
+            // console.log(
+            //   `Reranking took ${Date.now() - rerankingStartTime}ms, selected top ${docsForLlm.length} docs`,
+            // );
+            // Fallback to simple slicing if reranking is commented out
+            console.log('Reranking is commented out, using simple slicing.');
+            docsForLlm = retrievedDocs.slice(0, finalSourceCount);
           } catch (rerankError) {
             console.error(
-              'Error during reranking, falling back to top retrieved docs:',
+              'Error during reranking (or fallback slicing), falling back to top retrieved docs:',
               rerankError,
             );
             docsForLlm = retrievedDocs.slice(0, finalSourceCount);
@@ -804,12 +807,12 @@ export async function setupAndExecuteLanguageModelChain(
       const chain = await makeChain(
         retriever,
         { model: modelName, temperature },
-        finalSourceCount,
+        finalSourceCount, // This should be the already reranked/selected count
         filter,
         sendData,
-        undefined,
+        undefined, // resolveDocs - not needed as docs are already resolved
         { model: rephraseModelName, temperature: rephraseTemperature },
-        docsForLlm,
+        docsForLlm, // Pass the potentially reranked docs
       );
       console.log(
         `Chain creation took ${Date.now() - chainCreationStartTime}ms`,
