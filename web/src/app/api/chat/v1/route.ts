@@ -397,10 +397,17 @@ async function createEmptyDocument(
   // Check if db is available
   if (!db) {
     console.warn(
-      'Firestore database not initialized, skipping document creation',
+      '[DEBUG createEmptyDocument] Firestore database not initialized, skipping document creation',
     );
     return '';
   }
+
+  console.log(
+    `[DEBUG createEmptyDocument] Creating empty document for question: "${originalQuestion.substring(0, 50)}..."`,
+  );
+  console.log(
+    `[DEBUG createEmptyDocument] Collection: ${collection}, History items: ${history.length}`,
+  );
 
   try {
     const answerRef = db.collection(getAnswersCollectionName());
@@ -415,11 +422,40 @@ async function createEmptyDocument(
       timestamp: fbadmin.firestore.FieldValue.serverTimestamp(),
       relatedQuestionsV2: [],
     };
+
+    console.log(
+      '[DEBUG createEmptyDocument] Calling answerRef.add() with empty entry',
+    );
     const docRef = await answerRef.add(emptyEntry);
-    console.log(`Created empty document with ID: ${docRef.id}`);
+    console.log(
+      `[DEBUG createEmptyDocument] Successfully created empty document with ID: ${docRef.id}`,
+    );
+
+    // Verify the document was created
+    try {
+      const docSnapshot = await answerRef.doc(docRef.id).get();
+      if (docSnapshot.exists) {
+        console.log(
+          '[DEBUG createEmptyDocument] Verification: Document exists in Firestore',
+        );
+      } else {
+        console.warn(
+          '[DEBUG createEmptyDocument] Verification: Document NOT found in Firestore immediately after creation',
+        );
+      }
+    } catch (verifyError) {
+      console.error(
+        '[DEBUG createEmptyDocument] Error verifying document creation:',
+        verifyError,
+      );
+    }
+
     return docRef.id;
   } catch (error) {
-    console.error('Error creating empty document:', error);
+    console.error(
+      '[DEBUG createEmptyDocument] Error creating empty document:',
+      error,
+    );
     return '';
   }
 }
@@ -435,9 +471,21 @@ async function saveOrUpdateDocument(
   clientIP: string,
 ): Promise<string | null> {
   if (!db) {
-    console.warn('Firestore db not initialized, skipping document save/update');
+    console.warn(
+      '[DEBUG saveOrUpdateDocument] Firestore db not initialized, skipping document save/update',
+    );
     return null;
   }
+
+  console.log(
+    `[DEBUG saveOrUpdateDocument] Called with docId: ${docId || 'NULL/UNDEFINED'}, collection: ${collection}`,
+  );
+  console.log(
+    `[DEBUG saveOrUpdateDocument] Question length: ${originalQuestion.length}, Answer length: ${fullResponse.length}`,
+  );
+  console.log(
+    `[DEBUG saveOrUpdateDocument] Sources count: ${finalDocuments.length}, History items: ${history.length}`,
+  );
 
   const dataToSave = {
     question: originalQuestion,
@@ -455,17 +503,80 @@ async function saveOrUpdateDocument(
     const answerRef = db.collection(getAnswersCollectionName());
     if (docId) {
       // Update existing document
-      await answerRef.doc(docId).set(dataToSave, { merge: true }); // Use set with merge for update or create
-      console.log(`Updated document with ID: ${docId}`);
-      return docId;
-    } else {
-      // Create new document if docId was not provided or creation failed initially
-      const newDocRef = await answerRef.add(dataToSave);
-      console.log(`Created new document with ID: ${newDocRef.id}`);
-      return newDocRef.id;
+      console.log(
+        `[DEBUG saveOrUpdateDocument] Updating existing document with ID: ${docId}`,
+      );
+
+      try {
+        // First check if document exists
+        const docSnapshot = await answerRef.doc(docId).get();
+        if (!docSnapshot.exists) {
+          console.warn(
+            `[DEBUG saveOrUpdateDocument] Document with ID ${docId} doesn't exist, will create new`,
+          );
+        } else {
+          console.log(
+            `[DEBUG saveOrUpdateDocument] Document exists, current data:`,
+            JSON.stringify({
+              question: docSnapshot.data()?.question?.substring(0, 50) + '...',
+              answer: docSnapshot.data()?.answer
+                ? docSnapshot.data()?.answer?.substring(0, 50) + '...'
+                : 'EMPTY',
+              collection: docSnapshot.data()?.collection,
+            }),
+          );
+        }
+      } catch (checkError) {
+        console.error(
+          `[DEBUG saveOrUpdateDocument] Error checking document existence:`,
+          checkError,
+        );
+      }
+
+      try {
+        await answerRef.doc(docId).set(dataToSave, { merge: true }); // Use set with merge for update or create
+        console.log(
+          `[DEBUG saveOrUpdateDocument] Successfully updated document with ID: ${docId}`,
+        );
+        return docId;
+      } catch (updateError) {
+        console.error(
+          `[DEBUG saveOrUpdateDocument] Error updating document with ID ${docId}:`,
+          updateError,
+        );
+        // Fall through to creation as a fallback
+        console.log(
+          `[DEBUG saveOrUpdateDocument] Falling back to document creation after update failure`,
+        );
+        docId = null; // Force creation path below
+      }
     }
+
+    if (!docId) {
+      // Create new document if docId was not provided or creation failed initially
+      console.log(`[DEBUG saveOrUpdateDocument] Creating new document`);
+      try {
+        const newDocRef = await answerRef.add(dataToSave);
+        console.log(
+          `[DEBUG saveOrUpdateDocument] Successfully created new document with ID: ${newDocRef.id}`,
+        );
+        return newDocRef.id;
+      } catch (createError) {
+        console.error(
+          `[DEBUG saveOrUpdateDocument] Error creating new document:`,
+          createError,
+        );
+        return null;
+      }
+    }
+
+    // This should never be reached, but just in case
+    return docId || null;
   } catch (error) {
-    console.error(`Error saving/updating document ${docId || '(new)'}:`, error);
+    console.error(
+      `[DEBUG saveOrUpdateDocument] Unexpected error during save/update for ${docId || '(new)'}:`,
+      error,
+    );
     return null;
   }
 }
@@ -891,6 +1002,9 @@ async function handleChatRequest(req: NextRequest) {
         // Start document creation in parallel (non-blocking)
         let docIdPromise = Promise.resolve('');
         if (!sanitizedInput.privateSession) {
+          console.log(
+            '[DEBUG DocID] Starting empty document creation for tracking',
+          );
           // Create empty document in background - don't await here
           docIdPromise = createEmptyDocument(
             originalQuestion,
@@ -901,12 +1015,22 @@ async function handleChatRequest(req: NextRequest) {
             .then((id) => {
               // Send docId as soon as we have it, without blocking the main flow
               if (id) {
+                console.log(
+                  `[DEBUG DocID] Empty document created with ID: ${id}`,
+                );
                 sendData({ docId: id });
+              } else {
+                console.warn(
+                  '[DEBUG DocID] Empty document creation returned empty ID',
+                );
               }
               return id;
             })
             .catch((error) => {
-              console.error('Error creating empty document:', error);
+              console.error(
+                '[DEBUG DocID] Error creating empty document:',
+                error,
+              );
               return ''; // Return empty string on error
             });
         }
@@ -948,25 +1072,42 @@ async function handleChatRequest(req: NextRequest) {
 
         // Update Firestore document asynchronously after completion
         if (!sanitizedInput.privateSession) {
-          docIdPromise.then(async (docId) => {
-            // Make the callback async
-            // Use the new saveOrUpdateDocument function
-            const savedDocId = await saveOrUpdateDocument(
-              docId, // Pass the docId obtained from createEmptyDocument
-              originalQuestion,
-              fullResponse, // Use the destructured response
-              finalDocs, // Use the destructured final documents
-              sanitizedInput.collection || 'whole_library',
-              sanitizedInput.history || [],
-              clientIP,
-            );
+          console.log('[DEBUG DocID] Starting document update process');
+          docIdPromise
+            .then(async (docId) => {
+              // Make the callback async
+              console.log(
+                `[DEBUG DocID] docIdPromise resolved with ID: ${docId || 'EMPTY'}`,
+              );
+              // Use the new saveOrUpdateDocument function
+              const savedDocId = await saveOrUpdateDocument(
+                docId, // Pass the docId obtained from createEmptyDocument
+                originalQuestion,
+                fullResponse, // Use the destructured response
+                finalDocs, // Use the destructured final documents
+                sanitizedInput.collection || 'whole_library',
+                sanitizedInput.history || [],
+                clientIP,
+              );
 
-            if (savedDocId && !docId) {
-              // If a new document was created by saveOrUpdateDocument (because initial creation failed),
-              // send the new docId to the client.
-              sendData({ docId: savedDocId });
-            }
-          });
+              console.log(
+                `[DEBUG DocID] saveOrUpdateDocument returned ID: ${savedDocId || 'NULL'}`,
+              );
+              if (savedDocId && !docId) {
+                // If a new document was created by saveOrUpdateDocument (because initial creation failed),
+                // send the new docId to the client.
+                console.log(
+                  `[DEBUG DocID] Sending new docId to client: ${savedDocId}`,
+                );
+                sendData({ docId: savedDocId });
+              }
+            })
+            .catch((error) => {
+              console.error(
+                '[DEBUG DocID] Error in document update process:',
+                error,
+              );
+            });
         }
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
