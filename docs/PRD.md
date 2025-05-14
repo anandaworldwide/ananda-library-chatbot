@@ -51,15 +51,19 @@ authentication, and integration options, including a WordPress plugin.
   - **FR2.6:** Generate a coherent answer based on the LLM response.
   - **FR2.7:** Extract and format source citations from the retrieved document metadata (`DocMetadata.ts`).
 - **FR3: Data Ingestion & Management**
-  - **FR3.1:** Provide Python scripts for processing and ingesting data into Pinecone (`python/data_ingestion`).
-  - **FR3.2:** Support ingestion from text files and PDFs (`customPDFLoader.ts`, `db-to-pdfs.py`).
+  - **FR3.1:** Provide Python scripts for processing and ingesting data into Pinecone (`data_ingestion/`). Other scripts,
+    such as TypeScript-based PDF ingestion (`data_ingestion/pdf_to_vector_db.ts`), also exist.
+  - **FR3.2:** Support ingestion from text files and PDFs (`customPDFLoader.ts`, `db-to-pdfs.py` Python script,
+    `pdf_to_vector_db.ts` TypeScript script).
   - **FR3.3:** Support transcription of audio/video files (using external services like AssemblyAI inferred from
     `transcription_utils.py`) and ingestion of transcripts (`transcribe_and_ingest_media.py`).
-  - **FR3.4:** Support crawling web content (`ananda_crawler.py`).
-  - **FR3.5:** Utilize a queue system for managing ingestion tasks (`IngestQueue.py`, `manage_queue.py`).
-  - **FR3.6:** Associate relevant metadata (source, author, URL, potentially timestamps) with ingested data chunks
+  - **FR3.4:** Support crawling web content using `data_ingestion/crawler/website_crawler.py`.
+  - **FR3.5:** Support ingestion from SQL databases (`data_ingestion/sql_to_vector_db/`).
+  - **FR3.6:** Utilize a queue system (potentially Firestore-based as inferred in backend structure) for managing
+    ingestion tasks across these various sources.
+  - **FR3.7:** Associate relevant metadata (source, author, URL, page numbers, timestamps) with ingested data chunks
     (`DocMetadata.ts`).
-  - **FR3.7:** Provide scripts for managing data in Pinecone (delete, migrate, stats) (`delete_pinecone_data.py`,
+  - **FR3.8:** Provide scripts for managing data in Pinecone (delete, migrate, stats) (`delete_pinecone_data.py`,
     `migrate_pinecone.py`, `vector_db_stats.py`).
 - **FR4: Configuration & Personalization**
   - **FR4.1:** Allow definition of multiple chatbot configurations/sites (`site-config/config.json`).
@@ -142,7 +146,8 @@ authentication, and integration options, including a WordPress plugin.
   - Node: `langchain`, `@pinecone-database/pinecone`, `openai`, `jsonwebtoken`, `redis`, `firebase-admin`,
     `react-query`, `axios`.
   - Python: `langchain`, `pinecone-client`, `openai`, `tiktoken`, `unstructured`, `pdfminer.six`, `pydub`, `librosa`,
-    `assemblyai`, `boto3` (AWS SDK), `beautifulsoup4` (web scraping), `firebase-admin`, `google-cloud-firestore`.
+    `assemblyai`, `boto3` (AWS SDK), `beautifulsoup4` (web scraping), `firebase-admin`, `google-cloud-firestore`,
+    `playwright`.
 
 ### 7. Future Considerations / Open Issues (from TODOs)
 

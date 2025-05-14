@@ -41,8 +41,10 @@ ananda-library-chatbot/
 │   ├── audio/                   # Scripts for processing and ingesting audio content.
 │   ├── db-to-pdf/               # Scripts to convert database content to PDFs.
 │   ├── crawler/                 # Web crawler for ingesting website content.
+│   │   └── website_crawler.py  # Main script for crawling websites.
 │   ├── scripts/                 # Other data ingestion scripts (processing, queue management).
 │   ├── sql_to_vector_db/       # Scripts for converting SQL database content to vector embeddings.
+│   ├── pdf_to_vector_db.ts    # Script for ingesting PDFs directly (TypeScript based).
 │   └── tests/                   # Tests for the data ingestion scripts.
 │
 ├── declarations/                 # TypeScript declaration files (.d.ts) for libraries without native types.

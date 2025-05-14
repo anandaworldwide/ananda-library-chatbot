@@ -96,7 +96,9 @@ If the site is configured to require user login:
 - **Backend API:** The core interaction point is the chat API (`app/api/chat/v1/route.ts`), handling question processing
   and answer generation.
 - **Vector Database (Pinecone):** Used for retrieving relevant document chunks based on the user's query
-  (`config/pinecone.ts`, `utils/server/pinecone-client.ts`).
+  (`config/pinecone.ts`, `utils/server/pinecone-client.ts`). Data is populated into Pinecone through various ingestion
+  processes, including a website crawler (`data_ingestion/crawler/website_crawler.py`), PDF processing,
+  audio/video transcription, and direct SQL database imports.
 - **Database (Firestore):** Likely used for storing chat logs, user votes, configuration, or other persistent data
   (`services/firebase.ts`, `utils/server/firestoreUtils.ts`).
 - **Authentication System:** Manages user login, logout, and potentially JWT tokens (`pages/api/login.ts`,

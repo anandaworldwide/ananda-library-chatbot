@@ -11,7 +11,8 @@ understanding and future development.
 - **Framework:** The backend is built primarily using **Next.js**, leveraging both the `pages/api` directory for traditional
   serverless functions and the `app/api` directory (App Router) for edge-compatible routes.
 - **Language:** **TypeScript** is the primary language for the Next.js backend logic. **Python** is used for data ingestion
-  and processing scripts.
+  and processing scripts, including website crawling (`data_ingestion/crawler/website_crawler.py`), PDF parsing,
+  audio transcription, and SQL data conversion.
 - **Hosting:** Likely deployed on **Vercel** (implied by Next.js usage and edge functions) and potentially uses **AWS S3**
   for media storage and **Firebase** services (Firestore).
 - **Key Technologies:**
@@ -147,7 +148,8 @@ Data is stored across multiple services:
   - **`relatedQuestionsCache` (Collection):** Caches generated related questions to avoid re-computation.
   - **`modelComparisons`, `modelComparisonVotes` (Collections):** Data related to A/B testing or comparing different LLM
     responses.
-  - **`ingestQueue` (Collection - Inferred):** Used by Python scripts to manage the data ingestion pipeline.
+  - **`ingestQueue` (Collection - Inferred):** Used by Python scripts to manage the data ingestion pipeline for sources
+    like websites, PDFs, audio, video, and SQL databases.
 
 - **Pinecone:**
 
@@ -163,7 +165,7 @@ Data is stored across multiple services:
     - `type`: Source type ('pdf', 'audio', 'youtube', 'txt').
     - `title`: Document title.
     - `author`: Document author.
-    - `url`: URL source.
+    - `url`: URL source (e.g., from web crawling).
     - `publishedDate`: Publication date.
     - `s3Key`: Path to the audio file in S3 (for audio sources).
     - `startSecond`, `endSecond`: Timestamps for audio/video chunks.

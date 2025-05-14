@@ -41,7 +41,9 @@ Here's a breakdown of the tech stack used in the project:
   - OpenAI APIs are used.
   - Pinecone is used as a vector store for embeddings.
 - **Data Ingestion/Processing:**
-  - Python scripts are used for data ingestion, including processing PDF files, audio files, and YouTube videos.
+  - Python scripts are used for data ingestion, including website crawling (e.g., using `Playwright`,
+    `BeautifulSoup4`), processing PDF files, audio files, YouTube videos, and SQL databases.
+  - TypeScript scripts (e.g., `pdf_to_vector_db.ts`) are also utilized for specific ingestion tasks.
   - Scripts interact with a MySQL database (likely Wordpress).
 - **Testing:**
   - Jest is used for JavaScript/TypeScript testing[cite: 5].
