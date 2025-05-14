@@ -1147,10 +1147,13 @@ describe('Retry Mechanism', () => {
     // Keep track of log messages
     let logMessages: string[] = [];
 
-    // Spy on console.log
-    jest.spyOn(console, 'log').mockImplementation((message: string) => {
+    // Spy on console.log and console.error for this test only
+    const originalConsoleLog = console.log;
+    const originalConsoleError = console.error;
+    console.log = jest.fn((message: string) => {
       logMessages.push(message);
     });
+    console.error = jest.fn(); // Silence console.error for this specific test
 
     // We need to recreate our own implementation of updateDocument to test the retry logic
     // since we can't easily access the actual implementation
@@ -1251,6 +1254,8 @@ describe('Retry Mechanism', () => {
     ).toBe(true);
 
     // Clean up
-    jest.restoreAllMocks();
+    console.log = originalConsoleLog; // Restore original console.log
+    console.error = originalConsoleError; // Restore original console.error
+    jest.restoreAllMocks(); // Now restore other mocks if any were created by jest.spyOn for other objects
   });
 });

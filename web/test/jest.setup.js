@@ -23,6 +23,75 @@ process.env.GOOGLE_APPLICATION_CREDENTIALS = JSON.stringify({
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 process.env.NODE_ENV = 'test';
 
+// Mock site configurations
+const mockSiteConfigs = {
+  default: {
+    siteId: 'default',
+    name: 'Default Test Site',
+    allowedFrontEndDomains: ['localhost'],
+    storageBucket: 'default-test-bucket',
+    requireLogin: false,
+    allowUserRegistration: false,
+    firebaseConfig: {
+      apiKey: 'test-api-key',
+      authDomain: 'test-auth-domain.firebaseapp.com',
+      projectId: 'test-project-id',
+      storageBucket: 'test-storage-bucket.appspot.com',
+      messagingSenderId: 'test-messaging-sender-id',
+      appId: 'test-app-id',
+    },
+    promptCreditLimit: 10,
+    defaultPromptCredits: 0,
+    collections: [
+      {
+        collectionName: 'default_test_collection',
+        displayName: 'Default Test Collection',
+        sourceLanguage: 'en',
+        targetLanguage: 'en',
+        vectorDbCollectionName: 'test-vector-db-collection',
+        enabled: true,
+        isDefault: true,
+        answerStyle: 'default',
+        mediaTypes: ['text'],
+        maxRelatedQuestions: 3,
+        maxTokensForContext: 4000,
+        meta: {
+          access: 'public',
+        },
+      },
+    ],
+    // Ensure all essential properties from SiteConfig type are present
+    shortname: 'Default Test',
+    tagline: 'Tagline for default test site',
+    greeting: 'Hello from default test site',
+    welcome_popup_heading: 'Welcome (Test)',
+    other_visitors_reference: 'other testers',
+    parent_site_url: 'http://localhost',
+    parent_site_name: 'Test Parent',
+    help_url: '/test-help',
+    help_text: 'Test Help',
+    collectionConfig: { default_test_collection: 'Default Test Collection' },
+    libraryMappings: {},
+    enableSuggestedQueries: true,
+    enableMediaTypeSelection: true,
+    enableAuthorSelection: true,
+    allowPrivateSessions: true,
+    allowAllAnswersPage: true,
+    loginImage: null,
+    npsSurveyFrequencyDays: 0,
+    queriesPerUserPerDay: 100,
+    showSourceCountSelector: true,
+    temperature: 0.5,
+    modelName: 'gpt-test',
+    // Add other fields based on the actual config.json and SiteConfig type
+    // For example, if `enabledMediaTypes` is expected
+    enabledMediaTypes: ['text', 'audio', 'video', 'youtube'],
+    // defaultNumSources
+    defaultNumSources: 5,
+  },
+};
+process.env.SITE_CONFIG = JSON.stringify(mockSiteConfigs);
+
 // Configure React for testing environments
 global.React = require('react');
 
@@ -34,8 +103,8 @@ global.console = {
   ...console,
   // Uncomment to suppress specific console methods
   // log: jest.fn(),
-  // error: jest.fn(),
-  // warn: jest.fn(),
+  error: jest.fn(), // Uncommented to silence console.error globally for tests
+  warn: jest.fn(), // Uncommented to silence console.warn globally for tests
 };
 
 // Use a fixed "now" for tests that rely on timing

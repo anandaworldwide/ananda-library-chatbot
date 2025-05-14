@@ -66,18 +66,35 @@ describe('Get Token API', () => {
   const originalEnv = process.env;
   const originalConsoleLog = console.log;
   const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
 
   beforeEach(() => {
     jest.clearAllMocks();
     // Silence console logs in tests
     console.log = jest.fn();
     console.error = jest.fn();
+    console.warn = jest.fn();
 
     // Setup environment variables
     process.env = { ...originalEnv };
     process.env.SECURE_TOKEN = 'test-secure-token';
     process.env.SECURE_TOKEN_HASH = 'test-secure-token-hash';
-    process.env.SITE_ID = 'test-site';
+    process.env.SITE_ID = 'default'; // Explicitly set to default for these tests or a relevant one
+
+    // Ensure SITE_CONFIG is also set for these tests
+    const mockSiteConfigForTest = {
+      default: {
+        siteId: 'default',
+        name: 'Default Test Site for GetToken',
+        allowedFrontEndDomains: ['localhost', '127.0.0.1'], // Add relevant domains
+        // Add other minimal required fields for SiteConfig that get-token API or its middleware might use
+        requireLogin: false, // Example, adjust as needed
+        firebaseConfig: { apiKey: 'test' }, // Minimal example
+        collections: [], // Minimal example
+      },
+      // Add other site configs if tests specifically target them via x-site-id header
+    };
+    process.env.SITE_CONFIG = JSON.stringify(mockSiteConfigForTest);
 
     // Reset mock return values if needed
     jest.mocked(crypto.createHash).mockClear();
@@ -87,6 +104,7 @@ describe('Get Token API', () => {
     process.env = originalEnv;
     console.log = originalConsoleLog;
     console.error = originalConsoleError;
+    console.warn = originalConsoleWarn;
   });
 
   it('should return 405 for non-POST requests', async () => {
@@ -218,7 +236,7 @@ describe('Get Token API', () => {
       method: 'POST',
       body: {
         secret: 'test-secure-token',
-        expectedSiteId: 'test-site',
+        expectedSiteId: 'default',
       },
     });
 
@@ -247,7 +265,7 @@ describe('Get Token API', () => {
     expect(res.statusCode).toBe(403);
     expect(res._getJSONData()).toEqual({
       error:
-        'Site mismatch: You\'re trying to connect to "wrong-site" but this is "test-site"',
+        'Site mismatch: You\'re trying to connect to "wrong-site" but this is "default"',
       code: 'SITE_MISMATCH',
     });
   });
@@ -257,7 +275,7 @@ describe('Get Token API', () => {
       method: 'POST',
       body: {
         secret: 'wordpress-token',
-        expectedSiteId: 'test-site',
+        expectedSiteId: 'default',
       },
     });
 
