@@ -365,17 +365,18 @@ async function setupVectorStoreAndRetriever(
           resolveWithDocuments([]); // Resolve with empty array on error
         },
         handleRetrieverEnd(docs: Document[], runId: string) {
+          // RERANKING DISABLED FOR NOW:
           // Now, simply resolve the promise with the expanded list of documents.
           // The actual selection/reranking will happen *after* this retrieval completes.
-          if (docs.length < expandedSourceCount) {
-            const warning = `Warning: Retrieved ${docs.length} sources, but ${expandedSourceCount} were requested for reranking. (runId: ${runId})`;
-            console.warn(warning);
-            // Send warning but still proceed with the docs we got
-            sendData({ warning: warning });
-          }
-          console.log(
-            `Expanded document retrieval took ${Date.now() - retrieverStartTime}ms for ${docs.length} documents`,
-          );
+          // if (docs.length < expandedSourceCount) {
+          //   const warning = `Warning: Retrieved ${docs.length} sources, but ${expandedSourceCount} were requested for reranking. (runId: ${runId})`;
+          //   console.warn(warning);
+          //   // Send warning but still proceed with the docs we got
+          //   sendData({ warning: warning });
+          // }
+          // console.log(
+          //   `Expanded document retrieval took ${Date.now() - retrieverStartTime}ms for ${docs.length} documents`,
+          // );
           resolveWithDocuments(docs); // Resolve with the full list retrieved
         },
       } as Partial<BaseCallbackHandler>,
@@ -802,11 +803,12 @@ async function handleChatRequest(req: NextRequest) {
   }
 
   // Determine final and expanded source counts
+  // RERANKING DISABLED FOR NOW:
   const finalSourceCount = sanitizedInput.sourceCount || 4;
   // const expandedSourceCount = Math.min(finalSourceCount * 3, 20);
-  console.log(
-    `Reranking is commented out. Retrieving ${finalSourceCount} sources directly.`,
-  );
+  // console.log(
+  //   `Reranking is commented out. Retrieving ${finalSourceCount} sources directly.`,
+  // );
   const expandedSourceCount = finalSourceCount; // No expansion if reranking is off
 
   const clientIP = getClientIp(req);

@@ -749,9 +749,11 @@ export async function setupAndExecuteLanguageModelChain(
       try {
         const originalK = retriever.k;
         retriever.k = expandedSourceCount;
-        console.log(
-          `Attempting to retrieve ${expandedSourceCount} documents for reranking...`,
-        );
+
+        // RERANKING DISABLED FOR NOW:
+        // console.log(
+        //   `Attempting to retrieve ${expandedSourceCount} documents for reranking...`,
+        // );
         const retrievedDocs =
           await retriever.getRelevantDocuments(sanitizedQuestion);
         console.log(
@@ -762,6 +764,7 @@ export async function setupAndExecuteLanguageModelChain(
         if (retrievedDocs.length > finalSourceCount) {
           const rerankingStartTime = Date.now();
           try {
+            // RERANKING DISABLED FOR NOW:
             // const { applyReranking } = await import('@/utils/server/reranker');
             // docsForLlm = await applyReranking(
             //   sanitizedQuestion,
@@ -775,7 +778,6 @@ export async function setupAndExecuteLanguageModelChain(
             //   `Reranking took ${Date.now() - rerankingStartTime}ms, selected top ${docsForLlm.length} docs`,
             // );
             // Fallback to simple slicing if reranking is commented out
-            console.log('Reranking is commented out, using simple slicing.');
             docsForLlm = retrievedDocs.slice(0, finalSourceCount);
           } catch (rerankError) {
             console.error(
@@ -785,9 +787,11 @@ export async function setupAndExecuteLanguageModelChain(
             docsForLlm = retrievedDocs.slice(0, finalSourceCount);
           }
         } else {
-          console.log(
-            `Retrieved ${retrievedDocs.length} docs, fewer than requested ${finalSourceCount}. Using all.`,
-          );
+          if (retrievedDocs.length < finalSourceCount) {
+            console.log(
+              `Retrieved ${retrievedDocs.length} docs, fewer than requested ${finalSourceCount}. Using all.`,
+            );
+          }
           docsForLlm = retrievedDocs;
         }
       } catch (retrievalOrRerankError) {
