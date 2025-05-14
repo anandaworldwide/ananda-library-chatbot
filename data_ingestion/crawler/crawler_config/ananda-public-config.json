@@ -12,5 +12,6 @@
     "^/free-inspiration/books/efl$",
     "^/ask/answerer/",
     "^/video/locations/"
-  ]
+  ],
+  "crawl_frequency_days": 7
 }

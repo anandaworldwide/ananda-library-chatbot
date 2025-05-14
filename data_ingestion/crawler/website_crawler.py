@@ -2,33 +2,27 @@
 #
 # This script is a web crawler designed to scrape content from a specified domain and store it in a Pinecone index.
 # It uses Playwright for browser automation and BeautifulSoup for HTML parsing.
-# The crawler maintains state across runs using checkpoints and can resume from where it left off.
+# The crawler maintains state using a SQLite database and can resume from where it left off.
 # It filters out unwanted URLs and media files, focusing on text content.
-# The script also handles exit signals gracefully, saving its state before shutting down.
+# The script also handles exit signals gracefully, committing database changes before shutting down.
 #
 # Command line arguments:
 #   --site: Site ID for environment variables (e.g., ananda-public).
 #           Loads config from crawler_config/[site]-config.json and .env.[site]. REQUIRED.
-#   --continue: Continue from previous checkpoint (if available)
-#               Default: False (start fresh)
-#   --active-hours: Optional active time range (e.g., "9pm-6am" or "21:00-06:00").
-#                   Crawler pauses outside this window.
-#   --retry-failed: Retry URLs marked as failed in the previous checkpoint.
-#   --report: Generate a report of failed URLs from the last checkpoint and exit.
+#   --retry-failed: Retry URLs marked as 'permanent' failed in the database.
 #
 # Example usage:
-#   python website_crawler.py --site ananda-public
-#   python website_crawler.py --site ananda-public --continue
-#   python website_crawler.py --site crystal-clarity --retry-failed
+#   website_crawler.py --site ananda-public
+#   website_crawler.py --site ananda-public --retry-failed
 
 # Standard library imports
 import argparse
 import hashlib
 import logging
 import os
-import pickle
 import re
 import signal
+import sqlite3
 import sys
 import time
 import traceback
@@ -160,98 +154,293 @@ def ensure_scheme(url: str, default_scheme: str = "https") -> str:
         return urlunparse(parsed)
     return url
 
-@dataclass
-class CrawlerState:
-    visited_urls: Set[str]
-    attempted_urls: Dict[str, str]  # URLs we've tried but failed. Changed from Set[str] to Dict[str, str].
-    pending_urls: List[str]   # Queue of URLs to visit
-
 class WebsiteCrawler:
     def __init__(self, site_id: str, site_config: Dict, retry_failed: bool = False):
         self.site_id = site_id
         self.config = site_config
         self.domain = self.config['domain'] 
         self.start_url = ensure_scheme(self.domain) # Start URL is now just the domain
-        self.skip_patterns = self.config.get('skip_patterns', []) 
-
-        checkpoint_dir = Path(__file__).parent / 'checkpoints'
-        checkpoint_dir.mkdir(exist_ok=True)
-        # Use site_id in checkpoint filename
-        self.checkpoint_file = checkpoint_dir / f"crawler_checkpoint_{self.site_id}.pkl"
-        self.current_processing_url: Optional[str] = None # Track URL being processed
+        self.skip_patterns = self.config.get('skip_patterns', [])
+        self.crawl_frequency_days = self.config.get('crawl_frequency_days', 14)
         
-        # Initialize state
-        self.state = CrawlerState(
-            visited_urls=set(),
-            attempted_urls={},
-            pending_urls=[self.start_url]
-        )
+        # Set up SQLite database for crawl queue
+        db_dir = Path(__file__).parent / 'db'
+        db_dir.mkdir(exist_ok=True)
+        self.db_file = db_dir / f"crawler_queue_{self.site_id}.db"
+        self.conn = sqlite3.connect(str(self.db_file))
+        self.conn.row_factory = sqlite3.Row  # Allow dictionary-like access to rows
+        self.cursor = self.conn.cursor()
         
-        # Load previous checkpoint if exists
-        if self.checkpoint_file.exists():
-            try:
-                with open(self.checkpoint_file, 'rb') as f:
-                    loaded_state = pickle.load(f)
-                    # Load visited URLs
-                    self.state.visited_urls = loaded_state.visited_urls
+        # Create crawl_queue table if it doesn't exist
+        self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS crawl_queue (
+            url TEXT PRIMARY KEY,
+            last_crawl TIMESTAMP,
+            next_crawl TIMESTAMP,
+            crawl_frequency INTEGER,
+            content_hash TEXT,
+            last_error TEXT,
+            status TEXT DEFAULT 'pending',
+            retry_count INTEGER DEFAULT 0,
+            retry_after TIMESTAMP,
+            failure_type TEXT
+        )''')
+        self.conn.commit()
+        
+        # Track URL being processed
+        self.current_processing_url: Optional[str] = None
+        
+        # Handle --retry-failed flag
+        if retry_failed:
+            self.retry_failed_urls()
+            
+        # If queue is empty, seed with start URL
+        self.cursor.execute("SELECT COUNT(*) FROM crawl_queue WHERE status = 'pending'")
+        pending_count = self.cursor.fetchone()[0]
+        
+        if pending_count == 0:
+            logging.info(f"No pending URLs found. Seeding with start URL: {self.start_url}")
+            self.add_url_to_queue(self.start_url, priority=1)
+            self.conn.commit()
 
-                    # Filter and load pending URLs, ensuring scheme
-                    filtered_urls = [ensure_scheme(url) for url in loaded_state.pending_urls if self.is_valid_url(url)]
-                    initial_pending = [ensure_scheme(self.start_url)] if ensure_scheme(self.start_url) not in self.state.visited_urls else []
-                    self.state.pending_urls = filtered_urls or initial_pending
-                    logging.info(f"Loaded checkpoint: {len(self.state.visited_urls)} visited, {len(self.state.pending_urls)} pending URLs")
-                    if len(loaded_state.pending_urls) != len(filtered_urls):
-                        logging.debug(f"Filtered out {len(loaded_state.pending_urls) - len(filtered_urls)} invalid pending URLs")
-
-                    # --- Handle attempted_urls (including migration) ---
-                    if hasattr(loaded_state, 'attempted_urls'):
-                        # @TODO: Remove this migration logic after a few runs
-                        if isinstance(loaded_state.attempted_urls, set):
-                            # Migrate from Set to Dict
-                            logging.warning("Migrating attempted_urls from old set format to new dictionary format.")
-                            self.state.attempted_urls = {ensure_scheme(url): "Failure recorded in previous version" for url in loaded_state.attempted_urls}
-                            logging.info(f"Migrated {len(self.state.attempted_urls)} URLs from old attempted_urls format.")
-                        elif isinstance(loaded_state.attempted_urls, dict):
-                            # Load existing Dict, ensuring keys have schemes
-                            self.state.attempted_urls = {ensure_scheme(url): msg for url, msg in loaded_state.attempted_urls.items()}
-                        else:
-                            logging.warning(f"Unexpected type for attempted_urls in checkpoint: {type(loaded_state.attempted_urls)}. Initializing as empty.")
-                            self.state.attempted_urls = {}
-                    else:
-                         # Checkpoint existed but had no attempted_urls attribute
-                         self.state.attempted_urls = {}
-
-                    # Handle --retry-failed flag passed from main
-                    if retry_failed and self.state.attempted_urls:
-                        # Ensure scheme when creating retry list from keys
-                        retry_urls = list(self.state.attempted_urls.keys()) # Already have schemes due to loading logic
-                        logging.info(f"Retry requested: Re-queuing {len(retry_urls)} previously failed URLs.")
-                        # Prepend failed URLs to the front of the queue
-                        # Filter out any retry URLs that might already be pending (unlikely but safe)
-                        existing_pending_set = set(self.state.pending_urls)
-                        unique_retry_urls = [url for url in retry_urls if url not in existing_pending_set]
-                        self.state.pending_urls = unique_retry_urls + self.state.pending_urls
-                        # Clear attempted URLs for this run to avoid immediate re-marking on failure
-                        self.state.attempted_urls = {}
-                    # No 'else' needed here, attempted_urls already loaded/migrated correctly
-
-            except Exception as e:
-                logging.error(f"Failed to load checkpoint: {e}")
-                # Initialize fresh state if loading fails
-                self.state = CrawlerState(
-                    visited_urls=set(),
-                    attempted_urls={},
-                    pending_urls=[self.start_url] if self.is_valid_url(self.start_url) else []
-                )
-
-    def save_checkpoint(self):
-        """Save crawler state to checkpoint file"""
+    def close(self):
+        """Close database connection"""
+        if hasattr(self, 'conn') and self.conn:
+            self.conn.close()
+            
+    def add_url_to_queue(self, url: str, priority: int = 0):
+        """Add URL to crawl queue if not already present"""
+        normalized_url = self.normalize_url(url)
+        
         try:
-            with open(self.checkpoint_file, 'wb') as f:
-                pickle.dump(self.state, f)
-            logging.info(f"Saved checkpoint: {len(self.state.visited_urls)} visited, {len(self.state.pending_urls)} pending")
+            # Use INSERT OR IGNORE to avoid errors if URL already exists
+            self.cursor.execute('''
+            INSERT OR IGNORE INTO crawl_queue 
+            (url, next_crawl, crawl_frequency, status) 
+            VALUES (?, datetime('now'), ?, 'pending')
+            ''', (normalized_url, self.crawl_frequency_days))
+            return True
         except Exception as e:
-            logging.error(f"Failed to save checkpoint: {e}")
+            logging.error(f"Error adding URL to queue: {e}")
+            return False
+            
+    def retry_failed_urls(self):
+        """Reset failed URLs to pending status for retry"""
+        try:
+            self.cursor.execute('''
+            UPDATE crawl_queue 
+            SET status = 'pending', next_crawl = datetime('now'), 
+                last_error = NULL, retry_count = 0,
+                retry_after = NULL, failure_type = NULL
+            WHERE status = 'failed' 
+            AND (failure_type = 'permanent' OR failure_type IS NULL)
+            ''')
+            self.conn.commit()
+            logging.info(f"Reset {self.cursor.rowcount} previously failed URLs for retry")
+        except Exception as e:
+            logging.error(f"Error retrying failed URLs: {e}")
+            
+    def is_url_visited(self, url: str) -> bool:
+        """Check if URL has already been successfully visited"""
+        normalized_url = self.normalize_url(url)
+        self.cursor.execute("SELECT status FROM crawl_queue WHERE url = ? AND status = 'visited'", (normalized_url,))
+        return bool(self.cursor.fetchone())
+        
+    def get_next_url_to_crawl(self) -> Optional[str]:
+        """Get the next URL to crawl from the queue"""
+        try:
+            # Get URLs that are due for crawling, respecting retry_after for temporary failures
+            self.cursor.execute('''
+            SELECT url FROM crawl_queue 
+            WHERE status = 'pending' 
+            AND (next_crawl IS NULL OR next_crawl <= datetime('now'))
+            AND (retry_after IS NULL OR retry_after <= datetime('now'))
+            ORDER BY last_crawl IS NULL DESC, retry_count ASC, next_crawl ASC, url ASC
+            LIMIT 1
+            ''')
+            result = self.cursor.fetchone()
+            return result[0] if result else None
+        except Exception as e:
+            logging.error(f"Error getting next URL to crawl: {e}")
+            return None
+            
+    def mark_url_status(self, url: str, status: str, error_msg: Optional[str] = None, content_hash: Optional[str] = None):
+        """Update URL status in the database"""
+        normalized_url = self.normalize_url(url)
+        now = datetime.now().isoformat()
+        
+        try:
+            if status == 'visited':
+                # Calculate next crawl time based on frequency
+                next_crawl = (datetime.now() + timedelta(days=self.crawl_frequency_days)).isoformat()
+                self.cursor.execute('''
+                UPDATE crawl_queue 
+                SET status = ?, last_crawl = ?, next_crawl = ?, content_hash = ?,
+                    retry_count = 0, retry_after = NULL, failure_type = NULL
+                WHERE url = ?
+                ''', (status, now, next_crawl, content_hash, normalized_url))
+            elif status == 'failed':
+                # Determine if failure is temporary or permanent
+                is_temporary = False
+                
+                # Check for typical temporary failure patterns
+                temporary_patterns = [
+                    'timeout', 'timed out', 
+                    'connection', 'reset', 'refused', 
+                    'network', 'unreachable',
+                    'server error', '5', '503', '502',
+                    'overloaded', 'too many requests', '429',
+                    'temporarily', 'try again'
+                ]
+                
+                if error_msg:
+                    error_lower = error_msg.lower()
+                    is_temporary = any(pattern in error_lower for pattern in temporary_patterns)
+                
+                failure_type = "temporary" if is_temporary else "permanent"
+                
+                # For temporary failures, set up retry with backoff
+                if is_temporary:
+                    retry_count = 0
+                    self.cursor.execute("SELECT retry_count FROM crawl_queue WHERE url = ?", (normalized_url,))
+                    result = self.cursor.fetchone()
+                    if result and result[0] is not None:
+                        retry_count = result[0] + 1
+                    
+                    # Exponential backoff: wait longer between retries
+                    # Cap at 10 retries (retry_count starts at 1 for first retry)
+                    if retry_count <= 10:
+                        # 5min, 15min, 1hr, 4hr, 12hr, 24hr, 48hr, 72hr, 96hr, 120hr
+                        minutes_to_wait = 5 * (3 ** min(retry_count, 9))
+                        retry_after = (datetime.now() + timedelta(minutes=minutes_to_wait)).isoformat()
+                        
+                        self.cursor.execute('''
+                        UPDATE crawl_queue 
+                        SET status = 'pending', last_crawl = ?, last_error = ?, 
+                            retry_count = ?, retry_after = ?, failure_type = ?
+                        WHERE url = ?
+                        ''', (now, error_msg, retry_count, retry_after, failure_type, normalized_url))
+                        
+                        logging.info(f"Temporary failure for {url} (retry {retry_count}/10): Will retry in {minutes_to_wait} minutes")
+                    else:
+                        # After 10 retries, mark as permanent failure
+                        self.cursor.execute('''
+                        UPDATE crawl_queue 
+                        SET status = 'failed', last_crawl = ?, last_error = ?, 
+                            retry_count = ?, failure_type = 'permanent'
+                        WHERE url = ?
+                        ''', (now, f"{error_msg} [Exceeded max retries]", retry_count, normalized_url))
+                        
+                        logging.warning(f"Failed URL {url} exceeded maximum retry attempts (10): {error_msg}")
+                else:
+                    # Permanent failure, don't retry automatically
+                    self.cursor.execute('''
+                    UPDATE crawl_queue 
+                    SET status = ?, last_crawl = ?, last_error = ?, 
+                        retry_count = 0, retry_after = NULL, failure_type = ?
+                    WHERE url = ?
+                    ''', (status, now, error_msg, failure_type, normalized_url))
+                    
+                    logging.info(f"Permanent failure for {url}: {error_msg}")
+            else:
+                # Other status updates (like setting to 'pending')
+                self.cursor.execute('''
+                UPDATE crawl_queue 
+                SET status = ?, last_crawl = ? 
+                WHERE url = ?
+                ''', (status, now, normalized_url))
+                
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Error updating URL status: {e}")
+            return False
+    
+    def commit_db_changes(self):
+        """Commit any pending database changes"""
+        try:
+            self.conn.commit()
+            logging.debug(f"Database changes committed")
+            return True
+        except Exception as e:
+            logging.error(f"Error committing database changes: {e}")
+            return False
+
+    def get_queue_stats(self) -> Dict:
+        """Get statistics about the crawl queue"""
+        stats = {
+            'pending': 0, 
+            'visited': 0, 
+            'failed': 0, 
+            'total': 0,
+            'pending_retry': 0,  # URLs waiting to be retried
+            'avg_retry_count': 0  # Average retry count for URLs with retries
+        }
+        try:
+            # Get counts by status
+            self.cursor.execute('''
+            SELECT status, COUNT(*) as count 
+            FROM crawl_queue 
+            GROUP BY status
+            ''')
+            for row in self.cursor.fetchall():
+                status, count = row['status'], row['count']
+                if status in stats:
+                    stats[status] = count
+                stats['total'] += count
+            
+            # Count pending URLs with retry_after in the future
+            self.cursor.execute('''
+            SELECT COUNT(*) FROM crawl_queue 
+            WHERE status = 'pending' 
+            AND retry_after IS NOT NULL 
+            AND retry_after > datetime('now')
+            ''')
+            stats['pending_retry'] = self.cursor.fetchone()[0]
+            
+            # Get average retry count for URLs with retries
+            self.cursor.execute('''
+            SELECT AVG(retry_count) as avg_retries 
+            FROM crawl_queue 
+            WHERE retry_count > 0
+            ''')
+            avg_result = self.cursor.fetchone()
+            if avg_result and avg_result[0]:
+                stats['avg_retry_count'] = round(avg_result[0], 1)
+            
+            # Count by failure type
+            self.cursor.execute('''
+            SELECT failure_type, COUNT(*) as count 
+            FROM crawl_queue 
+            WHERE failure_type IS NOT NULL
+            GROUP BY failure_type
+            ''')
+            for row in self.cursor.fetchall():
+                failure_type, count = row['failure_type'], row['count']
+                if failure_type:
+                    stats[f'{failure_type}_failures'] = count
+            
+            return stats
+        except Exception as e:
+            logging.error(f"Error getting queue stats: {e}")
+            return stats
+
+    def get_failed_urls(self) -> List[Tuple[str, str]]:
+        """Get list of failed URLs with error messages"""
+        failed_urls = []
+        try:
+            self.cursor.execute('''
+            SELECT url, last_error 
+            FROM crawl_queue 
+            WHERE status = 'failed'
+            ORDER BY last_crawl DESC
+            ''')
+            failed_urls = [(row['url'], row['last_error'] or 'Unknown error') 
+                          for row in self.cursor.fetchall()]
+            return failed_urls
+        except Exception as e:
+            logging.error(f"Error getting failed URLs: {e}")
+            return []
 
     def normalize_url(self, url: str) -> str:
         """Normalize URL for comparison."""
@@ -311,33 +500,6 @@ class WebsiteCrawler:
         except Exception as e:
             logging.debug(f"Invalid URL {url}: {e}")
             return False
-
-    def wait_if_inactive(self, start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time], active_hours_str: Optional[str]):
-        """Checks if current time is outside active hours and sleeps if needed. Returns False if exit requested during sleep, True otherwise."""
-        is_active, sleep_duration_seconds = is_within_time_range(start_time_obj, end_time_obj)
-        if not is_active and sleep_duration_seconds is not None and sleep_duration_seconds > 0:
-            sleep_hours = sleep_duration_seconds / 3600
-            wake_time = (datetime.now() + timedelta(seconds=sleep_duration_seconds)).strftime('%Y-%m-%d %H:%M:%S')
-            logging.info(f"Outside active hours ({active_hours_str}). Sleeping for {sleep_hours:.2f} hours until {wake_time}. Saving checkpoint.")
-            self.save_checkpoint() # Use self.save_checkpoint
-            try:
-                # Sleep in shorter intervals to allow faster exit if signal received
-                sleep_interval = 60 # Sleep for 1 minute at a time
-                remaining_sleep = sleep_duration_seconds
-                while remaining_sleep > 0:
-                    if handle_exit.exit_requested:
-                        logging.info("Exit signal received during sleep. Stopping.")
-                        return False # Indicates sleep was interrupted by exit request
-                    sleep_this_interval = min(sleep_interval, remaining_sleep)
-                    time.sleep(sleep_this_interval)
-                    remaining_sleep -= sleep_this_interval
-                logging.info("Woke up. Resuming crawl.")
-            except KeyboardInterrupt:
-                logging.info("Keyboard interrupt during sleep. Stopping.")
-                handle_exit.exit_requested = True # Ensure graceful shutdown
-                return False # Indicates sleep was interrupted by exit request
-        # Return True if active, no sleep needed, or sleep completed normally
-        return True
 
     def clean_content(self, html_content: str) -> str:
         logging.debug(f"Cleaning HTML content (length: {len(html_content)})")
@@ -406,9 +568,12 @@ class WebsiteCrawler:
         last_exception = None # Keep track of the last error
         restart_needed = False # Initialize restart flag
 
+        # Ensure the URL has a scheme before attempting to navigate
+        url = ensure_scheme(url) # Overwrite url parameter
+
         while retries > 0:
             try:
-                logging.debug(f"Navigating to {url} (Attempts left: {retries})")
+                logging.debug(f"Attempting to navigate to {url} (Attempts left: {retries})")
                 page.set_default_timeout(30000) # 30 seconds page timeout
 
                 # --- Navigation Attempt ---
@@ -420,8 +585,9 @@ class WebsiteCrawler:
                     retries = 0 # Fail immediately if no response object
                     continue
                 if response.status >= 400:
-                    logging.error(f"HTTP {response.status} error for {url}")
-                    last_exception = Exception(f"HTTP {response.status}")
+                    error_msg = f"HTTP {response.status}"
+                    logging.error(f"{error_msg} error for {url}")
+                    last_exception = Exception(error_msg)
                     retries = 0 # Don't retry HTTP errors generally
                     continue
                 
@@ -430,7 +596,7 @@ class WebsiteCrawler:
                 if content_type and not content_type.lower().startswith('text/html'):
                     logging.info(f"Skipping non-HTML content ({content_type}) at {url}")
                     # Mark as visited because we successfully reached it, even if not processing
-                    self.state.visited_urls.add(self.normalize_url(url))
+                    self.mark_url_status(url, 'visited', content_hash="non_html")
                     return None, [], False # Return no content, no links, no restart needed
 
                 # --- Wait and Extract (Only for HTML) ---
@@ -533,14 +699,14 @@ class WebsiteCrawler:
              # Add to attempted URLs only on normal failure, not restart failure (handled in run_crawl_loop)
              # Store the error message as well
              error_message = str(last_exception) if last_exception else "Unknown error during crawl attempt"
-             self.state.attempted_urls[self.normalize_url(url)] = error_message
+             self.mark_url_status(url, 'failed', error_message)
 
         # Return based on whether restart is needed
         return None, [], restart_needed # Return restart flag
 
     def create_embeddings(self, chunks: List[str], url: str, page_title: str) -> List[Dict]:
         """Create embeddings for text chunks."""
-        embeddings = OpenAIEmbeddings({ model: 'text-embedding-ada-002' })
+        embeddings = OpenAIEmbeddings(model='text-embedding-ada-002', chunk_size=1000)
         vectors = []
         
         clean_title = sanitize_for_id(page_title)
@@ -571,6 +737,18 @@ class WebsiteCrawler:
         
         return vectors
     
+    def should_process_content(self, url: str, current_hash: str) -> bool:
+        """Check if content has changed and should be processed"""
+        self.cursor.execute(
+            "SELECT content_hash FROM crawl_queue WHERE url = ? AND status = 'visited'", 
+            (self.normalize_url(url),)
+        )
+        result = self.cursor.fetchone()
+        
+        # If never seen before or hash has changed, process it
+        if not result or not result[0] or result[0] != current_hash:
+            return True
+        return False
 
 def sanitize_for_id(text: str) -> str:
     """Sanitize text for use in Pinecone vector IDs"""
@@ -590,25 +768,25 @@ def handle_exit(signum, frame):
     handle_exit.counter += 1
     handle_exit.exit_requested = True # Set flag to request graceful exit
 
-    logging.warning(f"Received exit signal ({handle_exit.counter}). Will exit gracefully after current operation. Saving checkpoint...")
+    logging.warning(f"Received exit signal ({handle_exit.counter}). Will exit gracefully after current operation. Committing database changes...")
 
-    # Attempt to save checkpoint
+    # Attempt to commit database changes
     if hasattr(handle_exit, 'crawler') and handle_exit.crawler:
         crawler = handle_exit.crawler
         # Put the URL currently being processed back in the queue
-        if crawler.current_processing_url and crawler.current_processing_url not in crawler.state.pending_urls:
-            # Insert at the beginning to retry it first on resume
-            logging.debug(f"Re-queuing URL in progress: {crawler.current_processing_url}")
-            crawler.state.pending_urls.insert(0, crawler.current_processing_url)
+        if crawler.current_processing_url:
+            try:
+                # Mark it as pending to process again
+                crawler.mark_url_status(crawler.current_processing_url, 'pending')
+                logging.debug(f"Re-queued current URL for next run: {crawler.current_processing_url}")
+            except Exception as e:
+                logging.error(f"Error re-queuing current URL: {e}")
 
         try:
-            crawler.save_checkpoint()
-            logging.info("Checkpoint saved successfully during exit handler.")
+            crawler.commit_db_changes()
+            logging.info("Database changes committed successfully during exit handler.")
         except Exception as e:
-            logging.error(f"Error saving checkpoint during exit: {e}")
-
-    # No longer force immediate exit - allow main loop to terminate
-    # os._exit(1)
+            logging.error(f"Error committing database changes during exit: {e}")
 
 def create_chunks_from_page(page_content) -> List[str]:
     """Create text chunks from page content."""
@@ -645,75 +823,6 @@ def upsert_to_pinecone(vectors: List[Dict], index: pinecone.Index, index_name: s
                 pass # Continue with next batch
         logging.info(f"Upsert of {total_vectors} vectors complete.")
 
-def parse_time_string(time_str: str) -> Optional[dt_time]:
-    """Parse HH:MM (24hr) or H:MMam/pm time string into a time object."""
-    time_str = time_str.strip().lower()
-    # Added %I%p for cases like "9pm"
-    formats_to_try = [
-        '%H:%M',       # 24-hour (e.g., 14:30)
-        '%I:%M%p',     # 12-hour AM/PM (e.g., 2:30pm)
-        '%I%p',        # 12-hour AM/PM no minutes (e.g., 9pm)
-    ]
-    for fmt in formats_to_try:
-        try:
-             # No change needed here, strptime handles the format directly
-             parsed_time = datetime.strptime(time_str, fmt).time()
-             return parsed_time
-        except ValueError:
-            continue # Try next format
-
-    logging.error(f"Invalid time format: '{time_str}'. Use HH:MM (24hr) or H:MMam/pm (e.g., 9:00pm, 14:30).")
-    return None
-
-def parse_time_range_string(range_str: Optional[str]) -> Tuple[Optional[dt_time], Optional[dt_time]]:
-    """Parse 'START-END' time range string into start and end time objects."""
-    if not range_str:
-        return None, None
-    parts = range_str.split('-')
-    if len(parts) != 2:
-        logging.error(f"Invalid time range format: {range_str}. Use START-END format (e.g., 9:00pm-5:00am).")
-        return None, None
-    start_str, end_str = parts
-    start_time = parse_time_string(start_str)
-    end_time = parse_time_string(end_str)
-    return start_time, end_time
-
-def is_within_time_range(start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time]) -> Tuple[bool, Optional[float]]:
-    """Check if the current time is within the specified range. Handles overnight ranges. Returns (is_within, sleep_seconds)."""
-    if not start_time_obj or not end_time_obj:
-        return True, None  # No range specified, always within
-
-    now = datetime.now()
-    current_time = now.time()
-
-    # Check if range spans midnight (e.g., 21:00 to 05:00)
-    if start_time_obj <= end_time_obj:
-        # Normal range (e.g., 09:00 to 17:00)
-        is_within = start_time_obj <= current_time <= end_time_obj
-    else:
-        # Overnight range (e.g., 21:00 to 05:00)
-        is_within = current_time >= start_time_obj or current_time <= end_time_obj
-
-    if is_within:
-        return True, None
-    else:
-        # Calculate time until the next start time
-        start_datetime_today = now.replace(hour=start_time_obj.hour, minute=start_time_obj.minute, second=0, microsecond=0)
-
-        next_start_datetime = start_datetime_today
-        # If current time is past today's end time (for overnight) OR past today's start time (for same day)
-        if (start_time_obj > end_time_obj and current_time > end_time_obj) or \
-           (start_time_obj <= end_time_obj and current_time > start_time_obj): 
-             if now >= start_datetime_today:
-                 next_start_datetime += timedelta(days=1)
-        # Handle case where it's before the start time on the same day (for overnight range)
-        elif start_time_obj > end_time_obj and current_time < start_time_obj:
-             # next_start_datetime is already correctly set to today's start time
-             pass 
-
-        sleep_duration_seconds = max(0, (next_start_datetime - now).total_seconds())
-        return False, sleep_duration_seconds
-
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Crawl a website and store in Pinecone')
@@ -722,15 +831,7 @@ def parse_arguments() -> argparse.Namespace:
         required=True, # Make site ID required
         help='Site ID for environment variables (e.g., ananda-public). Loads config from crawler_config/[site]-config.json. REQUIRED.'
     )
-    parser.add_argument('--continue', action='store_true', help='Continue from previous checkpoint')
-    parser.add_argument(
-        '--active-hours',
-        type=str,
-        default=None,
-        help='Optional active time range (e.g., "9pm-5am" or "21:00-05:00"). Crawler pauses outside this window.'
-    )
-    parser.add_argument('--retry-failed', action='store_true', help='Retry URLs marked as failed in the previous checkpoint.')
-    parser.add_argument('--report', action='store_true', help='Generate a report of failed URLs from the last checkpoint and exit.')
+    parser.add_argument('--retry-failed', action='store_true', help="Retry URLs marked as 'permanent' failed in the database.")
     return parser.parse_args()
 
 def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
@@ -814,7 +915,7 @@ def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
         
     return pinecone_index
 
-def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace, start_time_obj: Optional[dt_time], end_time_obj: Optional[dt_time]):
+def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace):
     """Run the main crawling loop."""
     # Get index name (needed for upsert)
     index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
@@ -828,14 +929,10 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
     batch_start_time = time.time()
     PAGES_PER_RESTART = 50
 
-    # Ensure we have a starting URL
-    if not crawler.state.pending_urls:
-        logging.warning("No pending URLs found in state, reinitializing queue with start URL.")
-        crawler.state.pending_urls = [crawler.start_url]
+    # Log queue stats at start
+    stats = crawler.get_queue_stats()
+    logging.info(f"Initial queue stats: {stats['pending']} pending, {stats['visited']} visited, {stats['failed']} failed")
         
-    logging.info(f"Initial queue size: {len(crawler.state.pending_urls)} URLs")
-    logging.info(f"First URL in queue: {crawler.state.pending_urls[0] if crawler.state.pending_urls else 'None'}")
-
     with sync_playwright() as p:
         browser = p.firefox.launch(
             headless=True, 
@@ -848,18 +945,17 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
         try:
             start_run_time = time.time()
 
-            # --- Initial Time Check Before Loop ---
-            logging.debug("Performing initial active hours check...")
-            should_continue_loop = crawler.wait_if_inactive(start_time_obj, end_time_obj, args.active_hours)
-            if not should_continue_loop:
-                logging.info("Exiting after initial sleep interruption.")
-                # Let finally block handle cleanup
-            
             # Modified loop condition to check exit flag
-            while crawler.state.pending_urls and should_continue_loop and not handle_exit.exit_requested:
+            while should_continue_loop and not handle_exit.exit_requested:
+                # Get next URL to process
+                url = crawler.get_next_url_to_crawl()
+                if not url:
+                    # No URLs ready to process, sleep then check again
+                    logging.info("No URLs ready for processing. Sleeping for 60 seconds...")
+                    time.sleep(60)
+                    continue
+                
                 # --- Browser Restart Logic ---
-                # Trigger restart if counter reaches limit OR if restart_needed was flagged last iteration
-                # (restart_needed logic is handled *after* crawl_page call below)
                 if pages_since_restart >= PAGES_PER_RESTART:
                     # Calculate batch success rate
                     batch_attempts = len(batch_results)
@@ -874,17 +970,15 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                     else:
                         pages_per_minute = float('inf') # Or some other indicator
                     
-                    total_visited = len(crawler.state.visited_urls)
-                    total_attempted = total_visited + len(crawler.state.attempted_urls)
-                    success_rate = (total_visited / total_attempted * 100) if total_attempted > 0 else 0
-                    pending_count = len(crawler.state.pending_urls)
+                    stats = crawler.get_queue_stats()
                     
                     stats_message = (
                         f"\n--- Stats at {pages_since_restart} page boundary ---\n"
                         f"- Processing {pages_per_minute:.1f} pages/minute (last {pages_since_restart} pages)\n"
-                        f"- Total {total_visited} visited pages of {total_attempted} attempted ({round(success_rate)}% success)\n"
+                        f"- Total {stats['visited']} visited pages of {stats['total']} total ({round(stats['visited']/stats['total']*100 if stats['total'] > 0 else 0)}% success)\n"
                         f"- Success rate last {batch_attempts} attempts: {round(batch_success_rate)}%\n"
-                        f"- Total {pending_count} pending pages\n"
+                        f"- Total {stats['pending']} pending, {stats['failed']} failed, {stats['pending_retry']} awaiting retry\n"
+                        f"- Average retries per URL with retries: {stats['avg_retry_count']}\n"
                         f"--- End Stats ---"
                     )
                     for line in stats_message.split('\n'):
@@ -898,7 +992,7 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                         if browser and browser.is_connected():
                             browser.close()
                     except Exception as close_err:
-                        logging.warning(f"Error closing browser/page during restart: {close_err}")
+                        logging.warning(f"Error closing browser during restart: {close_err}")
                     
                     browser = p.firefox.launch(
                         headless=True,
@@ -914,38 +1008,18 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                     # Continue is important here to ensure the loop condition re-evaluates
                     continue 
 
-                # --- Time Check Inside Loop ---
-                should_continue_loop = crawler.wait_if_inactive(start_time_obj, end_time_obj, args.active_hours)
-                if not should_continue_loop:
-                    logging.info("Exit requested during sleep, breaking main loop.")
-                    break # Exit while loop
-                
-                if handle_exit.exit_requested:
-                    logging.info("Exit requested before processing next URL, breaking loop.")
-                    break
-
-                url = crawler.state.pending_urls.pop(0)
                 crawler.current_processing_url = url # Track current URL
-                normalized_url = crawler.normalize_url(url)
-                
+                                
                 logging.info(f"Processing URL: {url}")
-                logging.debug(f"Remaining in queue: {len(crawler.state.pending_urls)}")
                 
                 # --- Add skip pattern check ---
                 if crawler.should_skip_url(url):
                     logging.info(f"Skipping URL based on skip patterns: {url}")
-                    # Ensure it's marked as 'attempted' so it's not retried if --retry-failed is used later,
-                    # but don't mark as visited, as we didn't actually process it.
-                    if normalized_url not in crawler.state.attempted_urls:
-                        crawler.state.attempted_urls[normalized_url] = "Skipped by pattern rule" # Add reason
+                    crawler.mark_url_status(url, 'failed', "Skipped by pattern rule")
                     crawler.current_processing_url = None # Reset since we're skipping
                     continue
                 # --- End skip pattern check ---
                 
-                if normalized_url in crawler.state.visited_urls:
-                    logging.debug(f"Skipping already visited URL: {url}")
-                    continue
-                    
                 # Reset processing URL before crawl attempt
                 crawler.current_processing_url = url # Track current URL
                 content, new_links, restart_needed = crawler.crawl_page(browser, page, url) # Capture restart flag
@@ -953,14 +1027,10 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                 # --- Handle Restart Request ---
                 if restart_needed:
                     logging.warning(f"Browser restart requested after attempting {url}.")
-                    crawler.state.attempted_urls[normalized_url] = "Attempted before browser restart" # Mark as attempted with reason
-                    # Re-queue the URL to try again after restart
-                    if url not in crawler.state.pending_urls: # Avoid duplicate re-queueing
-                       logging.debug(f"Re-queuing {url} for retry after browser restart.")
-                       crawler.state.pending_urls.insert(0, url)
+                    crawler.mark_url_status(url, 'pending')  # Mark as pending to try again
                     # Force restart by setting counter past the limit
                     pages_since_restart = PAGES_PER_RESTART 
-                    crawler.save_checkpoint() # Save state before forcing restart
+                    crawler.commit_db_changes() # Save state before forcing restart
                     crawler.current_processing_url = None
                     continue # Skip rest of loop, trigger restart block at the top of the next iteration
 
@@ -970,7 +1040,6 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
 
                 if handle_exit.exit_requested:
                     logging.info("Exit requested after crawling page, stopping before processing/saving.")
-                    # URL was put back in queue by handle_exit if it was being processed
                     break
 
                 if content: # Page crawled successfully
@@ -980,38 +1049,42 @@ def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args
                     try:
                         chunks = create_chunks_from_page(content)
                         if chunks:
-                            embeddings = crawler.create_embeddings(chunks, url, content.title)
-                            upsert_to_pinecone(embeddings, pinecone_index, index_name)
-                            logging.debug(f"Successfully processed and upserted: {url}")
-                            logging.debug(f"Created {len(chunks)} chunks, {len(embeddings)} embeddings.")
+                            # Calculate content hash for change detection
+                            content_hash = hashlib.sha256(content.content.encode()).hexdigest()
+                            
+                            # Check if content has changed (if we've seen this URL before)
+                            if crawler.should_process_content(url, content_hash):
+                                embeddings = crawler.create_embeddings(chunks, url, content.title)
+                                upsert_to_pinecone(embeddings, pinecone_index, index_name)
+                                logging.debug(f"Successfully processed and upserted: {url}")
+                                logging.debug(f"Created {len(chunks)} chunks, {len(embeddings)} embeddings.")
+                            else:
+                                logging.info(f"Content unchanged for {url}, skipping embeddings creation")
 
-                        crawler.state.visited_urls.add(normalized_url)
+                            # Mark URL as visited with content hash
+                            crawler.mark_url_status(url, 'visited', content_hash=content_hash)
+                        else:
+                            # No chunks created, still mark as visited but note the issue
+                            crawler.mark_url_status(url, 'visited', content_hash="no_content")
+                            logging.warning(f"No content chunks created for {url}")
                         
+                        # Add new links to queue
                         for link in new_links:
-                            normalized_link = crawler.normalize_url(link)
-                            if (normalized_link not in crawler.state.visited_urls and
-                                normalized_link not in crawler.state.attempted_urls and
-                                link not in crawler.state.pending_urls and
-                                not crawler.should_skip_url(link)): # Add skip check here
-                                crawler.state.pending_urls.append(link)
-                        logging.debug(f"Queue size after adding links: {len(crawler.state.pending_urls)} URLs pending")
+                            if crawler.is_valid_url(link) and not crawler.should_skip_url(link) and not crawler.is_url_visited(link):
+                                crawler.add_url_to_queue(link)
 
                     except Exception as e:
                         logging.error(f"Failed to process page content {url}: {e}")
                         logging.error(traceback.format_exc())
-                        crawler.state.attempted_urls[normalized_url] = "Failed during content processing"
+                        crawler.mark_url_status(url, 'failed', f"Failed during content processing: {str(e)}")
 
-                else: # Page crawl failed normally (e.g., no content, HTTP error handled in crawl_page)
-                    # Already added to attempted_urls inside crawl_page if it failed there
-                    # (and returned restart_needed=False)
-                    # If crawl_page returned (None, links, False) it means no content extracted
-                    # Ensure it's marked as attempted if not already done in crawl_page
-                    if not restart_needed and normalized_url not in crawler.state.attempted_urls:
-                        logging.debug(f"Marking URL with no content or prior error as attempted: {url}")
-                        crawler.state.attempted_urls[normalized_url] = "No content or prior error"
+                else: # Page crawl failed normally
+                    # Get error message from attempted_urls if it was set there
+                    error_msg = f"No content extracted from {url}"
+                    crawler.mark_url_status(url, 'failed', error_msg)
 
-                # Save checkpoint *after* result is determined and added to batch_results/state updated
-                crawler.save_checkpoint()
+                # Save changes after processing URL
+                crawler.commit_db_changes()
 
                 if handle_exit.exit_requested:
                     logging.info("Exit requested after saving checkpoint, stopping loop.")
@@ -1057,7 +1130,7 @@ def main():
     # --- Environment File ---
     # Construct path relative to the script's location
     script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent.parent.parent  # Go up three levels
+    project_root = script_dir.parent.parent  # Go up two levels for project root
     env_file = project_root / f".env.{args.site}"
 
     # Convert Path object to string for os.path.exists
@@ -1067,13 +1140,6 @@ def main():
         sys.exit(1)
     else:
         logging.info(f"Will load environment variables from: {os.path.abspath(env_file_str)}")
-
-    # --- Validate Active Hours ---
-    start_time_obj, end_time_obj = parse_time_range_string(args.active_hours)
-    if args.active_hours and (not start_time_obj or not end_time_obj):
-        logging.error("Invalid --active-hours format provided. Exiting.")
-        print(f"Error: Invalid --active-hours format provided. Exiting.")
-        sys.exit(1)
 
     # --- Get Domain & Start URL from Config ---
     domain = site_config.get('domain')
@@ -1092,57 +1158,18 @@ def main():
     crawler = WebsiteCrawler(site_id=args.site, site_config=site_config, retry_failed=args.retry_failed)
     handle_exit.crawler = crawler  # Store crawler reference for signal handler
 
-    # --- Handle --report flag ---
-    if args.report:
-        logging.info("Generating report of failed URLs...")
-        print("\n--- Failed URL Report ---")
-        if crawler.state.attempted_urls:
-            for url, error_msg in crawler.state.attempted_urls.items():
-                # Print URL and error message on a single line
-                print(f"{url} - {error_msg}")
-            print(f"\nTotal failed URLs reported: {len(crawler.state.attempted_urls)}")
-        else:
-            print("No recorded failures found in the checkpoint.")
-        print("------------------------")
-        sys.exit(0) # Exit after generating report
-
-    # Handle --continue flag and checkpoint file (only if not reporting)
-    # This logic is now primarily about *clearing* state if not continuing/retrying
-    if not getattr(args, 'continue') and not args.retry_failed:
-        # Check if the checkpoint file exists before attempting to unlink
-        if crawler.checkpoint_file.exists():
-             logging.info("Starting fresh: Removing existing checkpoint file.")
-             crawler.checkpoint_file.unlink() # Remove existing checkpoint
-        # Reset state in the crawler object itself
-        crawler.state = CrawlerState(
-            visited_urls=set(),
-            attempted_urls={},
-            pending_urls=[crawler.start_url] if crawler.is_valid_url(crawler.start_url) else []
-        )
-        logging.info("Crawler state has been reset for a fresh run.")
-
-    elif not crawler.checkpoint_file.exists() and (getattr(args, 'continue') or args.retry_failed):
-         logging.warning("Continue or Retry requested, but no checkpoint file found. Starting fresh.")
-         # Ensure state is initialized correctly even if checkpoint didn't exist
-         if not crawler.state.pending_urls:
-             crawler.state.pending_urls = [crawler.start_url] if crawler.is_valid_url(crawler.start_url) else []
-
     # Initialize Pinecone
     pinecone_index = initialize_pinecone(env_file)
     if not pinecone_index:
+        crawler.close()  # Close database connection
         sys.exit(1) # Exit if Pinecone initialization failed
 
     # --- Start Crawl ---
     try:
         logging.info(f"Starting crawl of {start_url} for site '{args.site}'")
 
-        if start_time_obj and end_time_obj:
-            logging.info(f"Crawler active hours: {start_time_obj.strftime('%H:%M')} to {end_time_obj.strftime('%H:%M')}")
-        else:
-            logging.info("Crawler active 24/7.")
-            
         # Run the main crawl loop
-        run_crawl_loop(crawler, pinecone_index, args, start_time_obj, end_time_obj)
+        run_crawl_loop(crawler, pinecone_index, args)
         
     except SystemExit:
         logging.info("Exiting due to SystemExit signal.")
@@ -1151,8 +1178,9 @@ def main():
         logging.error(traceback.format_exc())
     finally:
         if 'crawler' in locals():
-            logging.info("Performing final checkpoint save...")
-            crawler.save_checkpoint() # Ensure final save
+            logging.info("Performing final database commit and cleanup...")
+            crawler.commit_db_changes() # Ensure final save
+            crawler.close()  # Close database connection
         if handle_exit.exit_requested:
             logging.info("Exiting script now due to signal request.")
         else:
