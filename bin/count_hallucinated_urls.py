@@ -34,7 +34,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 # Add the parent directory to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from python.util.env_utils import load_env
+from pyutil.env_utils import load_env
 
 # Import from local firestore_utils in the same directory
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -116,6 +116,7 @@ def analyze_hallucinated_urls_by_interval(db, env_prefix, interval_days, num_int
     interval_start_dates = []
     total_docs_processed = 0
     total_docs_with_urls = 0
+    total_url_occurrences_in_answers = 0
     
     now = datetime.now(timezone.utc)
     
@@ -145,6 +146,7 @@ def analyze_hallucinated_urls_by_interval(db, env_prefix, interval_days, num_int
                     urls = extract_urls(data['answer'])
                     if urls:
                         urls_in_interval += 1
+                        total_url_occurrences_in_answers += len(urls)
                         for url in urls:
                             all_unique_urls.add(url)
                             # Initialize URL entry if first time seen
@@ -173,7 +175,8 @@ def analyze_hallucinated_urls_by_interval(db, env_prefix, interval_days, num_int
         "all_unique_urls": all_unique_urls,
         "interval_start_dates": interval_start_dates,
         "total_docs_processed": total_docs_processed,
-        "total_docs_with_urls": total_docs_with_urls
+        "total_docs_with_urls": total_docs_with_urls,
+        "total_url_occurrences_in_answers": total_url_occurrences_in_answers
     }
 
 def validate_urls(unique_urls_set):
@@ -205,15 +208,24 @@ def validate_urls(unique_urls_set):
     
     return url_validation
 
-def generate_report(url_counts_by_interval, url_validation, interval_start_dates, num_intervals, total_docs_processed, total_docs_with_urls):
+def generate_report(url_counts_by_interval, url_validation, interval_start_dates, num_intervals, 
+                    total_docs_processed, total_docs_with_urls, total_url_occurrences_in_answers,
+                    interval_duration_days):
     """Generate a report comparing invalid URL counts across time intervals in Markdown format."""
     
     print("\n## Hallucinated URLs Report Across Intervals")
-    print(f"- **Total documents analyzed across {num_intervals} interval(s):** {total_docs_processed}")
+
+    # Clarify total documents analyzed line
+    if num_intervals == 1:
+        print(f"- **Total documents analyzed over {interval_duration_days} days:** {total_docs_processed}")
+    else:
+        total_duration_analyzed = interval_duration_days * num_intervals
+        print(f"- **Total documents analyzed over {total_duration_analyzed} days ({num_intervals} interval(s) of {interval_duration_days} days each):** {total_docs_processed}")
+
     # Calculate overall percentage with safety check for division by zero
     overall_perc = (total_docs_with_urls / total_docs_processed * 100) if total_docs_processed > 0 else 0
     print(f"- **Total documents containing URLs:** {total_docs_with_urls} ({overall_perc:.2f}%)")
-    print(f"- **Unique URLs found:** {len(url_validation)}")
+    print(f"- **Total unique URLs found:** {len(url_validation)}")
 
     # Filter for invalid URLs
     invalid_urls = {
@@ -225,8 +237,23 @@ def generate_report(url_counts_by_interval, url_validation, interval_start_dates
     valid_count = len(url_validation) - len(invalid_urls)
     invalid_count = len(invalid_urls)
     
-    print(f"- **Valid URLs (2xx status):** {valid_count}")
-    print(f"- **Invalid URLs (errors or non-2xx status):** {invalid_count}")
+    print(f"- **Unique valid URLs (2xx status):** {valid_count}")
+    print(f"- **Unique invalid URLs (errors or non-2xx status):** {invalid_count}")
+
+    # Calculate total_invalid_url_instances
+    total_invalid_url_instances = 0
+    if invalid_urls: # Ensure there are invalid URLs before iterating
+        for url_key in invalid_urls: # Iterate through keys of invalid_urls dictionary
+            counts_for_url = url_counts_by_interval.get(url_key, [0] * num_intervals)
+            total_invalid_url_instances += sum(counts_for_url)
+            
+    print(f"- **Total URL instances in answers (valid and invalid):** {total_url_occurrences_in_answers}")
+    print(f"- **Total invalid URL instances:** {total_invalid_url_instances}")
+
+    percentage_invalid_instances = 0.0
+    if total_url_occurrences_in_answers > 0:
+        percentage_invalid_instances = (total_invalid_url_instances / total_url_occurrences_in_answers * 100)
+    print(f"- **Percentage of invalid URL instances:** {percentage_invalid_instances:.2f}%")
 
     if not invalid_urls:
         print("\n**No invalid URLs found across the specified interval(s).**")
@@ -234,12 +261,14 @@ def generate_report(url_counts_by_interval, url_validation, interval_start_dates
 
     print("\n### Invalid URL Counts by Interval")
 
-    # Create Markdown table header
-    header_dates = [f"{date.month}/{date.day}" for date in interval_start_dates]
-    # Add "Total" column header
-    header_cells = header_dates + ["Total", "Status", "URL"] 
+    # Create Markdown table header conditionally
+    if num_intervals == 1:
+        header_cells = ["Total", "Status", "URL"]
+    else:
+        header_dates = [f"{date.month}/{date.day}" for date in interval_start_dates]
+        header_cells = header_dates + ["Total", "Status", "URL"]
+    
     header_str = " | ".join(header_cells)
-    # Create separator line based on number of columns
     separator_line = " | ".join(["---"] * len(header_cells))
     
     print(f"\n| {header_str} |")
@@ -253,8 +282,8 @@ def generate_report(url_counts_by_interval, url_validation, interval_start_dates
 
     for url in sorted_invalid_urls:
         counts = url_counts_by_interval.get(url, [0] * num_intervals)
-        row_total = sum(counts) # Calculate total for the current URL
-        grand_total += row_total # Add to grand total
+        row_total = sum(counts) 
+        grand_total += row_total 
         
         # Add to interval totals
         for i in range(num_intervals):
@@ -264,16 +293,21 @@ def generate_report(url_counts_by_interval, url_validation, interval_start_dates
         status_code = validation_info['status_code'] or "N/A"
         error_info = f" - {validation_info['error']}" if validation_info['error'] else ""
         status_str = f"`[{status_code}]{error_info}`"
-        # Escape pipe characters in the URL itself if necessary for Markdown
         escaped_url = url.replace("|", "\\\\|") 
         
-        # Format table row cells, including the row_total
-        row_cells = [str(c) for c in counts] + [str(row_total), status_str, f"`{escaped_url}`"]
+        if num_intervals == 1:
+            row_cells = [str(row_total), status_str, f"`{escaped_url}`"]
+        else:
+            row_cells = [str(c) for c in counts] + [str(row_total), status_str, f"`{escaped_url}`"]
+        
         row_str = " | ".join(row_cells)
         print(f"| {row_str} |")
 
-    # Print Totals row, including the grand_total
-    totals_cells = [str(t) for t in interval_totals] + [f"**{grand_total}**", "**TOTALS**", ""]
+    # Print Totals row, including the grand_total, conditionally
+    if num_intervals == 1:
+        totals_cells = [f"**{grand_total}**", "**TOTALS**", ""]
+    else:
+        totals_cells = [str(t) for t in interval_totals] + [f"**{grand_total}**", "**TOTALS**", ""]
     totals_str = " | ".join(totals_cells)
     print(f"| {totals_str} |")
 
@@ -315,8 +349,11 @@ def main():
             
             # Validate URLs (only once per unique URL across all intervals)
             url_validation = validate_urls(all_unique_urls)
+            total_url_occurrences_in_answers = analysis_data["total_url_occurrences_in_answers"]
+            
             generate_report(url_counts_by_interval, url_validation, interval_start_dates, 
-                           args.num_intervals, total_docs_processed, total_docs_with_urls)
+                           args.num_intervals, total_docs_processed, total_docs_with_urls,
+                           total_url_occurrences_in_answers, args.interval)
         else:
             print("No documents or URLs found in the specified interval(s).")
         
