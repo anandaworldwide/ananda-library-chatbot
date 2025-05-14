@@ -255,3 +255,22 @@ Data is stored across multiple services:
 - **Configuration Management:**
   - Server loads configuration details from `site-config/config.json`.
   - Prompts specific to different namespaces/personas are loaded from JSON files within `site-config/prompts/`.
+
+---
+
+## 5. Utility Scripts & Cron Jobs
+
+The `bin/` directory and parts of `data_ingestion/scripts/` contain various Python utility scripts for maintenance,
+data processing, and analysis.
+
+- **`bin/count_hallucinated_urls.py`**
+  - **Purpose:** Analyzes Firestore `chatLogs` (effectively "Answers" based on environment) to identify and count URLs
+    present in answer fields that return errors or non-2xx HTTP status codes (e.g., 404 Not Found).
+  - **Functionality:**
+    - Connects to Firestore.
+    - Queries chat logs within specified time intervals.
+    - Extracts all URLs from the 'answer' field of each log.
+    - Performs HTTP HEAD requests to each unique URL to check its status.
+    - Reports counts of invalid/broken URLs, categorized by time interval.
+  - **Usage:** Typically run manually or as a scheduled task to monitor the health of URLs provided in chatbot answers.
+    `python bin/count_hallucinated_urls.py --site <site_id> -e <environment> --interval <days> [--num-intervals <count>]`

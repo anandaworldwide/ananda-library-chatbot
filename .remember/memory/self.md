@@ -33,3 +33,17 @@ Result: `--skip-tests` was not included in `process.argv` inside `manage-prompts
 Use `--` to explicitly separate npm options from script arguments.
 Command: `npm run prompt -- ananda-public push ananda-public-base.txt --skip-tests`
 Result: `--skip-tests` is correctly passed to the script and included in `process.argv`.
+
+### Finding: Script for Checking Firestore URLs
+
+**Situation**: User asked for the location of a Python script that checks Firestore for 404 URLs included in "Answers". Initial searches focused on `data_ingestion` and general crawler utilities, which did not directly match the requirement of interacting with Firestore "Answers" for this specific purpose.
+
+**Resolution**: A broader codebase search for Python scripts interacting with Firestore, URLs, and terms like "answers" and "404" identified `bin/count_hallucinated_urls.py`. This script specifically:
+
+- Connects to Firestore.
+- Queries a `chatLogs` collection (derived from an environment prefix, effectively the "Answers").
+- Extracts URLs from answer fields.
+- Performs HTTP HEAD requests to check their status (including 404s).
+- Reports on these URLs.
+
+**Script Path**: `bin/count_hallucinated_urls.py`
