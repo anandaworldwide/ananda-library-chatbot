@@ -57,6 +57,8 @@ export const mockSiteConfig: SiteConfig = {
   enableModelComparison: true,
   showSourceCountSelector: true,
   hideSources: false,
+  showSourceContent: true,
+  showVoting: true,
 };
 
 /**
@@ -311,11 +313,52 @@ export function setupRateLimitMocks(shouldAllowRequests = true) {
  * Setup mocks for site configuration
  */
 export function setupSiteConfigMocks(config: Partial<SiteConfig> = {}) {
-  const mergedConfig = { ...mockSiteConfig, ...config };
+  // Ensure a 'default' config is always available for tests, merging with mockSiteConfig
+  const defaultTestConfig: SiteConfig = {
+    ...mockSiteConfig, // Use mockSiteConfig as a base
+    siteId: 'default', // Explicitly set siteId to 'default'
+    name: 'Default Test Site', // Give it a distinct name for clarity if needed
+    // You can override other properties from mockSiteConfig for 'default' if necessary
+  };
 
+  // Determine the primary config to be returned by direct mocks
+  // If an explicit config with a siteId is passed, use that, otherwise use the defaultTestConfig.
+  const primaryMockedConfig = config.siteId
+    ? { ...mockSiteConfig, ...config }
+    : defaultTestConfig;
+
+  // Prepare the object that will be stringified into process.env.SITE_CONFIG
+  // It should at least contain the 'default' config.
+  // If a specific config (other than 'default') is being mocked, add it too.
+  const envSiteConfigs: { [key: string]: SiteConfig } = {
+    default: defaultTestConfig,
+  };
+  if (primaryMockedConfig.siteId !== 'default') {
+    envSiteConfigs[primaryMockedConfig.siteId] = primaryMockedConfig;
+  }
+
+  // Store original SITE_CONFIG and set the mock value
+  const originalSiteConfigEnv = process.env.SITE_CONFIG;
+  process.env.SITE_CONFIG = JSON.stringify(envSiteConfigs);
+
+  // Mock both sync and async versions of loadSiteConfig
   jest.mock('@/utils/server/loadSiteConfig', () => ({
-    loadSiteConfigSync: jest.fn().mockReturnValue(mergedConfig),
+    loadSiteConfigSync: jest.fn((siteId?: string) => {
+      const idToLoad = siteId || 'default';
+      const configs = JSON.parse(process.env.SITE_CONFIG || '{}');
+      return configs[idToLoad] || null; // Simulate real loading logic against mocked env
+    }),
+    loadSiteConfig: jest.fn(async (siteId?: string) => {
+      const idToLoad = siteId || 'default';
+      const configs = JSON.parse(process.env.SITE_CONFIG || '{}');
+      return configs[idToLoad] || null; // Simulate real loading logic against mocked env
+    }),
   }));
+
+  // Teardown: Restore original SITE_CONFIG.
+  // Removed afterAll hook to prevent nesting errors.
+  // Jest typically isolates process.env changes per test file.
+  // If cleanup is needed, it should be handled by the calling test file's lifecycle hooks.
 }
 
 /**

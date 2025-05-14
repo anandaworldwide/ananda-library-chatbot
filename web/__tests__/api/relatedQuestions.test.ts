@@ -136,6 +136,10 @@ describe('Related Questions API', () => {
         return Promise.resolve(true);
       });
 
+      // Store original CRON_SECRET and set a mock value
+      const originalCronSecret = process.env.CRON_SECRET;
+      process.env.CRON_SECRET = 'MOCK_CRON_SECRET';
+
       // Re-mock withJwtAuth for this specific test to ensure it's NOT called
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const mockWithJwtAuth = require('@/utils/server/jwtUtils')
@@ -162,6 +166,7 @@ describe('Related Questions API', () => {
         method: 'GET',
         headers: {
           'user-agent': 'vercel-cron/1.0',
+          Authorization: 'Bearer MOCK_CRON_SECRET', // Add the CRON_SECRET
         },
         query: {
           updateBatch: '10', // Provide necessary query param
@@ -169,6 +174,13 @@ describe('Related Questions API', () => {
       });
 
       await handlerWithMiddleware(req, res);
+
+      // Restore original CRON_SECRET
+      if (originalCronSecret === undefined) {
+        delete process.env.CRON_SECRET;
+      } else {
+        process.env.CRON_SECRET = originalCronSecret;
+      }
 
       // Verify JWT auth middleware was NOT called for cron requests
       expect(
