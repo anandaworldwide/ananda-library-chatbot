@@ -487,6 +487,41 @@ async function saveOrUpdateDocument(
     `[DEBUG saveOrUpdateDocument] Sources count: ${finalDocuments.length}, History items: ${history.length}`,
   );
 
+  // Validate answer data
+  if (!fullResponse || fullResponse.trim() === '') {
+    console.error(
+      '[DEBUG saveOrUpdateDocument] ERROR - fullResponse is empty or null!',
+    );
+    console.log(
+      '[DEBUG saveOrUpdateDocument] DUMP - Raw fullResponse:',
+      JSON.stringify(fullResponse),
+    );
+    // Continue anyway since we might want to persist other fields
+  } else if (fullResponse.length < 5) {
+    console.warn(
+      `[DEBUG saveOrUpdateDocument] WARNING - fullResponse is suspiciously short: "${fullResponse}"`,
+    );
+  } else {
+    console.log(
+      `[DEBUG saveOrUpdateDocument] Answer data validation passed, length: ${fullResponse.length}`,
+    );
+  }
+
+  // Validate sources
+  try {
+    console.log(
+      `[DEBUG saveOrUpdateDocument] First source page content length: ${
+        finalDocuments.length > 0 ? finalDocuments[0].pageContent.length : 0
+      }`,
+    );
+  } catch (sourceError) {
+    console.error(
+      '[DEBUG saveOrUpdateDocument] Error accessing source documents:',
+      sourceError,
+    );
+  }
+
+  // Create data object to save
   const dataToSave = {
     question: originalQuestion,
     answer: fullResponse,
@@ -498,6 +533,10 @@ async function saveOrUpdateDocument(
     timestamp: fbadmin.firestore.FieldValue.serverTimestamp(), // Update timestamp on save/update
     relatedQuestionsV2: [], // Reset or handle related questions as needed
   };
+
+  console.log(
+    `[DEBUG saveOrUpdateDocument] Data prepared for saving. Answer field type: ${typeof dataToSave.answer}`,
+  );
 
   try {
     const answerRef = db.collection(getAnswersCollectionName());
@@ -538,6 +577,39 @@ async function saveOrUpdateDocument(
         console.log(
           `[DEBUG saveOrUpdateDocument] Successfully updated document with ID: ${docId}`,
         );
+
+        // Add verification check after update
+        try {
+          const verifyDoc = await answerRef.doc(docId).get();
+          if (verifyDoc.exists) {
+            const data = verifyDoc.data();
+            console.log(
+              `[DEBUG saveOrUpdateDocument] VERIFICATION - Updated document exists. Answer length: ${
+                data?.answer ? data.answer.length : 0
+              }, Question length: ${data?.question ? data.question.length : 0}`,
+            );
+            // Check if the answer was actually saved
+            if (data?.answer && data.answer.length > 0) {
+              console.log(
+                `[DEBUG saveOrUpdateDocument] VERIFICATION - Answer successfully saved (first 50 chars): "${data.answer.substring(0, 50)}..."`,
+              );
+            } else {
+              console.warn(
+                `[DEBUG saveOrUpdateDocument] VERIFICATION - Answer missing or empty after update!`,
+              );
+            }
+          } else {
+            console.warn(
+              `[DEBUG saveOrUpdateDocument] VERIFICATION - Document not found after successful update!`,
+            );
+          }
+        } catch (verifyError) {
+          console.error(
+            `[DEBUG saveOrUpdateDocument] Error during verification after update:`,
+            verifyError,
+          );
+        }
+
         return docId;
       } catch (updateError) {
         console.error(
@@ -1079,27 +1151,46 @@ async function handleChatRequest(req: NextRequest) {
               console.log(
                 `[DEBUG DocID] docIdPromise resolved with ID: ${docId || 'EMPTY'}`,
               );
-              // Use the new saveOrUpdateDocument function
-              const savedDocId = await saveOrUpdateDocument(
-                docId, // Pass the docId obtained from createEmptyDocument
-                originalQuestion,
-                fullResponse, // Use the destructured response
-                finalDocs, // Use the destructured final documents
-                sanitizedInput.collection || 'whole_library',
-                sanitizedInput.history || [],
-                clientIP,
-              );
 
-              console.log(
-                `[DEBUG DocID] saveOrUpdateDocument returned ID: ${savedDocId || 'NULL'}`,
-              );
-              if (savedDocId && !docId) {
-                // If a new document was created by saveOrUpdateDocument (because initial creation failed),
-                // send the new docId to the client.
-                console.log(
-                  `[DEBUG DocID] Sending new docId to client: ${savedDocId}`,
+              try {
+                // Use the new saveOrUpdateDocument function
+                const savedDocId = await saveOrUpdateDocument(
+                  docId, // Pass the docId obtained from createEmptyDocument
+                  originalQuestion,
+                  fullResponse, // Use the destructured response
+                  finalDocs, // Use the destructured final documents
+                  sanitizedInput.collection || 'whole_library',
+                  sanitizedInput.history || [],
+                  clientIP,
                 );
-                sendData({ docId: savedDocId });
+
+                console.log(
+                  `[DEBUG DocID] saveOrUpdateDocument returned ID: ${savedDocId || 'NULL'}`,
+                );
+                if (savedDocId && !docId) {
+                  // If a new document was created by saveOrUpdateDocument (because initial creation failed),
+                  // send the new docId to the client.
+                  console.log(
+                    `[DEBUG DocID] Sending new docId to client: ${savedDocId}`,
+                  );
+                  sendData({ docId: savedDocId });
+                }
+              } catch (updateError) {
+                console.error(
+                  '[DEBUG DocID] CRITICAL ERROR in document update process:',
+                  updateError,
+                );
+                // Try to send error to client if still possible
+                try {
+                  sendData({
+                    error: 'Error saving your answer. Please try again.',
+                  });
+                } catch (sendError) {
+                  console.error(
+                    '[DEBUG DocID] Failed to send error to client:',
+                    sendError,
+                  );
+                }
               }
             })
             .catch((error) => {
