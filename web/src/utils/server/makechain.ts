@@ -363,7 +363,6 @@ export const makeChain = async (
     model: 'gpt-3.5-turbo',
     temperature: 0.1,
   },
-  // finalDocs?: Document[], // REMOVED finalDocs parameter
 ) => {
   const siteId = process.env.SITE_ID || 'default';
   const configPath = path.join(process.cwd(), 'site-config/config.json');
@@ -701,7 +700,7 @@ export async function setupAndExecuteLanguageModelChain(
   sanitizedQuestion: string,
   history: ChatMessage[],
   sendData: (data: StreamingResponseData) => void,
-  finalSourceCount: number = 4,
+  sourceCount: number = 4,
   filter?: Record<string, unknown>,
   siteConfig?: AppSiteConfig | null,
   startTime?: number,
@@ -712,7 +711,6 @@ export async function setupAndExecuteLanguageModelChain(
 
   let retryCount = 0;
   let lastError: Error | null = null;
-  // let docsForLlm: Document[] = []; // REMOVED - makeChain will handle retrieval
   let tokensStreamed = 0;
 
   while (retryCount < MAX_RETRIES) {
@@ -741,12 +739,11 @@ export async function setupAndExecuteLanguageModelChain(
       const chain = await makeChain(
         retriever,
         { model: modelName, temperature },
-        finalSourceCount, // makeChain will retrieve this many docs
-        filter, // baseFilter (media type, collection author)
-        sendData, // For streaming tokens and sourceDocs from within makeChain
-        undefined, // resolveDocs - not strictly needed now
+        sourceCount,
+        filter,
+        sendData,
+        undefined,
         { model: rephraseModelName, temperature: rephraseTemperature },
-        // docsForLlm, // REMOVED - makeChain does its own retrieval
       );
       console.log(
         `Chain creation took ${Date.now() - chainCreationStartTime}ms`,
