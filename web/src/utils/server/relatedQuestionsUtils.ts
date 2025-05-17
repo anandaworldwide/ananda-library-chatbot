@@ -239,7 +239,7 @@ async function getPineconeIndex(): Promise<PineconeIndex> {
       // Wait for the newly created index to become ready.
       let indexDescription = await pinecone.describeIndex(indexName);
       const maxWaitTime = 5 * 60 * 1000; // Set a maximum wait time (5 minutes).
-      const startTime = Date.now();
+      const startTime = Date.now(); // Re-add startTime
       // Poll the index status until it's 'Ready' or the timeout is reached.
       while (
         indexDescription?.status?.state !== 'Ready' &&
@@ -537,9 +537,12 @@ export async function upsertEmbeddings(
               `[DEBUG upsertEmbeddings] Verifying upsert for batch ${batchNum} by fetching ID: ${firstId}.`,
             );
             const verifyResponse = await pineconeIndex.fetch([firstId]);
+            const record = verifyResponse.records[firstId];
+            const { values, ...otherFields } = record || {};
             console.log(
               `[DEBUG upsertEmbeddings] Verification fetch response for ID ${firstId}:`,
-              JSON.stringify(verifyResponse, null, 2),
+              `Found record with ${values?.length || 0} values and metadata:`,
+              JSON.stringify(otherFields, null, 2),
             );
 
             if (!verifyResponse.records[firstId]) {
@@ -1564,8 +1567,6 @@ export async function updateRelatedQuestionsBatch(
 export async function updateRelatedQuestions(
   questionId: string,
 ): Promise<{ previous: RelatedQuestion[]; current: RelatedQuestion[] }> {
-  const startTime = Date.now();
-
   // Ensure database and clients are ready.
   checkDbAvailable();
   try {

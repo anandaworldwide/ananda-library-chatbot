@@ -1,6 +1,6 @@
 # Project.md
 
-## Current project.
+## Current project
 
 See @crawler-TODO.md
 

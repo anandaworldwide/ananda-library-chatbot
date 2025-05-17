@@ -1,7 +1,7 @@
 // This component renders an audio player with play/pause controls, a seek bar,
 // and time display. It supports lazy loading and handles audio playback states.
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useAudioContext } from '@/contexts/AudioContext';
 import { logEvent } from '@/utils/client/analytics';
@@ -15,9 +15,8 @@ interface AudioPlayerProps {
   isExpanded?: boolean;
   library?: string; // Add library property for path resolution
 }
-
 // Loading spinner component for visual feedback during audio loading
-const LoadingSpinner = () => (
+export const LoadingSpinner = () => (
   <div className="flex justify-center items-center">
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
   </div>

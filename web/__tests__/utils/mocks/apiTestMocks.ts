@@ -336,9 +336,7 @@ export function setupSiteConfigMocks(config: Partial<SiteConfig> = {}) {
   if (primaryMockedConfig.siteId !== 'default') {
     envSiteConfigs[primaryMockedConfig.siteId] = primaryMockedConfig;
   }
-
-  // Store original SITE_CONFIG and set the mock value
-  const originalSiteConfigEnv = process.env.SITE_CONFIG;
+  // Set mock value for SITE_CONFIG
   process.env.SITE_CONFIG = JSON.stringify(envSiteConfigs);
 
   // Mock both sync and async versions of loadSiteConfig

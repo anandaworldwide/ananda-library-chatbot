@@ -1076,16 +1076,12 @@ describe('determineActiveMediaTypes', () => {
 
 describe('Retry Mechanism', () => {
   test('retries document update on transient errors', async () => {
-    // Keep track of log messages
-    let logMessages: string[] = [];
-
-    // Spy on console.log and console.error for this test only
+    // Mock console.log to capture messages
     const originalConsoleLog = console.log;
-    const originalConsoleError = console.error;
-    console.log = jest.fn((message: string) => {
+    const logMessages: string[] = [];
+    console.log = (message: string) => {
       logMessages.push(message);
-    });
-    console.error = jest.fn(); // Silence console.error for this specific test
+    };
 
     // We need to recreate our own implementation of updateDocument to test the retry logic
     // since we can't easily access the actual implementation
@@ -1187,7 +1183,6 @@ describe('Retry Mechanism', () => {
 
     // Clean up
     console.log = originalConsoleLog; // Restore original console.log
-    console.error = originalConsoleError; // Restore original console.error
     jest.restoreAllMocks(); // Now restore other mocks if any were created by jest.spyOn for other objects
   });
 });

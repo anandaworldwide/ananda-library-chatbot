@@ -94,8 +94,6 @@ export default function Home({
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [showScrollDownButton, setShowScrollDownButton] = useState(false);
   const [scrollClickState, setScrollClickState] = useState(0); // 0: initial, 1: scrolled to content
-  const lastScrollTopRef = useRef(0);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Function to handle media type selection
   const handleMediaTypeChange = (type: 'text' | 'audio' | 'youtube') => {
@@ -152,13 +150,10 @@ export default function Home({
   }, [abortController, setLoading, setAbortController]);
 
   const [, setSourceDocs] = useState<Document[] | null>(null);
-  const [lastRelatedQuestionsUpdate, setLastRelatedQuestionsUpdate] = useState<
-    string | null
-  >(null);
+  const [, setLastRelatedQuestionsUpdate] = useState<string | null>(null);
 
-  const [contentOverflowing, setContentOverflowing] = useState(false);
-  const [messageContainerBottom, setMessageContainerBottom] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(0);
+  const [, setMessageContainerBottom] = useState(0);
+  const [, setViewportHeight] = useState(0);
 
   // Add a state variable to track the docId separately
   const [savedDocId, setSavedDocId] = useState<string | null>(null);
@@ -292,9 +287,6 @@ export default function Home({
 
   const handleStreamingResponse = useCallback(
     (data: StreamingResponseData) => {
-      // Log every message that comes through with a timestamp
-      const timestamp = new Date().toISOString().substr(11, 12); // HH:MM:SS.mmm format
-
       if (
         data.siteId &&
         siteConfig?.siteId &&

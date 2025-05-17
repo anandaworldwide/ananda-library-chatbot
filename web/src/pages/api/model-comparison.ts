@@ -139,15 +139,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       setupA.documentPromise,
       setupB.documentPromise,
     ]);
-
     const responseDataA: StreamingResponseData = {
-      token: responseA,
+      token: responseA.answer,
       sourceDocs: docsA,
       done: true,
     };
-
     const responseDataB: StreamingResponseData = {
-      token: responseB,
+      token: responseB.answer,
       sourceDocs: docsB,
       done: true,
     };

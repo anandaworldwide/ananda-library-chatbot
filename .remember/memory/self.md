@@ -163,3 +163,35 @@ if (result.answer.includes("I don't have any specific information")) {
   // ... console.warn logic using result.answer ...
 }
 ```
+
+### Mistake: Edit tool applying changes to incorrect locations or not applying them
+
+**Wrong**:
+When attempting to remove an unused variable or import from a specific function/file, the `edit_file` tool sometimes applies the deletion to a different function or location within the same file, or even fails to apply the change if the targeted line is already commented out but still flagged by the linter (possibly due to stale linter data), or fails to remove an import line repeatedly.
+
+**Correct**:
+If the `edit_file` tool misapplies an edit or fails to apply it:
+
+1. Re-try the edit with more surrounding context to help the model pinpoint the exact location.
+2. Verify if the linter data is current, especially if the tool fails to act on a line that appears already fixed (e.g., commented out).
+3. If an edit (like removing an import) persistently fails across multiple attempts, note it for manual review and move on to other issues to avoid getting stuck.
+4. If an edit causes a new error (e.g., removing a variable that _is_ used elsewhere), the immediate next step should be to revert or fix that erroneous edit.
+
+### False Positive Linter Error Suppression
+
+**Situation**:
+A linter (e.g., ESLint with `@typescript-eslint/no-unused-vars`) flags a variable as unused, but it is actually used (e.g., within a callback or a complex assignment that the linter doesn't fully trace for usage in the final return path).
+
+**Resolution**:
+If confident the variable is used and the linter warning is a false positive, suppress the warning for that specific line using a linter disable comment.
+For ESLint and `@typescript-eslint/no-unused-vars`, this can be done by adding `// eslint-disable-next-line @typescript-eslint/no-unused-vars` on the line immediately preceding the variable declaration.
+
+**Example**:
+
+```typescript
+// web/src/utils/server/makechain.ts
+// ...
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let fullResponse = ''; // This variable is used in a callback, but linter flags it.
+// ...
+```

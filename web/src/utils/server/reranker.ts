@@ -1,5 +1,4 @@
 import { Document } from 'langchain/document';
-import { VectorStoreRetriever } from '@langchain/core/vectorstores';
 import { PineconeStore } from '@langchain/pinecone';
 import path from 'path';
 import fs from 'fs';

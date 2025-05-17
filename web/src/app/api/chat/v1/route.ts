@@ -69,7 +69,6 @@ import { JwtPayload } from '@/utils/server/jwtUtils';
 import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
 import * as corsMiddleware from '@/utils/server/corsMiddleware';
 import { determineActiveMediaTypes } from '@/utils/determineActiveMediaTypes';
-import * as pineconeDebug from '@/utils/server/pinecone-debug';
 
 export const runtime = 'nodejs';
 export const maxDuration = 240;
@@ -311,7 +310,6 @@ async function setupVectorStoreAndRetriever(
   filter: PineconeFilter | undefined,
   sendData: (data: StreamingResponseData) => void,
   requestedSourceCount: number = 4, // Final number of sources needed
-  expandedSourceCount: number = 15, // Number to retrieve for reranking
 ): Promise<{
   vectorStore: PineconeStore;
   retriever: ReturnType<PineconeStore['asRetriever']>;
@@ -354,8 +352,6 @@ async function setupVectorStoreAndRetriever(
     return results;
   };
 
-  const retrieverStartTime = Date.now();
-
   // Configure retriever to fetch the expanded number of documents
   const retriever = vectorStore.asRetriever({
     callbacks: [
@@ -364,24 +360,13 @@ async function setupVectorStoreAndRetriever(
           console.error('Retriever error:', error);
           resolveWithDocuments([]); // Resolve with empty array on error
         },
-        handleRetrieverEnd(docs: Document[], runId: string) {
-          // RERANKING DISABLED FOR NOW:
+        handleRetrieverEnd(docs: Document[]) {
           // Now, simply resolve the promise with the expanded list of documents.
-          // The actual selection/reranking will happen *after* this retrieval completes.
-          // if (docs.length < expandedSourceCount) {
-          //   const warning = `Warning: Retrieved ${docs.length} sources, but ${expandedSourceCount} were requested for reranking. (runId: ${runId})`;
-          //   console.warn(warning);
-          //   // Send warning but still proceed with the docs we got
-          //   sendData({ warning: warning });
-          // }
-          // console.log(
-          //   `Expanded document retrieval took ${Date.now() - retrieverStartTime}ms for ${docs.length} documents`,
-          // );
           resolveWithDocuments(docs); // Resolve with the full list retrieved
         },
       } as Partial<BaseCallbackHandler>,
     ],
-    k: expandedSourceCount, // Retrieve the larger number for reranking
+    k: requestedSourceCount,
   });
 
   return { vectorStore, retriever, documentPromise, resolveWithDocuments };
@@ -912,15 +897,7 @@ async function handleChatRequest(req: NextRequest) {
     );
   }
 
-  // Determine final and expanded source counts
-  // RERANKING DISABLED FOR NOW:
-  const finalSourceCount = sanitizedInput.sourceCount || 4;
-  // const expandedSourceCount = Math.min(finalSourceCount * 3, 20);
-  // console.log(
-  //   `Reranking is commented out. Retrieving ${finalSourceCount} sources directly.`,
-  // );
-  const expandedSourceCount = finalSourceCount; // No expansion if reranking is off
-
+  const sourceCount = sanitizedInput.sourceCount || 4;
   const clientIP = getClientIp(req);
 
   // Set up streaming response
@@ -1011,21 +988,19 @@ async function handleChatRequest(req: NextRequest) {
             index,
             filter,
             sendData, // Pass sendData for internal progress updates
-            finalSourceCount, // Pass final count
-            // expandedSourceCount, // Pass expanded count -- no longer needed if reranking is Commented out
+            sourceCount,
           );
 
-        // Execute the full chain, including internal retrieval and reranking
+        // Execute the full chain
         const { fullResponse, finalDocs } =
           await setupAndExecuteLanguageModelChain(
             retriever,
             sanitizedInput.question,
             sanitizedInput.history || [],
             sendData,
-            finalSourceCount,
+            sourceCount,
             filter,
             siteConfig,
-            expandedSourceCount, // Pass expandedSourceCount (which is same as finalSourceCount if reranking is off)
             timingMetrics.startTime,
           );
         // --- End of Encapsulated Call ---
@@ -1113,11 +1088,11 @@ function logPerformanceMetrics(
           ? metrics.firstByteTime - metrics.firstTokenGenerated
           : 0,
       ttfb: metrics.firstByteTime
-        ? metrics.firstByteTime - metrics.startTime
+        ? metrics.firstByteTime - stages.startTime
         : 0,
       streaming:
         metrics.firstByteTime && metrics.totalTime
-          ? metrics.totalTime - (metrics.firstByteTime - metrics.startTime)
+          ? metrics.totalTime - (metrics.firstByteTime - stages.startTime)
           : 0,
       total: metrics.totalTime || 0,
       tokensPerSecond: metrics.tokensPerSecond || 0,

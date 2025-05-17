@@ -45,7 +45,6 @@ import { PineconeStore } from '@langchain/pinecone';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { SiteConfig as AppSiteConfig } from '@/types/siteConfig';
 import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
-// import { applyReranking } from '@/utils/server/reranker'; // Import reranking function
 
 // S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
@@ -424,18 +423,6 @@ export const makeChain = async (
   // Runnable sequence for retrieving documents
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
-      // If finalDocs are provided, use them directly // REMOVED this block
-      // if (finalDocs) {
-      //   console.log(
-      //     `Using ${finalDocs.length} pre-retrieved and reranked documents.`,
-      //   );
-      //   if (sendData) {
-      //     sendData({ sourceDocs: finalDocs }); // Send pre-retrieved docs
-      //   }
-      //   return finalDocs;
-      // }
-
-      // Fallback: If finalDocs aren't provided, perform retrieval as before // This will now always run
       console.log(
         'Performing standard retrieval within makeChain...', // Updated log
       );
@@ -717,7 +704,6 @@ export async function setupAndExecuteLanguageModelChain(
   finalSourceCount: number = 4,
   filter?: Record<string, unknown>,
   siteConfig?: AppSiteConfig | null,
-  expandedSourceCount: number = Math.min(finalSourceCount * 3, 20),
   startTime?: number,
 ): Promise<{ fullResponse: string; finalDocs: Document[] }> {
   const TIMEOUT_MS = process.env.NODE_ENV === 'test' ? 1000 : 30000;
@@ -751,69 +737,6 @@ export async function setupAndExecuteLanguageModelChain(
         `🔧 Using ${modelName} for answer generation and ${rephraseModelName} for rephrasing`,
       );
 
-      // --- Integrated Retrieval & Reranking --- // REMOVED THIS SECTION
-      // const retrievalStartTime = Date.now();
-      // try {
-      //   const originalK = retriever.k;
-      //   retriever.k = expandedSourceCount;
-
-      //   // RERANKING DISABLED FOR NOW:
-      //   // console.log(
-      //   //   `Attempting to retrieve ${expandedSourceCount} documents for reranking...`,
-      //   // );
-      //   const retrievedDocs =
-      //     await retriever.getRelevantDocuments(sanitizedQuestion); // NO FILTER WAS PASSED HERE
-      //   console.log(
-      //     `Retrieved ${retrievedDocs.length} documents in ${Date.now() - retrievalStartTime}ms`,
-      //   );
-      //   retriever.k = originalK;
-
-      //   if (retrievedDocs.length > finalSourceCount) {
-      //     const rerankingStartTime = Date.now();
-      //     try {
-      //       // RERANKING DISABLED FOR NOW:
-      //       // const { applyReranking } = await import('@/utils/server/reranker');
-      //       // docsForLlm = await applyReranking(
-      //       //   sanitizedQuestion,
-      //       //   retriever,
-      //       //   filter,
-      //       //   expandedSourceCount,
-      //       //   finalSourceCount,
-      //       //   retrievedDocs,
-      //       // );
-      //       // console.log(
-      //       //   `Reranking took ${Date.now() - rerankingStartTime}ms, selected top ${docsForLlm.length} docs`,
-      //       // );
-      //       // Fallback to simple slicing if reranking is commented out
-      //       docsForLlm = retrievedDocs.slice(0, finalSourceCount);
-      //     } catch (rerankError) {
-      //       console.error(
-      //         'Error during reranking (or fallback slicing), falling back to top retrieved docs:',
-      //         rerankError,
-      //       );
-      //       docsForLlm = retrievedDocs.slice(0, finalSourceCount);
-      //     }
-      //   } else {
-      //     if (retrievedDocs.length < finalSourceCount) {
-      //       console.log(
-      //         `Retrieved ${retrievedDocs.length} docs, fewer than requested ${finalSourceCount}. Using all.`,
-      //       );
-      //     }
-      //     docsForLlm = retrievedDocs;
-      //   }
-      // } catch (retrievalOrRerankError) {
-      //   console.error(
-      //     'Error during retrieval/reranking phase:',
-      //     retrievalOrRerankError,
-      //   );
-      //   // Decide fallback: empty docs, or try a simple retrieval?
-      //   // For now, proceed with empty docs, chain might handle it.
-      //   docsForLlm = [];
-      // }
-      // --- End of Integrated Retrieval & Reranking ---
-
-      // sendData({ sourceDocs: docsForLlm }); // This will be handled by makeChain's retrievalSequence
-
       const chainCreationStartTime = Date.now();
       const chain = await makeChain(
         retriever,
@@ -832,6 +755,7 @@ export async function setupAndExecuteLanguageModelChain(
       // Format chat history for the language model
       const pastMessages = convertChatHistory(history);
 
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       let fullResponse = ''; // This will be populated by streaming tokens
       let firstTokenTime: number | null = null;
       let firstByteTime: number | null = null;

@@ -30,7 +30,6 @@ import { SudoProvider } from '@/contexts/SudoContext';
 import { useAnswers } from '@/hooks/useAnswers';
 import { useMutation } from '@tanstack/react-query';
 import { queryFetch } from '@/utils/client/reactQueryConfig';
-import { Answer } from '@/types/answer';
 
 interface AllAnswersProps {
   siteConfig: SiteConfig | null;
