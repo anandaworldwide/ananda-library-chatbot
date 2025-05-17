@@ -364,7 +364,7 @@ export const makeChain = async (
     model: 'gpt-3.5-turbo',
     temperature: 0.1,
   },
-  finalDocs?: Document[],
+  // finalDocs?: Document[], // REMOVED finalDocs parameter
 ) => {
   const siteId = process.env.SITE_ID || 'default';
   const configPath = path.join(process.cwd(), 'site-config/config.json');
@@ -424,22 +424,20 @@ export const makeChain = async (
   // Runnable sequence for retrieving documents
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
-      // If finalDocs are provided, use them directly
-      if (finalDocs) {
-        console.log(
-          `Using ${finalDocs.length} pre-retrieved and reranked documents.`,
-        );
-        if (sendData) {
-          sendData({ sourceDocs: finalDocs }); // Send pre-retrieved docs
-        }
-        return finalDocs;
-      }
+      // If finalDocs are provided, use them directly // REMOVED this block
+      // if (finalDocs) {
+      //   console.log(
+      //     `Using ${finalDocs.length} pre-retrieved and reranked documents.`,
+      //   );
+      //   if (sendData) {
+      //     sendData({ sourceDocs: finalDocs }); // Send pre-retrieved docs
+      //   }
+      //   return finalDocs;
+      // }
 
-      // Fallback: If finalDocs aren't provided, perform retrieval as before
-      // (This path shouldn't ideally be hit with the new route.ts logic,
-      // but kept for robustness or potential direct use of makeChain)
+      // Fallback: If finalDocs aren't provided, perform retrieval as before // This will now always run
       console.log(
-        'No pre-retrieved docs found, performing standard retrieval...',
+        'Performing standard retrieval within makeChain...', // Updated log
       );
       const retrievalStartTime = Date.now();
       const allDocuments: Document[] = [];
@@ -567,6 +565,34 @@ export const makeChain = async (
 
   // Generate an answer to the standalone question based on the chat history
   // and retrieved documents. Additionally, we return the source documents directly.
+
+  // Define the input type for the data that goes into the prompt
+  type PromptDataType = {
+    context: string;
+    chat_history: string;
+    question: string;
+    documents: Document[]; // also include documents for passthrough
+  };
+
+  // This chain takes PromptDataType, selects necessary fields for the prompt, and generates a string answer
+  const generationChainThatTakesPromptData = RunnableSequence.from([
+    (input: PromptDataType) => ({
+      // Select fields for answerPrompt
+      context: input.context,
+      chat_history: input.chat_history,
+      question: input.question,
+    }),
+    answerPrompt,
+    answerModel,
+    new StringOutputParser(),
+  ]);
+
+  // Chain to prepare input for generationChain and combine its output with sourceDocuments
+  const fullAnswerGenerationChain = RunnablePassthrough.assign({
+    answer: generationChainThatTakesPromptData, // Use the new chain
+    sourceDocuments: (input: PromptDataType) => input.documents, // input here is PromptDataType
+  });
+
   const answerChain = RunnableSequence.from([
     // Step 1: Combine retrieval and original input
     {
@@ -574,27 +600,16 @@ export const makeChain = async (
       originalInput: new RunnablePassthrough<AnswerChainInput>(),
     },
     // Step 2: Map to the required fields
-    {
-      context: (input: {
-        retrievalOutput: { combinedContent: string; documents: Document[] };
-        originalInput: AnswerChainInput;
-      }) => input.retrievalOutput.combinedContent,
-      chat_history: (input: {
-        retrievalOutput: { combinedContent: string; documents: Document[] };
-        originalInput: AnswerChainInput;
-      }) => input.originalInput.chat_history,
-      question: (input: {
-        retrievalOutput: { combinedContent: string; documents: Document[] };
-        originalInput: AnswerChainInput;
-      }) => input.originalInput.question,
-      documents: (input: {
-        retrievalOutput: { combinedContent: string; documents: Document[] };
-        originalInput: AnswerChainInput;
-      }) => input.retrievalOutput.documents,
-    },
-    answerPrompt,
-    answerModel,
-    new StringOutputParser(),
+    (input: {
+      retrievalOutput: { combinedContent: string; documents: Document[] };
+      originalInput: AnswerChainInput;
+    }) => ({
+      context: input.retrievalOutput.combinedContent,
+      chat_history: input.originalInput.chat_history,
+      question: input.originalInput.question,
+      documents: input.retrievalOutput.documents, // Pass documents along
+    }),
+    fullAnswerGenerationChain, // This now takes the mapped input and produces { answer, sourceDocuments }
   ]);
 
   // Combine all chains into the final conversational retrieval QA chain
@@ -648,14 +663,6 @@ export const makeChain = async (
       modelInfo: () => ({ label, model, temperature }), // Pass model info through
     },
     answerChain,
-    (result: string) => {
-      if (result.includes("I don't have any specific information")) {
-        console.warn(
-          `Warning: AI response indicates no relevant information found (${label || model})`,
-        );
-      }
-      return result;
-    },
   ]);
 
   return conversationalRetrievalQAChain;
@@ -719,7 +726,7 @@ export async function setupAndExecuteLanguageModelChain(
 
   let retryCount = 0;
   let lastError: Error | null = null;
-  let docsForLlm: Document[] = [];
+  // let docsForLlm: Document[] = []; // REMOVED - makeChain will handle retrieval
   let tokensStreamed = 0;
 
   while (retryCount < MAX_RETRIES) {
@@ -744,79 +751,79 @@ export async function setupAndExecuteLanguageModelChain(
         `🔧 Using ${modelName} for answer generation and ${rephraseModelName} for rephrasing`,
       );
 
-      // --- Integrated Retrieval & Reranking ---
-      const retrievalStartTime = Date.now();
-      try {
-        const originalK = retriever.k;
-        retriever.k = expandedSourceCount;
+      // --- Integrated Retrieval & Reranking --- // REMOVED THIS SECTION
+      // const retrievalStartTime = Date.now();
+      // try {
+      //   const originalK = retriever.k;
+      //   retriever.k = expandedSourceCount;
 
-        // RERANKING DISABLED FOR NOW:
-        // console.log(
-        //   `Attempting to retrieve ${expandedSourceCount} documents for reranking...`,
-        // );
-        const retrievedDocs =
-          await retriever.getRelevantDocuments(sanitizedQuestion);
-        console.log(
-          `Retrieved ${retrievedDocs.length} documents in ${Date.now() - retrievalStartTime}ms`,
-        );
-        retriever.k = originalK;
+      //   // RERANKING DISABLED FOR NOW:
+      //   // console.log(
+      //   //   `Attempting to retrieve ${expandedSourceCount} documents for reranking...`,
+      //   // );
+      //   const retrievedDocs =
+      //     await retriever.getRelevantDocuments(sanitizedQuestion); // NO FILTER WAS PASSED HERE
+      //   console.log(
+      //     `Retrieved ${retrievedDocs.length} documents in ${Date.now() - retrievalStartTime}ms`,
+      //   );
+      //   retriever.k = originalK;
 
-        if (retrievedDocs.length > finalSourceCount) {
-          const rerankingStartTime = Date.now();
-          try {
-            // RERANKING DISABLED FOR NOW:
-            // const { applyReranking } = await import('@/utils/server/reranker');
-            // docsForLlm = await applyReranking(
-            //   sanitizedQuestion,
-            //   retriever,
-            //   filter,
-            //   expandedSourceCount,
-            //   finalSourceCount,
-            //   retrievedDocs,
-            // );
-            // console.log(
-            //   `Reranking took ${Date.now() - rerankingStartTime}ms, selected top ${docsForLlm.length} docs`,
-            // );
-            // Fallback to simple slicing if reranking is commented out
-            docsForLlm = retrievedDocs.slice(0, finalSourceCount);
-          } catch (rerankError) {
-            console.error(
-              'Error during reranking (or fallback slicing), falling back to top retrieved docs:',
-              rerankError,
-            );
-            docsForLlm = retrievedDocs.slice(0, finalSourceCount);
-          }
-        } else {
-          if (retrievedDocs.length < finalSourceCount) {
-            console.log(
-              `Retrieved ${retrievedDocs.length} docs, fewer than requested ${finalSourceCount}. Using all.`,
-            );
-          }
-          docsForLlm = retrievedDocs;
-        }
-      } catch (retrievalOrRerankError) {
-        console.error(
-          'Error during retrieval/reranking phase:',
-          retrievalOrRerankError,
-        );
-        // Decide fallback: empty docs, or try a simple retrieval?
-        // For now, proceed with empty docs, chain might handle it.
-        docsForLlm = [];
-      }
+      //   if (retrievedDocs.length > finalSourceCount) {
+      //     const rerankingStartTime = Date.now();
+      //     try {
+      //       // RERANKING DISABLED FOR NOW:
+      //       // const { applyReranking } = await import('@/utils/server/reranker');
+      //       // docsForLlm = await applyReranking(
+      //       //   sanitizedQuestion,
+      //       //   retriever,
+      //       //   filter,
+      //       //   expandedSourceCount,
+      //       //   finalSourceCount,
+      //       //   retrievedDocs,
+      //       // );
+      //       // console.log(
+      //       //   `Reranking took ${Date.now() - rerankingStartTime}ms, selected top ${docsForLlm.length} docs`,
+      //       // );
+      //       // Fallback to simple slicing if reranking is commented out
+      //       docsForLlm = retrievedDocs.slice(0, finalSourceCount);
+      //     } catch (rerankError) {
+      //       console.error(
+      //         'Error during reranking (or fallback slicing), falling back to top retrieved docs:',
+      //         rerankError,
+      //       );
+      //       docsForLlm = retrievedDocs.slice(0, finalSourceCount);
+      //     }
+      //   } else {
+      //     if (retrievedDocs.length < finalSourceCount) {
+      //       console.log(
+      //         `Retrieved ${retrievedDocs.length} docs, fewer than requested ${finalSourceCount}. Using all.`,
+      //       );
+      //     }
+      //     docsForLlm = retrievedDocs;
+      //   }
+      // } catch (retrievalOrRerankError) {
+      //   console.error(
+      //     'Error during retrieval/reranking phase:',
+      //     retrievalOrRerankError,
+      //   );
+      //   // Decide fallback: empty docs, or try a simple retrieval?
+      //   // For now, proceed with empty docs, chain might handle it.
+      //   docsForLlm = [];
+      // }
       // --- End of Integrated Retrieval & Reranking ---
 
-      sendData({ sourceDocs: docsForLlm });
+      // sendData({ sourceDocs: docsForLlm }); // This will be handled by makeChain's retrievalSequence
 
       const chainCreationStartTime = Date.now();
       const chain = await makeChain(
         retriever,
         { model: modelName, temperature },
-        finalSourceCount, // This should be the already reranked/selected count
-        filter,
-        sendData,
-        undefined, // resolveDocs - not needed as docs are already resolved
+        finalSourceCount, // makeChain will retrieve this many docs
+        filter, // baseFilter (media type, collection author)
+        sendData, // For streaming tokens and sourceDocs from within makeChain
+        undefined, // resolveDocs - not strictly needed now
         { model: rephraseModelName, temperature: rephraseTemperature },
-        docsForLlm, // Pass the potentially reranked docs
+        // docsForLlm, // REMOVED - makeChain does its own retrieval
       );
       console.log(
         `Chain creation took ${Date.now() - chainCreationStartTime}ms`,
@@ -825,7 +832,7 @@ export async function setupAndExecuteLanguageModelChain(
       // Format chat history for the language model
       const pastMessages = convertChatHistory(history);
 
-      let fullResponse = '';
+      let fullResponse = ''; // This will be populated by streaming tokens
       let firstTokenTime: number | null = null;
       let firstByteTime: number | null = null;
 
@@ -873,7 +880,22 @@ export async function setupAndExecuteLanguageModelChain(
         },
       );
 
-      await Promise.race([chainPromise, timeoutPromise]);
+      // The result from chain.invoke will now be an object { answer: string, sourceDocuments: Document[] }
+      const result = (await Promise.race([chainPromise, timeoutPromise])) as {
+        answer: string;
+        sourceDocuments: Document[];
+      };
+
+      // Add warning logic here, after streaming is complete and result is aggregated
+      if (result.answer.includes("I don't have any specific information")) {
+        const modelInfoForWarning =
+          siteConfig?.modelName || modelName || 'unknown'; // Get model name
+        console.warn(
+          `Warning: AI response from model ${modelInfoForWarning} indicates no relevant information was found for question: "${sanitizedQuestion.substring(0, 100)}..."`,
+        );
+        // Optionally, send a warning to the client if needed, though this is after `done:true` has been sent.
+        // sendData({ warning: "AI response indicates no relevant information found." });
+      }
 
       const finalTiming: Partial<TimingMetrics> = {};
       if (startTime) {
@@ -896,7 +918,9 @@ export async function setupAndExecuteLanguageModelChain(
 
       sendData({ done: true, timing: finalTiming });
 
-      return { fullResponse, finalDocs: docsForLlm };
+      // Use result.answer for fullResponse to ensure consistency, though fullResponse is also built by streaming.
+      // result.sourceDocuments are the correctly filtered documents from makeChain.
+      return { fullResponse: result.answer, finalDocs: result.sourceDocuments };
     } catch (error) {
       lastError = error as Error;
       retryCount++;
