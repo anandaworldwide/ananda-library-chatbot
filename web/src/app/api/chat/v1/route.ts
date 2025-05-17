@@ -387,79 +387,6 @@ async function setupVectorStoreAndRetriever(
   return { vectorStore, retriever, documentPromise, resolveWithDocuments };
 }
 
-// Function to create an empty document and return its ID
-async function createEmptyDocument(
-  originalQuestion: string,
-  collection: string,
-  history: ChatMessage[],
-  clientIP: string,
-): Promise<string> {
-  // Check if db is available
-  if (!db) {
-    console.warn(
-      '[DEBUG createEmptyDocument] Firestore database not initialized, skipping document creation',
-    );
-    return '';
-  }
-
-  console.log(
-    `[DEBUG createEmptyDocument] Creating empty document for question: "${originalQuestion.substring(0, 50)}..."`,
-  );
-  console.log(
-    `[DEBUG createEmptyDocument] Collection: ${collection}, History items: ${history.length}`,
-  );
-
-  try {
-    const answerRef = db.collection(getAnswersCollectionName());
-    const emptyEntry = {
-      question: originalQuestion,
-      answer: '', // Placeholder
-      collection: collection,
-      sources: '[]', // Placeholder
-      likeCount: 0,
-      history: history,
-      ip: clientIP,
-      timestamp: fbadmin.firestore.FieldValue.serverTimestamp(),
-      relatedQuestionsV2: [],
-    };
-
-    console.log(
-      '[DEBUG createEmptyDocument] Calling answerRef.add() with empty entry',
-    );
-    const docRef = await answerRef.add(emptyEntry);
-    console.log(
-      `[DEBUG createEmptyDocument] Successfully created empty document with ID: ${docRef.id}`,
-    );
-
-    // Verify the document was created
-    try {
-      const docSnapshot = await answerRef.doc(docRef.id).get();
-      if (docSnapshot.exists) {
-        console.log(
-          '[DEBUG createEmptyDocument] Verification: Document exists in Firestore',
-        );
-      } else {
-        console.warn(
-          '[DEBUG createEmptyDocument] Verification: Document NOT found in Firestore immediately after creation',
-        );
-      }
-    } catch (verifyError) {
-      console.error(
-        '[DEBUG createEmptyDocument] Error verifying document creation:',
-        verifyError,
-      );
-    }
-
-    return docRef.id;
-  } catch (error) {
-    console.error(
-      '[DEBUG createEmptyDocument] Error creating empty document:',
-      error,
-    );
-    return '';
-  }
-}
-
 // Updated function to handle both creation (if docId is missing) and update
 async function saveOrUpdateDocument(
   docId: string | undefined | null, // Make docId optional
@@ -478,7 +405,7 @@ async function saveOrUpdateDocument(
   }
 
   console.log(
-    `[DEBUG saveOrUpdateDocument] Called with docId: ${docId || 'NULL/UNDEFINED'}, collection: ${collection}`,
+    `[DEBUG saveOrUpdateDocument] Called with docId: ${docId || 'NULL/UNDEFINED -> EXPECTING CREATION'}, collection: ${collection}`,
   );
   console.log(
     `[DEBUG saveOrUpdateDocument] Question length: ${originalQuestion.length}, Answer length: ${fullResponse.length}`,
@@ -1071,49 +998,12 @@ async function handleChatRequest(req: NextRequest) {
         // Send site ID first
         sendData({ siteId: siteConfig.siteId });
 
-        // Start document creation in parallel (non-blocking)
-        let docIdPromise = Promise.resolve('');
-        if (!sanitizedInput.privateSession) {
-          console.log(
-            '[DEBUG DocID] Starting empty document creation for tracking',
-          );
-          // Create empty document in background - don't await here
-          docIdPromise = createEmptyDocument(
-            originalQuestion,
-            sanitizedInput.collection || 'whole_library',
-            sanitizedInput.history || [],
-            clientIP,
-          )
-            .then((id) => {
-              // Send docId as soon as we have it, without blocking the main flow
-              if (id) {
-                console.log(
-                  `[DEBUG DocID] Empty document created with ID: ${id}`,
-                );
-                sendData({ docId: id });
-              } else {
-                console.warn(
-                  '[DEBUG DocID] Empty document creation returned empty ID',
-                );
-              }
-              return id;
-            })
-            .catch((error) => {
-              console.error(
-                '[DEBUG DocID] Error creating empty document:',
-                error,
-              );
-              return ''; // Return empty string on error
-            });
-        }
-
-        // Set up Pinecone and filter (needed for retriever setup)
         const { index, filter } = await setupPineconeAndFilter(
           sanitizedInput.collection || 'whole_library',
           sanitizedInput.mediaTypes,
           siteConfig,
         );
-        stages.pineconeComplete = Date.now(); // Mark Pinecone setup complete
+        stages.pineconeComplete = Date.now();
 
         // --- Call the Encapsulated RAG Chain Function ---
         const { retriever /*, documentPromise, resolveWithDocuments*/ } =
@@ -1140,65 +1030,41 @@ async function handleChatRequest(req: NextRequest) {
           );
         // --- End of Encapsulated Call ---
 
-        // Note: The 'done' signal is now sent inside setupAndExecuteLanguageModelChain
-
-        // Update Firestore document asynchronously after completion
+        // SAVE DOCUMENT AFTER RESPONSE IS READY
         if (!sanitizedInput.privateSession) {
-          console.log('[DEBUG DocID] Starting document update process');
-          docIdPromise
-            .then(async (docId) => {
-              // Make the callback async
+          console.log(
+            '[DEBUG DocID] Starting document save process (post-response)',
+          );
+          try {
+            // Always create a new document; pass null as docId
+            const savedDocId = await saveOrUpdateDocument(
+              null, // Force creation path
+              originalQuestion,
+              fullResponse,
+              finalDocs,
+              sanitizedInput.collection || 'whole_library',
+              sanitizedInput.history || [],
+              clientIP,
+            );
+
+            if (savedDocId) {
               console.log(
-                `[DEBUG DocID] docIdPromise resolved with ID: ${docId || 'EMPTY'}`,
+                `[DEBUG DocID] Document successfully saved with new ID: ${savedDocId}`,
               );
-
-              try {
-                // Use the new saveOrUpdateDocument function
-                const savedDocId = await saveOrUpdateDocument(
-                  docId, // Pass the docId obtained from createEmptyDocument
-                  originalQuestion,
-                  fullResponse, // Use the destructured response
-                  finalDocs, // Use the destructured final documents
-                  sanitizedInput.collection || 'whole_library',
-                  sanitizedInput.history || [],
-                  clientIP,
-                );
-
-                console.log(
-                  `[DEBUG DocID] saveOrUpdateDocument returned ID: ${savedDocId || 'NULL'}`,
-                );
-                if (savedDocId && !docId) {
-                  // If a new document was created by saveOrUpdateDocument (because initial creation failed),
-                  // send the new docId to the client.
-                  console.log(
-                    `[DEBUG DocID] Sending new docId to client: ${savedDocId}`,
-                  );
-                  sendData({ docId: savedDocId });
-                }
-              } catch (updateError) {
-                console.error(
-                  '[DEBUG DocID] CRITICAL ERROR in document update process:',
-                  updateError,
-                );
-                // Try to send error to client if still possible
-                try {
-                  sendData({
-                    error: 'Error saving your answer. Please try again.',
-                  });
-                } catch (sendError) {
-                  console.error(
-                    '[DEBUG DocID] Failed to send error to client:',
-                    sendError,
-                  );
-                }
-              }
-            })
-            .catch((error) => {
+              sendData({ docId: savedDocId }); // Send the new docId to the client
+            } else {
               console.error(
-                '[DEBUG DocID] Error in document update process:',
-                error,
+                '[DEBUG DocID] Document saving failed, saveOrUpdateDocument returned null/empty.',
               );
-            });
+            }
+          } catch (saveError) {
+            console.error(
+              '[DEBUG DocID] CRITICAL ERROR during document save process:',
+              saveError,
+            );
+            // Optionally send an error to the client if saving is critical for UX
+            // sendData({ error: 'Failed to save chat log.' });
+          }
         }
       } catch (error: unknown) {
         console.error('Error in stream handler:', error);
