@@ -50,8 +50,8 @@ import {
   makeChain,
   setupAndExecuteLanguageModelChain,
 } from '@/utils/server/makechain';
-import { getCachedPineconeIndex } from '@ananda-library-chatbot/shared-utils/pinecone-client';
-import { getPineconeIndexName } from '@ananda-library-chatbot/shared-utils/pinecone-config';
+import { getCachedPineconeIndex } from '@/utils/server/pinecone-client';
+import { getPineconeIndexName } from '@/utils/server/pinecone-config';
 import * as fbadmin from 'firebase-admin';
 import { db } from '@/services/firebase';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';

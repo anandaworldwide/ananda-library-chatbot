@@ -19,8 +19,8 @@ export function loadEnv() {
 
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
-  // Go up three levels: src -> shared-utils -> packages -> project root
-  const rootDir = path.join(__dirname, '..', '..', '..');
+  // Go up two levels: utils -> data_ingestion -> project root
+  const rootDir = path.join(__dirname, '..', '..');
   const envFile = path.join(rootDir, `.env.${site}`);
 
   console.log(`Attempting to load environment from: ${envFile}`);

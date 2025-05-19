@@ -49,7 +49,7 @@ global.TextEncoder = jest.fn().mockImplementation(() => ({
 }));
 
 // Mock other dependencies before importing the route handler
-jest.mock('@ananda-library-chatbot/shared-utils/pinecone-client');
+jest.mock('@/utils/server/pinecone-client');
 jest.mock('@/utils/server/makechain');
 jest.mock('@/utils/server/loadSiteConfig');
 jest.mock('@/utils/server/genericRateLimiter');
@@ -68,7 +68,7 @@ jest.mock('@/utils/server/firestoreUtils', () => ({
   getAnswersCollectionName: jest.fn().mockReturnValue('answers'),
 }));
 jest.mock('@/utils/server/ipUtils');
-jest.mock('@ananda-library-chatbot/shared-utils/pinecone-config');
+jest.mock('@/utils/server/pinecone-config');
 jest.mock('@/utils/env', () => ({
   isDevelopment: jest.fn().mockReturnValue(true),
 }));
@@ -98,13 +98,13 @@ import { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
 
 // Import mocked modules
-import { getPineconeClient } from '@ananda-library-chatbot/shared-utils/pinecone-client';
+import { getPineconeClient } from '@/utils/server/pinecone-client';
 import { makeChain } from '@/utils/server/makechain';
 import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
 import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
 import { getClientIp } from '@/utils/server/ipUtils';
 import { Document } from 'langchain/document';
-import { getPineconeIndexName } from '@ananda-library-chatbot/shared-utils/pinecone-config';
+import { getPineconeIndexName } from '@/utils/server/pinecone-config';
 import { PineconeStore } from '@langchain/pinecone';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 
@@ -134,9 +134,8 @@ const mockPineconeIndex = {
 const mockGetCachedPineconeIndex = jest
   .fn()
   .mockResolvedValue(mockPineconeIndex);
-jest.requireMock(
-  '@ananda-library-chatbot/shared-utils/pinecone-client',
-).getCachedPineconeIndex = mockGetCachedPineconeIndex;
+jest.requireMock('@/utils/server/pinecone-client').getCachedPineconeIndex =
+  mockGetCachedPineconeIndex;
 
 // Add interface definition to match production code
 interface MediaTypes {

@@ -109,7 +109,7 @@ jest.mock('@/services/firebase', () => ({
 }));
 
 // Mock Pinecone to avoid loading env variables
-jest.mock('@ananda-library-chatbot/shared-utils/pinecone-config', () => ({
+jest.mock('@/utils/server/pinecone-config', () => ({
   getPineconeIndexName: jest.fn().mockReturnValue('test-index'),
   __test__: {
     validatePineconeEnv: jest.fn(),
@@ -246,7 +246,7 @@ jest.mock('@langchain/pinecone', () => ({
   },
 }));
 
-jest.mock('@ananda-library-chatbot/shared-utils/pinecone-client', () => ({
+jest.mock('@/utils/server/pinecone-client', () => ({
   getPineconeClient: jest.fn().mockResolvedValue({
     Index: jest.fn().mockReturnValue({
       namespace: jest.fn().mockReturnValue({

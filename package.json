@@ -7,8 +7,7 @@
   "type": "module",
   "workspaces": [
     "web",
-    "data_ingestion",
-    "packages/shared-utils"
+    "data_ingestion"
   ],
   "scripts": {
     "dev:root": "node scripts/dev.js",

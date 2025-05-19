@@ -28,9 +28,9 @@
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { PineconeStore } from '@langchain/pinecone';
-import { getPineconeClient } from '@ananda-library-chatbot/shared-utils/pinecone-client';
+import { getPineconeClient } from './utils/pinecone-client.js';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
-import { getPineconeIngestIndexName } from '@ananda-library-chatbot/shared-utils/pinecone-config';
+import { getPineconeIngestIndexName } from './utils/pinecone-config.js';
 import { DirectoryLoader } from 'langchain/document_loaders/fs/directory';
 import readline from 'readline';
 import { Index } from '@pinecone-database/pinecone';
@@ -42,6 +42,7 @@ import path from 'path';
 import { parseArgs } from 'util';
 import { config } from 'dotenv';
 import { Pinecone } from '@pinecone-database/pinecone';
+import { loadEnv } from './utils/loadEnv.js';
 
 const CHECKPOINT_FILE = './pdf-docs/text_ingestion_checkpoint.json';
 
@@ -552,17 +553,6 @@ export const run = async (keepData: boolean, libraryName: string) => {
   }
 };
 
-/**
- * Loads environment variables from a specific .env file based on the site name.
- * This allows for different configurations for different deployment environments.
- * @param site The name of the site/environment to load
- */
-function loadEnv(site: string) {
-  const envFile = path.join(process.cwd(), `.env.${site}`);
-  config({ path: envFile });
-  console.log(`Loaded environment from: ${envFile}`);
-}
-
 // Parse command-line arguments
 const { values } = parseArgs({
   options: {
@@ -581,7 +571,7 @@ if (!site) {
   );
   process.exit(1);
 }
-loadEnv(site);
+loadEnv();
 console.log('PINECONE_API_KEY:', process.env.PINECONE_API_KEY);
 
 if (!values['file-path']) {
