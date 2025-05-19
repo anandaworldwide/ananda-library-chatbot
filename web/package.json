@@ -148,8 +148,7 @@
     "text-encoding": "^0.7.0",
     "ts-jest": "^29.3.2",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
-    "browserslist": "^4.23.0"
+    "typescript": "^5.8.3"
   },
   "engines": {
     "node": "^20.0.0"
