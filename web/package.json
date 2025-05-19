@@ -28,12 +28,9 @@
     "emulator": "firebase emulators:start --import ../emulator-data --export-on-exit ../emulator-data --inspect-functions",
     "prepare": "cd .. && command -v husky >/dev/null 2>&1 && husky || true",
     "setup-hooks": "cd .. && husky",
-    "prompt": "tsx -r dotenv/config scripts/manage-prompts.ts",
-    "prebuild": "cd ../packages/shared-utils && npm install && npm run build",
-    "postinstall": "cd ../packages/shared-utils && npm install && npm run build"
+    "prompt": "tsx -r dotenv/config scripts/manage-prompts.ts"
   },
   "dependencies": {
-    "@ananda-library-chatbot/shared-utils": "file:../packages/shared-utils",
     "@aws-sdk/client-sts": "^3.799.0",
     "@aws-sdk/credential-providers": "^3.799.0",
     "@headlessui/react": "^2.2.2",
