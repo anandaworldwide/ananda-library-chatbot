@@ -38,3 +38,16 @@ The `Resource` should be restricted to a specific path, e.g., `public/audio/*`.
 - All shared dependencies across web, data_ingestion, and packages/shared-utils must match the versions in web/package.json. Web versions take priority.
 - As of [2024-07-09], @types/jest and ts-jest in packages/shared-utils were updated to match web/package.json.
 - If adding or updating a dependency in any package, ensure the version matches web/package.json if it exists there.
+
+### Vercel Monorepo Local Package Build Order Fix
+
+**Problem:** Vercel builds from a subdirectory (e.g., web/) that depends on a local package (e.g., packages/shared-utils). The build fails if the local package is not built first (e.g., missing dist/loadEnv.js).
+
+**Fix:** Add the following scripts to the subdirectory's package.json (e.g., web/package.json):
+
+```
+"prebuild": "cd ../packages/shared-utils && npm install && npm run build",
+"postinstall": "cd ../packages/shared-utils && npm install && npm run build"
+```
+
+This ensures the local package is built before the subdirectory's build runs, fixing module not found errors on Vercel.
