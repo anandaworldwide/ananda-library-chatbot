@@ -196,66 +196,53 @@ let fullResponse = ''; // This variable is used in a callback, but linter flags 
 // ...
 ```
 
-### Mistake: Jest module resolution for local packages (e.g., shared-utils)
+### Mistake: Jest Module Resolution for Local Dependencies
 
 **Situation**:
-After moving shared utilities to a local package (e.g., `packages/shared-utils`), Jest tests in other packages (e.g., `web`) fail to resolve imports from the shared package. Errors like "Configuration error: Could not locate module..." or "Cannot find module '@ananda-library-chatbot/shared-utils/module-name' or its corresponding type declarations" occur.
-This happens even if relative paths like `../../../../packages/shared-utils/src/module-name` are used in mocks/imports, as TypeScript/Jest might not correctly resolve these across package boundaries without proper configuration.
+When Jest tests need to import from another directory in the monorepo, using relative paths can be error-prone and fragile. Errors like "Configuration error: Could not locate module..." or "Cannot find module" occur.
+This happens even if relative paths are used in mocks/imports, as TypeScript/Jest might not correctly resolve these across directory boundaries without proper configuration.
 
-**Wrong (Example in `web/__tests__/some.test.ts`)**:
+**Wrong**:
 
 ```typescript
-// Attempting to use relative paths for mocks or imports from another package
-jest.mock('../../../../packages/shared-utils/src/pinecone-client');
-import { getPineconeClient } from '../../../../packages/shared-utils/src/pinecone-client';
+// Attempting to use relative paths for mocks or imports from another directory
+jest.mock('../../../../src/utils/pinecone-client');
+import { getPineconeClient } from '../../../../src/utils/pinecone-client';
 ```
 
-This often fails because Jest's module resolution (and TypeScript's, which Jest might leverage via `ts-jest` or `babel-jest`) is scoped to the current package (`web`) and might not correctly trace deep relative paths into another package's `src` directory, especially if the shared package has a build step (`dist` directory).
+**Correct**:
 
-**Correct (Configuration and Usage)**:
+1. Use module path aliases in `tsconfig.json`:
 
-1.  **Shared Package `package.json` (`packages/shared-utils/package.json`)**:
-    Ensure the shared package has a `name` (e.g., `@ananda-library-chatbot/shared-utils`) and an `exports` map pointing to its compiled output (usually in a `dist` directory).
+   ```json
+   {
+     "compilerOptions": {
+       "paths": {
+         "@/*": ["./src/*"]
+       }
+     }
+   }
+   ```
 
-    ```json
-    {
-      "name": "@ananda-library-chatbot/shared-utils",
-      "version": "1.0.0",
-      "main": "./dist/index.js",
-      "types": "./dist/index.d.ts",
-      "exports": {
-        ".": "./dist/index.js",
-        "./pinecone-client": "./dist/pinecone-client.js",
-        "./pinecone-config": "./dist/pinecone-config.js"
-      },
-      "scripts": {
-        "build": "tsc"
-      }
-      // ... dependencies ...
-    }
-    ```
+2. Configure Jest to understand these aliases:
 
-2.  **Jest Configuration in Consuming Package (`web/jest.config.cjs`)**:
-    Update `moduleNameMapper` to map the shared package name to its `dist` directory relative to the `rootDir` of the consuming package's Jest config.
+   ```javascript
+   // jest.config.js
+   module.exports = {
+     moduleNameMapper: {
+       '^@/(.*)$': '<rootDir>/src/$1',
+     },
+   };
+   ```
 
-    ```javascript
-    // In web/jest.config.cjs (rootDir is 'web/')
-    moduleNameMapper: {
-      // ... other mappers ...
-      '^@ananda-library-chatbot/shared-utils/(.*)$': '<rootDir>/../../packages/shared-utils/dist/$1.js',
-      // Ensure $1.js if your shared package exports JS files, or adjust as needed (e.g. if it exports .ts directly and Jest handles transpilation)
-    },
-    ```
-
-3.  **Imports in Test Files (`web/__tests__/some.test.ts`)**:
-    Use the package name for imports and mocks.
-    ```typescript
-    jest.mock('@ananda-library-chatbot/shared-utils/pinecone-client');
-    import { getPineconeClient } from '@ananda-library-chatbot/shared-utils/pinecone-client';
-    ```
+3. Use the aliases in your tests:
+   ```typescript
+   jest.mock('@/utils/pinecone-client');
+   import { getPineconeClient } from '@/utils/pinecone-client';
+   ```
 
 **Reasoning**:
-Using the package name (`@ananda-library-chatbot/shared-utils/...`) leverages Node.js module resolution mechanisms (which Jest emulates). The `moduleNameMapper` in Jest provides the specific instruction on where to find this named package locally within the monorepo structure, pointing to the compiled output (`dist`) as defined by the shared package's `exports` map. This is more robust than deep relative paths and aligns with how imports from `node_modules` work.
+Using module aliases provides a more robust and maintainable way to handle imports across the codebase. It avoids deep relative paths, makes refactoring easier, and works consistently across different file locations.
 
 ### Mistake: Forgot to cd into web directory before running tests
 
@@ -270,21 +257,3 @@ Ran 'npm test' without ensuring the shell was in the web directory.
 ```
 Must cd into the web directory with 'cd web' before running 'npm test' to execute the Next.js test suite.
 ```
-
-### Mistake: Jest config as .js in ESM package
-
-**Wrong:**
-
-```
-// packages/shared-utils/jest.config.js (with "type": "module")
-module.exports = { ... }
-```
-
-**Correct:**
-
-```
-// Rename to jest.config.cjs for CommonJS compatibility
-module.exports = { ... }
-```
-
-- Always use .cjs extension for Jest config in ESM packages ("type": "module").

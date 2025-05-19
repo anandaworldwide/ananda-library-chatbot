@@ -96,16 +96,10 @@ After installation, you should now see a `node_modules` folder.
 
 ### Monorepo Workspaces Build
 
-This project uses npm workspaces. Some packages within the monorepo, like `packages/shared-utils`, have their own build
-step. After the main `npm install` at the root, you may need to build these individual workspaces.
-
-To build the `shared-utils` package (which is necessary for other parts of the application like data ingestion and web
-API routes to function correctly):
+This project uses npm workspaces. After running `npm install` at the root, the project should be ready to use.
 
 ```bash
-cd packages/shared-utils
-npm run build
-cd ../.. # Return to the project root
+npm install
 ```
 
 ### Environment Variables Setup

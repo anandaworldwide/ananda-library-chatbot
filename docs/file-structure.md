@@ -57,12 +57,6 @@ ananda-library-chatbot/
 │
 ├── migrations/                   # Scripts for database schema migrations or data transformations.
 │
-├── packages/                     # Workspace packages for shared code across the monorepo.
-│   └── shared-utils/             # Shared utilities (TypeScript) for use in both web and other Node.js parts of the project.
-│       ├── src/                  # Source files for the shared utilities (e.g., pinecone-client.ts, pinecone-config.ts).
-│       ├── dist/                 # Compiled JavaScript output from src/.
-│       └── package.json          # Defines the package name (@ananda-library-chatbot/shared-utils) and its exports.
-│
 ├── pages/                        # Next.js Pages Router directory.
 │   └── api/                      # API routes defined using the Pages Router.
 │       ├── audio/                # API routes related to audio processing.
@@ -96,8 +90,7 @@ ananda-library-chatbot/
 │
 ├── utils/                        # Utility functions shared across the application.
 │   ├── client/                   # Utilities specifically for the client-side (browser).
-│   ├── server/                   # Utilities specifically for the server-side (Node.js environment).
-│   └── shared/                   # Utilities that can be used on both client and server.
+│   └── server/                   # Utilities specifically for the server-side (Node.js environment).
 │
 └── wordpress/                    # Code related to WordPress integration.
     └── plugins/
@@ -121,18 +114,6 @@ ananda-library-chatbot/
 - `jest.setup.ts`, `jest.setup-server.ts`: Setup files for the Jest testing framework.
 - `SECURITY-TODO.md`, `TESTS-TODO.md`, `TESTS-README.md`, `TOKEN-SECURITY-README.md`: Documentation regarding
   security, testing, and tokens.
-
-## Importing from Shared Utilities
-
-When using utilities from the `packages/shared-utils` directory, import them using the package name, for example:
-
-```typescript
-import { getPineconeClient } from '@ananda-library-chatbot/shared-utils/pinecone-client';
-import { getPineconeIndexName } from '@ananda-library-chatbot/shared-utils/pinecone-config';
-```
-
-Jest configuration (`web/jest.config.cjs`) has been updated with a `moduleNameMapper` to correctly resolve these
-imports during tests.
 
 ## Naming Conventions
 
