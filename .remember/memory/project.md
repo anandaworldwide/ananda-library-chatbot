@@ -51,3 +51,17 @@ The `Resource` should be restricted to a specific path, e.g., `public/audio/*`.
 ```
 
 This ensures the local package is built before the subdirectory's build runs, fixing module not found errors on Vercel.
+
+### Browserslist Error in Next.js Build
+
+**Problem:** Vercel build fails with `Cannot find module 'browserslist'` during the Next.js build process. This happens when processing CSS files with autoprefixer in the Next.js application.
+
+**Fix:**
+
+- Add browserslist directly to the devDependencies of the package running Next.js (web/package.json):
+  ```
+  "browserslist": "^4.23.0"
+  ```
+- Run `npm install` to update the lockfile.
+
+**Important note:** The error might appear to be coming from a dependency package (like packages/shared-utils) if that package is built in a prebuild step, but the actual error occurs in the Next.js build context when processing CSS. Always check the require stack carefully to identify which package actually needs the dependency.
