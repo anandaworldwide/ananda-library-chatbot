@@ -28,9 +28,9 @@
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { PineconeStore } from '@langchain/pinecone';
-import { getPineconeClient } from '@/utils/server/pinecone-client';
+import { getPineconeClient } from '@ananda-library-chatbot/shared-utils/pinecone-client';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
-import { getPineconeIngestIndexName } from '@/config/pinecone';
+import { getPineconeIngestIndexName } from '@ananda-library-chatbot/shared-utils/pinecone-config';
 import { DirectoryLoader } from 'langchain/document_loaders/fs/directory';
 import readline from 'readline';
 import { Index } from '@pinecone-database/pinecone';
@@ -228,7 +228,7 @@ async function processDocument(
 
     await pMap(
       batch,
-      async (doc, j) => {
+      async (doc: Document, j: number) => {
         const title = doc.metadata.pdf?.info?.Title || 'Untitled';
         const sanitizedTitle = title
           .replace(/\s+/g, '_')
@@ -314,9 +314,15 @@ async function createPineconeIndexIfNotExists(
     ) {
       console.log(`Index ${indexName} does not exist. Creating...`);
       try {
+        const dimension = process.env.OPENAI_INGEST_EMBEDDINGS_DIMENSION;
+        if (!dimension) {
+          throw new Error(
+            'OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set',
+          );
+        }
         await pinecone.createIndex({
           name: indexName,
-          dimension: 1536,
+          dimension: parseInt(dimension, 10),
           metric: 'cosine',
           spec: {
             serverless: {
@@ -476,8 +482,14 @@ export const run = async (keepData: boolean, libraryName: string) => {
   }
 
   try {
+    const modelName = process.env.OPENAI_INGEST_EMBEDDINGS_MODEL;
+    if (!modelName) {
+      throw new Error(
+        'OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set',
+      );
+    }
     const vectorStore = await PineconeStore.fromExistingIndex(
-      new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
+      new OpenAIEmbeddings({ model: modelName }),
       {
         pineconeIndex,
         textKey: 'text',

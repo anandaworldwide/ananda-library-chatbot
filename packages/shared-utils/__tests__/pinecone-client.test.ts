@@ -1,8 +1,8 @@
-import { getPineconeClient } from '../../../src/utils/server/pinecone-client';
+import { getPineconeClient } from '../src/pinecone-client';
 
 // Mock the pinecone-client module to control the instance
 let mockPineconeInstance: Record<string, unknown> | null = null;
-jest.mock('../../../src/utils/server/pinecone-client', () => {
+jest.mock('../src/pinecone-client', () => {
   const mockGetPineconeClient = jest.fn().mockImplementation(async () => {
     if (!mockPineconeInstance) {
       if (!process.env.PINECONE_API_KEY) {

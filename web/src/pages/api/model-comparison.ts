@@ -2,10 +2,10 @@
 // It receives a query and model configurations, then returns responses from both models.
 
 import { NextApiRequest, NextApiResponse } from 'next';
-import { makeChain } from '@/utils/server/makechain';
-import { getPineconeClient } from '@/utils/server/pinecone-client';
-import { PineconeStore } from '@langchain/pinecone';
 import { OpenAIEmbeddings } from '@langchain/openai';
+import { PineconeStore } from '@langchain/pinecone';
+import { getPineconeClient } from '@ananda-library-chatbot/shared-utils/pinecone-client';
+import { makeChain } from '@/utils/server/makechain';
 import { StreamingResponseData } from '@/types/StreamingResponseData';
 import { Document } from 'langchain/document';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
@@ -54,7 +54,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX_NAME || '');
 
     const vectorStore = await PineconeStore.fromExistingIndex(
-      new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
+      new OpenAIEmbeddings({
+        model:
+          process.env.OPENAI_EMBEDDINGS_MODEL ||
+          (() => {
+            console.warn(
+              'OPENAI_EMBEDDINGS_MODEL not set, using default text-embedding-ada-002',
+            );
+            return 'text-embedding-ada-002';
+          })(),
+      }),
       { pineconeIndex },
     );
 

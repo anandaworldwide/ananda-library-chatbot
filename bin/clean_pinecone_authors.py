@@ -115,7 +115,7 @@ def find_and_replace_authors(
     for alt_name in alternative_names:
         # Query using exact match on author field
         query_response = index.query(
-            vector=[0] * 1536,  # dummy vector since we only care about metadata
+            vector=[0] * int(os.getenv("OPENAI_EMBEDDINGS_DIMENSION", "1536")),  # dummy vector since we only care about metadata
             top_k=10000,  # maximum number of matches to return
             filter={"author": {"$eq": alt_name}},
             include_metadata=True,

@@ -1,0 +1,30 @@
+{
+  "name": "@ananda-library-chatbot/shared-utils",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./pinecone-client": "./dist/pinecone-client.js",
+    "./pinecone-config": "./dist/pinecone-config.js",
+    "./loadEnv": "./dist/loadEnv.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@pinecone-database/pinecone": "^5.1.2",
+    "dotenv": "^16.5.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.15.3",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.2",
+    "typescript": "^5.8.3"
+  }
+}

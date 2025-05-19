@@ -37,7 +37,6 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     ".next/types/**/*.ts",
-    "src/utils/server/loadEnv.js",
     "src/types/**/*.d.ts",
     "scripts/**/*.ts",
     "jest.setup.ts"

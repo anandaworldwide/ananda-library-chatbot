@@ -152,7 +152,8 @@ class MarkdownGenerator:
         """Get embedding for a text using OpenAI's API."""
         try:
             response = self.openai_client.embeddings.create(
-                model="text-embedding-ada-002",
+                model="text-embedding-3-large",
+                dimensions=3072,
                 input=text
             )
             return response.data[0].embedding

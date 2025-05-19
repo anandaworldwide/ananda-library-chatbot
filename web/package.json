@@ -31,6 +31,7 @@
     "prompt": "tsx -r dotenv/config scripts/manage-prompts.ts"
   },
   "dependencies": {
+    "@ananda-library-chatbot/shared-utils": "file:../packages/shared-utils",
     "@aws-sdk/client-sts": "^3.799.0",
     "@aws-sdk/credential-providers": "^3.799.0",
     "@headlessui/react": "^2.2.2",
@@ -54,7 +55,6 @@
     "firebase-admin": "^12.7.0",
     "framer-motion": "^11.18.2",
     "jsonwebtoken": "^9.0.2",
-    "mdast-util-from-markdown": "^2.0.2",
     "micromark-util-symbol": "^2.0.1",
     "mongodb": "^5.9.2",
     "natural": "^8.0.1",

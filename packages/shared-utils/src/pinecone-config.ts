@@ -1,4 +1,4 @@
-import { loadEnv } from '../utils/server/loadEnv.js';
+import { loadEnv } from './loadEnv.js';
 
 // This function is now only used internally in this file
 // and ensures environment variables are available

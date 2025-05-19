@@ -10,6 +10,7 @@
 #   --site: Site ID for environment variables (e.g., ananda-public).
 #           Loads config from crawler_config/[site]-config.json and .env.[site]. REQUIRED.
 #   --retry-failed: Retry URLs marked as 'permanent' failed in the database.
+#   --fresh-start: Delete the existing SQLite database and start from a clean slate.
 #
 # Example usage:
 #   website_crawler.py --site ananda-public
@@ -706,7 +707,10 @@ class WebsiteCrawler:
 
     def create_embeddings(self, chunks: List[str], url: str, page_title: str) -> List[Dict]:
         """Create embeddings for text chunks."""
-        embeddings = OpenAIEmbeddings(model='text-embedding-ada-002', chunk_size=1000)
+        model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+        if not model_name:
+            raise ValueError("OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set")
+        embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
         vectors = []
         
         clean_title = sanitize_for_id(page_title)
@@ -832,6 +836,7 @@ def parse_arguments() -> argparse.Namespace:
         help='Site ID for environment variables (e.g., ananda-public). Loads config from crawler_config/[site]-config.json. REQUIRED.'
     )
     parser.add_argument('--retry-failed', action='store_true', help="Retry URLs marked as 'permanent' failed in the database.")
+    parser.add_argument('--fresh-start', action='store_true', help="Delete the existing SQLite database and start from a clean slate.")
     return parser.parse_args()
 
 def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
@@ -875,7 +880,10 @@ def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
 
         if user_input == 'y':
             try:
-                dimension = 1536 # Standard dimension for OpenAI ada-002 embeddings
+                dimension_str = os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION")
+                if not dimension_str:
+                    raise ValueError("OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set")
+                dimension = int(dimension_str)
                 metric = 'cosine' # Standard metric for semantic search
                 spec = ServerlessSpec(
                     cloud='aws', 
@@ -899,8 +907,51 @@ def initialize_pinecone(env_file: str) -> Optional[pinecone.Index]:
                 logging.info(f"Successfully created and connected to Pinecone index '{index_name}'.")
 
             except Exception as create_e:
+                # Log the full error for detailed debugging
                 logging.error(f"Failed to create or connect to Pinecone index '{index_name}' after user confirmation: {create_e}")
-                print(f"Error: Failed to create index '{index_name}'. Please check Pinecone console/logs. Exiting.")
+
+                # Try to extract a more user-friendly message for the print statement
+                pinecone_specific_error = ""
+                error_status_code = None
+                try:
+                    # Pinecone API exceptions (like ApiException) often have a 'body' attribute with JSON
+                    # and a 'status' attribute for the HTTP status code.
+                    if hasattr(create_e, 'status'):
+                        error_status_code = create_e.status
+                    
+                    if hasattr(create_e, 'body') and isinstance(create_e.body, str):
+                        error_data = json.loads(create_e.body)
+                        if isinstance(error_data, dict):
+                            if 'error' in error_data and isinstance(error_data['error'], dict) and 'message' in error_data['error']:
+                                pinecone_specific_error = error_data['error']['message']
+                            elif 'message' in error_data: # Sometimes the message is at the top level
+                                pinecone_specific_error = error_data['message']
+                            
+                            # If status code wasn't directly on create_e, try to get it from body
+                            if error_status_code is None and 'status' in error_data:
+                                error_status_code = error_data['status']
+                
+                except json.JSONDecodeError:
+                    logging.debug(f"Could not parse Pinecone error body for detailed message: {getattr(create_e, 'body', 'N/A')}")
+                except Exception as e_parse: # Catch any other error during parsing details
+                    logging.debug(f"An error occurred while parsing Pinecone exception details: {e_parse}")
+
+                # Construct the user-facing error message
+                user_message_parts = [f"Error: Failed to create Pinecone index '{index_name}'."]
+                if pinecone_specific_error:
+                    user_message_parts.append(f"Reason: {pinecone_specific_error}.")
+                else:
+                    # Fallback detail if specific message wasn't extracted but we have the original exception
+                    user_message_parts.append(f"Details: {str(create_e)[:200]}...")
+
+
+                if error_status_code:
+                    user_message_parts.append(f"(Status Code: {error_status_code})")
+                
+                user_message_parts.append("Please check logs for full details or the Pinecone console. Exiting.")
+                final_user_message = " ".join(user_message_parts)
+                
+                print(final_user_message)
                 return None # Indicate failure
         else:
             logging.info("User declined to create the index. Exiting.")
@@ -1132,6 +1183,21 @@ def main():
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent.parent  # Go up two levels for project root
     env_file = project_root / f".env.{args.site}"
+
+    # --- Handle --fresh-start ---    
+    if args.fresh_start:
+        db_dir = script_dir / 'db' # Path to db directory within crawler script's directory
+        db_file_to_delete = db_dir / f"crawler_queue_{args.site}.db"
+        if db_file_to_delete.exists():
+            try:
+                os.remove(db_file_to_delete)
+                logging.info(f"Successfully deleted database file for fresh start: {db_file_to_delete}")
+            except OSError as e:
+                logging.error(f"Error deleting database file {db_file_to_delete}: {e}")
+                print(f"Error: Could not delete database file {db_file_to_delete} for fresh start. Please check permissions or delete manually. Exiting.")
+                sys.exit(1)
+        else:
+            logging.info(f"--fresh-start specified, but no existing database file found at {db_file_to_delete}. Proceeding with new database.")
 
     # Convert Path object to string for os.path.exists
     env_file_str = str(env_file)

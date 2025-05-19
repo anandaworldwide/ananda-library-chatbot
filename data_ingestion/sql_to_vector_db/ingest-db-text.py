@@ -153,7 +153,10 @@ def create_pinecone_index_if_not_exists(pinecone: Pinecone, index_name: str, dry
                 print(f"Creating index '{index_name}' in dry run mode...")
                 try:
                     # Create the index with the same parameters as the non-dry-run case
-                    dimension = 1536
+                    dimension_str = os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION")
+                    if not dimension_str:
+                        raise ValueError("OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set")
+                    dimension = int(dimension_str)
                     metric = 'cosine'
                     spec = ServerlessSpec(
                         cloud=os.getenv("PINECONE_CLOUD", 'aws'),
@@ -188,7 +191,10 @@ def create_pinecone_index_if_not_exists(pinecone: Pinecone, index_name: str, dry
             print(f"Index '{index_name}' does not exist. Creating...")
             try:
                 # Dimension for OpenAI text-embedding-ada-002
-                dimension = 1536
+                dimension_str = os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION")
+                if not dimension_str:
+                    raise ValueError("OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set")
+                dimension = int(dimension_str)
                 # Using cosine similarity as it's common for text embeddings
                 metric = 'cosine'
                 # Specify serverless configuration
@@ -910,7 +916,10 @@ def main():
 
         if all_rows:
             # Prepare embedding model and text splitter
-            embeddings_model = OpenAIEmbeddings(model="text-embedding-ada-002", chunk_size=500)
+            model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+            if not model_name:
+                raise ValueError("OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set")
+            embeddings_model = OpenAIEmbeddings(model=model_name, chunk_size=500)
             text_splitter = TokenTextSplitter.from_tiktoken_encoder(
                 encoding_name='cl100k_base',
                 chunk_size=256,

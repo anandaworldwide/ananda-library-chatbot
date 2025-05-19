@@ -94,6 +94,20 @@ npm install
 
 After installation, you should now see a `node_modules` folder.
 
+### Monorepo Workspaces Build
+
+This project uses npm workspaces. Some packages within the monorepo, like `packages/shared-utils`, have their own build
+step. After the main `npm install` at the root, you may need to build these individual workspaces.
+
+To build the `shared-utils` package (which is necessary for other parts of the application like data ingestion and web
+API routes to function correctly):
+
+```bash
+cd packages/shared-utils
+npm run build
+cd ../.. # Return to the project root
+```
+
 ### Environment Variables Setup
 
 1. Copy the example environment file and create site-specific configs:
@@ -416,7 +430,7 @@ In general, keep an eye out in the `issues` and `discussions` section of this re
 ### Pinecone errors
 
 - Make sure your pinecone dashboard `environment` and `index` matches the one in the `pinecone.ts` and `.env` files.
-- Check that you've set the vector dimensions to `1536`.
+- Check that you've set the vector dimensions env var OPENAI_EMBEDDINGS_DIMENSION appropriately (e.g., 1536 or 3072).
 - Retry from scratch with a new Pinecone project, index, and cloned repo.
 
 ## Adding a new site

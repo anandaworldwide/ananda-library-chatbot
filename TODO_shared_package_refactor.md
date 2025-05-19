@@ -1,0 +1,34 @@
+## Shared Package Refactor TODO List
+
+- [x] Create `packages/shared-utils` directory structure (`src`).
+- [x] Create `packages/shared-utils/package.json`.
+- [x] Create `packages/shared-utils/tsconfig.json`.
+- [x] Move `pinecone-client.ts` from `web` to `packages/shared-utils/src/`.
+- [x] Move `pinecone-config.ts` from `web` to `packages/shared-utils/src/`.
+- [x] Create `packages/shared-utils/src/index.ts` to export shared modules.
+- [x] Add `packages/shared-utils` to root `package.json` workspaces.
+- [x] Add `shared-utils` as a `file:` dependency in `web/package.json`.
+- [x] Add `shared-utils` as a `file:` dependency in `data_ingestion/package.json`.
+- [ ] **Resolve `loadEnv.js` dependency for `shared-utils`:**
+  - [x] Locate `loadEnv.js` (likely in `web/src/utils/server/`).
+  - [x] Decide if it should be moved to `shared-utils/src` or if `pinecone-config.ts` needs a different way to get env vars. (Decided: Move)
+  - [x] If moved, update its import path in `shared-utils/src/pinecone-config.ts`.
+  - [x] Create `loadEnv.d.ts` declaration file for `shared-utils/src/loadEnv.js` OR convert `loadEnv.js` to `loadEnv.ts`. (Resolved by using allowJs and deleting .d.ts)
+  - [x] Ensure `shared-utils` can build successfully (`npm run build` in `packages/shared-utils`).
+- [ ] **Update Imports in `data_ingestion` package:**
+  - [x] Update imports in `data_ingestion/pdf_to_vector_db.ts` to use `@ananda-library-chatbot/shared-utils`.
+  - [x] Verify no TypeScript errors in `data_ingestion/pdf_to_vector_db.ts` related to these imports after `shared-utils` is built.
+- [ ] **Update Imports in `web` package:**
+  - [x] Identify all files in `web` that used the original `pinecone-client.ts` and `pinecone-config.ts`.
+  - [x] Update their import paths to use `@ananda-library-chatbot/shared-utils`.
+  - [x] If `loadEnv.js` was moved to `shared-utils`, update its imports within the `web` package as well, or adjust `web` to use the shared version. (Resolved: `loadEnv` in `web` removed as `shared-utils` handles it; `next.config.mjs` and `web/tsconfig.json` updated).
+- [ ] **Final Verification:**
+  - [ ] Ensure `data_ingestion` scripts run correctly.
+  - [ ] Ensure `web` application builds and runs correctly.
+- [ ] **Refactor Pinecone Client Tests:**
+  - [x] Move `web/__tests__/utils/server/pinecone-client.test.ts` to `packages/shared-utils/__tests__/pinecone-client.test.ts`.
+  - [x] Update import and mock paths within the moved `packages/shared-utils/__tests__/pinecone-client.test.ts`.
+  - [x] Add Jest (and necessary types like `@types/jest`) as dev dependencies to `packages/shared-utils/package.json`.
+  - [x] Create `jest.config.js` (or `.cjs`) in `packages/shared-utils/`.
+  - [x] Add a test script (e.g., `"test": "jest"`) to `packages/shared-utils/package.json`.
+- [x] Consider switching back from `file:` to `workspace:*` protocol for dependencies if npm version issues are otherwise resolved (optional, lower priority). Note: Attempted switch, but npm 8.11.0 threw 'Unsupported URL Type "workspace:"' error; reverted to `file:`.

@@ -52,10 +52,12 @@ export async function getEmbedding(text: string): Promise<number[]> {
 
   if (!cleanedText) {
     // Handle empty strings to avoid API errors - return a zero vector or handle as needed
-    // The dimension depends on the model, text-embedding-3-large uses 1536
-    // You might need to adjust this based on the model you use.
+    // The dimension depends on the model, text-embedding-3-large uses process.env.OPENAI_EMBEDDINGS_DIMENSION || 1536
     console.warn('Attempted to embed an empty string. Returning zero vector.');
-    const dimensions = 1536; // Dimension for text-embedding-3-large
+    const dimensions = parseInt(
+      process.env.OPENAI_EMBEDDINGS_DIMENSION || '1536',
+      10,
+    ); // Dimension for text-embedding-3-large
     return Array(dimensions).fill(0);
   }
 
@@ -63,7 +65,10 @@ export async function getEmbedding(text: string): Promise<number[]> {
   if (process.env.OPENAI_API_KEY === undefined) {
     console.warn('Using mock embeddings for testing');
     // Generate deterministic mock embeddings based on text length
-    const dimensions = 1536;
+    const dimensions = parseInt(
+      process.env.OPENAI_EMBEDDINGS_DIMENSION || '1536',
+      10,
+    );
     return Array(dimensions)
       .fill(0)
       .map(

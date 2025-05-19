@@ -19,7 +19,7 @@ jest.mock('@/services/firebase', () => ({
   },
 }));
 
-jest.mock('@/utils/server/pinecone-client', () => ({
+jest.mock('@ananda-library-chatbot/shared-utils/pinecone-client', () => ({
   getPineconeClient: jest.fn().mockResolvedValue({
     index: jest.fn().mockReturnValue({
       query: jest.fn().mockResolvedValue({
@@ -34,7 +34,7 @@ jest.mock('@/utils/server/pinecone-client', () => ({
   }),
 }));
 
-jest.mock('@/config/pinecone', () => ({
+jest.mock('@ananda-library-chatbot/shared-utils/pinecone-config', () => ({
   getPineconeIndexName: jest.fn().mockReturnValue('test-index'),
 }));
 

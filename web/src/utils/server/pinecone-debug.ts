@@ -18,7 +18,13 @@ export function logPineconeQuery(
   filter: Record<string, any>,
   topK: number,
   embeddingDimension: number,
-  modelName: string = 'text-embedding-ada-002',
+  modelName: string = process.env.OPENAI_EMBEDDINGS_MODEL ||
+    (() => {
+      console.warn(
+        'OPENAI_EMBEDDINGS_MODEL not set, using default text-embedding-ada-002',
+      );
+      return 'text-embedding-ada-002';
+    })(),
 ) {
   console.log('\n===== DEBUG: WEBSITE PINECONE QUERY DETAILS =====');
   console.log(`Query text: ${query}`);

@@ -1,0 +1,22 @@
+{
+  "name": "data_ingestion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ananda-library-chatbot/shared-utils": "file:../packages/shared-utils",
+    "@langchain/community": "0.3.34",
+    "@langchain/openai": "^0.5.8",
+    "@langchain/pinecone": "^0.2.0",
+    "@langchain/textsplitters": "^0.0.2",
+    "@pinecone-database/pinecone": "^5.1.2",
+    "dotenv": "^16.5.0",
+    "langchain": "^0.3.24",
+    "p-map": "^7.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

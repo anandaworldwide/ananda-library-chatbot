@@ -20,7 +20,7 @@ Architecture:
 - Atomic operations with rollback capability
 
 Technical Specifications:
-- Vector Dimension: 1536 (OpenAI ada-002)
+- Vector Dimension: from OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable
 - Index Metric: Cosine Similarity
 - Batch Size: 100 vectors per upsert
 - Region: us-west-2 (AWS)
@@ -41,11 +41,13 @@ def create_embeddings(chunks, client):
     - Returns flat list of embeddings
     
     Rate Limits: Determined by OpenAI API quotas
-    Vector Size: 1536 dimensions per embedding
     """
     texts = [chunk["text"] for chunk in chunks]
     logging.debug("create_embeddings")
-    response = client.embeddings.create(input=texts, model="text-embedding-ada-002")
+    model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+    if not model_name:
+        raise ValueError("OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set")
+    response = client.embeddings.create(input=texts, model=model_name)
     return [embedding.embedding for embedding in response.data]
 
 
@@ -67,9 +69,12 @@ def load_pinecone(index_name=None):
         index_name = os.getenv("PINECONE_INGEST_INDEX_NAME")
     pc = Pinecone()
     try:
+        dimension_str = os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION")
+        if not dimension_str:
+            raise ValueError("OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set")
         pc.create_index(
             index_name,
-            dimension=1536,
+            dimension=int(dimension_str),
             metric="cosine",
             spec=ServerlessSpec(cloud="aws", region="us-west-2"),
         )

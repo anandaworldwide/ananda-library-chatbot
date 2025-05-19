@@ -19,6 +19,8 @@ const customJestConfig = {
   moduleNameMapper: {
     // Update paths to ensure they resolve to web/src
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@ananda-library-chatbot/shared-utils/(.*)$':
+      '<rootDir>/../packages/shared-utils/dist/$1.js',
     '^@/pages/(.*)$': '<rootDir>/src/pages/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@/types/(.*)$': '<rootDir>/src/types/$1',
@@ -77,6 +79,8 @@ const serverConfig = {
   moduleNameMapper: {
     // Update paths relative to <rootDir> (web/)
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@ananda-library-chatbot/shared-utils/(.*)$':
+      '<rootDir>/../packages/shared-utils/dist/$1.js',
     '^@/pages/(.*)$': '<rootDir>/src/pages/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@/types/(.*)$': '<rootDir>/src/types/$1',

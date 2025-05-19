@@ -50,8 +50,8 @@ import {
   makeChain,
   setupAndExecuteLanguageModelChain,
 } from '@/utils/server/makechain';
-import { getCachedPineconeIndex } from '@/utils/server/pinecone-client';
-import { getPineconeIndexName } from '@/config/pinecone';
+import { getCachedPineconeIndex } from '@ananda-library-chatbot/shared-utils/pinecone-client';
+import { getPineconeIndexName } from '@ananda-library-chatbot/shared-utils/pinecone-config';
 import * as fbadmin from 'firebase-admin';
 import { db } from '@/services/firebase';
 import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
@@ -328,7 +328,16 @@ async function setupVectorStoreAndRetriever(
   };
 
   const vectorStore = await PineconeStore.fromExistingIndex(
-    new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
+    new OpenAIEmbeddings({
+      model:
+        process.env.OPENAI_EMBEDDINGS_MODEL ||
+        (() => {
+          console.warn(
+            'OPENAI_EMBEDDINGS_MODEL not set, using default text-embedding-ada-002',
+          );
+          return 'text-embedding-ada-002';
+        })(),
+    }),
     vectorStoreOptions,
   );
 
@@ -659,7 +668,16 @@ async function handleComparisonRequest(
         };
 
         const vectorStore = await PineconeStore.fromExistingIndex(
-          new OpenAIEmbeddings({ model: 'text-embedding-ada-002' }),
+          new OpenAIEmbeddings({
+            model:
+              process.env.OPENAI_EMBEDDINGS_MODEL ||
+              (() => {
+                console.warn(
+                  'OPENAI_EMBEDDINGS_MODEL not set, using default text-embedding-ada-002',
+                );
+                return 'text-embedding-ada-002';
+              })(),
+          }),
           vectorStoreOptions,
         );
 
