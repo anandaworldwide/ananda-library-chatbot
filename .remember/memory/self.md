@@ -257,3 +257,34 @@ Ran 'npm test' without ensuring the shell was in the web directory.
 ```
 Must cd into the web directory with 'cd web' before running 'npm test' to execute the Next.js test suite.
 ```
+
+### Python Import Path Resolution for Direct Script Execution
+
+**Problem**: When running a Python script directly from its directory using `./script.py` instead of as a module with `python -m`, imports referencing the parent package fail.
+
+**Wrong**:
+
+```python
+# Using relative path calculation that might be unreliable
+import sys
+import os
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+```
+
+**Correct**:
+
+```python
+# Directly calculate the absolute paths for reliable import resolution
+import sys
+import os
+# Get the absolute path of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the parent directory of the package directory
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+# Add parent directory to Python path
+sys.path.insert(0, parent_dir)
+```
+
+This solution ensures that Python can find the parent package when a script is run directly using `./script.py` from within its directory.

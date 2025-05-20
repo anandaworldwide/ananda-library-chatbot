@@ -5,6 +5,16 @@ This script reads file path information from the SQLite database and adds it to 
 transcription JSON files. It ensures each transcription file has a reference to its original media file.
 """
 
+import sys
+import os
+
+# Get the absolute path of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the parent directory of data_ingestion
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+# Add parent directory to Python path
+sys.path.insert(0, parent_dir)
+
 import sqlite3
 import gzip
 import json

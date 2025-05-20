@@ -1,4 +1,14 @@
 #!/usr/bin/env python
+import sys
+import os
+
+# Get the absolute path of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the parent directory of data_ingestion
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+# Add parent directory to Python path
+sys.path.insert(0, parent_dir)
+
 """
 Media Processing and Ingestion Pipeline
 
@@ -20,8 +30,6 @@ Key Features:
 """
 
 import argparse
-import os
-import sys
 import logging
 from openai import OpenAI
 from tqdm import tqdm

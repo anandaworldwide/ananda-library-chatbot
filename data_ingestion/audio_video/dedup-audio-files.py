@@ -1,6 +1,14 @@
 #!/usr/bin/env python
-
+import sys
 import os
+
+# Get the absolute path of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the parent directory of data_ingestion
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+# Add parent directory to Python path
+sys.path.insert(0, parent_dir)
+
 import argparse
 import hashlib
 import sqlite3
@@ -8,7 +16,6 @@ from pydub import AudioSegment
 import shutil
 from tqdm import tqdm
 import signal
-import sys
 
 """
 Audio File Deduplication Script
