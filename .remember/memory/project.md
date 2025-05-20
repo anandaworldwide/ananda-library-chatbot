@@ -55,9 +55,11 @@ The `Resource` should be restricted to a specific path, e.g., `public/audio/*`.
 **Fix:**
 
 - Add browserslist directly to the devDependencies of the package running Next.js (web/package.json):
+
   ```
   "browserslist": "^4.23.0"
   ```
+
 - Run `npm install` to update the lockfile.
 
 ### TypeScript Configuration for Test Files
@@ -142,3 +144,7 @@ When adding new shared functionality:
 - Copy the code to both packages if needed
 - Maintain version alignment for any npm dependencies used in both packages
 - Keep the implementations as similar as possible while allowing for package-specific optimizations
+
+### Markdown Formatting
+
+- Markdown files should adhere to a 120-character line limit.
