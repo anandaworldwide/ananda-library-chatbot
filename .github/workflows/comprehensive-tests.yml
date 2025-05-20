@@ -19,7 +19,9 @@ jobs:
           node-version: '20'
           # Cache dependencies installed in the web directory
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            web/package.json
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
@@ -49,7 +51,9 @@ jobs:
           node-version: '20'
           # Cache dependencies installed in the web directory
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            web/package.json
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
@@ -82,7 +86,9 @@ jobs:
           node-version: '20'
           # Cache dependencies installed in the web directory
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            web/package.json
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
@@ -118,7 +124,9 @@ jobs:
           node-version: '20'
           # Cache dependencies installed in the web directory
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            web/package.json
 
       - name: Update package-lock.json
         run: npm install --package-lock-only
