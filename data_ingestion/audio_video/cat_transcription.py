@@ -3,7 +3,7 @@ import re
 import hashlib
 import gzip
 import json
-from data_ingestion.scripts.transcription_utils import TRANSCRIPTIONS_DIR
+from data_ingestion.audio_video.transcription_utils import TRANSCRIPTIONS_DIR
 
 
 def get_file_hash(file_path):

@@ -17,7 +17,7 @@ import tempfile
 import shutil
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, APIC, COMM, ID3NoHeaderError
-from data_ingestion.scripts.media_utils import get_media_metadata, get_mp3_metadata, get_wav_metadata
+from data_ingestion.audio_video.media_utils import get_media_metadata, get_mp3_metadata, get_wav_metadata
 import wave
 import numpy as np
 import logging

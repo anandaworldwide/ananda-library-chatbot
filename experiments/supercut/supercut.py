@@ -20,9 +20,9 @@ project_root = str(Path(__file__).parent.parent.parent)
 sys.path.append(project_root)
 
 from pyutil.env_utils import load_env
-from data_ingestion.scripts.youtube_utils import extract_youtube_id
-from data_ingestion.scripts.media_utils import get_file_hash
-from data_ingestion.scripts.transcription_utils import (
+from data_ingestion.audio_video.youtube_utils import extract_youtube_id
+from data_ingestion.audio_video.media_utils import get_file_hash
+from data_ingestion.audio_video.transcription_utils import (
     TRANSCRIPTIONS_DIR, 
     get_saved_transcription
 )

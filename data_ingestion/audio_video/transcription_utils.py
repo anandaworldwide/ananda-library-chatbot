@@ -16,8 +16,8 @@ from tqdm import tqdm
 import logging
 import re
 import signal
-from data_ingestion.scripts.media_utils import get_file_hash, split_audio, get_media_metadata
-from data_ingestion.scripts.youtube_utils import load_youtube_data_map, save_youtube_data_map
+from data_ingestion.audio_video.media_utils import get_file_hash, split_audio, get_media_metadata
+from data_ingestion.audio_video.youtube_utils import load_youtube_data_map, save_youtube_data_map
 from datetime import datetime
 import hashlib
 

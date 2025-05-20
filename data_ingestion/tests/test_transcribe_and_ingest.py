@@ -17,7 +17,7 @@ import gzip
 import io
 import hashlib
 from unittest.mock import Mock, patch, MagicMock, PropertyMock, mock_open, create_autospec
-from data_ingestion.scripts.transcribe_and_ingest_media import (
+from data_ingestion.audio_video.transcribe_and_ingest_media import (
     verify_and_update_transcription_metadata,
     process_file,
     merge_reports,
@@ -25,8 +25,8 @@ from data_ingestion.scripts.transcribe_and_ingest_media import (
     preprocess_youtube_video,
     worker
 )
-from data_ingestion.scripts.transcription_utils import RateLimitError, UnsupportedAudioFormatError
-from data_ingestion.scripts.s3_utils import S3UploadError
+from data_ingestion.audio_video.transcription_utils import RateLimitError, UnsupportedAudioFormatError
+from data_ingestion.audio_video.s3_utils import S3UploadError
 from multiprocessing import Queue, Event
 from openai import RateLimitError, APIError, APIStatusError
 
@@ -159,9 +159,9 @@ def test_verify_metadata_legacy_format():
     assert result['type'] == "audio_file"
 
 @patch('os.path.exists')
-@patch('data_ingestion.scripts.media_utils.get_media_metadata')
+@patch('data_ingestion.audio_video.media_utils.get_media_metadata')
 @patch('os.stat')
-@patch('data_ingestion.scripts.media_utils.MP3')
+@patch('data_ingestion.audio_video.media_utils.MP3')
 @patch('os.makedirs')
 @patch('builtins.open', new_callable=mock_open)
 def test_verify_metadata_with_file_stats(mock_file, mock_makedirs, mock_mp3, mock_stat, mock_get_metadata, mock_exists):
@@ -210,7 +210,7 @@ def test_verify_metadata_with_file_stats(mock_file, mock_makedirs, mock_mp3, moc
 
 def test_preprocess_youtube_private():
     """Test preprocessing of private YouTube videos"""
-    with patch('data_ingestion.scripts.youtube_utils.download_youtube_audio') as mock_download:
+    with patch('data_ingestion.audio_video.youtube_utils.download_youtube_audio') as mock_download:
         mock_download.return_value = None
         result, youtube_id = preprocess_youtube_video(
             "https://youtube.com/watch?v=private123",

@@ -28,7 +28,7 @@
       "name": "Python: ananda_crawler.py",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/data_ingestion/scripts/ananda_crawler.py",
+      "program": "${workspaceFolder}/data_ingestion/audio_video/ananda_crawler.py",
       "console": "integratedTerminal",
       "args": ["--site", "ananda-public", "--active-hours", "10:34am-10:35am"]
     },
@@ -90,7 +90,7 @@
       "name": "Python: update_related_answers.py",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/data_ingestion/scripts/update_related_answers.py",
+      "program": "${workspaceFolder}/data_ingestion/audio_video/update_related_answers.py",
       "console": "integratedTerminal",
       "justMyCode": false,
       "args": ["-e", "dev"]
@@ -99,8 +99,8 @@
       "name": "Python: transcribe_and_ingest_media.py",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/data_ingestion/scripts/transcribe_and_ingest_media.py",
-      "cwd": "${workspaceFolder}/data_ingestion/scripts",
+      "program": "${workspaceFolder}/data_ingestion/audio_video/transcribe_and_ingest_media.py",
+      "cwd": "${workspaceFolder}/data_ingestion/audio_video",
       "console": "integratedTerminal",
       "env": {
         "PYTHONPATH": "${workspaceFolder}"

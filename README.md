@@ -349,7 +349,7 @@ python ingest_queue.py \
 Then process the queue:
 
 ```bash
-python data_ingestion/scripts/transcribe_and_ingest_media.py
+python data_ingestion/audio_video/transcribe_and_ingest_media.py
 ```
 
 Check Pinecone dashboard to verify your namespace and vectors have been added.

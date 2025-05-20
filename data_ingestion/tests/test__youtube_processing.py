@@ -6,10 +6,10 @@ import logging
 import uuid
 from unittest.mock import Mock, patch, MagicMock
 from unittest import TestCase
-from data_ingestion.scripts.youtube_utils import download_youtube_audio, extract_youtube_id
-from data_ingestion.scripts.transcription_utils import transcribe_media
-from data_ingestion.scripts.pinecone_utils import store_in_pinecone
-from data_ingestion.scripts.s3_utils import upload_to_s3
+from data_ingestion.audio_video.youtube_utils import download_youtube_audio, extract_youtube_id
+from data_ingestion.audio_video.transcription_utils import transcribe_media
+from data_ingestion.audio_video.pinecone_utils import store_in_pinecone
+from data_ingestion.audio_video.s3_utils import upload_to_s3
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +43,12 @@ class TestYouTubeProcessing(TestCase):
             "file_size": 1024
         }
     
-    @patch('data_ingestion.scripts.youtube_utils.extract_youtube_id')
-    @patch('data_ingestion.scripts.youtube_utils.YoutubeDL')
+    @patch('data_ingestion.audio_video.youtube_utils.extract_youtube_id')
+    @patch('data_ingestion.audio_video.youtube_utils.YoutubeDL')
     @patch('os.path.exists')
     @patch('os.path.getsize')
     @patch('uuid.uuid4')
-    @patch('data_ingestion.scripts.youtube_utils.add_metadata_to_mp3')
+    @patch('data_ingestion.audio_video.youtube_utils.add_metadata_to_mp3')
     def test_youtube_download(self, mock_add_metadata, mock_uuid, mock_getsize, mock_exists, mock_ytdl, mock_extract_id):
         """Test that YouTube videos can be downloaded and processed"""
         # Setup mocks
@@ -71,13 +71,13 @@ class TestYouTubeProcessing(TestCase):
         self.assertEqual(result["title"], self.mock_video_info["title"])
         mock_ytdl_instance.extract_info.assert_called_once_with(self.test_video_url, download=True)
     
-    @patch('data_ingestion.scripts.youtube_utils.extract_youtube_id')
-    @patch('data_ingestion.scripts.youtube_utils.YoutubeDL')
+    @patch('data_ingestion.audio_video.youtube_utils.extract_youtube_id')
+    @patch('data_ingestion.audio_video.youtube_utils.YoutubeDL')
     @patch('os.path.exists')
     @patch('os.path.getsize')
     @patch('uuid.uuid4')
-    @patch('data_ingestion.scripts.youtube_utils.add_metadata_to_mp3')
-    @patch('data_ingestion.scripts.media_utils.split_audio')
+    @patch('data_ingestion.audio_video.youtube_utils.add_metadata_to_mp3')
+    @patch('data_ingestion.audio_video.media_utils.split_audio')
     def test_transcription(self, mock_split_audio, mock_add_metadata, mock_uuid, mock_getsize, mock_exists, mock_ytdl, mock_extract_id):
         """Test that downloaded YouTube videos can be transcribed"""
         # Setup mocks
@@ -109,7 +109,7 @@ class TestYouTubeProcessing(TestCase):
             youtube_data = download_youtube_audio(self.test_video_url)
             
             # Now directly test the mock of transcribe_media
-            with patch('data_ingestion.scripts.transcription_utils.transcribe_media') as mock_transcribe:
+            with patch('data_ingestion.audio_video.transcription_utils.transcribe_media') as mock_transcribe:
                 mock_transcribe.return_value = {
                     "text": "test transcription",
                     "words": [{"word": "test", "start": 0, "end": 1}]
@@ -129,13 +129,13 @@ class TestYouTubeProcessing(TestCase):
                 self.assertEqual(transcription["text"], "test transcription")
                 mock_transcribe.assert_called_once()
     
-    @patch('data_ingestion.scripts.youtube_utils.extract_youtube_id')
-    @patch('data_ingestion.scripts.youtube_utils.YoutubeDL')
+    @patch('data_ingestion.audio_video.youtube_utils.extract_youtube_id')
+    @patch('data_ingestion.audio_video.youtube_utils.YoutubeDL')
     @patch('os.path.exists')
     @patch('os.path.getsize')
     @patch('uuid.uuid4')
-    @patch('data_ingestion.scripts.youtube_utils.add_metadata_to_mp3')
-    @patch('data_ingestion.scripts.pinecone_utils.create_embeddings')
+    @patch('data_ingestion.audio_video.youtube_utils.add_metadata_to_mp3')
+    @patch('data_ingestion.audio_video.pinecone_utils.create_embeddings')
     def test_pinecone_storage(self, mock_embeddings, mock_add_metadata, mock_uuid, mock_getsize, mock_exists, mock_ytdl, mock_extract_id):
         """Test that YouTube transcriptions can be stored in Pinecone"""
         # Setup mocks
@@ -161,7 +161,7 @@ class TestYouTubeProcessing(TestCase):
         mock_pinecone_index = MagicMock()
         
         # Replace the real function with a mocked version to test the integration
-        with patch('data_ingestion.scripts.pinecone_utils.store_in_pinecone') as mock_store_function:
+        with patch('data_ingestion.audio_video.pinecone_utils.store_in_pinecone') as mock_store_function:
             # Configure the mock
             mock_store_function.return_value = True
             
@@ -192,12 +192,12 @@ class TestYouTubeProcessing(TestCase):
             # Verify that our function returns the expected result
             self.assertTrue(result)
     
-    @patch('data_ingestion.scripts.youtube_utils.extract_youtube_id')
-    @patch('data_ingestion.scripts.youtube_utils.YoutubeDL') 
+    @patch('data_ingestion.audio_video.youtube_utils.extract_youtube_id')
+    @patch('data_ingestion.audio_video.youtube_utils.YoutubeDL') 
     @patch('os.path.exists')
     @patch('os.path.getsize')
     @patch('uuid.uuid4')
-    @patch('data_ingestion.scripts.youtube_utils.add_metadata_to_mp3')
+    @patch('data_ingestion.audio_video.youtube_utils.add_metadata_to_mp3')
     @patch('boto3.client')
     def test_s3_upload_skipped(self, mock_boto3_client, mock_add_metadata, mock_uuid, mock_getsize, mock_exists, mock_ytdl, mock_extract_id):
         """Test that S3 uploads are properly handled for YouTube videos"""
@@ -226,13 +226,13 @@ class TestYouTubeProcessing(TestCase):
         upload_to_s3(youtube_data["audio_path"], "test/key.mp3")
         mock_s3.upload_file.assert_called_once()
     
-    @patch('data_ingestion.scripts.youtube_utils.extract_youtube_id')
-    @patch('data_ingestion.scripts.youtube_utils.YoutubeDL')
+    @patch('data_ingestion.audio_video.youtube_utils.extract_youtube_id')
+    @patch('data_ingestion.audio_video.youtube_utils.YoutubeDL')
     @patch('os.path.exists')
     @patch('os.path.getsize') 
     @patch('uuid.uuid4')
-    @patch('data_ingestion.scripts.youtube_utils.add_metadata_to_mp3')
-    @patch('data_ingestion.scripts.media_utils.get_media_metadata')
+    @patch('data_ingestion.audio_video.youtube_utils.add_metadata_to_mp3')
+    @patch('data_ingestion.audio_video.media_utils.get_media_metadata')
     def test_audio_metadata(self, mock_metadata, mock_add_metadata, mock_uuid, mock_getsize, mock_exists, mock_ytdl, mock_extract_id):
         """Test that audio metadata is properly extracted and handled"""
         # Setup mocks

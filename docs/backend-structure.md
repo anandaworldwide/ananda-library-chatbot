@@ -26,7 +26,7 @@ understanding and future development.
     potentially ingestion queue state (`firestoreUtils.ts`, `services/firebase.ts`).
   - **Redis:** In-memory data store used primarily for API rate limiting (`redisUtils.ts`, `genericRateLimiter.ts`).
   - **AWS S3:** Object storage used for hosting source audio files (`awsConfig.ts`,
-    `data_ingestion/scripts/s3_utils.py`).
+    `data_ingestion/audio_video/s3_utils.py`).
   - **AssemblyAI / Whisper:** Likely used for audio transcription within the Python ingestion scripts.
 
 ---
@@ -260,7 +260,7 @@ Data is stored across multiple services:
 
 ## 5. Utility Scripts & Cron Jobs
 
-The `bin/` directory and parts of `data_ingestion/scripts/` contain various Python utility scripts for maintenance,
+The `bin/` directory and parts of `data_ingestion/audio_video/` contain various Python utility scripts for maintenance,
 data processing, and analysis.
 
 - **`bin/count_hallucinated_urls.py`**

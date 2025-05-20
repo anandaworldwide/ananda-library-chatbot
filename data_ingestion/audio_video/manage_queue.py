@@ -67,15 +67,15 @@ from collections import defaultdict
 import pytz
 from datetime import datetime
 import json
-from data_ingestion.scripts.IngestQueue import IngestQueue
+from data_ingestion.audio_video.IngestQueue import IngestQueue
 from pyutil.logging_utils import configure_logging
-from data_ingestion.scripts.youtube_utils import (
+from data_ingestion.audio_video.youtube_utils import (
     extract_youtube_id, 
     get_playlist_videos,
     load_youtube_data_map
 )
-from data_ingestion.scripts.media_utils import get_file_hash
-from data_ingestion.scripts.processing_time_estimates import get_estimate, estimate_total_processing_time
+from data_ingestion.audio_video.media_utils import get_file_hash
+from data_ingestion.audio_video.processing_time_estimates import get_estimate, estimate_total_processing_time
 from pyutil.env_utils import load_env
 
 # Load library configuration

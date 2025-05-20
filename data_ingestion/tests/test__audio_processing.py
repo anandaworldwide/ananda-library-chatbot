@@ -7,12 +7,12 @@ from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
 from argparse import ArgumentParser
 from pyutil.env_utils import load_env
-from data_ingestion.scripts.IngestQueue import IngestQueue  
-from data_ingestion.scripts.transcribe_and_ingest_media import process_file
-from data_ingestion.scripts.transcription_utils import TimeoutException, transcribe_media, chunk_transcription
-from data_ingestion.scripts.pinecone_utils import store_in_pinecone, load_pinecone, create_embeddings
-from data_ingestion.scripts.s3_utils import upload_to_s3, S3UploadError, upload_to_s3
-from data_ingestion.scripts.media_utils import get_media_metadata, split_audio
+from data_ingestion.audio_video.IngestQueue import IngestQueue
+from data_ingestion.audio_video.transcribe_and_ingest_media import process_file
+from data_ingestion.audio_video.transcription_utils import TimeoutException, transcribe_media, chunk_transcription
+from data_ingestion.audio_video.pinecone_utils import store_in_pinecone, load_pinecone, create_embeddings
+from data_ingestion.audio_video.s3_utils import upload_to_s3, S3UploadError, upload_to_s3
+from data_ingestion.audio_video.media_utils import get_media_metadata
 from data_ingestion.tests.test_utils import trim_audio
 import tempfile
 import subprocess
@@ -68,7 +68,7 @@ class TestAudioProcessing(unittest.TestCase):
         self.test_audio_path = os.path.abspath(os.path.join(
             os.path.dirname(__file__), 
             "..", 
-            "media", "media", "unit-test-data", "how-to-commune-with-god.mp3"
+            "media", "test", "unit-test-data", "how-to-commune-with-god.mp3"
         ))
         self.author = "Paramhansa Yogananda"
         self.library = "Ananda Sangha"
@@ -205,7 +205,7 @@ class TestAudioProcessing(unittest.TestCase):
         logger.debug("Starting S3 upload error handling test")
         
         # Mock the S3 client to simulate an error
-        with patch('data_ingestion.scripts.s3_utils.get_s3_client') as mock_get_s3_client:
+        with patch('data_ingestion.audio_video.s3_utils.get_s3_client') as mock_get_s3_client:
             mock_s3 = MagicMock()
             mock_s3.upload_file.side_effect = ClientError(
                 {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
@@ -227,7 +227,7 @@ class TestAudioProcessing(unittest.TestCase):
         logger.debug("Starting S3 upload RequestTimeTooSkewed test")
         
         # Mock the S3 client to simulate a RequestTimeTooSkewed error
-        with patch('data_ingestion.scripts.s3_utils.get_s3_client') as mock_get_s3_client:
+        with patch('data_ingestion.audio_video.s3_utils.get_s3_client') as mock_get_s3_client:
             mock_s3 = MagicMock()
             mock_s3.upload_file.side_effect = [
                 ClientError(
@@ -269,7 +269,7 @@ class TestAudioProcessing(unittest.TestCase):
         logger.debug("Starting process file chunk transcription timeout test")
         
         # Mock the chunk_transcription to simulate a timeout error
-        with patch('data_ingestion.scripts.transcribe_and_ingest_media.chunk_transcription', 
+        with patch('data_ingestion.audio_video.transcribe_and_ingest_media.chunk_transcription', 
                    return_value={"error": "chunk_transcription timed out."}):
             report = process_file(
                 self.trimmed_audio_path,
@@ -299,7 +299,7 @@ class TestAudioProcessing(unittest.TestCase):
             subprocess.run(['ffmpeg', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '1', '-y', '-acodec', 'libmp3lame', '-b:a', '128k', temp_file_path], check=True)
             
             # Mock split_audio to return empty chunks
-            with patch('data_ingestion.scripts.media_utils.split_audio') as mock_split:
+            with patch('data_ingestion.audio_video.media_utils.split_audio') as mock_split:
                 mock_split.return_value = []
                 transcription = transcribe_media(temp_file_path)
                 

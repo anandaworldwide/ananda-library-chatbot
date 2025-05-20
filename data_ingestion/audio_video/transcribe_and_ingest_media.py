@@ -31,10 +31,10 @@ import signal
 import time
 from queue import Empty
 from tenacity import RetryError
-from data_ingestion.scripts.media_utils import get_media_metadata, print_chunk_statistics
+from data_ingestion.audio_video.media_utils import get_media_metadata, print_chunk_statistics
 from pyutil.logging_utils import configure_logging
-from data_ingestion.scripts.IngestQueue import IngestQueue
-from data_ingestion.scripts.transcription_utils import (
+from data_ingestion.audio_video.IngestQueue import IngestQueue
+from data_ingestion.audio_video.transcription_utils import (
     init_db,
     transcribe_media,
     chunk_transcription,
@@ -45,15 +45,15 @@ from data_ingestion.scripts.transcription_utils import (
     UnsupportedAudioFormatError,
     save_transcription
 )
-from data_ingestion.scripts.pinecone_utils import (
+from data_ingestion.audio_video.pinecone_utils import (
     load_pinecone,
     create_embeddings,
     store_in_pinecone,
     clear_library_vectors,
 )
-from data_ingestion.scripts.s3_utils import upload_to_s3, S3UploadError
-from data_ingestion.scripts.youtube_utils import download_youtube_audio, extract_youtube_id
-from data_ingestion.scripts.processing_time_estimates import save_estimate
+from data_ingestion.audio_video.s3_utils import upload_to_s3, S3UploadError
+from data_ingestion.audio_video.youtube_utils import download_youtube_audio, extract_youtube_id
+from data_ingestion.audio_video.processing_time_estimates import save_estimate
 from pyutil.env_utils import load_env
 
 logger = logging.getLogger(__name__)

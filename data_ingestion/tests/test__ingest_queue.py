@@ -3,9 +3,9 @@ import os
 import sys
 import json
 import shutil
-from data_ingestion.scripts.IngestQueue import IngestQueue
+from data_ingestion.audio_video.IngestQueue import IngestQueue
 
-# Add the parent directory (scripts/) to the Python path
+# Add the parent directory (audio_video/) to the Python path
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 

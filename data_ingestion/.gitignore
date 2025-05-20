@@ -2,7 +2,7 @@
 /db-to-pdf/docs-*/
 /db-to-pdf/freejoehunt/
 /media/
-/scripts/queue/
-/scripts/queue-*/
-/scripts/data/
+/audio_video/queue/
+/audio_video/queue-*/
+/audio_video/data/
 **/ingestion_checkpoints/
