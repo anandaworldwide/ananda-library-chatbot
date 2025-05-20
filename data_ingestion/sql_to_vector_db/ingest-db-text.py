@@ -8,6 +8,17 @@ calculates metadata (like author, permalink, categories), splits the text into c
 generates embeddings using OpenAI, and upserts the resulting vectors into a specified
 Pinecone index. It includes features for checkpointing to resume interrupted ingestions
 and options to clear existing data for a specific library before starting.
+
+Command Line Arguments:
+    --site: Required. Site name (e.g., ananda, jairam) for config and env loading.
+    --database: Required. Name of the MySQL database to connect to.
+    --library-name: Required. Name of the library for Pinecone metadata.
+    --keep-data: Optional. Keep existing data in Pinecone (resume from checkpoint).
+    --batch-size: Optional. Number of documents to process in parallel for embeddings/upserts (default: 50).
+    --dry-run: Optional. Perform all steps except Pinecone index creation, deletion, and upsertion.
+
+Example Usage:
+    python ingest-db-text.py --site ananda --database wp_ananda --library-name "Ananda Library" --keep-data
 """
 
 import os

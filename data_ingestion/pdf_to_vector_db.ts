@@ -30,13 +30,17 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import { PineconeStore } from '@langchain/pinecone';
 import { getPineconeClient } from './utils/pinecone-client.js';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
-import { getPineconeIngestIndexName } from './utils/pinecone-config.js';
+import {
+  getPineconeIngestIndexName,
+  initializePineconeConfig,
+} from './utils/pinecone-config.js';
 import { DirectoryLoader } from 'langchain/document_loaders/fs/directory';
 import readline from 'readline';
 import { Index } from '@pinecone-database/pinecone';
 import { promises as fsPromises } from 'fs';
 import crypto from 'crypto';
 import { Document } from 'langchain/document';
+import { BaseDocumentLoader } from 'langchain/document_loaders/base';
 import pMap from 'p-map';
 import path from 'path';
 import { parseArgs } from 'util';
@@ -59,7 +63,6 @@ async function createFolderSignature(directory: string): Promise<string> {
       entries.map(async (entry) => {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          console.log(`Searching subdirectory: ${fullPath}`);
           return getFilesRecursively(fullPath);
         } else {
           return fullPath;
@@ -280,15 +283,33 @@ async function processDocument(
 // Set up graceful shutdown handling
 let isExiting = false;
 
+async function cleanup() {
+  console.log('\nSaving progress before exit...');
+  try {
+    const currentFolderSignature = await createFolderSignature(filePath);
+    const checkpoint = await loadCheckpoint();
+    const currentProgress = checkpoint ? checkpoint.processedDocs : 0;
+    await saveCheckpoint(currentProgress, currentFolderSignature);
+    console.log('Progress saved successfully.');
+  } catch (error) {
+    console.log('Could not save progress:', error);
+  }
+}
+
 process.on('SIGINT', async () => {
   if (isExiting) {
-    console.log('\nForced exit. Data may be inconsistent.');
-    process.exit(1);
+    console.log('\nForced exit. Shutting down...');
+    process.exit(0); // Exit with success code to avoid npm errors
   } else {
-    console.log(
-      '\nGraceful shutdown initiated. Press Ctrl+C again to force exit.',
-    );
+    console.log('\nGraceful shutdown initiated. Press Ctrl+C again to exit.');
     isExiting = true;
+    try {
+      await cleanup();
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      process.exit(0); // Still exit with success code
+    }
   }
 });
 
@@ -351,7 +372,7 @@ async function createPineconeIndexIfNotExists(
  * @param libraryName The name of the library being processed
  */
 export const run = async (keepData: boolean, libraryName: string) => {
-  console.log(`\nProcessing documents from ${filePath}`);
+  console.log(`Processing documents from ${filePath}`);
 
   // Print count of PDF files in the directory
   try {
@@ -366,19 +387,16 @@ export const run = async (keepData: boolean, libraryName: string) => {
   }
 
   console.log('PINECONE_API_KEY:', process.env.PINECONE_API_KEY);
-  console.log('PINECONE_ENVIRONMENT:', process.env.PINECONE_ENVIRONMENT);
 
   let pinecone: Pinecone;
   try {
     pinecone = await getPineconeClient();
-    console.log('Pinecone client initialized successfully');
   } catch (error) {
     console.error('Failed to initialize Pinecone:', error);
     return;
   }
 
   const indexName = getPineconeIngestIndexName();
-  console.log('Attempting to create/check index:', indexName);
   await createPineconeIndexIfNotExists(pinecone, indexName);
 
   let pineconeIndex: Index;
@@ -465,7 +483,19 @@ export const run = async (keepData: boolean, libraryName: string) => {
 
   let rawDocs: Document[];
   try {
-    console.log(`Searching for PDFs in: ${filePath}`);
+    // Temporarily override console.warn to suppress .DS_Store warnings
+    const originalConsoleWarn = console.warn;
+    console.warn = (message, ...args) => {
+      if (
+        typeof message === 'string' &&
+        message.includes('Unknown file type: .DS_Store')
+      ) {
+        // Silently ignore this specific warning
+        return;
+      }
+      originalConsoleWarn(message, ...args);
+    };
+
     const directoryLoader = new DirectoryLoader(
       filePath,
       {
@@ -473,10 +503,16 @@ export const run = async (keepData: boolean, libraryName: string) => {
           return new PDFLoader(path);
         },
       },
-      true,
+      true, // recursive
     );
-    rawDocs = await directoryLoader.load();
-    console.log('Number of items in rawDocs:', rawDocs.length);
+
+    try {
+      rawDocs = await directoryLoader.load();
+      console.log('Number of items in rawDocs:', rawDocs.length);
+    } finally {
+      // Restore original console function
+      console.warn = originalConsoleWarn;
+    }
   } catch (error) {
     console.error('Failed to load documents:', error);
     return;
@@ -515,10 +551,8 @@ export const run = async (keepData: boolean, libraryName: string) => {
     for (let i = startIndex; i < rawDocs.length; i++) {
       if (isExiting) {
         console.log('Graceful shutdown: saving progress...');
-        await saveCheckpoint(i, currentFolderSignature);
-        console.log(
-          `Progress saved. Resumed from document ${i + 1} next time.`,
-        );
+        await cleanup();
+        console.log('Exiting...');
         process.exit(0);
       }
 
@@ -571,7 +605,9 @@ if (!site) {
   );
   process.exit(1);
 }
-loadEnv();
+
+// Initialize environment with the site argument
+initializePineconeConfig(site);
 console.log('PINECONE_API_KEY:', process.env.PINECONE_API_KEY);
 
 if (!values['file-path']) {
@@ -581,7 +617,6 @@ if (!values['file-path']) {
   process.exit(1);
 }
 const filePath = path.resolve(values['file-path']);
-console.log(`Using file path: ${filePath}`);
 
 const theLibraryName = values['library-name'] || 'Default Library';
 

@@ -1,15 +1,5 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# data ingestion specific
-/pdf-docs/*
-/data_ingestion/db-to-pdf/docs-*/
-/data_ingestion/db-to-pdf/freejoehunt/
-/data_ingestion/media/
-/data_ingestion/scripts/queue/
-/data_ingestion/scripts/queue-*/
-/data_ingestion/scripts/data/
-**/ingestion_checkpoints/
-
 # supercut
 /experiments/supercut/cache/
 /experiments/supercut/temp/

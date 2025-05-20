@@ -54,7 +54,7 @@ from data_ingestion.scripts.pinecone_utils import (
 from data_ingestion.scripts.s3_utils import upload_to_s3, S3UploadError
 from data_ingestion.scripts.youtube_utils import download_youtube_audio, extract_youtube_id
 from data_ingestion.scripts.processing_time_estimates import save_estimate
-from util.env_utils import load_env
+from pyutil.env_utils import load_env
 
 logger = logging.getLogger(__name__)
 

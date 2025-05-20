@@ -265,23 +265,42 @@ preprocessing, and imports the data. It can be adapted for other WordPress dumps
 Use this method for PDF files that _do not_ originate from the WordPress database.
 
 1. Place your PDF files (or folders containing them) inside a designated directory (e.g., create `pdf-docs/[library-name]/`).
-2. Run the `ingest-text-data.ts` script (via npm):
+2. Run the ingestion script using one of these commands:
 
    ```bash
-   # Example: Ingest PDFs from pdf-docs/my-library/
-   npm run ingest -- --file-path ./pdf-docs/my-library --site [site] --library-name "My Library Name"
+   # Standard ingestion
+   npm run ingest:pdf -- --file-path ./pdf-docs/my-library --site [site] --library-name "My Library Name"
+
+   # With deprecation warnings
+   npm run ingest:pdf:trace -- --file-path ./pdf-docs/my-library --site [site] --library-name "My Library Name"
    ```
 
-   - `--file-path`: Path to the directory containing the PDFs.
-   - `--site`: Your site configuration name (for `.env` loading).
-   - `--library-name`: Name for this library in Pinecone.
-   - `--keep-data` (optional): Resume from checkpoint.
+   Arguments:
+
+   - `--file-path`: Path to the directory containing the PDFs
+   - `--site`: Your site configuration name (for `.env` loading)
+   - `--library-name`: Name for this library in Pinecone
+   - `--keep-data` (optional): Resume from checkpoint
 
 3. Check Pinecone dashboard to verify vectors.
 
-_(Note: The `npm run ingest` command likely needs adjustment in `package.json` if it currently points to the TS script
-with different default arguments or assumptions. Alternatively, run the TS script directly with `ts-node` and the
-required arguments.)_
+### Ingesting from WordPress Database
+
+For WordPress database ingestion, use the Python script directly:
+
+```bash
+python data_ingestion/sql_to_vector_db/ingest-db-text.py --site [site] --database [database_name] \
+  --library-name "[Library Name]"
+```
+
+Arguments:
+
+- `--site`: Your site configuration name (e.g., `ananda`) used for `.env` loading and site-specific settings
+- `--database`: The name of the MySQL database containing the WordPress data
+- `--library-name`: The name to assign to this library within Pinecone metadata
+- `--keep-data` (optional): Resume ingestion from the last checkpoint
+- `--batch-size` (optional): Number of documents to process in each embedding/upsert batch (default: 50)
+- `--dry-run` (optional): Perform all steps except Pinecone operations
 
 ### Crawl Websites and Convert to Embeddings
 

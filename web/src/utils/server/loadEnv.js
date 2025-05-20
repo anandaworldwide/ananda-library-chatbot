@@ -15,15 +15,12 @@ export function loadEnv() {
   if (!process.env.SITE_ID) {
     process.env.SITE_ID = site;
   }
-  console.log('loadEnv site', site);
 
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   // Go up four levels: server -> utils -> src -> web -> project root
   const rootDir = path.join(__dirname, '..', '..', '..', '..');
   const envFile = path.join(rootDir, `.env.${site}`);
-
-  console.log(`Attempting to load environment from: ${envFile}`);
 
   // Check if the file exists before attempting to load
   if (!fs.existsSync(envFile)) {

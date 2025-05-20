@@ -6,7 +6,7 @@ from pinecone import PineconeException
 from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
 from argparse import ArgumentParser
-from util.env_utils import load_env
+from pyutil.env_utils import load_env
 from data_ingestion.scripts.IngestQueue import IngestQueue  
 from data_ingestion.scripts.transcribe_and_ingest_media import process_file
 from data_ingestion.scripts.transcription_utils import TimeoutException, transcribe_media, chunk_transcription

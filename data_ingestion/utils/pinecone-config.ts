@@ -17,10 +17,12 @@ function validatePineconeEnv() {
   }
 }
 
-// Initialize once at module load, but only if not in test environment
-loadEnv();
-if (process.env.NODE_ENV !== 'test') {
-  validatePineconeEnv();
+// Initialize environment if needed
+export function initializePineconeConfig(site?: string) {
+  loadEnv(site);
+  if (process.env.NODE_ENV !== 'test') {
+    validatePineconeEnv();
+  }
 }
 
 export function getPineconeIndexName() {
