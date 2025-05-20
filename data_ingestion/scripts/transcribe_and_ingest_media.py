@@ -32,7 +32,7 @@ import time
 from queue import Empty
 from tenacity import RetryError
 from data_ingestion.scripts.media_utils import get_media_metadata, print_chunk_statistics
-from data_ingestion.scripts.logging_utils import configure_logging
+from pyutil.logging_utils import configure_logging
 from data_ingestion.scripts.IngestQueue import IngestQueue
 from data_ingestion.scripts.transcription_utils import (
     init_db,

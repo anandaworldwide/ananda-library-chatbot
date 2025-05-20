@@ -1,5 +1,4 @@
 # data ingestion specific
-/pdf-docs/*
 /db-to-pdf/docs-*/
 /db-to-pdf/freejoehunt/
 /media/

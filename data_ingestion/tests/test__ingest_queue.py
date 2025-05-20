@@ -10,9 +10,9 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 # Centralized test data
-TEST_AUDIO_FILE_1 = "media/media/unit-test-data/how-to-commune-with-god.mp3"
+TEST_AUDIO_FILE_1 = "media/test/unit-test-data/how-to-commune-with-god.mp3"
 TEST_AUDIO_FILE_2 = (
-    "media/media/unit-test-data/Treasures/01 Creativity & Initiative.mp3"
+    "media/test/unit-test-data/Treasures/01 Creativity & Initiative.mp3"
 )
 TEST_YOUTUBE_URL = "https://youtu.be/2s77yXNPwb0?si=abjnjhhBj9qGE1IY"
 TEST_AUTHOR = "Swami Kriyananda"
