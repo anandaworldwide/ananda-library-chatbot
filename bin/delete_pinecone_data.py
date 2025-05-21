@@ -43,7 +43,7 @@ from tqdm import tqdm
 project_root = Path(__file__).resolve().parents[2]
 sys.path.append(str(project_root))
 
-from util.env_utils import load_env
+from pyutil.env_utils import load_env
 
 def construct_media_prefix(file_type: str, library: Optional[str] = None, title: Optional[str] = None) -> str:
     prefix = f"{file_type}||"
