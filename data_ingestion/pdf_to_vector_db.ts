@@ -16,7 +16,7 @@
  * Run the script with the following options:
  * --file-path: Path to the directory containing PDF files
  * --site: Site name for loading environment variables
- * --library-name: Name of the library to process (default: "Default Library")
+ * --library-name: Name of the library to process
  * --keep-data: Flag to keep existing data in the index (default: false)
  *
  * Note: If you encounter a "Warning: TT: undefined function" message during execution,
@@ -48,7 +48,7 @@ import { config } from 'dotenv';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { loadEnv } from './utils/loadEnv.js';
 
-const CHECKPOINT_FILE = './pdf-docs/text_ingestion_checkpoint.json';
+const CHECKPOINT_FILE = './media/pdf-docs/text_ingestion_checkpoint.json';
 
 /**
  * Creates a unique signature for the folder based on PDF file names and modification times.
@@ -618,7 +618,13 @@ if (!values['file-path']) {
 }
 const filePath = path.resolve(values['file-path']);
 
-const theLibraryName = values['library-name'] || 'Default Library';
+if (!values['library-name']) {
+  console.error(
+    'Error: No library name specified. Please provide a library name using the --library-name option.',
+  );
+  process.exit(1);
+}
+const theLibraryName = values['library-name'];
 
 const keepData = values['keep-data'] || false;
 
