@@ -1,29 +1,28 @@
 #!/usr/bin/env python3
 """
-Evaluates and compares two RAG (Retrieval-Augmented Generation) systems for retrieval performance.
+Evaluates and compares RAG systems with different chunking strategies for retrieval performance.
 
 Key Operations:
-- Loads configurations (API keys, Pinecone index names, OpenAI model IDs) via a `--site` argument.
-- Connects to two Pinecone indexes (current vs. new system) and an OpenAI client.
-- Processes a human-judged dataset (`evaluation_dataset_ananda.jsonl`) containing queries,
-  documents, and relevance scores.
-- For each query:
-    - Retrieves top-K documents from both Pinecone indexes using their respective embedding
-      models and chunking strategies.
-    - Matches retrieved chunks to judged documents using `difflib.SequenceMatcher` to assign
-      relevance scores. A similarity ratio above `SIMILARITY_THRESHOLD` (0.85) denotes a match.
-    - Calculates Precision@K and NDCG@K for both systems.
-- Aggregates results: reports average Precision@K, NDCG@K, retrieval times, and percentage
-  improvements of the new system over the current one.
+- Loads configurations via a `--site` argument, setting environment variables dynamically.
+- Connects to two Pinecone indexes (current: corpus-2025-02-15, new: test-2025-05-17--3-large-3072).
+- Processes a human-judged dataset (`evaluation_dataset_ananda.jsonl`) with queries and relevance scores.
+- For each query and system (current: text-embedding-ada-002, new: text-embedding-3-large):
+    - Tests multiple chunking strategies (fixed-size and spaCy-based) defined in CHUNKING_STRATEGIES.
+    - Retrieves top-K documents, applying strategy-specific chunking.
+    - Matches retrieved chunks to judged documents using `difflib.SequenceMatcher`.
+    - Calculates Precision@K and NDCG@K for each strategy.
+    - Logs top-K chunks for manual review.
+- Reports average Precision@K, NDCG@K, retrieval times, and a comparison table for all strategies.
 
 Dependencies:
-- Populated Pinecone indexes for both systems are required. Empty indexes will result in errors
-  or zeroed (meaningless) metrics.
-- Correct Pinecone index dimensions (e.g., 1536 for `text-embedding-ada-002`, 3072 for
-  `text-embedding-3-large`) are crucial; mismatches cause query failures.
+- Populated Pinecone indexes are required.
+- Requires spaCy with `en_core_web_sm` for semantic chunking.
+- Correct index dimensions (1536 for ada-002, 3072 for 3-large) are critical.
 
-Future improvements: 
-- Add a command line interface for different embedding models. 
+Future Improvements:
+- Add CLI arguments for selecting chunking strategies.
+- Support multiple indexes per strategy.
+- Add redundancy metrics for overlap analysis.
 """
 
 import json
@@ -41,6 +40,7 @@ import os
 import sys
 from dotenv import load_dotenv
 import argparse
+import spacy
 
 # Add project root to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -51,18 +51,49 @@ from pyutil.env_utils import load_env
 # Download NLTK data (for tokenization)
 nltk.download('punkt', quiet=True)
 
+# Load spaCy English model
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    print("ERROR: spaCy model 'en_core_web_sm' not found. Install with: python -m spacy download en_core_web_sm")
+    sys.exit(1)
+
 # --- Configuration ---
 EVAL_DATASET_PATH = "./reranking/evaluation_dataset_ananda.jsonl"  # Path to human judgment dataset
 K = 5  # Evaluate top-K results
-# CURRENT_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "corpus-2025-02-15") # Moved to main
-# NEW_INDEX_NAME = os.getenv("PINECONE_INGEST_INDEX_NAME", "test-2025-05-17--3-large-3072") # Moved to main
-# CURRENT_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDINGS_MODEL", "text-embedding-ada-002") # Moved to main
-# NEW_EMBEDDING_MODEL = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL", "text-embedding-3-large") # Moved to main
-SIMILARITY_THRESHOLD = 0.85  # Threshold for matching chunks (for chunking differences)
-CHUNK_SIZE_CURRENT = 256  # Chunk size for current system
-CHUNK_OVERLAP_CURRENT = 50  # Overlap for current system
-CHUNK_SIZE_NEW = 400  # Chunk size for new system
-CHUNK_OVERLAP_NEW = 100  # Overlap for new system
+SIMILARITY_THRESHOLD = 0.85  # Threshold for matching chunks
+
+# Define chunking strategies for evaluation
+CHUNKING_STRATEGIES = [
+    {
+        "name": "current_fixed",
+        "chunk_size": 256,
+        "chunk_overlap": 50,
+        "method": "fixed",
+        "description": "Current fixed-size chunking (256 tokens, 19.5% overlap)"
+    },
+    {
+        "name": "optimized_fixed",
+        "chunk_size": 400,
+        "chunk_overlap": 100,
+        "method": "fixed",
+        "description": "Optimized fixed-size chunking (400 tokens, 25% overlap)"
+    },
+    {
+        "name": "spacy_sentence",
+        "chunk_size": 300,
+        "chunk_overlap": 75,
+        "method": "spacy_sentence",
+        "description": "spaCy sentence-based chunking (~300 tokens, 25% overlap)"
+    },
+    {
+        "name": "spacy_paragraph",
+        "chunk_size": 600,
+        "chunk_overlap": 120,
+        "method": "spacy_paragraph",
+        "description": "spaCy paragraph-based chunking (~600 tokens, 20% overlap)"
+    }
+]
 
 # --- Helper Functions ---
 
@@ -101,6 +132,11 @@ def get_pinecone_index(pinecone_client, index_name):
         print(f"Successfully connected to index '{index_name}'. Stats: {stats['total_vector_count']} vectors.")
         dimension = stats.get('dimension', 'Unknown')
         print(f"Index '{index_name}' dimension: {dimension}")
+        expected_dimension = 1536 if index_name == os.getenv("PINECONE_INDEX_NAME") else 3072
+        if dimension != expected_dimension:
+            print(f"WARNING: Expected dimension {expected_dimension} for {index_name}, got {dimension}")
+        if stats['total_vector_count'] == 0:
+            print(f"WARNING: Index '{index_name}' is empty. Evaluation will produce zero metrics.")
         return index
     except NotFoundException:
         print(f"ERROR: Pinecone index '{index_name}' not found.")
@@ -139,17 +175,78 @@ def get_embedding(text, model_name, openai_client):
         print(f"ERROR generating embedding with {model_name}: {e}")
         return None
 
-def chunk_text(text, chunk_size, chunk_overlap):
-    """Chunk text into segments with specified size and overlap."""
-    words = word_tokenize(text)
-    chunks = []
-    start = 0
-    while start < len(words):
-        end = min(start + chunk_size, len(words))
-        chunk = ' '.join(words[start:end])
-        chunks.append(chunk)
-        start += chunk_size - chunk_overlap
-    return chunks
+def chunk_text(text, chunk_size, chunk_overlap, method):
+    """Chunk text into segments with specified size, overlap, and method."""
+    if method == "fixed":
+        words = word_tokenize(text)
+        chunks = []
+        start = 0
+        while start < len(words):
+            end = min(start + chunk_size, len(words))
+            chunk = ' '.join(words[start:end])
+            chunks.append(chunk)
+            start += chunk_size - chunk_overlap
+        return chunks
+    elif method == "spacy_sentence":
+        doc = nlp(text)
+        sentences = [sent.text.strip() for sent in doc.sents if sent.text.strip()]
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        for sent in sentences:
+            sent_tokens = len(word_tokenize(sent))
+            if current_length + sent_tokens <= chunk_size:
+                current_chunk.append(sent)
+                current_length += sent_tokens
+            else:
+                if current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                current_chunk = [sent]
+                current_length = sent_tokens
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        # Apply overlap by adding trailing tokens from previous chunk
+        overlapped_chunks = []
+        for i, chunk in enumerate(chunks):
+            overlapped_chunk = chunk
+            if i > 0 and chunk_overlap > 0:
+                prev_chunk_tokens = word_tokenize(chunks[i-1])
+                overlap_tokens = prev_chunk_tokens[-min(chunk_overlap, len(prev_chunk_tokens)):]
+                overlapped_chunk = ' '.join(overlap_tokens) + ' ' + chunk
+            overlapped_chunks.append(overlapped_chunk)
+        return overlapped_chunks
+    elif method == "spacy_paragraph":
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        if not paragraphs:  # Fallback to spaCy sentences if no clear paragraphs
+            doc = nlp(text)
+            paragraphs = [' '.join([sent.text.strip() for sent in doc.sents])]
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        for para in paragraphs:
+            para_tokens = len(word_tokenize(para))
+            if current_length + para_tokens <= chunk_size:
+                current_chunk.append(para)
+                current_length += para_tokens
+            else:
+                if current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                current_chunk = [para]
+                current_length = para_tokens
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        # Apply overlap
+        overlapped_chunks = []
+        for i, chunk in enumerate(chunks):
+            overlapped_chunk = chunk
+            if i > 0 and chunk_overlap > 0:
+                prev_chunk_tokens = word_tokenize(chunks[i-1])
+                overlap_tokens = prev_chunk_tokens[-min(chunk_overlap, len(prev_chunk_tokens)):]
+                overlapped_chunk = ' '.join(overlap_tokens) + ' ' + chunk
+            overlapped_chunks.append(overlapped_chunk)
+        return overlapped_chunks
+    else:
+        raise ValueError(f"Unsupported chunking method: {method}")
 
 def match_chunks(retrieved_chunk, judged_chunks):
     """Match a retrieved chunk to judged chunks by content similarity."""
@@ -162,8 +259,8 @@ def match_chunks(retrieved_chunk, judged_chunks):
             best_match = judged
     return best_match
 
-def retrieve_documents(index, query, embedding_model, chunk_size, chunk_overlap, top_k, openai_client):
-    """Retrieve top-K documents for a query using the specified system."""
+def retrieve_documents(index, query, embedding_model, chunking_strategy, top_k, openai_client):
+    """Retrieve top-K documents for a query using the specified system and chunking strategy."""
     start_time = time.time()
     
     # Generate query embedding
@@ -182,13 +279,18 @@ def retrieve_documents(index, query, embedding_model, chunk_size, chunk_overlap,
     documents = []
     for match in results['matches']:
         text = match['metadata'].get('text', '')
-        # Re-chunk to simulate system-specific chunking
-        chunks = chunk_text(text, chunk_size, chunk_overlap)
+        # Re-chunk using specified strategy
+        chunks = chunk_text(
+            text,
+            chunking_strategy['chunk_size'],
+            chunking_strategy['chunk_overlap'],
+            chunking_strategy['method']
+        )
         for chunk in chunks[:2]:  # Limit to avoid overfetching
             doc = {
                 'document': chunk,
                 'metadata': match['metadata'],
-                'score': float(match['score'])  # Cosine similarity from Pinecone
+                'score': float(match['score'])
             }
             documents.append(doc)
             if len(documents) >= top_k:
@@ -220,22 +322,23 @@ def calculate_ndcg_at_k(documents, k):
 
 # --- Main Evaluation Logic ---
 def main():
-    print("Starting RAG system evaluation...")
+    print("Starting RAG system evaluation with chunking strategies...")
 
     # --- Argument Parsing ---
-    parser = argparse.ArgumentParser(description='Evaluate RAG system performance.')
-    parser.add_argument('--site', required=True, help='Site ID to load environment variables (e.g., ananda, crystal)')
+    parser = argparse.ArgumentParser(description='Evaluate RAG system performance with chunking strategies.')
+    parser.add_argument('--site', required=True, help='Site ID to load environment variables (e.g., ananda)')
     args = parser.parse_args()
 
-    # Load environment and initialize clients
+    # Load environment
     load_environment(args.site)
     
-    # Initialize configuration variables after environment is loaded
+    # Define environment variables after loading
     CURRENT_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "corpus-2025-02-15")
     NEW_INDEX_NAME = os.getenv("PINECONE_INGEST_INDEX_NAME", "test-2025-05-17--3-large-3072")
     CURRENT_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDINGS_MODEL", "text-embedding-ada-002")
     NEW_EMBEDDING_MODEL = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL", "text-embedding-3-large")
     
+    # Initialize OpenAI client
     openai.api_key = os.getenv("OPENAI_API_KEY")
     openai_client = OpenAI()
     
@@ -244,18 +347,6 @@ def main():
         pinecone_client = get_pinecone_client()
         current_index = get_pinecone_index(pinecone_client, CURRENT_INDEX_NAME)
         new_index = get_pinecone_index(pinecone_client, NEW_INDEX_NAME)
-
-        # Check dimensions after indexes are loaded and config vars are set
-        current_stats = current_index.describe_index_stats()
-        current_dimension = current_stats.get('dimension', 'Unknown')
-        if str(current_dimension) != "1536":
-            print(f"WARNING: Expected dimension 1536 for {CURRENT_INDEX_NAME}, got {current_dimension}")
-        
-        new_stats = new_index.describe_index_stats()
-        new_dimension = new_stats.get('dimension', 'Unknown')
-        if str(new_dimension) != "3072":
-            print(f"WARNING: Expected dimension 3072 for {NEW_INDEX_NAME}, got {new_dimension}")
-
     except Exception as e:
         print(f"ERROR initializing Pinecone: {e}")
         return
@@ -265,10 +356,16 @@ def main():
     if not eval_data:
         return
 
-    current_metrics = defaultdict(list)
-    new_metrics = defaultdict(list)
-    current_times = []
-    new_times = []
+    # Initialize metrics storage for each system and strategy
+    metrics = {
+        'current': {strategy['name']: defaultdict(list) for strategy in CHUNKING_STRATEGIES},
+        'new': {strategy['name']: defaultdict(list) for strategy in CHUNKING_STRATEGIES}
+    }
+    times = {
+        'current': {strategy['name']: [] for strategy in CHUNKING_STRATEGIES},
+        'new': {strategy['name']: [] for strategy in CHUNKING_STRATEGIES}
+    }
+    retrieved_chunks = defaultdict(list)  # For manual review
 
     query_count = len(eval_data)
     processed_queries = 0
@@ -278,80 +375,97 @@ def main():
         processed_queries += 1
         print(f"  Query {processed_queries}/{query_count}: '{query[:50]}...'")
 
-        # Evaluate Current System
-        try:
-            current_docs, time_current = retrieve_documents(
-                current_index, query, CURRENT_EMBEDDING_MODEL, CHUNK_SIZE_CURRENT, 
-                CHUNK_OVERLAP_CURRENT, K, openai_client
-            )
-            for doc in current_docs:
-                matched = match_chunks(doc['document'], judged_docs)
-                doc['relevance'] = matched['relevance'] if matched else 0.0
-            current_precision = calculate_precision_at_k(current_docs, K)
-            current_ndcg = calculate_ndcg_at_k(current_docs, K)
-            current_metrics['precision'].append(current_precision)
-            current_metrics['ndcg'].append(current_ndcg)
-            current_times.append(time_current)
-        except Exception as e:
-            print(f"    ERROR processing query with current system: {e}")
-            current_metrics['precision'].append(0.0)
-            current_metrics['ndcg'].append(0.0)
-            current_times.append(0.0)
+        # Evaluate Current System (text-embedding-ada-002)
+        for strategy in CHUNKING_STRATEGIES:
+            try:
+                docs, time_taken = retrieve_documents(
+                    current_index, query, CURRENT_EMBEDDING_MODEL, strategy, K, openai_client
+                )
+                for doc in docs:
+                    matched = match_chunks(doc['document'], judged_docs)
+                    doc['relevance'] = matched['relevance'] if matched else 0.0
+                    # Log chunk for manual review
+                    retrieved_chunks[(query, 'current', strategy['name'])].append({
+                        'chunk': doc['document'][:200] + '...',
+                        'relevance': doc['relevance'],
+                        'score': doc['score']
+                    })
+                precision = calculate_precision_at_k(docs, K)
+                ndcg = calculate_ndcg_at_k(docs, K)
+                metrics['current'][strategy['name']]['precision'].append(precision)
+                metrics['current'][strategy['name']]['ndcg'].append(ndcg)
+                times['current'][strategy['name']].append(time_taken)
+                print(f"    Current System, {strategy['name']} - Precision@{K}: {precision:.4f}, NDCG@{K}: {ndcg:.4f}")
+            except Exception as e:
+                print(f"    ERROR processing query with current system, {strategy['name']}: {e}")
+                metrics['current'][strategy['name']]['precision'].append(0.0)
+                metrics['current'][strategy['name']]['ndcg'].append(0.0)
+                times['current'][strategy['name']].append(0.0)
 
-        # Evaluate New System
-        try:
-            new_docs, time_new = retrieve_documents(
-                new_index, query, NEW_EMBEDDING_MODEL, CHUNK_SIZE_NEW, 
-                CHUNK_OVERLAP_NEW, K, openai_client
-            )
-            for doc in new_docs:
-                matched = match_chunks(doc['document'], judged_docs)
-                doc['relevance'] = matched['relevance'] if matched else 0.0
-            new_precision = calculate_precision_at_k(new_docs, K)
-            new_ndcg = calculate_ndcg_at_k(new_docs, K)
-            new_metrics['precision'].append(new_precision)
-            new_metrics['ndcg'].append(new_ndcg)
-            new_times.append(time_new)
-        except Exception as e:
-            print(f"    ERROR processing query with new system: {e}")
-            new_metrics['precision'].append(0.0)
-            new_metrics['ndcg'].append(0.0)
-            new_times.append(0.0)
-
-        # Output per-query metrics
-        print(f"    Current System - Precision@{K}: {current_precision:.4f}, NDCG@{K}: {current_ndcg:.4f}")
-        print(f"    New System - Precision@{K}: {new_precision:.4f}, NDCG@{K}: {new_ndcg:.4f}")
-        precision_diff = ((new_precision - current_precision) / current_precision * 100) if current_precision > 1e-9 else float('inf') if new_precision > 1e-9 else 0.0
-        ndcg_diff = ((new_ndcg - current_ndcg) / current_ndcg * 100) if current_ndcg > 1e-9 else float('inf') if new_ndcg > 1e-9 else 0.0
-        print(f"    Improvement - Precision: {precision_diff:.2f}%, NDCG: {ndcg_diff:.2f}%")
+        # Evaluate New System (text-embedding-3-large)
+        for strategy in CHUNKING_STRATEGIES:
+            try:
+                docs, time_taken = retrieve_documents(
+                    new_index, query, NEW_EMBEDDING_MODEL, strategy, K, openai_client
+                )
+                for doc in docs:
+                    matched = match_chunks(doc['document'], judged_docs)
+                    doc['relevance'] = matched['relevance'] if matched else 0.0
+                    # Log chunk for manual review
+                    retrieved_chunks[(query, 'new', strategy['name'])].append({
+                        'chunk': doc['document'][:200] + '...',
+                        'relevance': doc['relevance'],
+                        'score': doc['score']
+                    })
+                precision = calculate_precision_at_k(docs, K)
+                ndcg = calculate_ndcg_at_k(docs, K)
+                metrics['new'][strategy['name']]['precision'].append(precision)
+                metrics['new'][strategy['name']]['ndcg'].append(ndcg)
+                times['new'][strategy['name']].append(time_taken)
+                print(f"    New System, {strategy['name']} - Precision@{K}: {precision:.4f}, NDCG@{K}: {ndcg:.4f}")
+            except Exception as e:
+                print(f"    ERROR processing query with new system, {strategy['name']}: {e}")
+                metrics['new'][strategy['name']]['precision'].append(0.0)
+                metrics['new'][strategy['name']]['ndcg'].append(0.0)
+                times['new'][strategy['name']].append(0.0)
 
     # Calculate Average Metrics
-    avg_current_precision = np.mean(current_metrics['precision']) if current_metrics['precision'] else 0.0
-    avg_current_ndcg = np.mean(current_metrics['ndcg']) if current_metrics['ndcg'] else 0.0
-    avg_new_precision = np.mean(new_metrics['precision']) if new_metrics['precision'] else 0.0
-    avg_new_ndcg = np.mean(new_metrics['ndcg']) if new_metrics['ndcg'] else 0.0
-    avg_current_time = np.mean(current_times) if current_times else 0.0
-    avg_new_time = np.mean(new_times) if new_times else 0.0
-
-    # Calculate Improvement
-    precision_improvement = ((avg_new_precision - avg_current_precision) / avg_current_precision * 100) if avg_current_precision > 1e-9 else float('inf') if avg_new_precision > 1e-9 else 0.0
-    ndcg_improvement = ((avg_new_ndcg - avg_current_ndcg) / avg_current_ndcg * 100) if avg_current_ndcg > 1e-9 else float('inf') if avg_new_ndcg > 1e-9 else 0.0
-
-    # Output Final Results
     print("\n--- Evaluation Results ---")
     print(f"Evaluated on {query_count} queries with K={K}")
-    print("\nCurrent System (text-embedding-ada-002, current chunking):")
-    print(f"  Avg Precision@{K}: {avg_current_precision:.4f}")
-    print(f"  Avg NDCG@{K}:      {avg_current_ndcg:.4f}")
-    print(f"  Avg Retrieval Time: {avg_current_time:.4f} seconds")
-    print("\nNew System (text-embedding-3-large, optimized chunking):")
-    print(f"  Avg Precision@{K}: {avg_new_precision:.4f}")
-    print(f"  Avg NDCG@{K}:      {avg_new_ndcg:.4f}")
-    print(f"  Avg Retrieval Time: {avg_new_time:.4f} seconds")
-    print("\nComparison:")
-    print(f"  Precision@{K} Improvement: {precision_improvement:.2f}%")
-    print(f"  NDCG@{K} Improvement:      {ndcg_improvement:.2f}%")
-    print(f"  Speed Difference (New vs Current): {(avg_new_time / avg_current_time):.2f}x" if avg_current_time > 1e-9 else 'N/A')
+    
+    for system in ['current', 'new']:
+        system_name = "Current System (text-embedding-ada-002)" if system == 'current' else "New System (text-embedding-3-large)"
+        print(f"\n{system_name}:")
+        for strategy in CHUNKING_STRATEGIES:
+            name = strategy['name']
+            avg_precision = np.mean(metrics[system][name]['precision']) if metrics[system][name]['precision'] else 0.0
+            avg_ndcg = np.mean(metrics[system][name]['ndcg']) if metrics[system][name]['ndcg'] else 0.0
+            avg_time = np.mean(times[system][name]) if times[system][name] else 0.0
+            print(f"  Strategy: {strategy['description']}")
+            print(f"    Avg Precision@{K}: {avg_precision:.4f}")
+            print(f"    Avg NDCG@{K}:      {avg_ndcg:.4f}")
+            print(f"    Avg Retrieval Time: {avg_time:.4f} seconds")
+
+    # Comparison Table
+    print("\n--- Comparison Table ---")
+    print(f"{'Strategy':<30} {'System':<15} {'Precision@K':<12} {'NDCG@K':<10} {'Time (s)':<10}")
+    print("-" * 80)
+    for strategy in CHUNKING_STRATEGIES:
+        name = strategy['name']
+        for system in ['current', 'new']:
+            system_label = "Current" if system == 'current' else "New"
+            avg_precision = np.mean(metrics[system][name]['precision']) if metrics[system][name]['precision'] else 0.0
+            avg_ndcg = np.mean(metrics[system][name]['ndcg']) if metrics[system][name]['ndcg'] else 0.0
+            avg_time = np.mean(times[system][name]) if times[system][name] else 0.0
+            print(f"{strategy['description']:<30} {system_label:<15} {avg_precision:.4f}      {avg_ndcg:.4f}    {avg_time:.4f}")
+
+    # Log Retrieved Chunks for Manual Review
+    print("\n--- Retrieved Chunks for Manual Review ---")
+    for (query, system, strategy_name), chunks in retrieved_chunks.items():
+        print(f"\nQuery: {query[:50]}... | System: {system} | Strategy: {strategy_name}")
+        for i, chunk_info in enumerate(chunks[:K], 1):
+            print(f"  Chunk {i}: Relevance={chunk_info['relevance']}, Score={chunk_info['score']:.4f}")
+            print(f"    Text: {chunk_info['chunk']}")
 
 if __name__ == "__main__":
     main()
