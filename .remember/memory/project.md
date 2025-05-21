@@ -148,3 +148,50 @@ When adding new shared functionality:
 ### Markdown Formatting
 
 - Markdown files should adhere to a 120-character line limit.
+
+### Script Argument for Environment Loading
+
+**Situation**: Scripts like `bin/evaluate_rag_system.py` that need to access environment-specific configurations (e.g., API keys for different sites like 'ananda' or 'crystal') should use a consistent mechanism for loading these configurations.
+
+**Previous (Problematic)**: Some scripts might hardcode the environment file (e.g., `.env.ananda`) or lack a way to specify the target site, making them less flexible.
+
+**Correct (Preferred)**:
+
+1.  Add a command-line argument, typically `--site`, to the script using `argparse`.
+2.  Utilize a shared utility function, like `pyutil.env_utils.load_env(site_name)`, to load the appropriate `.env.<site_name>` file.
+3.  Ensure that functions relying on environment variables (e.g., `initialize_pinecone`, `load_environment`) fetch these variables _after_ `load_env` has been called.
+
+**Example Snippet (`bin/evaluate_rag_system.py`)**:
+
+```python
+import argparse
+from pyutil.env_utils import load_env
+import os
+
+def load_environment(site: str):
+    """Load environment variables based on the site."""
+    load_env(site)
+    if not os.getenv("PINECONE_API_KEY") or not os.getenv("OPENAI_API_KEY"):
+        raise ValueError("PINECONE_API_KEY or OPENAI_API_KEY not found after loading environment. Check .env.<site> file.")
+
+# ... other helper functions ...
+
+def main():
+    parser = argparse.ArgumentParser(description='Evaluate RAG system performance.')
+    parser.add_argument('--site', required=True, help='Site ID to load environment variables (e.g., ananda, crystal)')
+    args = parser.parse_args()
+
+    try:
+        load_environment(args.site)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"ERROR loading environment: {e}")
+        return
+
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    # ... rest of main
+
+if __name__ == "__main__":
+    main()
+```
+
+This approach standardizes how scripts handle site-specific configurations, improving maintainability and usability across different environments/sites.

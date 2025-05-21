@@ -288,3 +288,194 @@ sys.path.insert(0, parent_dir)
 ```
 
 This solution ensures that Python can find the parent package when a script is run directly using `./script.py` from within its directory.
+
+### Mistake: ModuleNotFoundError for Local Modules in Scripts
+
+**Situation**: When running a Python script from a subdirectory (e.g., `bin/myscript.py`) that imports a local module from another directory at the project root level (e.g., `pyutil/some_module.py`), a `ModuleNotFoundError` can occur because the script's directory is not automatically part of Python's search path for modules in the way that the current working directory is when you run `python -m`.
+
+**Wrong**:
+Script `bin/evaluate_rag_system.py` trying to import `from pyutil.env_utils import load_env` might fail if `bin/` is not the current working directory or if `pyutil` is not in a location Python automatically searches (like `site-packages`).
+
+**Correct**:
+To reliably import local modules from other directories within the same project, explicitly add the project's root directory (or the specific directory containing the module) to `sys.path` at the beginning of the script.
+
+**Example Snippet (`bin/evaluate_rag_system.py`)**:
+
+```python
+#!/usr/bin/env python3
+import os
+import sys
+
+# Add project root to Python path
+# Assumes the script is in a subdirectory like 'bin' one level down from project root
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
+
+# Now, imports like this should work:
+from pyutil.env_utils import load_env
+
+# ... rest of the script ...
+```
+
+This ensures that Python can find the `pyutil` directory (and other modules at the project root) regardless of how or from where the script is executed.
+
+### Mistake: Using outdated OpenAI Embedding API
+
+**Situation**: Code using `openai.Embedding.create()` will fail with `openai>=1.0.0` as the API has changed.
+
+**Wrong**:
+
+```python
+import openai
+# ...
+openai.api_key = "YOUR_API_KEY" # Also an outdated way to set key for client
+# ...
+def get_embedding(text, model_name):
+    try:
+        response = openai.Embedding.create(input=text, model=model_name)
+        return response['data'][0]['embedding']
+    except Exception as e:
+        # ... error handling ...
+        return None
+```
+
+**Correct**:
+Initialize an `OpenAI` client and use its `embeddings.create` method.
+
+```python
+from openai import OpenAI # Import the client
+import os
+
+# ...
+
+# Initialize client (API key is usually picked up from OPENAI_API_KEY env var by default)
+# or client = OpenAI(api_key="YOUR_API_KEY")
+client = OpenAI()
+
+# ...
+
+def get_embedding(text, model_name, openai_client):
+    try:
+        response = openai_client.embeddings.create(input=text, model=model_name)
+        return response.data[0].embedding # Access data attribute directly
+    except Exception as e:
+        # ... error handling ...
+        return None
+
+# Example usage in a main function:
+def main():
+    # ... setup ...
+    openai_client = OpenAI()
+    # ...
+    embedding = get_embedding("some text", "text-embedding-ada-002", openai_client)
+    # ...
+```
+
+**Key Changes**:
+
+1. Import `OpenAI` from `openai`.
+2. Instantiate the client: `client = OpenAI()`.
+3. Call `client.embeddings.create(...)`.
+4. Access the embedding via `response.data[0].embedding`.
+5. Pass the initialized client to functions that need to generate embeddings.
+
+````
+
+### Mistake: Overly verbose docstrings
+**Wrong**:
+```python
+"""
+Evaluate and compare the retrieval performance of two RAG (Retrieval-Augmented Generation) systems.
+
+This script assesses a "current" RAG system against a "new" RAG system, typically differing in
+embedding models, Pinecone index configurations, and text chunking strategies. The primary goal
+is to quantify improvements in retrieval quality using human-judged relevance data.
+
+Core Algorithm Steps:
+1.  **Setup**:
+    *   Loads site-specific environment variables (API keys, index names, model IDs) based on a `--site` argument.
+    *   Initializes Pinecone clients and connects to two distinct Pinecone indexes: one for the
+        current system and one for the new system. It verifies index dimensions.
+    *   Initializes an OpenAI client for generating text embeddings.
+    *   Loads a human-curated evaluation dataset (JSONL format). Each entry in this dataset
+        consists of a query, a document (chunk of text), and a human-assigned relevance score
+        (e.g., 0 for irrelevant, 3 for highly relevant). This data is grouped by query.
+
+2.  **Per-Query Evaluation Loop**:
+    *   For each unique query in the evaluation dataset:
+        *   **Current System Retrieval**:
+            *   Generates a query embedding using the current system's specified OpenAI model
+              (e.g., `text-embedding-ada-002`).
+            *   Queries the current system's Pinecone index to retrieve the top-K documents (chunks)
+              most similar to the query embedding. Pinecone returns documents with their metadata
+              and cosine similarity scores.
+            *   The retrieved text is re-chunked using the current system's chunking parameters
+              (defined by `CHUNK_SIZE_CURRENT` and `CHUNK_OVERLAP_CURRENT`). This step simulates
+              the exact chunking that system would use.
+        *   **New System Retrieval**:
+            *   Repeats the retrieval process, but using the new system's embedding model
+              (e.g., `text-embedding-3-large`), Pinecone index, and chunking parameters
+              (`CHUNK_SIZE_NEW`, `CHUNK_OVERLAP_NEW`).
+        *   **Relevance Assignment (Matcher Logic)**:
+            *   For both systems, each retrieved chunk needs to be assigned a relevance score based
+              on the human judgments. Since the chunking in the retrieval systems might differ from
+              the chunking in the evaluation dataset, a direct match isn't always possible.
+            *   The `match_chunks` function is used. It employs `difflib.SequenceMatcher` to compare
+              the text content of a retrieved chunk against all human-judged chunks for that query.
+            *   If the `SequenceMatcher.ratio()` (a measure of similarity between two sequences,
+              ranging from 0 to 1) exceeds a predefined `SIMILARITY_THRESHOLD` (e.g., 0.85),
+              the retrieved chunk is considered a match to the judged chunk and inherits its
+              relevance score. If no judged chunk meets the threshold, the retrieved chunk
+              is assigned a relevance of 0.0.
+        *   **Metric Calculation**:
+            *   Calculates Precision@K: The fraction of the top-K retrieved documents that have a
+              relevance score of 1.0 or higher.
+            *   Calculates NDCG@K (Normalized Discounted Cumulative Gain): A metric that evaluates
+              the ranking quality, giving higher scores for more relevant documents ranked higher.
+              It uses the assigned relevance scores and the similarity scores from Pinecone.
+
+3.  **Aggregation and Reporting**:
+    *   After processing all queries, the script calculates average Precision@K, NDCG@K, and
+        average retrieval time for both the current and new systems.
+    *   It then reports these average metrics and calculates the percentage improvement of the
+        new system over the current system for both precision and NDCG.
+    *   It also reports the relative speed difference between the two systems.
+
+Pinecone Interaction:
+- The script heavily relies on Pinecone for document retrieval. It expects both specified Pinecone
+  indexes to be populated with document embeddings corresponding to their respective systems.
+- If an index is empty or does not exist, the script will encounter errors or produce
+  meaningless (zeroed) metrics, as no documents can be retrieved for evaluation.
+- The dimensions of the embeddings in Pinecone are checked against expected values (e.g., 1536
+  for `text-embedding-ada-002`, 3072 for `text-embedding-3-large`). Warnings are issued
+  if mismatches are found, as this would lead to errors during Pinecone queries.
+"""
+````
+
+**Correct**:
+
+```python
+"""
+Evaluates and compares two RAG (Retrieval-Augmented Generation) systems for retrieval performance.
+
+Key Operations:
+- Loads configurations (API keys, Pinecone index names, OpenAI model IDs) via a `--site` argument.
+- Connects to two Pinecone indexes (current vs. new system) and an OpenAI client.
+- Processes a human-judged dataset (`evaluation_dataset_ananda.jsonl`) containing queries,
+  documents, and relevance scores.
+- For each query:
+    - Retrieves top-K documents from both Pinecone indexes using their respective embedding
+      models and chunking strategies.
+    - Matches retrieved chunks to judged documents using `difflib.SequenceMatcher` to assign
+      relevance scores. A similarity ratio above `SIMILARITY_THRESHOLD` (0.85) denotes a match.
+    - Calculates Precision@K and NDCG@K for both systems.
+- Aggregates results: reports average Precision@K, NDCG@K, retrieval times, and percentage
+  improvements of the new system over the current one.
+
+Dependencies:
+- Populated Pinecone indexes for both systems are required. Empty indexes will result in errors
+  or zeroed (meaningless) metrics.
+- Correct Pinecone index dimensions (e.g., 1536 for `text-embedding-ada-002`, 3072 for
+  `text-embedding-3-large`) are crucial; mismatches cause query failures.
+"""
+```
