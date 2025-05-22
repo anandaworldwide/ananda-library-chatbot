@@ -3,6 +3,7 @@
 # 
 # then pip install -r requirements.txt
 
+pytest-asyncio==0.26.0
 beautifulsoup4==4.12.2
 boto3==1.34.144
 botocore==1.34.144

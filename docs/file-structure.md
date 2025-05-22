@@ -44,7 +44,7 @@ ananda-library-chatbot/
 │   │   └── website_crawler.py  # Main script for crawling websites.
 │   ├── scripts/                 # Other data ingestion scripts (processing, queue management).
 │   ├── sql_to_vector_db/       # Scripts for converting SQL database content to vector embeddings.
-│   ├── pdf_to_vector_db.ts    # Script for ingesting PDFs directly (TypeScript based).
+│   ├── pdf_to_vector_db.py    # Script for ingesting PDFs directly (Python based).
 │   └── tests/                   # Tests for the data ingestion scripts.
 │
 ├── declarations/                 # TypeScript declaration files (.d.ts) for libraries without native types.

@@ -379,103 +379,18 @@ def main():
 4. Access the embedding via `response.data[0].embedding`.
 5. Pass the initialized client to functions that need to generate embeddings.
 
-````
+### Rule: Add File Header Comment
 
-### Mistake: Overly verbose docstrings
-**Wrong**:
-```python
-"""
-Evaluate and compare the retrieval performance of two RAG (Retrieval-Augmented Generation) systems.
+**Requirement**: Always add a brief, descriptive comment at the top of any new or modified file, explaining its purpose.
 
-This script assesses a "current" RAG system against a "new" RAG system, typically differing in
-embedding models, Pinecone index configurations, and text chunking strategies. The primary goal
-is to quantify improvements in retrieval quality using human-judged relevance data.
-
-Core Algorithm Steps:
-1.  **Setup**:
-    *   Loads site-specific environment variables (API keys, index names, model IDs) based on a `--site` argument.
-    *   Initializes Pinecone clients and connects to two distinct Pinecone indexes: one for the
-        current system and one for the new system. It verifies index dimensions.
-    *   Initializes an OpenAI client for generating text embeddings.
-    *   Loads a human-curated evaluation dataset (JSONL format). Each entry in this dataset
-        consists of a query, a document (chunk of text), and a human-assigned relevance score
-        (e.g., 0 for irrelevant, 3 for highly relevant). This data is grouped by query.
-
-2.  **Per-Query Evaluation Loop**:
-    *   For each unique query in the evaluation dataset:
-        *   **Current System Retrieval**:
-            *   Generates a query embedding using the current system's specified OpenAI model
-              (e.g., `text-embedding-ada-002`).
-            *   Queries the current system's Pinecone index to retrieve the top-K documents (chunks)
-              most similar to the query embedding. Pinecone returns documents with their metadata
-              and cosine similarity scores.
-            *   The retrieved text is re-chunked using the current system's chunking parameters
-              (defined by `CHUNK_SIZE_CURRENT` and `CHUNK_OVERLAP_CURRENT`). This step simulates
-              the exact chunking that system would use.
-        *   **New System Retrieval**:
-            *   Repeats the retrieval process, but using the new system's embedding model
-              (e.g., `text-embedding-3-large`), Pinecone index, and chunking parameters
-              (`CHUNK_SIZE_NEW`, `CHUNK_OVERLAP_NEW`).
-        *   **Relevance Assignment (Matcher Logic)**:
-            *   For both systems, each retrieved chunk needs to be assigned a relevance score based
-              on the human judgments. Since the chunking in the retrieval systems might differ from
-              the chunking in the evaluation dataset, a direct match isn't always possible.
-            *   The `match_chunks` function is used. It employs `difflib.SequenceMatcher` to compare
-              the text content of a retrieved chunk against all human-judged chunks for that query.
-            *   If the `SequenceMatcher.ratio()` (a measure of similarity between two sequences,
-              ranging from 0 to 1) exceeds a predefined `SIMILARITY_THRESHOLD` (e.g., 0.85),
-              the retrieved chunk is considered a match to the judged chunk and inherits its
-              relevance score. If no judged chunk meets the threshold, the retrieved chunk
-              is assigned a relevance of 0.0.
-        *   **Metric Calculation**:
-            *   Calculates Precision@K: The fraction of the top-K retrieved documents that have a
-              relevance score of 1.0 or higher.
-            *   Calculates NDCG@K (Normalized Discounted Cumulative Gain): A metric that evaluates
-              the ranking quality, giving higher scores for more relevant documents ranked higher.
-              It uses the assigned relevance scores and the similarity scores from Pinecone.
-
-3.  **Aggregation and Reporting**:
-    *   After processing all queries, the script calculates average Precision@K, NDCG@K, and
-        average retrieval time for both the current and new systems.
-    *   It then reports these average metrics and calculates the percentage improvement of the
-        new system over the current system for both precision and NDCG.
-    *   It also reports the relative speed difference between the two systems.
-
-Pinecone Interaction:
-- The script heavily relies on Pinecone for document retrieval. It expects both specified Pinecone
-  indexes to be populated with document embeddings corresponding to their respective systems.
-- If an index is empty or does not exist, the script will encounter errors or produce
-  meaningless (zeroed) metrics, as no documents can be retrieved for evaluation.
-- The dimensions of the embeddings in Pinecone are checked against expected values (e.g., 1536
-  for `text-embedding-ada-002`, 3072 for `text-embedding-3-large`). Warnings are issued
-  if mismatches are found, as this would lead to errors during Pinecone queries.
-"""
-````
-
-**Correct**:
+**Example**:
 
 ```python
-"""
-Evaluates and compares two RAG (Retrieval-Augmented Generation) systems for retrieval performance.
+# /path/to/file.py
+# This script performs X, Y, and Z.
+```
 
-Key Operations:
-- Loads configurations (API keys, Pinecone index names, OpenAI model IDs) via a `--site` argument.
-- Connects to two Pinecone indexes (current vs. new system) and an OpenAI client.
-- Processes a human-judged dataset (`evaluation_dataset_ananda.jsonl`) containing queries,
-  documents, and relevance scores.
-- For each query:
-    - Retrieves top-K documents from both Pinecone indexes using their respective embedding
-      models and chunking strategies.
-    - Matches retrieved chunks to judged documents using `difflib.SequenceMatcher` to assign
-      relevance scores. A similarity ratio above `SIMILARITY_THRESHOLD` (0.85) denotes a match.
-    - Calculates Precision@K and NDCG@K for both systems.
-- Aggregates results: reports average Precision@K, NDCG@K, retrieval times, and percentage
-  improvements of the new system over the current one.
-
-Dependencies:
-- Populated Pinecone indexes for both systems are required. Empty indexes will result in errors
-  or zeroed (meaningless) metrics.
-- Correct Pinecone index dimensions (e.g., 1536 for `text-embedding-ada-002`, 3072 for
-  `text-embedding-3-large`) are crucial; mismatches cause query failures.
-"""
+```typescript
+// /path/to/file.ts
+// This module is responsible for A, B, and C.
 ```

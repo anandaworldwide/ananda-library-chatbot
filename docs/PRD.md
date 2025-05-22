@@ -51,10 +51,9 @@ authentication, and integration options, including a WordPress plugin.
   - **FR2.6:** Generate a coherent answer based on the LLM response.
   - **FR2.7:** Extract and format source citations from the retrieved document metadata (`DocMetadata.ts`).
 - **FR3: Data Ingestion & Management**
-  - **FR3.1:** Provide Python scripts for processing and ingesting data into Pinecone (`data_ingestion/`). Other scripts,
-    such as TypeScript-based PDF ingestion (`data_ingestion/pdf_to_vector_db.ts`), also exist.
-  - **FR3.2:** Support ingestion from text files and PDFs (`customPDFLoader.ts`, `db-to-pdfs.py` Python script,
-    `pdf_to_vector_db.ts` TypeScript script).
+  - **FR3.1:** Provide Python scripts for processing and ingesting data into Pinecone (`data_ingestion/`).
+    The primary PDF ingestion script is `data_ingestion/pdf_to_vector_db.py`.
+  - **FR3.2:** Support ingestion from text files and PDFs (`db-to-pdfs.py` Python script, `pdf_to_vector_db.py` Python script).
   - **FR3.3:** Support transcription of audio/video files (using external services like AssemblyAI inferred from
     `transcription_utils.py`) and ingestion of transcripts (`transcribe_and_ingest_media.py`).
   - **FR3.4:** Support crawling web content using `data_ingestion/crawler/website_crawler.py`.

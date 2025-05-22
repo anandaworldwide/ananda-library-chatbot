@@ -96,6 +96,8 @@ imageio==2.37.0
     # via moviepy
 imageio-ffmpeg==0.6.0
     # via moviepy
+iniconfig==2.1.0
+    # via pytest
 jinja2==3.1.6
     # via spacy
 jiter==0.8.2
@@ -166,6 +168,7 @@ orjson==3.10.15
 packaging==24.2
     # via
     #   langchain-core
+    #   pytest
     #   spacy
     #   thinc
     #   weasel
@@ -182,6 +185,8 @@ pinecone-plugin-interface==0.0.7
     #   pinecone-plugin-inference
 playwright==1.40.0
     # via -r requirements.in
+pluggy==1.6.0
+    # via pytest
 preshed==3.0.9
     # via
     #   spacy
@@ -212,6 +217,10 @@ pygments==2.19.1
 pymysql==1.1.0
     # via -r requirements.in
 pypdf2==3.0.1
+    # via -r requirements.in
+pytest==8.3.5
+    # via pytest-asyncio
+pytest-asyncio==0.26.0
     # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via

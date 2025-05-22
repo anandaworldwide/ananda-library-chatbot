@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "ingest:pdf": "NODE_ENV=development NODE_OPTIONS='--max-old-space-size=6000' tsx pdf_to_vector_db.ts",
-    "ingest:pdf:trace": "NODE_ENV=development NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' tsx pdf_to_vector_db.ts"
+    "ingest:pdf": "NODE_ENV=development NODE_OPTIONS='--max-old-space-size=6000' python pdf_to_vector_db.py",
+    "ingest:pdf:trace": "NODE_ENV=development NODE_OPTIONS='--max-old-space-size=6000 --trace-deprecation' python pdf_to_vector_db.py"
   },
   "dependencies": {
     "@langchain/community": "0.3.34",
