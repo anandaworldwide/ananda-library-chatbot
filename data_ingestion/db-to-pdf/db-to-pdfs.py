@@ -22,10 +22,17 @@ from PyPDF2 import PdfReader, PdfWriter
 from PyPDF2.generic import TextStringObject
 import logging
 from PyPDF2.errors import PdfReadError
+from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
 
 # Suppress specific warning from fpdf
 warnings.filterwarnings("ignore", message="cmap value too big/small")
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -33,6 +40,12 @@ def parse_arguments():
     parser.add_argument("--database", required=True, help="Database name")
     parser.add_argument(
         "--attachments", action="store_true", help="Download PDF attachments"
+    )
+    parser.add_argument(
+        "--chunk-size", type=int, default=600, help="Maximum size of text chunks"
+    )
+    parser.add_argument(
+        "--chunk-overlap", type=int, default=120, help="Overlap between chunks in characters"
     )
     return parser.parse_args()
 
@@ -235,7 +248,7 @@ def get_total_posts_count(cursor, post_types):
     return cursor.fetchone()[0]
 
 
-def process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db):
+def process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, chunk_size=600, chunk_overlap=120):
     """
     Process posts using an API call to retrieve additional information.
     This version is used when the full WordPress database is not available.
@@ -321,7 +334,7 @@ def process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unico
         permalink, author_name = get_data_from_wp(id, db, cursor)
 
         pdf = create_pdf(
-            post_title, author_name, permalink, content, unicode_font_path_cache
+            post_title, author_name, permalink, content, unicode_font_path_cache, chunk_size, chunk_overlap
         )
 
         try:
@@ -343,7 +356,7 @@ def process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unico
     return n, skipped
 
 
-def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, base_url):
+def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, base_url, chunk_size=600, chunk_overlap=120):
     """
     Process posts using only the database, without making API calls.
     This version is used when the full WordPress database dump is available.
@@ -434,7 +447,7 @@ def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, u
         author_name = author_result[0] if author_result else None
 
         pdf = create_pdf(
-            post_title, author_name, permalink, content, unicode_font_path_cache
+            post_title, author_name, permalink, content, unicode_font_path_cache, chunk_size, chunk_overlap
         )
 
         try:
@@ -456,28 +469,32 @@ def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, u
     return n, skipped
 
 
-def process_posts(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, site_config):
+def process_posts(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, site_config, chunk_size=600, chunk_overlap=120):
     if site_config.get('use_api', False):
-        return process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db)
+        return process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, chunk_size, chunk_overlap)
     else:
-        return process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, site_config['base_url'])
+        return process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, site_config['base_url'], chunk_size, chunk_overlap)
 
 
-def create_pdf(post_title, author_name, permalink, content, unicode_font_path_cache):
+def create_pdf(post_title, author_name, permalink, content, unicode_font_path_cache, chunk_size=600, chunk_overlap=120):
+    """
+    Create a PDF file from post content, using spaCy chunking to handle long texts.
+    
+    Args:
+        post_title (str): Title of the post
+        author_name (str): Author name
+        permalink (str): URL of the original post
+        content (str): The post content
+        unicode_font_path_cache (str): Path to the font file
+        chunk_size (int): Maximum size of text chunks (default: 600)
+        chunk_overlap (int): Overlap between chunks in characters (default: 120)
+        
+    Returns:
+        FPDF: PDF document object
+    """
     pdf = FPDF()
     pdf.add_page()
     
-    # Commented out custom font code
-    # # Check if the font file exists
-    # if not os.path.exists(unicode_font_path_cache):
-    #     print(f"Font file not found: {unicode_font_path_cache}")
-    #     # Use a default font if the custom font is not available
-    #     pdf.set_font("Arial", "", 14)
-    # else:
-    #     # Force FPDF to use the new path
-    #     pdf.add_font("TimesNewRoman", "", unicode_font_path_cache, uni=True)
-    #     pdf.set_font("TimesNewRoman", "", 14)
-
     # Try to use a Unicode-compatible font that's likely to be on macOS
     try:
         pdf.add_font("Arial Unicode MS", "", "/Library/Fonts/Arial Unicode.ttf", uni=True)
@@ -508,7 +525,37 @@ def create_pdf(post_title, author_name, permalink, content, unicode_font_path_ca
     pdf.set_font(font_name, "", 14)
     content = replace_smart_quotes(content)
     content = remove_html_tags(content)
-    pdf.multi_cell(0, 10, f"{post_title}\n\n{content}")
+    
+    # Create a new text splitter with the specified chunk size and overlap
+    text_splitter = SpacyTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separator="\n\n"
+    )
+    
+    # First write the title
+    pdf.multi_cell(0, 10, f"{post_title}\n\n")
+    
+    # For very long content, use spaCy chunking to split into manageable chunks
+    if len(content) > chunk_size:
+        logger.info(f"Content length ({len(content)} chars) exceeds chunk size ({chunk_size}). Using spaCy chunking.")
+        try:
+            chunks = text_splitter.split_text(content)
+            logger.info(f"Split content into {len(chunks)} chunks")
+            
+            for i, chunk in enumerate(chunks):
+                if i > 0 and pdf.get_y() > 250:  # Check if near page end
+                    pdf.add_page()
+                pdf.multi_cell(0, 10, chunk)
+                if i < len(chunks) - 1:  # Add separator between chunks (except after last chunk)
+                    pdf.ln(5)
+        except Exception as e:
+            logger.error(f"Error during content chunking: {e}")
+            # Fall back to writing the entire content without chunking
+            pdf.multi_cell(0, 10, content)
+    else:
+        # For shorter content, write directly
+        pdf.multi_cell(0, 10, content)
 
     return pdf
 
@@ -630,6 +677,7 @@ def main():
         args
     )
     print(f"Unicode font path cache: {unicode_font_path_cache}")
+    print(f"Using spaCy chunking with chunk size: {args.chunk_size}, overlap: {args.chunk_overlap}")
 
     max_retries = 5
     attempt = 0
@@ -654,7 +702,9 @@ def main():
                 pdf_folder,
                 unicode_font_path_cache,
                 db,
-                site_config
+                site_config,
+                args.chunk_size,
+                args.chunk_overlap
             )
 
             attachments_processed = 0

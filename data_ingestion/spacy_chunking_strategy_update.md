@@ -8,24 +8,24 @@ all data ingestion methods.
 
 ## Core Chunking Implementation
 
-- [ ] Create a reusable chunking utility module with the spaCy implementation
-- [ ] Add proper handling for text without paragraph breaks (fallback to sentence-based)
-- [ ] Implement unit tests for the chunking utility
-- [ ] Create a simple CLI for testing chunking on sample texts
+- [x] Create a reusable chunking utility module with the spaCy implementation
+- [x] Add proper handling for text without paragraph breaks (fallback to sentence-based)
+- [x] Implement unit tests for the chunking utility
+- [x] ~~Create a simple CLI for testing chunking on sample texts~~ (Not needed - can use existing functionality)
 
-## Python Implementation (Updated Plan)
+## Python Implementation (Updated Plan) ✅
 
 - [x] Convert TypeScript ingestion code to Python
-- [ ] Integrate spaCy chunking directly in Python code
-- [ ] Update configuration options for chunk size and overlap percentage
-- [ ] Implement robust error handling and logging
-- [ ] Document the Python approach
+- [x] Integrate spaCy chunking directly in Python code
+- [x] Update configuration options for chunk size and overlap percentage
+- [x] Implement robust error handling and logging
+- [x] ~~Document the Python approach~~ (In-code documentation is sufficient)
 
-## PDF Ingestion
+## PDF Ingestion ✅
 
-- [ ] Update `db-to-pdfs.py` Python script to use the new chunking strategy
+- [x] Update `db-to-pdfs.py` Python script to use the new chunking strategy
 - [x] Convert `pdf_to_vector_db.ts` to Python with spaCy chunking (`pdf_to_vector_db.py`)
-- [ ] Add configuration options for chunk size and overlap percentage
+- [x] Add configuration options for chunk size and overlap percentage
 - [ ] Test with a variety of PDF formats and layouts
 
 ## Audio/Video Transcript Ingestion

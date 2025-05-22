@@ -28,6 +28,7 @@ playwright==1.40.0
 PyPDF2==3.0.1
 pydub==0.25.1
 pymysql==1.1.0
+pytest-mock
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 pytz==2024.1

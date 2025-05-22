@@ -29,6 +29,7 @@ import signal
 import json
 import hashlib
 import time
+import logging
 from typing import List, Dict, Any, Optional, Tuple, NamedTuple
 import readline
 from pathlib import Path
@@ -39,14 +40,14 @@ import requests
 
 from dotenv import load_dotenv
 from pinecone import Pinecone, Index
+from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter, Document
 
-# Define a custom Document class to replace langchain_core.documents.Document
-class Document:
-    """Simple document class with content and metadata"""
-    
-    def __init__(self, page_content: str, metadata: Dict[str, Any] = None):
-        self.page_content = page_content
-        self.metadata = metadata or {}
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Custom PDF document loader
 class PyPDFLoader:
@@ -108,110 +109,6 @@ class DirectoryLoader:
                     print(f"Error loading {path}: {e}")
         
         return documents
-
-# Custom text splitter using spaCy directly
-class SpacyTextSplitter:
-    """Text splitter that uses spaCy to split text into chunks by paragraphs."""
-    
-    def __init__(self, chunk_size=500, chunk_overlap=100, separator="\n\n", pipeline="en_core_web_sm"):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-        self.separator = separator
-        self.pipeline = pipeline
-        self.nlp = None
-    
-    def _ensure_nlp(self):
-        """Ensure spaCy model is loaded"""
-        if self.nlp is None:
-            try:
-                self.nlp = spacy.load(self.pipeline)
-            except OSError:
-                print(f"Downloading spaCy model {self.pipeline}...")
-                spacy.cli.download(self.pipeline)
-                self.nlp = spacy.load(self.pipeline)
-                
-    def split_text(self, text: str) -> List[str]:
-        """Split text into chunks using spaCy"""
-        self._ensure_nlp()
-        
-        # First split by separator (paragraphs)
-        if self.separator:
-            splits = text.split(self.separator)
-        else:
-            splits = [text]
-        
-        # Process splits to ensure they are within chunk_size
-        chunks = []
-        current_chunk = []
-        current_length = 0
-        
-        for split in splits:
-            split = split.strip()
-            if not split:
-                continue
-                
-            # If the split is very long, break it down further using spaCy
-            if len(split) > self.chunk_size:
-                doc = self.nlp(split)
-                for sent in doc.sents:
-                    sent_text = sent.text.strip()
-                    if len(sent_text) > self.chunk_size:
-                        # If a single sentence is too long, just add it as a chunk
-                        chunks.append(sent_text)
-                    else:
-                        if current_length + len(sent_text) <= self.chunk_size:
-                            current_chunk.append(sent_text)
-                            current_length += len(sent_text)
-                        else:
-                            if current_chunk:
-                                chunks.append(" ".join(current_chunk))
-                            current_chunk = [sent_text]
-                            current_length = len(sent_text)
-            else:
-                if current_length + len(split) <= self.chunk_size:
-                    current_chunk.append(split)
-                    current_length += len(split)
-                else:
-                    if current_chunk:
-                        chunks.append(self.separator.join(current_chunk))
-                    current_chunk = [split]
-                    current_length = len(split)
-        
-        if current_chunk:
-            chunks.append(self.separator.join(current_chunk))
-            
-        # Apply chunk overlap if needed
-        if self.chunk_overlap > 0 and len(chunks) > 1:
-            result = []
-            
-            for i, chunk in enumerate(chunks):
-                if i == 0:
-                    result.append(chunk)
-                else:
-                    prev_chunk = chunks[i-1]
-                    overlap_text = prev_chunk[-self.chunk_overlap:]
-                    result.append(overlap_text + chunk)
-                    
-            return result
-        
-        return chunks
-    
-    def split_documents(self, documents: List[Document]) -> List[Document]:
-        """Split documents into chunks"""
-        chunked_docs = []
-        
-        for doc in documents:
-            text = doc.page_content
-            chunks = self.split_text(text)
-            
-            for chunk in chunks:
-                if chunk:
-                    chunked_docs.append(Document(
-                        page_content=chunk,
-                        metadata=doc.metadata.copy()
-                    ))
-                    
-        return chunked_docs
 
 # OpenAI API wrapper for embeddings
 class OpenAIEmbeddings:
