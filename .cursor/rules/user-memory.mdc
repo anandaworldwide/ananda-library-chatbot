@@ -21,7 +21,8 @@ Ensure Cursor avoids repeating known mistakes by persistently logging correction
 ### On Every Mistake or deprecated warning:
 1. **Detect** incorrect or suboptimal outputs.
 2. **Correct** the mistake.
-3. **Save** both mistake and correction in @self.md using the format:
+3. **Save** both mistake and correction in @self.md if there is a fair likelihood that the mistake could happen again 
+in a different context. Use the format:
 
    ```markdown
    ### Mistake: [Short Description]

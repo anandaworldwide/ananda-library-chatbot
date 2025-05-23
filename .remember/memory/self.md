@@ -394,3 +394,97 @@ def main():
 // /path/to/file.ts
 // This module is responsible for A, B, and C.
 ```
+
+### Mistake: PDF Text Extraction Treating Empty HTML as Successful
+
+**Wrong**:
+
+```python
+# In PyPDFLoader - accepting any non-empty string as successful extraction
+if alt_text and str(alt_text).strip():
+    text = str(alt_text).strip()
+    logger.info(f"Successfully extracted text using {method_name} method!")
+    break
+```
+
+This would treat empty HTML structures like `<div id="page0">\n</div>` as successful text extraction.
+
+**Correct**:
+
+```python
+# In PyPDFLoader - properly handle HTML/XML extraction and validate meaningful content
+elif method_name in ["html", "xml"]:
+    # For HTML/XML, extract text content from markup
+    if alt_text:
+        import re
+        # Remove HTML tags and extract text content
+        text_content = re.sub(r'<[^>]+>', '', str(alt_text))
+        # Clean up whitespace
+        text_content = ' '.join(text_content.split())
+        alt_text = text_content.strip()
+
+# Check if we have meaningful text content (not just whitespace or minimal content)
+if alt_text and str(alt_text).strip() and len(str(alt_text).strip()) > 5:
+    text = str(alt_text).strip()
+    logger.info(f"Successfully extracted text using {method_name} method!")
+    break
+```
+
+This properly strips HTML tags to get actual text content and ensures the extracted text is meaningful (more than 5 characters).
+
+### Improvement: Enhanced PDF Processing Logging
+
+**Problem**:
+
+1. Blank page warnings cluttered the logs even though blank pages are expected
+2. Text splitting logs didn't show which document was being processed, making it hard to track progress
+
+**Solution**:
+
+```python
+# In PyPDFLoader - Changed blank page warnings to debug level
+logger.debug(f"No text extracted from page {page_num} of {self.file_path}. Skipping page (likely blank page).")
+
+# In process_document - Added document context to text splitting
+doc_filename = os.path.basename(raw_doc.metadata.get('source', 'Unknown File'))
+page_number = raw_doc.metadata.get('page', 'Unknown Page')
+
+logger.info(f"Splitting page {page_number} of {doc_filename} into chunks...")
+docs = text_splitter.split_documents([raw_doc])
+
+if valid_docs:
+    logger.info(f"Page {page_number} of {doc_filename} split into {len(valid_docs)} chunks")
+
+# In run function - Added PDF completion summary
+pdf_filename = os.path.basename(current_pdf_path)
+logger.info(f"✓ Completed {pdf_filename} - processed {len(pages_from_pdf)} pages")
+```
+
+**Benefits**:
+
+- Cleaner logs with blank page warnings at debug level
+- Clear tracking of which document is being processed during text splitting
+- Summary message after each PDF completion for better progress visibility
+
+### Mistake: SpacyTextSplitter Incorrectly Disabling Overlap for Paragraph Separators
+
+**Wrong**:
+
+```python
+# In data_ingestion/utils/text_splitter_utils.py
+# Apply chunk overlap - but only for certain types of splits
+# For paragraph separators (\n\n), we want to maintain clean boundaries
+skip_overlap = self.separator == "\n\n"  # Only skip overlap for paragraph separators
+
+if self.chunk_overlap > 0 and len(chunks) > 1 and not skip_overlap:
+```
+
+**Correct**:
+
+```python
+# In data_ingestion/utils/text_splitter_utils.py
+# Apply chunk overlap if configured
+if self.chunk_overlap > 0 and len(chunks) > 1:
+```
+
+**Issue**: The SpacyTextSplitter was logging "Split text into X chunks without overlap" even when overlap was configured (120 characters = 20% of 600) because it explicitly disabled overlap for paragraph separators (`\n\n`). This conflicted with the spaCy paragraph-based chunking strategy that requires overlap for better retrieval performance.
