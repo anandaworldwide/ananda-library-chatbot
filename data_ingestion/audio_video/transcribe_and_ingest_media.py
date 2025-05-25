@@ -251,9 +251,19 @@ def process_file(
         file_name = os.path.basename(file_path) if file_path else "Unknown_File"
 
     # Check cache first to avoid redundant processing
-    existing_transcription = get_saved_transcription(
-        file_path, is_youtube_video, youtube_id
-    )
+    try:
+        existing_transcription = get_saved_transcription(
+            file_path, is_youtube_video, youtube_id
+        )
+    except Exception as e:
+        error_msg = (
+            f"Error checking for existing transcription for {file_name}: {str(e)}"
+        )
+        logger.error(error_msg)
+        local_report["errors"] += 1
+        local_report["error_details"].append(error_msg)
+        return local_report
+
     if existing_transcription and not force:
         # Verify and update metadata in existing transcription
         try:

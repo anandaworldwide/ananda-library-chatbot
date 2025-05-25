@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pdfplumber
+import pytest
 import spacy
 
 # Add the parent directory to the path so we can find the utils module
@@ -63,10 +64,24 @@ def read_json_gz_content(file_path):
         return f"Error reading {file_path}: {e}"
 
 
-def test_chunker_on_content(content_type, content_path):
+@pytest.fixture(
+    params=[
+        ("spiritual_books", Path("media/pdf-docs/crystal")),
+        ("transcriptions", Path("media/transcriptions")),
+        ("wordpress_content", Path("media/pdf-docs")),
+    ]
+)
+def content_data(request):
+    """Fixture providing content type and path pairs."""
+    return request.param
+
+
+def test_chunker_on_content(content_data):
     """Test the chunker on the specified content type from the given path."""
+    content_type, content_path = content_data
+
     if not content_path.exists():
-        return f"Path for {content_type} does not exist: {content_path}"
+        pytest.skip(f"Path for {content_type} does not exist: {content_path}")
 
     splitter = SpacyTextSplitter()
     results = []

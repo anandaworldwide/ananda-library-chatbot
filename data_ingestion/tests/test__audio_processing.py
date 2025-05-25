@@ -1,21 +1,32 @@
-import unittest
-import os
 import logging
+import os
+import subprocess
+import tempfile
+import unittest
+from argparse import ArgumentParser
+from unittest.mock import MagicMock, patch
+
+from botocore.exceptions import ClientError
 from openai import OpenAI
 from pinecone import PineconeException
-from unittest.mock import patch, MagicMock
-from botocore.exceptions import ClientError
-from argparse import ArgumentParser
-from pyutil.env_utils import load_env
+
 from data_ingestion.audio_video.IngestQueue import IngestQueue
-from data_ingestion.audio_video.transcribe_and_ingest_media import process_file
-from data_ingestion.audio_video.transcription_utils import TimeoutException, transcribe_media, chunk_transcription
-from data_ingestion.audio_video.pinecone_utils import store_in_pinecone, load_pinecone, create_embeddings
-from data_ingestion.audio_video.s3_utils import upload_to_s3, S3UploadError, upload_to_s3
 from data_ingestion.audio_video.media_utils import get_media_metadata
+from data_ingestion.audio_video.pinecone_utils import (
+    create_embeddings,
+    load_pinecone,
+    store_in_pinecone,
+)
+from data_ingestion.audio_video.s3_utils import S3UploadError, upload_to_s3
+from data_ingestion.audio_video.transcribe_and_ingest_media import process_file
+from data_ingestion.audio_video.transcription_utils import (
+    TimeoutException,
+    chunk_transcription,
+    transcribe_media,
+)
 from data_ingestion.tests.test_utils import trim_audio
-import tempfile
-import subprocess
+from pyutil.env_utils import load_env
+
 
 def configure_logging(debug=False):
     # Configure the root logger
@@ -48,7 +59,9 @@ logger = configure_logging(debug=True)
 
 def main():
     parser = ArgumentParser(description="Audio processing test")
-    parser.add_argument('--site', required=True, help='Site ID for environment variables')
+    parser.add_argument(
+        "--site", required=True, help="Site ID for environment variables"
+    )
     args = parser.parse_args()
 
     # Load environment variables
@@ -59,17 +72,24 @@ class TestAudioProcessing(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         parser = ArgumentParser()
-        parser.add_argument('--site', default='ananda', help='Site ID for environment variables')
+        parser.add_argument(
+            "--site", default="ananda", help="Site ID for environment variables"
+        )
         args, _ = parser.parse_known_args()
         load_env(args.site)
 
     def setUp(self):
         # Update the path to use the correct relative path
-        self.test_audio_path = os.path.abspath(os.path.join(
-            os.path.dirname(__file__), 
-            "..", 
-            "media", "test", "unit-test-data", "how-to-commune-with-god.mp3"
-        ))
+        self.test_audio_path = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "media",
+                "test",
+                "unit-test-data",
+                "how-to-commune-with-god.mp3",
+            )
+        )
         self.author = "Paramhansa Yogananda"
         self.library = "Ananda Sangha"
         self.client = OpenAI()
@@ -88,7 +108,9 @@ class TestAudioProcessing(unittest.TestCase):
 
     def test_audio_metadata(self):
         logger.debug("Starting audio metadata test")
-        title, author, duration, url, album = get_media_metadata(self.trimmed_audio_path)
+        title, author, duration, url, album = get_media_metadata(
+            self.trimmed_audio_path
+        )
         self.assertIsNotNone(title)
         self.assertIsNotNone(author)
         self.assertGreater(duration, 0)
@@ -103,11 +125,39 @@ class TestAudioProcessing(unittest.TestCase):
         logger.debug("Starting transcription test")
         transcription = transcribe_media(self.trimmed_audio_path)
         self.assertIsNotNone(transcription)
-        self.assertIsInstance(transcription, list)
-        self.assertTrue(len(transcription) > 0)
-        self.assertIsInstance(transcription[0], dict)
-        self.assertIn("text", transcription[0])
-        self.assertIn("words", transcription[0])
+
+        # transcribe_media can return either:
+        # 1. A list of transcript segments (when creating new transcription)
+        # 2. A dict with full transcription data (when loading existing transcription)
+        if isinstance(transcription, list):
+            # New transcription format - list of transcript segments
+            self.assertTrue(len(transcription) > 0)
+            self.assertIsInstance(transcription[0], dict)
+            self.assertIn("text", transcription[0])
+            self.assertIn("words", transcription[0])
+            logger.debug(
+                f"Transcription test completed with {len(transcription)} segments"
+            )
+        else:
+            # Existing transcription format (dict with metadata)
+            self.assertIsInstance(transcription, dict)
+            # For existing transcriptions, check if it has the expected structure
+            # It could be either the full saved format or a simplified format
+            if "transcripts" in transcription:
+                # Full saved transcription format
+                self.assertIn("transcripts", transcription)
+                self.assertIsInstance(transcription["transcripts"], list)
+                self.assertTrue(len(transcription["transcripts"]) > 0)
+                logger.debug(
+                    f"Transcription test completed with existing full transcription containing {len(transcription['transcripts'])} segments"
+                )
+            else:
+                # Simplified transcription format
+                self.assertIn("text", transcription)
+                self.assertIn("words", transcription)
+                logger.debug(
+                    "Transcription test completed with existing simplified transcription"
+                )
 
     def test_chunk_transcription(self):
         logger.debug("Starting process transcription test")
@@ -138,7 +188,9 @@ class TestAudioProcessing(unittest.TestCase):
         )
 
         # Get metadata including album
-        title, author, duration, url, album = get_media_metadata(self.trimmed_audio_path)
+        title, author, duration, url, album = get_media_metadata(
+            self.trimmed_audio_path
+        )
 
         try:
             store_in_pinecone(
@@ -150,7 +202,7 @@ class TestAudioProcessing(unittest.TestCase):
                 is_youtube_video=False,
                 title=title,
                 url=url,
-                album=album
+                album=album,
             )
             logger.debug("Pinecone storage success test completed")
         except PineconeException as e:
@@ -203,13 +255,15 @@ class TestAudioProcessing(unittest.TestCase):
 
     def test_s3_upload_error_handling(self):
         logger.debug("Starting S3 upload error handling test")
-        
+
         # Mock the S3 client to simulate an error
-        with patch('data_ingestion.audio_video.s3_utils.get_s3_client') as mock_get_s3_client:
+        with patch(
+            "data_ingestion.audio_video.s3_utils.get_s3_client"
+        ) as mock_get_s3_client:
             mock_s3 = MagicMock()
             mock_s3.upload_file.side_effect = ClientError(
-                {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-                'upload_file'
+                {"Error": {"Code": "TestException", "Message": "Test error message"}},
+                "upload_file",
             )
             mock_get_s3_client.return_value = mock_s3
 
@@ -225,16 +279,23 @@ class TestAudioProcessing(unittest.TestCase):
 
     def test_s3_upload_request_time_skewed(self):
         logger.debug("Starting S3 upload RequestTimeTooSkewed test")
-        
+
         # Mock the S3 client to simulate a RequestTimeTooSkewed error
-        with patch('data_ingestion.audio_video.s3_utils.get_s3_client') as mock_get_s3_client:
+        with patch(
+            "data_ingestion.audio_video.s3_utils.get_s3_client"
+        ) as mock_get_s3_client:
             mock_s3 = MagicMock()
             mock_s3.upload_file.side_effect = [
                 ClientError(
-                    {'Error': {'Code': 'RequestTimeTooSkewed', 'Message': 'Time skewed'}},
-                    'upload_file'
+                    {
+                        "Error": {
+                            "Code": "RequestTimeTooSkewed",
+                            "Message": "Time skewed",
+                        }
+                    },
+                    "upload_file",
                 ),
-                None  # Successful on second attempt
+                None,  # Successful on second attempt
             ]
             mock_get_s3_client.return_value = mock_s3
 
@@ -251,9 +312,9 @@ class TestAudioProcessing(unittest.TestCase):
 
     def test_chunk_transcription_timeout(self):
         logger.debug("Starting chunk transcription timeout test")
-        
+
         # Mock the signal.alarm to simulate a timeout
-        with patch('signal.alarm', side_effect=TimeoutException):
+        with patch("signal.alarm", side_effect=TimeoutException):
             try:
                 transcription = transcribe_media(self.trimmed_audio_path)
                 chunks = chunk_transcription(transcription)
@@ -262,15 +323,17 @@ class TestAudioProcessing(unittest.TestCase):
             self.assertIsInstance(chunks, dict)
             self.assertIn("error", chunks)
             self.assertEqual(chunks["error"], "chunk_transcription timed out.")
-        
+
         logger.debug("Chunk transcription timeout test completed")
 
     def test_process_file_chunk_transcription_timeout(self):
         logger.debug("Starting process file chunk transcription timeout test")
-        
+
         # Mock the chunk_transcription to simulate a timeout error
-        with patch('data_ingestion.audio_video.transcribe_and_ingest_media.chunk_transcription', 
-                   return_value={"error": "chunk_transcription timed out."}):
+        with patch(
+            "data_ingestion.audio_video.transcribe_and_ingest_media.chunk_transcription",
+            return_value={"error": "chunk_transcription timed out."},
+        ):
             report = process_file(
                 self.trimmed_audio_path,
                 MagicMock(),  # Mock pinecone index
@@ -284,55 +347,76 @@ class TestAudioProcessing(unittest.TestCase):
             )
             self.assertEqual(report["errors"], 1)
             self.assertIn("chunk_transcription timed out.", report["error_details"][0])
-        
+
         logger.debug("Process file chunk transcription timeout test completed")
 
     def test_transcription_with_empty_audio(self):
         logger.debug("Starting transcription with empty audio test")
-        
+
         # Create an empty audio file
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
             temp_file_path = temp_file.name
             self.temp_files.append(temp_file_path)
-            
+
             # Create a valid but empty MP3 file
-            subprocess.run(['ffmpeg', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '1', '-y', '-acodec', 'libmp3lame', '-b:a', '128k', temp_file_path], check=True)
-            
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "anullsrc=r=44100:cl=mono",
+                    "-t",
+                    "1",
+                    "-y",
+                    "-acodec",
+                    "libmp3lame",
+                    "-b:a",
+                    "128k",
+                    temp_file_path,
+                ],
+                check=True,
+            )
+
             # Mock split_audio to return empty chunks
-            with patch('data_ingestion.audio_video.media_utils.split_audio') as mock_split:
+            with patch(
+                "data_ingestion.audio_video.media_utils.split_audio"
+            ) as mock_split:
                 mock_split.return_value = []
                 transcription = transcribe_media(temp_file_path)
-                
+
                 self.assertIsNone(transcription, "Expected None for empty audio file")
-        
+
         logger.debug("Transcription with empty audio test completed")
 
     def test_transcription_with_corrupted_audio(self):
         logger.debug("Starting transcription with corrupted audio test")
-        
+
         # Create a corrupted audio file
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
             temp_file.write(b"This is not valid MP3 data")
             temp_file_path = temp_file.name
             self.temp_files.append(temp_file_path)
-            
+
             # Test transcription with corrupted audio
             with self.assertRaises(Exception) as context:
                 transcribe_media(temp_file_path)
-            
+
             self.assertIn("Error", str(context.exception))
-        
+
         logger.debug("Transcription with corrupted audio test completed")
 
     def test_pinecone_storage_with_empty_chunks(self):
         logger.debug("Starting Pinecone storage with empty chunks test")
-        
+
         index = load_pinecone()
         empty_chunks = []
         empty_embeddings = []
-        
+
         # Mock the index.upsert method to raise an exception
-        with patch.object(index, 'upsert', side_effect=PineconeException("No chunks to store")):
+        with patch.object(
+            index, "upsert", side_effect=PineconeException("No chunks to store")
+        ):
             with self.assertRaises(PineconeException) as context:
                 store_in_pinecone(
                     index,
@@ -340,15 +424,15 @@ class TestAudioProcessing(unittest.TestCase):
                     empty_embeddings,
                     self.author,
                     self.library,
-                    is_youtube_video=False
+                    is_youtube_video=False,
                 )
-            
+
             self.assertIn("No chunks to store", str(context.exception))
         logger.debug("Pinecone storage with empty chunks test completed")
 
     def test_process_file_with_invalid_path(self):
         logger.debug("Starting process file with invalid path test")
-        
+
         invalid_path = "/path/to/nonexistent/file.mp3"
         report = process_file(
             invalid_path,
@@ -361,9 +445,9 @@ class TestAudioProcessing(unittest.TestCase):
             is_youtube_video=False,
             youtube_data=None,
         )
-        
+
         self.assertEqual(report["errors"], 1)
-        self.assertIn("No such file or directory", report["error_details"][0])
+        self.assertIn("File not found", report["error_details"][0])
         logger.debug("Process file with invalid path test completed")
 
 

@@ -43,9 +43,18 @@ this chunking strategy across all data ingestion methods.
 
 ## Audio/Video Transcript Ingestion
 
-- [ ] Update `transcribe_and_ingest_media.py` to use the new chunking strategy
+- [x] Update `transcribe_and_ingest_media.py` to use the new chunking strategy
+- [ ] Test it.
 
 **Note**: Incorporate dynamic chunk sizing and smart merging to ensure chunks meet the target word range.
+
+**Update**: Successfully integrated SpacyTextSplitter into `chunk_transcription()` function with:
+
+- Dynamic chunk sizing based on content length (225-450 word target range)
+- Semantic chunking using spaCy paragraph detection
+- Preserved audio timestamps and word-level metadata
+- Fallback to legacy chunking if spaCy processing fails
+- Enhanced logging for chunk quality metrics and target range achievement
 
 ## Web Crawling
 

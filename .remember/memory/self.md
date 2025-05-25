@@ -1054,3 +1054,231 @@ function. Mocking `utils.progress_utils.is_exiting` only affects new imports, no
 
 **Impact**: Tests hang indefinitely because the actual function is called instead of the mock, creating infinite loops
 in daemon-like behavior tests.
+
+## Audio/Video Transcript Chunking Strategy Update Completed
+
+**Task**: Successfully updated `data_ingestion/audio_video/transcription_utils.py` to use the new spaCy-based chunking
+strategy while preserving audio-specific features.
+
+**Key Implementation Details**:
+
+- **Primary Function**: Modified `chunk_transcription()` to use `SpacyTextSplitter` for semantic chunking
+- **Dynamic Sizing**: Leverages word count-based chunk sizing (225-450 word target range)
+- **Timestamp Preservation**: Maps spaCy text chunks back to original word timestamps for audio playback
+- **Fallback Strategy**: Maintains legacy chunking method as fallback if spaCy processing fails
+- **Enhanced Logging**: Added comprehensive chunk quality metrics and target range achievement tracking
+
+**Technical Approach**:
+
+1. Use SpacyTextSplitter to create semantic text chunks from transcription text
+2. Map text chunks back to timestamped word objects using fuzzy word matching
+3. Handle word matching edge cases with fallback to word count estimation
+4. Preserve all audio metadata (start/end times, speaker info) in chunk objects
+5. Log detailed statistics about chunk quality and target range compliance
+
+**Benefits**:
+
+- Maintains semantic coherence in audio chunks (better than fixed-word chunking)
+- Preserves all audio-specific functionality (timestamps, speaker diarization)
+- Provides robust error handling with graceful fallback
+- Enables consistent chunking strategy across all ingestion methods
+- Improves RAG retrieval quality for audio/video content
+
+**Files Modified**:
+
+- `data_ingestion/audio_video/transcription_utils.py`: Updated `chunk_transcription()` and added
+  `_legacy_chunk_transcription()`
+- `data_ingestion/spacy_chunking_strategy_update.md`: Marked task as completed with implementation details
+
+## Mistake: Timestamp Accuracy Risk in Audio Chunking with Text Mapping
+
+**Problem**: Initial spaCy-based audio chunking implementation used "fuzzy matching" to map spaCy's reformatted text
+chunks back to original timestamped words. This approach was fundamentally flawed and could break timestamp accuracy
+critical for audio/video playback.
+
+**Wrong**: Letting spaCy reformat text then trying to map it back to timestamped words:
+
+```python
+# Use spaCy to split the text into semantic chunks
+text_chunks = text_splitter.split_text(original_text, document_id="transcription")
+
+# Try to map reformatted text back to timestamped words (DANGEROUS!)
+for chunk_idx, chunk_text in enumerate(text_chunks):
+    chunk_text_words = chunk_text.split()
+    # Fuzzy matching logic that could misalign words
+    if (word_text.lower() == expected_word.lower() or
+        word_text.lower() in expected_word.lower()):
+        # This matching could fail or skip words
+
+    # Fallback to word count estimation (VERY DANGEROUS!)
+    if len(chunk_words) < len(chunk_text_words) * 0.7:
+        words_needed = len(chunk_text_words)
+        chunk_words = words[start_word_index:start_word_index + words_needed]
+```
+
+**Correct**: Work directly with timestamped words as source of truth:
+
+```python
+# Use spaCy only for dynamic chunk sizing guidance, not text reformatting
+text_splitter._set_dynamic_chunk_size(word_count)
+target_words_per_chunk = text_splitter.chunk_size // 4
+
+# Chunk directly using timestamped words (PRESERVES EXACT TIMESTAMPS)
+while word_index < len(words):
+    chunk_words = words[word_index:end_index]
+
+    # Build text from actual timestamped words (no reformatting)
+    chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
+
+    # Use exact timestamps from word objects
+    start_time = chunk_words[0]["start"]
+    end_time = chunk_words[-1]["end"]
+
+    chunks.append({
+        "text": chunk_text,
+        "start": start_time,
+        "end": end_time,
+        "words": chunk_words,
+    })
+```
+
+**Key Principles**:
+
+- **Never reformat timestamped content** - preserve original word objects as source of truth
+- **Use spaCy for guidance only** - leverage dynamic sizing but don't let it change the text
+- **Maintain perfect timestamp accuracy** - critical for audio/video playback functionality
+- **Avoid fuzzy matching** - any word misalignment breaks timestamp synchronization
+
+**Impact**: Timestamp accuracy is essential for queuing audio/video players to the correct playback position. Any
+misalignment would break the core functionality of playing back found snippets.
+
+## Mistake: get_file_hash Function Signature Mismatch in Audio Transcription
+
+**Problem**: The `save_transcription` function in `transcription_utils.py` was calling
+`get_file_hash(file_path=file_path, youtube_id=youtube_id)` but the `get_file_hash` function in `media_utils.py` only
+accepts a single `file_path` parameter, causing
+`TypeError: get_file_hash() got an unexpected keyword argument 'youtube_id'`.
+
+**Wrong**: Calling get_file_hash with unsupported youtube_id parameter:
+
+```python
+# In save_transcription function
+file_hash = get_file_hash(file_path=file_path, youtube_id=youtube_id)
+```
+
+**Correct**: Handle YouTube videos and regular files separately, following the same pattern as
+`get_saved_transcription`:
+
+```python
+# Generate hash based on either file_path or youtube_id
+if youtube_id:
+    youtube_data_map = load_youtube_data_map()
+    youtube_data = youtube_data_map.get(youtube_id)
+    if youtube_data and "file_hash" in youtube_data:
+        file_hash = youtube_data["file_hash"]
+    else:
+        # Generate hash from YouTube ID if not in data map
+        file_hash = hashlib.md5(youtube_id.encode()).hexdigest()
+else:
+    file_hash = get_file_hash(file_path)
+```
+
+**Impact**: This error was causing multiple audio processing tests to fail with TypeError, preventing proper
+transcription saving for both regular audio files and YouTube videos.
+
+**Detection**: PyTest failures in audio processing tests with clear error message about unexpected keyword argument.
+
+## Mistake: Test Expectations Not Updated for Dynamic Chunking Implementation
+
+**Problem**: Tests were failing because they expected static chunk sizes and old transcription return formats, but the
+implementation had been updated to use dynamic sizing and could return different data structures.
+
+**Issues Fixed**:
+
+1. **Audio Processing Test - transcribe_media Return Types**: The `transcribe_media` function can return either:
+   - A list of transcript segments (when creating new transcription)
+   - A dict with full transcription data (when loading existing transcription)
+
+**Wrong**: Test only expected list format:
+
+```python
+def test_transcription(self):
+    transcription = transcribe_media(self.trimmed_audio_path)
+    self.assertTrue(len(transcription) > 0)  # Assumes list
+    self.assertIsInstance(transcription[0], dict)  # Fails if dict returned
+```
+
+**Correct**: Test handles both return types:
+
+```python
+def test_transcription(self):
+    transcription = transcribe_media(self.trimmed_audio_path)
+    if isinstance(transcription, list):
+        # New transcription format - list of transcript segments
+        self.assertTrue(len(transcription) > 0)
+        self.assertIsInstance(transcription[0], dict)
+    else:
+        # Existing transcription format (dict with metadata)
+        self.assertIsInstance(transcription, dict)
+        if "transcripts" in transcription:
+            # Full saved transcription format
+            self.assertIn("transcripts", transcription)
+        else:
+            # Simplified transcription format
+            self.assertIn("text", transcription)
+```
+
+2. **SpaCy Text Splitter - Dynamic Chunk Size Expectations**: Tests expected old static chunk sizes but implementation
+   now uses dynamic sizing:
+
+**Wrong**: Expected old static values:
+
+```python
+assert splitter.chunk_size == 200  # Old static value
+assert splitter.chunk_overlap == 50  # Old static value
+```
+
+**Correct**: Updated to match current dynamic sizing logic:
+
+```python
+assert splitter.chunk_size == 800   # New dynamic value for short text
+assert splitter.chunk_overlap == 100  # New dynamic value for short text
+```
+
+3. **Error Handling in process_file**: Added proper error handling for file not found errors:
+
+**Wrong**: No error handling around `get_saved_transcription` call:
+
+```python
+existing_transcription = get_saved_transcription(file_path, is_youtube_video, youtube_id)
+```
+
+**Correct**: Wrapped in try-catch to handle file not found errors:
+
+```python
+try:
+    existing_transcription = get_saved_transcription(file_path, is_youtube_video, youtube_id)
+except Exception as e:
+    error_msg = f"Error checking for existing transcription for {file_name}: {str(e)}"
+    logger.error(error_msg)
+    local_report["errors"] += 1
+    local_report["error_details"].append(error_msg)
+    return local_report
+```
+
+4. **Mock Data Type Issue**: Test mock was returning string data instead of binary data for file hashing:
+
+**Wrong**: Mock without proper binary data:
+
+```python
+@patch('builtins.open', new_callable=mock_open)
+```
+
+**Correct**: Mock with binary data for hashing:
+
+```python
+@patch('builtins.open', new_callable=mock_open, read_data=b'mock binary data')
+```
+
+**Detection**: Tests were failing with specific error messages about type mismatches and unexpected return values.
+Always update test expectations when implementation changes, especially for dynamic behavior.

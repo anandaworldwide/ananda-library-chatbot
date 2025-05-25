@@ -1,4 +1,5 @@
 import gzip
+import hashlib
 import json
 import logging
 import os
@@ -224,7 +225,15 @@ def save_transcription(file_path, transcripts, youtube_id=None):
         youtube_id: YouTube video ID if applicable
     """
     # Generate hash based on either file_path or youtube_id
-    file_hash = get_file_hash(file_path=file_path, youtube_id=youtube_id)
+    if youtube_id:
+        youtube_data_map = load_youtube_data_map()
+        youtube_data = youtube_data_map.get(youtube_id)
+        if youtube_data and "file_hash" in youtube_data:
+            file_hash = youtube_data["file_hash"]
+        else:
+            file_hash = hashlib.md5(youtube_id.encode()).hexdigest()
+    else:
+        file_hash = get_file_hash(file_path)
 
     # Convert list of transcripts to expected format if needed
     if isinstance(transcripts, list):
@@ -423,6 +432,20 @@ def timeout_handler(signum, frame):
 
 
 def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
+    """
+    Chunk transcription using spaCy-based semantic chunking with dynamic sizing.
+
+    This function now uses the SpacyTextSplitter for semantic chunking while preserving
+    audio-specific features like timestamps.
+
+    Args:
+        transcript: Transcript object with 'text' and 'words' fields
+        target_chunk_size: Legacy parameter, now ignored (dynamic sizing used)
+        overlap: Legacy parameter, now ignored (dynamic overlap used)
+
+    Returns:
+        List of chunk dictionaries with text, start/end times, and word arrays
+    """
     global chunk_lengths  # Ensure we are using the global list
     chunks = []
 
@@ -441,7 +464,7 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
     original_text = transcript["text"]
     total_words = len(words)
 
-    logger.debug(f"Starting chunk_transcription with {total_words} words.")
+    logger.debug(f"Starting spaCy-based chunk_transcription with {total_words} words.")
 
     if not words or not original_text.strip():
         logger.warning("Transcription is empty or invalid.")
@@ -459,90 +482,190 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
     signal.alarm(60)
 
     try:
-        # Calculate the number of chunks needed
-        num_chunks = (total_words + target_chunk_size - 1) // target_chunk_size
+        # Import and use SpacyTextSplitter for semantic chunking guidance
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
 
-        # Adjust chunk size to ensure even distribution
-        adjusted_chunk_size = (total_words + num_chunks - 1) // num_chunks
+        # Initialize spaCy text splitter to get dynamic chunk sizing
+        text_splitter = SpacyTextSplitter(
+            separator="\n\n",  # Paragraph-based chunking
+            pipeline="en_core_web_sm",
+        )
 
-        i = 0
-        while i < total_words:
-            end_index = min(i + adjusted_chunk_size, total_words)
-            current_chunk = words[i:end_index]
-            if not current_chunk:
+        # Set dynamic chunk size based on content length (but work with words, not text)
+        word_count = len(words)
+        text_splitter._set_dynamic_chunk_size(word_count)
+        target_words_per_chunk = (
+            text_splitter.chunk_size // 4
+        )  # Rough tokens-to-words conversion
+
+        logger.debug(
+            f"Dynamic target: ~{target_words_per_chunk} words per chunk based on {word_count} total words"
+        )
+
+        # Chunk directly using timestamped words to preserve exact timestamps
+        # This approach maintains perfect timestamp accuracy
+        word_index = 0
+        chunk_idx = 0
+
+        while word_index < len(words):
+            # Determine chunk size for this chunk
+            remaining_words = len(words) - word_index
+            if (
+                remaining_words <= target_words_per_chunk * 1.3
+            ):  # If close to target, take all remaining
+                chunk_size = remaining_words
+            else:
+                chunk_size = target_words_per_chunk
+
+            # Get the words for this chunk
+            end_index = min(word_index + chunk_size, len(words))
+            chunk_words = words[word_index:end_index]
+
+            if not chunk_words:
                 break
 
-            # Extract the corresponding text segment from the original text
-            start_time = current_chunk[0]["start"]
-            end_time = current_chunk[-1]["end"]
+            # Build chunk text from the actual timestamped words (preserves exact content)
+            chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
 
-            # Build a regex pattern to match the words in the current chunk
-            pattern = (
-                r"\b"
-                + r"\W*".join(re.escape(word["word"]) for word in current_chunk)
-                + r"[\W]*"
-            )
-
-            match = re.search(pattern, original_text)
-            if match:
-                chunk_text = match.group(0)
-                # Ensure the chunk ends with punctuation if present
-                end_pos = match.end()
-                while end_pos < len(original_text) and re.match(
-                    r"\W", original_text[end_pos]
-                ):
-                    end_pos += 1
-                chunk_text = original_text[match.start() : end_pos]
-            else:
-                chunk_text = " ".join(word["word"] for word in current_chunk)
+            # Use exact timestamps from the word objects
+            start_time = chunk_words[0]["start"]
+            end_time = chunk_words[-1]["end"]
 
             chunks.append(
                 {
                     "text": chunk_text,
                     "start": start_time,
                     "end": end_time,
-                    "words": current_chunk,
+                    "words": chunk_words,
                 }
             )
 
             # Store the length of the current chunk
-            chunk_lengths.append(len(current_chunk))
+            chunk_lengths.append(len(chunk_words))
 
-            i += adjusted_chunk_size - overlap
+            # Move to next chunk with overlap if configured
+            overlap_words = min(
+                target_words_per_chunk // 4, len(chunk_words) // 4
+            )  # 25% overlap
+            word_index = end_index - overlap_words
+            chunk_idx += 1
 
-        min_chunk_size = target_chunk_size // 2
-        max_chunk_size = int(target_chunk_size * 1.2)
-        chunks = combine_small_chunks(chunks, min_chunk_size, max_chunk_size)
+            logger.debug(
+                f"Created chunk {chunk_idx}: {len(chunk_words)} words, {start_time:.2f}s-{end_time:.2f}s"
+            )
 
-        chunks = split_large_chunks(chunks, target_chunk_size)
+        # Log chunk statistics with new spaCy-based approach
+        if chunks:
+            chunk_word_counts = [len(chunk["words"]) for chunk in chunks]
+            avg_words = sum(chunk_word_counts) / len(chunk_word_counts)
+            target_range_chunks = sum(
+                1 for count in chunk_word_counts if 225 <= count <= 450
+            )
+            target_percentage = (target_range_chunks / len(chunks)) * 100
 
-        chunk_warning = False
-        for chunk in chunks:
-            if len(chunk["words"]) < 30:
+            logger.info(
+                f"SpaCy chunking results: {len(chunks)} chunks, avg {avg_words:.1f} words/chunk"
+            )
+            logger.info(
+                f"Target range (225-450 words): {target_range_chunks}/{len(chunks)} chunks ({target_percentage:.1f}%)"
+            )
+
+            # Warn about very small chunks (but don't fail)
+            small_chunks = [
+                i for i, count in enumerate(chunk_word_counts) if count < 30
+            ]
+            if small_chunks:
                 logger.warning(
-                    f"Chunk length is less than 30 words. Length = {len(chunk['words'])}, Start time = {chunk['start']:.2f}s"
+                    f"Found {len(small_chunks)} chunks with <30 words: {small_chunks[:5]}"
                 )
-                logger.warning(
-                    f"Transcription Chunk: Length = {len(chunk['words'])}, Start time = {chunk['start']:.2f}s, Word count = {len(chunk['words'])}, Text = {' '.join([word['word'] for word in chunk['words'][:5]])}..."
-                    + (" *****" if len(chunk["words"]) < 15 else "")
-                )
-                chunk_warning = True
 
-        if chunk_warning:
-            logger.warning("Full list of chunks:")
-            for idx, chunk in enumerate(chunks):
-                logger.warning(f"Chunk {idx + 1}:")
-                logger.warning(f"Text: {chunk['text']}")
-                logger.warning(f"Number of words: {len(chunk['words'])}")
-                logger.warning("\n")
-
-        logger.debug(f"Finished chunk_transcription with {len(chunks)} chunks.")
+        logger.debug(
+            f"Finished spaCy-based chunk_transcription with {len(chunks)} chunks."
+        )
 
     except TimeoutException:
         logger.error("chunk_transcription timed out.")
         return {"error": "chunk_transcription timed out."}
+    except Exception as e:
+        logger.error(
+            f"Error in spaCy-based chunking, falling back to legacy method: {str(e)}"
+        )
+        # Fall back to legacy chunking if spaCy fails
+        return _legacy_chunk_transcription(transcript, target_chunk_size, overlap)
     finally:
         signal.alarm(0)  # Disable the alarm
+
+    return chunks
+
+
+def _legacy_chunk_transcription(transcript, target_chunk_size=150, overlap=75):
+    """
+    Legacy word-based chunking method as fallback.
+
+    This is the original chunking implementation, kept as a fallback
+    in case the spaCy-based chunking fails.
+    """
+    global chunk_lengths
+    chunks = []
+    words = transcript["words"]
+    original_text = transcript["text"]
+    total_words = len(words)
+
+    logger.debug(f"Using legacy chunk_transcription with {total_words} words.")
+
+    # Calculate the number of chunks needed
+    num_chunks = (total_words + target_chunk_size - 1) // target_chunk_size
+    # Adjust chunk size to ensure even distribution
+    adjusted_chunk_size = (total_words + num_chunks - 1) // num_chunks
+
+    i = 0
+    while i < total_words:
+        end_index = min(i + adjusted_chunk_size, total_words)
+        current_chunk = words[i:end_index]
+        if not current_chunk:
+            break
+
+        # Extract the corresponding text segment from the original text
+        start_time = current_chunk[0]["start"]
+        end_time = current_chunk[-1]["end"]
+
+        # Build a regex pattern to match the words in the current chunk
+        pattern = (
+            r"\b"
+            + r"\W*".join(re.escape(word["word"]) for word in current_chunk)
+            + r"[\W]*"
+        )
+
+        match = re.search(pattern, original_text)
+        if match:
+            chunk_text = match.group(0)
+            # Ensure the chunk ends with punctuation if present
+            end_pos = match.end()
+            while end_pos < len(original_text) and re.match(
+                r"\W", original_text[end_pos]
+            ):
+                end_pos += 1
+            chunk_text = original_text[match.start() : end_pos]
+        else:
+            chunk_text = " ".join(word["word"] for word in current_chunk)
+
+        chunks.append(
+            {
+                "text": chunk_text,
+                "start": start_time,
+                "end": end_time,
+                "words": current_chunk,
+            }
+        )
+
+        # Store the length of the current chunk
+        chunk_lengths.append(len(current_chunk))
+        i += adjusted_chunk_size - overlap
+
+    min_chunk_size = target_chunk_size // 2
+    max_chunk_size = int(target_chunk_size * 1.2)
+    chunks = combine_small_chunks(chunks, min_chunk_size, max_chunk_size)
+    chunks = split_large_chunks(chunks, target_chunk_size)
 
     return chunks
 

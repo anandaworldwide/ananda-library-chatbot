@@ -44,6 +44,24 @@ See @crawler-TODO.md
 **Bug Fix**: Resolved issue where metrics were only recorded for documents processed through the "without overlap" code
 path by extracting metrics recording to a helper method called from all return paths.
 
+## Documentation Updates Completed
+
+Updated all relevant documentation files to reflect the completed spaCy chunking optimization work:
+
+- **`docs/chunking-strategy.md`**: Updated with dynamic sizing strategy, target word ranges, recent completions, and
+  comprehensive testing details
+- **`docs/backend-structure.md`**: Updated chunking description to reflect dynamic sizing and smart merging
+- **`docs/tech-stack.md`**: Updated spaCy description and corrected testing framework (pytest vs unittest)
+- **`docs/TESTS-README.md`**: Added diverse content testing section and updated chunking test descriptions
+
+**Key Changes**:
+
+- Removed incorrect references to speaker diarization (not implemented)
+- Added dynamic chunk sizing details (225-450 word target range)
+- Updated completion status for audio/video transcription integration
+- Added comprehensive testing documentation for diverse content validation
+- Corrected testing framework references (pytest for Python, not unittest)
+
 ## Shared Utilities Integration Status
 
 **Discovery**: During verification of the shared utilities refactor completion, three additional ingestion scripts were
