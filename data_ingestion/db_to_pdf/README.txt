@@ -12,7 +12,7 @@ The process is:
    ADD COLUMN permalink VARCHAR(255),
    ADD COLUMN author_name VARCHAR(255);
 
-2. from this directory, run python db-to-pdfs.py to generate the PDF file set. 
+2. from this directory, run python db_to_pdfs.py to generate the PDF file set. 
    The resulting files will be in docs-anandaLib/ subfolder.
 
 3. Move subfolder to /docs at top of tree

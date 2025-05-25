@@ -18,7 +18,7 @@ Command Line Arguments:
     --dry-run: Optional. Perform all steps except Pinecone index creation, deletion, and upsertion.
 
 Example Usage:
-    python ingest-db-text.py --site ananda --database wp_ananda --library-name "Ananda Library" --keep-data
+    python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --keep-data
 """
 
 import argparse
@@ -132,7 +132,7 @@ def load_environment(site: str):
 # --- Database Utilities ---
 def get_db_config(args):
     """Constructs the database connection configuration dictionary from environment variables."""
-    # Loads DB config from environment variables, similar to db-to-pdfs.py
+    # Loads DB config from environment variables, similar to db_to_pdfs.py
     # Ensure DB_CHARSET and DB_COLLATION are set in your .env file if needed
     return {
         "user": os.getenv("DB_USER"),
@@ -147,7 +147,7 @@ def get_db_config(args):
 
 def get_db_connection(db_config):
     """Establishes and returns a database connection with retry logic."""
-    # Establishes DB connection, similar to db-to-pdfs.py
+    # Establishes DB connection, similar to db_to_pdfs.py
     max_retries = 5
     attempt = 0
     while attempt < max_retries:

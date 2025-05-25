@@ -90,7 +90,7 @@ documentation claiming all scripts use spaCy chunking. Analysis of vector databa
 **Wrong**: SQL script using outdated token-based chunking:
 
 ```python
-# data_ingestion/sql_to_vector_db/ingest-db-text.py
+# data_ingestion/sql_to_vector_db/ingest_db_text.py
 text_splitter = TokenTextSplitter.from_tiktoken_encoder(
     encoding_name="cl100k_base", chunk_size=256, chunk_overlap=50
 )

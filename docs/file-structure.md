@@ -2,12 +2,12 @@
 
 ## Purpose
 
-This document maps out the directory and file organization of the `ananda-library-chatbot` project. It outlines
-the folder hierarchy, naming conventions, and the purpose of key directories and files. This helps in understanding
-the codebase structure and navigating it effectively.
+This document maps out the directory and file organization of the `ananda-library-chatbot` project. It outlines the
+folder hierarchy, naming conventions, and the purpose of key directories and files. This helps in understanding the
+codebase structure and navigating it effectively.
 
-This structure organizes the codebase by concern (e.g., API routes, UI components, utilities, tests, configuration)
-and by technology stack (e.g., separating Python code).
+This structure organizes the codebase by concern (e.g., API routes, UI components, utilities, tests, configuration) and
+by technology stack (e.g., separating Python code).
 
 ## Folder Hierarchy
 
@@ -38,7 +38,7 @@ ananda-library-chatbot/
 │
 ├── data_ingestion/               # Scripts and modules related to ingesting data from various sources.
 │   ├── audio/                   # Scripts for processing and ingesting audio content.
-│   ├── db-to-pdf/               # Scripts to convert database content to PDFs.
+│   ├── db_to_pdf/               # Scripts to convert database content to PDFs.
 │   ├── crawler/                 # Web crawler for ingesting website content.
 │   │   └── website_crawler.py  # Main script for crawling websites.
 │   ├── scripts/                 # Other data ingestion scripts (processing, queue management).
@@ -106,19 +106,17 @@ ananda-library-chatbot/
 - `vercel.json`: Configuration for deploying the project on Vercel.
 - `firebase.json`: Configuration for Firebase services.
 - `jest.setup.ts`, `jest.setup-server.ts`: Setup files for the Jest testing framework.
-- `SECURITY-TODO.md`, `TESTS-TODO.md`, `TESTS-README.md`, `TOKEN-SECURITY-README.md`: Documentation regarding
-  security, testing, and tokens.
+- `SECURITY-TODO.md`, `TESTS-TODO.md`, `TESTS-README.md`, `TOKEN-SECURITY-README.md`: Documentation regarding security,
+  testing, and tokens.
 
 ## Naming Conventions
 
-- **Folders:** Generally use `kebab-case` (e.g., `site-config`) or `camelCase` (e.g., `__tests__`,
-  `data_ingestion` in Python). Standard names like `components`, `utils`, `pages`, `app`, `public`,
-  `styles` are used.
+- **Folders:** Generally use `kebab-case` (e.g., `site-config`) or `camelCase` (e.g., `__tests__`, `data_ingestion` in
+  Python). Standard names like `components`, `utils`, `pages`, `app`, `public`, `styles` are used.
 - **Files:**
-  - TypeScript/JavaScript: `camelCase` (e.g., `pineconeClient.ts`) or `kebab-case` (e.g., `get-token.ts`)
-    seem to be used. React components use `PascalCase` (e.g., `CollectionSelector.jsx`). Test files
-    often use `.test.ts` suffix.
+  - TypeScript/JavaScript: `camelCase` (e.g., `pineconeClient.ts`) or `kebab-case` (e.g., `get-token.ts`) seem to be
+    used. React components use `PascalCase` (e.g., `CollectionSelector.jsx`). Test files often use `.test.ts` suffix.
   - Python: `snake_case` (e.g., `crawl_authors.py`, `pinecone_utils.py`).
-  - CSS: `kebab-case` (e.g., `loading-dots.module.css`) or `PascalCase` for CSS Modules tied to
-    components (e.g., `MarkdownStyles.module.css`).
+  - CSS: `kebab-case` (e.g., `loading-dots.module.css`) or `PascalCase` for CSS Modules tied to components (e.g.,
+    `MarkdownStyles.module.css`).
 - **Configuration Files:** Standard names are used (e.g., `package.json`, `tsconfig.json`, `next.config.js`).

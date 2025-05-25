@@ -47,7 +47,7 @@ path by extracting metrics recording to a helper method called from all return p
 **Discovery**: During verification of the shared utilities refactor completion, three additional ingestion scripts were
 found that are not fully using the new shared utilities:
 
-1. **`data_ingestion/db-to-pdf/db-to-pdfs.py`** - Partially updated (missing `remove_html_tags` import)
+1. **`data_ingestion/db_to_pdf/db_to_pdfs.py`** - Partially updated (missing `remove_html_tags` import)
 2. **`data_ingestion/pdf_to_vector_db.py`** - Partially updated (missing several major utilities)
 3. **`data_ingestion/crawler/website_crawler.py`** - Not updated (only using `generate_document_hash`)
 

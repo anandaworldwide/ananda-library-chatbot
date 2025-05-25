@@ -1,6 +1,6 @@
 # data ingestion specific
-/db-to-pdf/docs-*/
-/db-to-pdf/freejoehunt/
+/db_to_pdf/docs-*/
+/db_to_pdf/freejoehunt/
 /media/
 /audio_video/queue/
 /audio_video/queue-*/
