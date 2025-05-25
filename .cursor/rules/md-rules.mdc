@@ -8,3 +8,4 @@ alwaysApply: false
 
 - Follow markdownlint rules such as 120 character line limit
 - NO Multiple headings with the same content
+- MD029/ol-prefix: Ordered list item prefix 
