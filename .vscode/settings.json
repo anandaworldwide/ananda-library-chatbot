@@ -1,0 +1,49 @@
+{
+  // Python linting and formatting configuration
+  // Enable Ruff as the linter
+  "python.linting.enabled": true,
+  "python.linting.ruffEnabled": true,
+  "python.linting.ruffArgs": ["--config", "${workspaceFolder}/pyproject.toml"],
+
+  // Disable other linters to avoid conflicts
+  "python.linting.flake8Enabled": false,
+  "python.linting.pylintEnabled": false,
+  "python.linting.pycodestyleEnabled": false,
+  "python.linting.mypyEnabled": false,
+
+  // Enable auto-fixing on save
+  "python.formatting.provider": "none",
+  "python.linting.lintOnSave": true,
+
+  // Use Ruff for formatting as well
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // Markdown formatting configuration
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wordWrapColumn": 120,
+    "editor.rulers": [120],
+    "editor.codeActionsOnSave": {
+      "source.fixAll.markdownlint": "explicit"
+    }
+  },
+
+  // Show problems in Problems panel
+  "python.linting.ignorePatterns": [".vscode/*.py", "**/site-packages/**/*.py"],
+
+  // General editor settings
+  "editor.rulers": [88],
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true
+  }
+}

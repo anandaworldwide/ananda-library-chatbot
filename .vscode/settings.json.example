@@ -1,0 +1,13 @@
+{
+  // Example of optional local settings you can add to your personal .vscode/settings.json
+  // This file should NOT be committed to git - it's for reference only
+  
+  // Optional: Override Python interpreter if auto-detection doesn't work
+  // "python.defaultInterpreterPath": "/path/to/your/python/interpreter",
+  
+  // Examples for different setups:
+  // Conda: "python.defaultInterpreterPath": "/Users/yourname/miniconda3/envs/ananda-library-chatbot/bin/python"
+  // Pyenv: "python.defaultInterpreterPath": "/Users/yourname/.pyenv/versions/3.11.9/envs/ananda-library-chatbot/bin/python"
+  // Virtualenv: "python.defaultInterpreterPath": "./venv/bin/python"
+  // System Python: "python.defaultInterpreterPath": "/usr/bin/python3"
+} 
