@@ -46,15 +46,16 @@ Note: Patterns are treated as regex. Ensure proper escaping.
 """
 
 import argparse
-import os
-import sys
 import json
-import re
-from pinecone import Pinecone
-from tqdm import tqdm
 import logging
+import os
+import re
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
+
+from pinecone import Pinecone
+from tqdm import tqdm
 
 # --- Correct Python Path Setup ---
 # Get the directory containing this script
@@ -65,38 +66,45 @@ project_python_root = os.path.dirname(os.path.dirname(script_dir))
 sys.path.append(project_python_root)
 
 # Now import from the 'util' package located in the 'python' directory
-from util.env_utils import load_env
+from pyutil.env_utils import load_env
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 
 def get_pinecone_client() -> Pinecone:
     """Initialize and return Pinecone client using environment variables."""
-    api_key = os.getenv('PINECONE_API_KEY')
+    api_key = os.getenv("PINECONE_API_KEY")
     if not api_key:
         raise ValueError("PINECONE_API_KEY environment variable not set.")
     return Pinecone(api_key=api_key)
 
+
 def get_index(pc: Pinecone):
     """Get Pinecone index instance based on environment variable."""
-    index_name = os.getenv('PINECONE_INGEST_INDEX_NAME')
+    index_name = os.getenv("PINECONE_INGEST_INDEX_NAME")
     if not index_name:
         raise ValueError("PINECONE_INGEST_INDEX_NAME environment variable not set.")
     logging.info(f"Connecting to Pinecone index: {index_name}")
     return pc.Index(index_name)
 
+
 def load_config(site_id: str) -> dict:
     """Load configuration from a JSON file based on site_id."""
-    config_dir = Path(__file__).parent / 'crawler_config'
+    config_dir = Path(__file__).parent / "crawler_config"
     config_file = config_dir / f"{site_id}-config.json"
-    config_path = str(config_file) # Convert Path to string for file operations
+    config_path = str(config_file)  # Convert Path to string for file operations
 
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             config = json.load(f)
         logging.info(f"Loaded configuration from {config_path}.")
-        if 'domain' not in config or 'skip_patterns' not in config:
-            raise ValueError(f"Config file {config_path} must contain 'domain' and 'skip_patterns' keys.")
+        if "domain" not in config or "skip_patterns" not in config:
+            raise ValueError(
+                f"Config file {config_path} must contain 'domain' and 'skip_patterns' keys."
+            )
         return config
     except FileNotFoundError:
         logging.error(f"Configuration file not found: {config_path}")
@@ -107,6 +115,7 @@ def load_config(site_id: str) -> dict:
     except ValueError as e:
         logging.error(e)
         raise
+
 
 def compile_skip_patterns(patterns: list[str]) -> list[re.Pattern]:
     """Compile a list of string patterns into regex objects."""
@@ -122,18 +131,19 @@ def compile_skip_patterns(patterns: list[str]) -> list[re.Pattern]:
         logging.error(f"Invalid regex pattern found in configuration: {e}")
         raise
 
+
 def delete_vectors_by_skip_pattern(
     index,
     id_prefix: str,
     skip_patterns: list[re.Pattern],
     dry_run: bool = True,
-    skip_vectors: int = 0 # Added parameter to skip initial vectors
+    skip_vectors: int = 0,  # Added parameter to skip initial vectors
 ):
     """
     Iterate through vectors matching a prefix, check source URL against skip patterns,
     and delete matches. Skips the first `skip_vectors` vectors found.
     """
-    batch_size = 50 # Reduced from 100 to prevent 414 Request-URI Too Large error
+    batch_size = 50  # Reduced from 100 to prevent 414 Request-URI Too Large error
 
     if not skip_patterns:
         logging.warning("No skip patterns provided. Exiting.")
@@ -148,9 +158,9 @@ def delete_vectors_by_skip_pattern(
 
     total_processed = 0
     total_to_delete = 0
-    skipped_count = 0 # Counter for skipped vectors
+    skipped_count = 0  # Counter for skipped vectors
     ids_to_fetch_accumulator = []
-    all_ids_to_delete = [] # Only used for summary in dry run
+    all_ids_to_delete = []  # Only used for summary in dry run
 
     try:
         # Pinecone's list() returns a generator, efficiently handling large listings
@@ -170,18 +180,24 @@ def delete_vectors_by_skip_pattern(
                 if current_list_len <= remaining_to_skip:
                     # Skip the entire list
                     skipped_count += current_list_len
-                    pbar.update(current_list_len) # Update pbar for skipped vectors
+                    pbar.update(current_list_len)  # Update pbar for skipped vectors
                     pbar.set_postfix_str(f"Skipping {skipped_count}/{skip_vectors}")
-                    continue # Move to the next list from the generator
+                    continue  # Move to the next list from the generator
                 else:
                     # Skip part of this list and process the rest
                     num_to_skip_from_this_list = remaining_to_skip
                     skipped_count += num_to_skip_from_this_list
-                    pbar.update(num_to_skip_from_this_list) # Update pbar for skipped vectors
+                    pbar.update(
+                        num_to_skip_from_this_list
+                    )  # Update pbar for skipped vectors
                     # Get the portion of the list *after* skipping
-                    ids_to_process_from_this_list = vector_id_list[num_to_skip_from_this_list:]
-                    logging.info(f"Finished skipping {skipped_count} vectors. Starting processing.")
-                    pbar.set_postfix_str("Processing") # Clear skip status
+                    ids_to_process_from_this_list = vector_id_list[
+                        num_to_skip_from_this_list:
+                    ]
+                    logging.info(
+                        f"Finished skipping {skipped_count} vectors. Starting processing."
+                    )
+                    pbar.set_postfix_str("Processing")  # Clear skip status
             else:
                 # Skipping is done, process the entire list
                 ids_to_process_from_this_list = vector_id_list
@@ -201,19 +217,24 @@ def delete_vectors_by_skip_pattern(
                 try:
                     fetched_vectors = index.fetch(ids=current_batch_ids).vectors
                 except Exception as fetch_error:
-                     logging.error(f"Error fetching batch (IDs: {current_batch_ids[:5]}...): {fetch_error}", exc_info=True)
-                     # Option: Decide whether to continue to next batch or re-raise/stop
-                     # For now, log and continue processing other batches
-                     pbar.update(len(current_batch_ids)) # Still update progress bar for attempted batch
-                     continue # Skip processing for this failed batch
+                    logging.error(
+                        f"Error fetching batch (IDs: {current_batch_ids[:5]}...): {fetch_error}",
+                        exc_info=True,
+                    )
+                    # Option: Decide whether to continue to next batch or re-raise/stop
+                    # For now, log and continue processing other batches
+                    pbar.update(
+                        len(current_batch_ids)
+                    )  # Still update progress bar for attempted batch
+                    continue  # Skip processing for this failed batch
 
                 ids_to_delete_batch = []
 
                 for vec_id, vector_data in fetched_vectors.items():
                     total_processed += 1
 
-                    metadata = vector_data.get('metadata', {})
-                    source_url = metadata.get('source')
+                    metadata = vector_data.get("metadata", {})
+                    source_url = metadata.get("source")
 
                     if source_url:
                         try:
@@ -221,14 +242,18 @@ def delete_vectors_by_skip_pattern(
                             # Construct path + query string for matching
                             path_and_query = parsed_url.path
                             if parsed_url.query:
-                                path_and_query += '?' + parsed_url.query
+                                path_and_query += "?" + parsed_url.query
                             # Ensure path starts with / if it exists but doesn't already
-                            if path_and_query and not path_and_query.startswith('/'):
-                                path_and_query = '/' + path_and_query
+                            if path_and_query and not path_and_query.startswith("/"):
+                                path_and_query = "/" + path_and_query
                             elif not path_and_query:
-                                path_and_query = '/' # Handle cases like just 'domain.com'
+                                path_and_query = (
+                                    "/"  # Handle cases like just 'domain.com'
+                                )
 
-                            logging.debug(f"Checking patterns against path: {path_and_query}") # Debug log
+                            logging.debug(
+                                f"Checking patterns against path: {path_and_query}"
+                            )  # Debug log
 
                             for pattern in skip_patterns:
                                 # Compare against path and query, not the full URL
@@ -237,19 +262,29 @@ def delete_vectors_by_skip_pattern(
                                     total_to_delete += 1
                                     if dry_run:
                                         # Log more verbosely in dry run to see what *would* be deleted
-                                        logging.info(f"[Dry Run] Match found: ID={vec_id}, URL={source_url}, Path={path_and_query}, Pattern='{pattern.pattern}'")
-                                        all_ids_to_delete.append(vec_id) # Keep track for dry run summary
+                                        logging.info(
+                                            f"[Dry Run] Match found: ID={vec_id}, URL={source_url}, Path={path_and_query}, Pattern='{pattern.pattern}'"
+                                        )
+                                        all_ids_to_delete.append(
+                                            vec_id
+                                        )  # Keep track for dry run summary
                                     else:
-                                         # Log less verbosely during actual deletion
-                                         logging.debug(f"Match found for deletion: ID={vec_id}, Path={path_and_query}, Pattern='{pattern.pattern}'")
-                                    break # Stop checking patterns for this URL once matched
+                                        # Log less verbosely during actual deletion
+                                        logging.debug(
+                                            f"Match found for deletion: ID={vec_id}, Path={path_and_query}, Pattern='{pattern.pattern}'"
+                                        )
+                                    break  # Stop checking patterns for this URL once matched
                         except ValueError as url_error:
-                             logging.warning(f"Could not parse source_url '{source_url}' for vector ID {vec_id}: {url_error}")
+                            logging.warning(
+                                f"Could not parse source_url '{source_url}' for vector ID {vec_id}: {url_error}"
+                            )
 
                 # Perform deletion if not a dry run and there are IDs to delete
                 if not dry_run and ids_to_delete_batch:
                     try:
-                        logging.info(f"Deleting batch of {len(ids_to_delete_batch)} vectors...")
+                        logging.info(
+                            f"Deleting batch of {len(ids_to_delete_batch)} vectors..."
+                        )
                         index.delete(ids=ids_to_delete_batch)
                         logging.debug(f"Deleted IDs: {ids_to_delete_batch}")
                     except Exception as e:
@@ -262,36 +297,41 @@ def delete_vectors_by_skip_pattern(
 
         # Process the final partial batch remaining in the accumulator
         if ids_to_fetch_accumulator:
-            current_batch_ids = ids_to_fetch_accumulator # Process the remainder
+            current_batch_ids = ids_to_fetch_accumulator  # Process the remainder
             try:
                 fetched_vectors = index.fetch(ids=current_batch_ids).vectors
             except Exception as fetch_error:
-                 logging.error(f"Error fetching final batch (IDs: {current_batch_ids[:5]}...): {fetch_error}", exc_info=True)
-                 # Don't try to process if fetch failed
-                 fetched_vectors = {} # Ensure loop below doesn't run
+                logging.error(
+                    f"Error fetching final batch (IDs: {current_batch_ids[:5]}...): {fetch_error}",
+                    exc_info=True,
+                )
+                # Don't try to process if fetch failed
+                fetched_vectors = {}  # Ensure loop below doesn't run
 
             ids_to_delete_batch = []
 
             for vec_id, vector_data in fetched_vectors.items():
-                 total_processed += 1 # Count actual processing attempts
+                total_processed += 1  # Count actual processing attempts
 
-                 metadata = vector_data.get('metadata', {})
-                 source_url = metadata.get('source')
+                metadata = vector_data.get("metadata", {})
+                source_url = metadata.get("source")
 
-                 if source_url:
+                if source_url:
                     try:
                         parsed_url = urlparse(source_url)
                         # Construct path + query string for matching
                         path_and_query = parsed_url.path
                         if parsed_url.query:
-                            path_and_query += '?' + parsed_url.query
+                            path_and_query += "?" + parsed_url.query
                         # Ensure path starts with / if it exists but doesn't already
-                        if path_and_query and not path_and_query.startswith('/'):
-                            path_and_query = '/' + path_and_query
+                        if path_and_query and not path_and_query.startswith("/"):
+                            path_and_query = "/" + path_and_query
                         elif not path_and_query:
-                            path_and_query = '/' # Handle cases like just 'domain.com'
+                            path_and_query = "/"  # Handle cases like just 'domain.com'
 
-                        logging.debug(f"Checking patterns against path: {path_and_query}") # Debug log
+                        logging.debug(
+                            f"Checking patterns against path: {path_and_query}"
+                        )  # Debug log
 
                         for pattern in skip_patterns:
                             # Compare against path and query, not the full URL
@@ -299,22 +339,30 @@ def delete_vectors_by_skip_pattern(
                                 ids_to_delete_batch.append(vec_id)
                                 total_to_delete += 1
                                 if dry_run:
-                                    logging.info(f"[Dry Run] Match found: ID={vec_id}, URL={source_url}, Path={path_and_query}, Pattern='{pattern.pattern}'")
+                                    logging.info(
+                                        f"[Dry Run] Match found: ID={vec_id}, URL={source_url}, Path={path_and_query}, Pattern='{pattern.pattern}'"
+                                    )
                                     all_ids_to_delete.append(vec_id)
                                 else:
-                                    logging.debug(f"Match found for deletion: ID={vec_id}, Path={path_and_query}, Pattern='{pattern.pattern}'")
+                                    logging.debug(
+                                        f"Match found for deletion: ID={vec_id}, Path={path_and_query}, Pattern='{pattern.pattern}'"
+                                    )
                                 break
                     except ValueError as url_error:
-                         logging.warning(f"Could not parse source_url '{source_url}' for vector ID {vec_id}: {url_error}")
+                        logging.warning(
+                            f"Could not parse source_url '{source_url}' for vector ID {vec_id}: {url_error}"
+                        )
 
             # Perform final deletion if not a dry run and there are IDs to delete
             if not dry_run and ids_to_delete_batch:
-                 try:
-                     logging.info(f"Deleting final batch of {len(ids_to_delete_batch)} vectors...")
-                     index.delete(ids=ids_to_delete_batch)
-                     logging.debug(f"Deleted IDs: {ids_to_delete_batch}")
-                 except Exception as e:
-                     logging.error(f"Error deleting final batch: {e}")
+                try:
+                    logging.info(
+                        f"Deleting final batch of {len(ids_to_delete_batch)} vectors..."
+                    )
+                    index.delete(ids=ids_to_delete_batch)
+                    logging.debug(f"Deleted IDs: {ids_to_delete_batch}")
+                except Exception as e:
+                    logging.error(f"Error deleting final batch: {e}")
 
             # Update progress bar for the final attempted batch
             pbar.update(len(current_batch_ids))
@@ -323,28 +371,49 @@ def delete_vectors_by_skip_pattern(
 
     except Exception as e:
         # Catch broader errors happening outside the fetch/delete loops
-        logging.error(f"An unexpected error occurred during vector processing: {e}", exc_info=True)
+        logging.error(
+            f"An unexpected error occurred during vector processing: {e}", exc_info=True
+        )
     finally:
-        logging.info("="*30 + " Summary " + "="*30)
+        logging.info("=" * 30 + " Summary " + "=" * 30)
         if skip_vectors > 0:
-             logging.info(f"Attempted to skip {skip_vectors} vectors. Actually skipped: {skipped_count}")
+            logging.info(
+                f"Attempted to skip {skip_vectors} vectors. Actually skipped: {skipped_count}"
+            )
         logging.info(f"Total vectors processed (after skipping): {total_processed}")
         if dry_run:
-            logging.info(f"Total vectors matched for deletion (Dry Run): {total_to_delete}")
+            logging.info(
+                f"Total vectors matched for deletion (Dry Run): {total_to_delete}"
+            )
             # Optionally print all IDs found in dry run if needed for verification
             # if all_ids_to_delete:
             #    logging.info(f"IDs matched in dry run: {all_ids_to_delete}")
         else:
             logging.info(f"Total vectors deleted: {total_to_delete}")
-        logging.info("="*69)
+        logging.info("=" * 69)
 
 
 def main():
     """Main execution function."""
-    parser = argparse.ArgumentParser(description='Delete Pinecone vectors based on URL skip patterns found in the auto-detected site config file.')
-    parser.add_argument('--site', required=True, help='Site ID (e.g., ananda). Determines .env file and crawler_config/[site]-config.json to load.')
-    parser.add_argument('--dry-run', action='store_true', help='Perform a dry run without deleting vectors')
-    parser.add_argument('--skip-vectors', type=int, default=0, help='Number of vectors to skip before starting processing.') # Added argument
+    parser = argparse.ArgumentParser(
+        description="Delete Pinecone vectors based on URL skip patterns found in the auto-detected site config file."
+    )
+    parser.add_argument(
+        "--site",
+        required=True,
+        help="Site ID (e.g., ananda). Determines .env file and crawler_config/[site]-config.json to load.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Perform a dry run without deleting vectors",
+    )
+    parser.add_argument(
+        "--skip-vectors",
+        type=int,
+        default=0,
+        help="Number of vectors to skip before starting processing.",
+    )  # Added argument
 
     args = parser.parse_args()
 
@@ -358,25 +427,31 @@ def main():
 
         # Load config automatically based on site_id
         config = load_config(args.site)
-        library = config.get('domain')
-        raw_skip_patterns = config.get('skip_patterns', [])
+        library = config.get("domain")
+        raw_skip_patterns = config.get("skip_patterns", [])
 
         if not library:
             # Use config_path calculated inside load_config for error message
-            config_path = Path(__file__).parent / 'crawler_config' / f"{args.site}-config.json"
-            raise ValueError(f"'domain' key is missing or empty in config file: {config_path}")
+            config_path = (
+                Path(__file__).parent / "crawler_config" / f"{args.site}-config.json"
+            )
+            raise ValueError(
+                f"'domain' key is missing or empty in config file: {config_path}"
+            )
 
         # Compile skip patterns
         skip_patterns = compile_skip_patterns(raw_skip_patterns)
 
         # Check skip patterns validity before proceeding
         if not skip_patterns and not args.dry_run:
-             logging.warning("No valid skip patterns loaded. No deletions will occur.")
-             return
+            logging.warning("No valid skip patterns loaded. No deletions will occur.")
+            return
         elif not skip_patterns and args.dry_run:
-             logging.warning("No skip patterns loaded. Dry run will not find any matches.")
-             # Allow dry run to proceed even without patterns, maybe to test skipping
-             # return # Or uncomment this to exit if no patterns exist
+            logging.warning(
+                "No skip patterns loaded. Dry run will not find any matches."
+            )
+            # Allow dry run to proceed even without patterns, maybe to test skipping
+            # return # Or uncomment this to exit if no patterns exist
 
         pc = get_pinecone_client()
         index = get_index(pc)
@@ -390,7 +465,7 @@ def main():
             id_prefix=id_prefix,
             skip_patterns=skip_patterns,
             dry_run=args.dry_run,
-            skip_vectors=args.skip_vectors # Pass the value here
+            skip_vectors=args.skip_vectors,  # Pass the value here
         )
 
         logging.info("Script finished.")
@@ -405,5 +480,6 @@ def main():
         logging.error(f"An unexpected error occurred: {e}", exc_info=True)
         sys.exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

@@ -17,16 +17,17 @@ Key Features:
 """
 
 import json
+import logging
 import os
 import random
-import uuid
-import logging
-from yt_dlp import YoutubeDL
-from yt_dlp.utils import DownloadError
-from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, COMM
 import re
 import time
+import uuid
+
+from mutagen.id3 import COMM, ID3, TALB, TIT2, TPE1
+from mutagen.mp3 import MP3
+from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ YOUTUBE_DATA_MAP_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "data_ingestion",
     "media",
-    "youtube_data_map.json"
+    "youtube_data_map.json",
 )
 
 
@@ -46,15 +47,16 @@ def extract_youtube_id(url: str) -> str:
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", url)
     return match.group(1) if match else None
 
+
 def download_youtube_audio(url: str, output_path: str = "."):
     """
     Downloads and processes YouTube audio with retry logic.
-    
+
     Implements exponential backoff with random jitter for 403 errors:
     - First retry: 30-45 seconds
     - Second retry: 60-75 seconds
     - Third retry: 120-135 seconds
-    
+
     Returns metadata dict on success, None on failure
     """
     youtube_id = extract_youtube_id(url)
@@ -68,11 +70,13 @@ def download_youtube_audio(url: str, output_path: str = "."):
     # Configure yt-dlp for best quality audio extraction
     ydl_opts = {
         "format": "bestaudio/best",
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",  # Balanced quality vs size
-        }],
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",  # Balanced quality vs size
+            }
+        ],
         "outtmpl": os.path.join(output_path, f"{random_filename}.%(ext)s"),
         "noplaylist": True,
         "extract_flat": False,
@@ -88,7 +92,9 @@ def download_youtube_audio(url: str, output_path: str = "."):
 
                 # Verify file was actually created
                 if not os.path.exists(audio_path):
-                    raise FileNotFoundError(f"Could not find the downloaded MP3 file: {audio_path}")
+                    raise FileNotFoundError(
+                        f"Could not find the downloaded MP3 file: {audio_path}"
+                    )
 
                 # Track file size for quota management
                 file_size = os.path.getsize(audio_path)
@@ -120,7 +126,7 @@ def download_youtube_audio(url: str, output_path: str = "."):
                     "error": "private_video",
                     "message": "This video is private and cannot be accessed",
                     "youtube_id": youtube_id,
-                    "url": url
+                    "url": url,
                 }
             elif "HTTP Error 403: Forbidden" in error_msg:
                 # Rate limit hit - implement backoff unless final attempt
@@ -128,10 +134,14 @@ def download_youtube_audio(url: str, output_path: str = "."):
                     sleep_time = 30 * (2**attempt)  # 30, 60, 120 seconds base
                     jitter = random.uniform(0, 15)  # Prevent thundering herd
                     total_sleep_time = sleep_time + jitter
-                    logger.warning(f"403 Forbidden error. Retrying in {total_sleep_time:.2f} seconds...")
+                    logger.warning(
+                        f"403 Forbidden error. Retrying in {total_sleep_time:.2f} seconds..."
+                    )
                     time.sleep(total_sleep_time)
                 else:
-                    logger.error("Max retries reached. Unable to download due to 403 Forbidden error.")
+                    logger.error(
+                        "Max retries reached. Unable to download due to 403 Forbidden error."
+                    )
                     return None
             else:
                 logger.error(f"YouTube download error: {error_msg}")
@@ -142,10 +152,11 @@ def download_youtube_audio(url: str, output_path: str = "."):
 
     return None  # If we've exhausted all retries
 
+
 def add_metadata_to_mp3(mp3_path: str, metadata: dict, url: str):
     """
     Adds ID3 tags to MP3 file for metadata preservation.
-    
+
     Tags added:
     - TIT2: Title
     - TPE1: Artist/Author
@@ -168,34 +179,38 @@ def add_metadata_to_mp3(mp3_path: str, metadata: dict, url: str):
 
         audio.save()
         logger.info("Metadata added successfully to MP3.")
-        
+
     except Exception as e:
         logger.error(f"An error occurred while adding metadata to MP3: {e}")
 
+
 def load_youtube_data_map():
     if os.path.exists(YOUTUBE_DATA_MAP_PATH):
-        with open(YOUTUBE_DATA_MAP_PATH, "r") as f:
+        with open(YOUTUBE_DATA_MAP_PATH) as f:
             return json.load(f)
     return {}
+
 
 def save_youtube_data_map(youtube_data_map):
     with open(YOUTUBE_DATA_MAP_PATH, "w") as f:
         json.dump(youtube_data_map, f, ensure_ascii=False, indent=2)
 
+
 def get_playlist_videos(playlist_url: str, output_path: str = "."):
     """
     Extracts video information from YouTube playlists.
-    
+
     Uses exponential backoff with random jitter for retries:
     - Base delay: 5 seconds
     - Each retry doubles the delay
     - Adds 0-1 second random jitter
-    
+
     Returns list of dicts containing video URLs and IDs
     """
+
     # Custom retry delay function with jitter
     def exponential_sleep(attempt):
-        return 5 * (2 ** attempt) + random.uniform(0, 1)
+        return 5 * (2**attempt) + random.uniform(0, 1)
 
     # Configure yt-dlp for metadata-only extraction
     ydl_opts = {

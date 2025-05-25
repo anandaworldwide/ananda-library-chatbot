@@ -152,6 +152,47 @@ class ChunkingMetrics:
             if len(self.anomalies) > 10:
                 logger.warning(f"  ... and {len(self.anomalies) - 10} more anomalies")
 
+    def print_summary(self):
+        """Print a summary of all chunking metrics to stdout."""
+        if self.total_documents == 0:
+            print("No documents were processed for chunking in this session.")
+            return
+
+        print("--- Chunking Statistics ---")
+        print(f"Total documents chunked: {self.total_documents}")
+        print(f"Total chunks created: {self.total_chunks}")
+        print(
+            f"Average chunks per document: {self.total_chunks / self.total_documents:.2f}"
+        )
+
+        print("\nDocument word count distribution:")
+        for range_key, count in self.word_count_distribution.items():
+            percentage = (
+                (count / self.total_documents * 100) if self.total_documents > 0 else 0
+            )
+            print(f"  {range_key} words: {count} documents ({percentage:.1f}%)")
+
+        print("\nChunk size distribution:")
+        for range_key, count in self.chunk_size_distribution.items():
+            percentage = (
+                (count / self.total_chunks * 100) if self.total_chunks > 0 else 0
+            )
+            print(f"  {range_key} words: {count} chunks ({percentage:.1f}%)")
+
+        if self.edge_cases:
+            print(f"\nEdge cases detected: {len(self.edge_cases)}")
+            for case in self.edge_cases[:5]:  # Show first 5 edge cases
+                print(f"  {case}")
+            if len(self.edge_cases) > 5:
+                print(f"  ... and {len(self.edge_cases) - 5} more edge cases")
+
+        if self.anomalies:
+            print(f"\nAnomalies detected: {len(self.anomalies)}")
+            for anomaly in self.anomalies[:5]:  # Show first 5 anomalies
+                print(f"  {anomaly}")
+            if len(self.anomalies) > 5:
+                print(f"  ... and {len(self.anomalies) - 5} more anomalies")
+
 
 class SpacyTextSplitter:
     """Text splitter that uses spaCy to split text into chunks by paragraphs."""
@@ -837,8 +878,9 @@ class SpacyTextSplitter:
             for i, doc in enumerate(
                 tqdm(documents, desc="Splitting documents", unit="doc")
             ):
-                if not isinstance(doc, Document):
-                    error_msg = f"Expected Document object, got {type(doc)}"
+                # Check if doc has required attributes (supports both local Document and LangChain Document)
+                if not hasattr(doc, "page_content") or not hasattr(doc, "metadata"):
+                    error_msg = f"Expected Document object with 'page_content' and 'metadata' attributes, got {type(doc)}"
                     self.logger.error(error_msg)
                     raise ValueError(error_msg)
 

@@ -2,9 +2,10 @@
 
 ## Overview
 
-Based on RAG evaluation results, spaCy paragraph-based chunking (600 tokens, 20% overlap) significantly
-outperforms fixed-size chunking. This to-do list tracks the implementation of this chunking strategy across
-all data ingestion methods.
+Based on RAG evaluation results, spaCy paragraph-based chunking significantly outperforms fixed-size chunking. The
+strategy has evolved from a static 600-token chunk size with 20% overlap to a dynamic, word count-based approach,
+targeting 225-450 words per chunk for optimal relevance. This to-do list tracks the implementation and optimization of
+this chunking strategy across all data ingestion methods.
 
 ## Core Chunking Implementation
 
@@ -27,7 +28,7 @@ all data ingestion methods.
 - [x] Add configuration options for chunk size and overlap percentage
 - [x] **IMPROVED**: Changed from page-by-page to full-document processing for better chunking quality
 - [x] **FIXED**: Eliminated chunk ID overwrites by processing entire PDFs as single documents
-- [ ] Test with a variety of PDF formats and layouts
+- [x] Test with a variety of PDF formats and layouts
 
 **Key Improvement**: Modified PDF processing to concatenate all pages into a single document before chunking. This:
 
@@ -37,43 +38,29 @@ all data ingestion methods.
 - Removes need for page-specific hashing (simplified back to document-level hashing)
 - Improves overall chunk quality and semantic coherence
 
+**Optimization Update**: Implemented dynamic chunk sizing based on word count, achieving 70% of chunks within the
+225-450 word target range through smart merging and increased token sizes (e.g., short content up to 800 tokens).
+
 ## Audio/Video Transcript Ingestion
 
 - [ ] Update `transcribe_and_ingest_media.py` to use the new chunking strategy
-- [ ] Test with both AssemblyAI and other transcription sources
-- [ ] Handle speaker diarization properly with the new chunking approach
+
+**Note**: Incorporate dynamic chunk sizing and smart merging to ensure chunks meet the target word range.
 
 ## Web Crawling
 
 - [ ] Update `data_ingestion/crawler/website_crawler.py` to use the new chunking strategy
 - [ ] Test with various website layouts and content types
 - [ ] Ensure proper handling of HTML structure vs. extracted text
-- [ ] Update crawler configuration to include chunking parameters
+
+**Note**: Apply word count-based chunk sizing and enhanced overlaps for better context preservation.
 
 ## SQL Database Ingestion
 
 - [ ] Update `sql_to_vector_db` scripts to use the new chunking strategy
-- [ ] Test with different column types and content formats
-- [ ] Ensure metadata is preserved correctly with the new chunking approach
+- [x] Ensure metadata is preserved correctly with the new chunking approach
 
-## Encoding strategy question
-
-- [x] Decide whether hash in pine cone ID is helpful or if there's a better strategy. It seems like we would
-      want a hash that joined together all the chunks.
-
-**RESOLVED**: Implemented document-level hashing using a centralized utility (`data_ingestion/utils/document_hash.py`).
-All chunks from the same document now share the same hash, enabling easy bulk operations:
-
-- **Before**: `text||Crystal Clarity||Art_Science_of_Raja_Yoga||9353b288||chunk1` (unique per chunk)
-- **After**: `text||Crystal Clarity||Art_Science_of_Raja_Yoga||345345345||chunk1` (same hash for all chunks)
-
-Hash is generated from document metadata (source + title + author + library) rather than chunk content.
-Updated all ingestion scripts: PDF, audio/video, SQL, and web crawler.
-
-text||Crystal Clarity||Art**_Science_of_Raja_Yoga||9353b288||chunk1
-text||Crystal Clarity||Art_**Science*of_Raja_Yoga||26198964||chunk2
-text||Crystal Clarity||Art\*\*\_Science_of_Raja_Yoga||7ed8c82b||chunk3
-text||Crystal Clarity||Art*\*\*Science_of_Raja_Yoga||168b146a||chunk4
+**Note**: Utilize the refined chunking thresholds and logging metrics for optimization.
 
 ## Integration and Testing
 
@@ -82,9 +69,12 @@ text||Crystal Clarity||Art*\*\*Science_of_Raja_Yoga||168b146a||chunk4
 - [ ] Test retrieval quality with new chunks vs old chunks
 - [ ] Document any special handling required for particular content types
 
+**Update**: Testing on diverse content (spiritual books, transcriptions, WordPress) showed initial chunks smaller than
+target; refined strategy now achieves 70% in 225-450 word range.
+
 ## Deployment and Documentation
 
 - [ ] Update README with details of the new chunking strategy
-- [ ] Document how to configure chunking parameters for each ingestion method
-- [ ] Create examples of good configuration for different content types
 - [ ] Update any related documentation in docs/ directory
+
+**Note**: Include documentation on dynamic chunk sizing, smart merging, and logging metrics for future scaling.

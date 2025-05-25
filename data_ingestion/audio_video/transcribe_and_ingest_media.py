@@ -1,14 +1,4 @@
 #!/usr/bin/env python
-import sys
-import os
-
-# Get the absolute path of the current script
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Get the parent directory of data_ingestion
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-# Add parent directory to Python path
-sys.path.insert(0, parent_dir)
-
 """
 Media Processing and Ingestion Pipeline
 
@@ -30,39 +20,57 @@ Key Features:
 """
 
 import argparse
-import logging
-from openai import OpenAI
-from tqdm import tqdm
-from multiprocessing import Pool, cpu_count, Queue, Event
 import atexit
+import logging
+import os
 import signal
+import sys
 import time
+from multiprocessing import Event, Pool, Queue, cpu_count
 from queue import Empty
+
+from openai import OpenAI
 from tenacity import RetryError
-from data_ingestion.audio_video.media_utils import get_media_metadata, print_chunk_statistics
-from pyutil.logging_utils import configure_logging
+from tqdm import tqdm
+
+# Get the absolute path of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the parent directory of data_ingestion
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+# Add parent directory to Python path
+sys.path.insert(0, parent_dir)
+
+
 from data_ingestion.audio_video.IngestQueue import IngestQueue
-from data_ingestion.audio_video.transcription_utils import (
-    init_db,
-    transcribe_media,
-    chunk_transcription,
-    get_saved_transcription,
-    load_youtube_data_map,
-    save_youtube_transcription,
-    RateLimitError,
-    UnsupportedAudioFormatError,
-    save_transcription
+from data_ingestion.audio_video.media_utils import (
+    get_media_metadata,
+    print_chunk_statistics,
 )
 from data_ingestion.audio_video.pinecone_utils import (
-    load_pinecone,
-    create_embeddings,
-    store_in_pinecone,
     clear_library_vectors,
+    create_embeddings,
+    load_pinecone,
+    store_in_pinecone,
 )
-from data_ingestion.audio_video.s3_utils import upload_to_s3, S3UploadError
-from data_ingestion.audio_video.youtube_utils import download_youtube_audio, extract_youtube_id
 from data_ingestion.audio_video.processing_time_estimates import save_estimate
+from data_ingestion.audio_video.s3_utils import S3UploadError, upload_to_s3
+from data_ingestion.audio_video.transcription_utils import (
+    RateLimitError,
+    UnsupportedAudioFormatError,
+    chunk_transcription,
+    get_saved_transcription,
+    init_db,
+    load_youtube_data_map,
+    save_transcription,
+    save_youtube_transcription,
+    transcribe_media,
+)
+from data_ingestion.audio_video.youtube_utils import (
+    download_youtube_audio,
+    extract_youtube_id,
+)
 from pyutil.env_utils import load_env
+from pyutil.logging_utils import configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +88,14 @@ def reset_terminal():
 atexit.register(reset_terminal)
 
 
-def verify_and_update_transcription_metadata(transcription_data, file_path, author, library_name,
-                                             is_youtube_video, youtube_data=None):
+def verify_and_update_transcription_metadata(
+    transcription_data,
+    file_path,
+    author,
+    library_name,
+    is_youtube_video,
+    youtube_data=None,
+):
     """
     Verifies and updates metadata in transcription JSON file.
     Returns updated transcription data.
@@ -89,22 +103,24 @@ def verify_and_update_transcription_metadata(transcription_data, file_path, auth
     # Handle legacy format (just text string)
     if not isinstance(transcription_data, dict):
         transcription_data = {
-            'text': transcription_data,
-            'words': [],  # No word timestamps in legacy format
+            "text": transcription_data,
+            "words": [],  # No word timestamps in legacy format
         }
-    
+
     # Get current timestamp
     current_time = time.strftime("%Y-%m-%d %H:%M:%S")
-    
+
     # Update core fields
-    transcription_data.update({
-        'file_path': file_path,
-        'author': author,
-        'library': library_name,
-        'type': "youtube" if is_youtube_video else "audio_file",
-        'updated_at': current_time,
-        'media_type': 'video' if is_youtube_video else 'audio'
-    })
+    transcription_data.update(
+        {
+            "file_path": file_path,
+            "author": author,
+            "library": library_name,
+            "type": "youtube" if is_youtube_video else "audio_file",
+            "updated_at": current_time,
+            "media_type": "video" if is_youtube_video else "audio",
+        }
+    )
 
     # Set created_at only if it doesn't exist
     if "created_at" not in transcription_data:
@@ -113,50 +129,58 @@ def verify_and_update_transcription_metadata(transcription_data, file_path, auth
     if is_youtube_video:
         # Load existing YouTube data from storage if not provided
         if not youtube_data:
-            youtube_id = transcription_data.get('youtube_id')
+            youtube_id = transcription_data.get("youtube_id")
             if youtube_id:
                 youtube_data_map = load_youtube_data_map()
                 youtube_data = youtube_data_map.get(youtube_id)
 
         if youtube_data and "media_metadata" in youtube_data:
             yt_metadata = youtube_data["media_metadata"]
-            transcription_data.update({
-                'title': yt_metadata.get("title"),
-                'source_url': yt_metadata.get("url"),
-                'duration': yt_metadata.get("duration"),
-                'file_name': f"YouTube_{youtube_data['youtube_id']}",
-                'youtube_id': youtube_data["youtube_id"],
-                'upload_date': yt_metadata.get("upload_date"),
-                'channel': yt_metadata.get("channel"),
-                'view_count': yt_metadata.get("view_count"),
-                'description': yt_metadata.get("description")
-            })
-        
+            transcription_data.update(
+                {
+                    "title": yt_metadata.get("title"),
+                    "source_url": yt_metadata.get("url"),
+                    "duration": yt_metadata.get("duration"),
+                    "file_name": f"YouTube_{youtube_data['youtube_id']}",
+                    "youtube_id": youtube_data["youtube_id"],
+                    "upload_date": yt_metadata.get("upload_date"),
+                    "channel": yt_metadata.get("channel"),
+                    "view_count": yt_metadata.get("view_count"),
+                    "description": yt_metadata.get("description"),
+                }
+            )
+
             # Save the updated transcription file
-            save_transcription(file_path, transcription_data, youtube_id=youtube_data["youtube_id"])
+            save_transcription(
+                file_path, transcription_data, youtube_id=youtube_data["youtube_id"]
+            )
     else:
         # Only try to get file metadata for local audio files that exist
         if file_path and os.path.exists(file_path):
             # Get metadata for local audio file
             title, mp3_author, duration, url, album = get_media_metadata(file_path)
-            transcription_data.update({
-                'title': title,
-                'author': mp3_author if mp3_author != "Unknown" else author,
-                'file_name': os.path.basename(file_path),
-                'duration': duration,
-                'album': album
-            })
-            
+            transcription_data.update(
+                {
+                    "title": title,
+                    "author": mp3_author if mp3_author != "Unknown" else author,
+                    "file_name": os.path.basename(file_path),
+                    "duration": duration,
+                    "album": album,
+                }
+            )
+
             # Get additional file metadata
             try:
                 file_stats = os.stat(file_path)
-                transcription_data.update({
-                    'file_size': file_stats.st_size,
-                    'format': os.path.splitext(file_path)[1][1:].lower()
-                })
+                transcription_data.update(
+                    {
+                        "file_size": file_stats.st_size,
+                        "format": os.path.splitext(file_path)[1][1:].lower(),
+                    }
+                )
             except Exception as e:
                 logger.warning(f"Could not get file stats: {str(e)}")
-            
+
             # Save transcription file
             save_transcription(file_path, transcription_data)
 
@@ -178,7 +202,7 @@ def process_file(
 ):
     """
     Core processing pipeline for a single media file or YouTube video.
-    
+
     Flow:
     1. Check for existing transcription in cache
     2. If needed, generate new transcription
@@ -187,31 +211,33 @@ def process_file(
        b. Create embeddings for chunks
        c. Store in Pinecone with metadata
     4. Upload original to S3 (non-YouTube only)
-    
+
     Returns a report dictionary with processing statistics and any errors
     """
     logger.debug(
-        f"process_file called with params: file_path={file_path}, index={pinecone_index}, " +
-        f"client={client}, force={force}, dryrun={dryrun}, default_author={default_author}, " +
-        f"library_name={library_name}, is_youtube_video={is_youtube_video}, youtube_data={youtube_data}, " +
-        f"s3_key={s3_key}, refresh_metadata_only={refresh_metadata_only}"
+        f"process_file called with params: file_path={file_path}, index={pinecone_index}, "
+        + f"client={client}, force={force}, dryrun={dryrun}, default_author={default_author}, "
+        + f"library_name={library_name}, is_youtube_video={is_youtube_video}, youtube_data={youtube_data}, "
+        + f"s3_key={s3_key}, refresh_metadata_only={refresh_metadata_only}"
     )
 
     # Track processing statistics and errors for this file
     local_report = {
         "processed": 0,  # Successfully transcribed files
-        "skipped": 0,    # Files with existing transcriptions
-        "errors": 0,     # Failed processing attempts
-        "error_details": [], 
+        "skipped": 0,  # Files with existing transcriptions
+        "errors": 0,  # Failed processing attempts
+        "error_details": [],
         "warnings": [],
         "fully_indexed": 0,  # Files that completed the full pipeline
-        "chunk_lengths": [], # Track chunk sizes for quality metrics
-        "private_videos": 0  # New counter
+        "chunk_lengths": [],  # Track chunk sizes for quality metrics
+        "private_videos": 0,  # New counter
     }
 
     if is_youtube_video and youtube_data.get("error") == "private_video":
         local_report["private_videos"] += 1
-        local_report["error_details"].append(f"Private video (inaccessible): {youtube_data['url']}")
+        local_report["error_details"].append(
+            f"Private video (inaccessible): {youtube_data['url']}"
+        )
         return local_report
 
     if is_youtube_video:
@@ -237,10 +263,12 @@ def process_file(
                 default_author,
                 library_name,
                 is_youtube_video,
-                youtube_data
+                youtube_data,
             )
             local_report["skipped"] += 1
-            logger.debug(f"Using existing transcription with updated metadata for {file_name}")
+            logger.debug(
+                f"Using existing transcription with updated metadata for {file_name}"
+            )
         except Exception as e:
             error_msg = f"Error updating metadata for {file_name}: {str(e)}"
             logger.error(error_msg)
@@ -277,7 +305,9 @@ def process_file(
                 return local_report
         except RetryError as e:
             # Failed after multiple retry attempts - likely a persistent issue
-            error_msg = f"Failed to transcribe {file_name} after multiple retries: {str(e)}"
+            error_msg = (
+                f"Failed to transcribe {file_name} after multiple retries: {str(e)}"
+            )
             logger.error(error_msg)
             local_report["errors"] += 1
             local_report["error_details"].append(error_msg)
@@ -340,7 +370,9 @@ def process_file(
                     author = default_author
                     album = None  # YouTube videos don't have albums
                 else:
-                    title, mp3_author, duration, url, album = get_media_metadata(file_path)
+                    title, mp3_author, duration, url, album = get_media_metadata(
+                        file_path
+                    )
                     author = mp3_author if mp3_author != "Unknown" else default_author
 
                 store_in_pinecone(
@@ -363,10 +395,17 @@ def process_file(
                 local_report["error_details"].append(error_msg)
                 return local_report
         elif refresh_metadata_only:
-            logger.info(f"Skipping embedding creation and Pinecone upsert for {file_name} (--refresh-metadata-only mode)")
+            logger.info(
+                f"Skipping embedding creation and Pinecone upsert for {file_name} (--refresh-metadata-only mode)"
+            )
 
         # After successful processing, upload to S3 only if it's not a YouTube video and not a dry run or refresh-metadata-only mode
-        if not dryrun and not refresh_metadata_only and not is_youtube_video and file_path:
+        if (
+            not dryrun
+            and not refresh_metadata_only
+            and not is_youtube_video
+            and file_path
+        ):
             try:
                 if not s3_key:
                     # Fallback to a default S3 key if not provided
@@ -380,7 +419,9 @@ def process_file(
                 local_report["error_details"].append(error_msg)
                 return local_report
         elif not dryrun and not is_youtube_video and file_path:
-            logger.info(f"Skipping S3 upload for {file_name} (--refresh-metadata-only mode)")
+            logger.info(
+                f"Skipping S3 upload for {file_name} (--refresh-metadata-only mode)"
+            )
 
         local_report["fully_indexed"] += 1
 
@@ -396,7 +437,7 @@ def process_file(
 def worker(task_queue, result_queue, args, stop_event):
     """
     Worker process that handles media processing tasks from the queue.
-    
+
     Maintains its own OpenAI client and Pinecone connection to avoid
     sharing resources between processes. Continues processing until
     stop_event is set or queue is empty.
@@ -436,7 +477,7 @@ def worker(task_queue, result_queue, args, stop_event):
 def process_item(item, args, client, index):
     """
     Processes a single media item with timing metrics and cleanup.
-    
+
     Handles both audio files and YouTube videos, tracking processing time
     for future estimates. Ensures cleanup of temporary files for YouTube
     content.
@@ -458,7 +499,9 @@ def process_item(item, args, client, index):
         is_youtube_video = False
         youtube_data = None
     elif item["type"] == "youtube_video":
-        youtube_data, youtube_id = preprocess_youtube_video(item["data"]["url"], logger, args.refresh_metadata_only)
+        youtube_data, youtube_id = preprocess_youtube_video(
+            item["data"]["url"], logger, args.refresh_metadata_only
+        )
         if not youtube_data:
             logger.error(f"Failed to process YouTube video: {item['data']['url']}")
             error_report["error_details"].append(
@@ -522,7 +565,7 @@ def preprocess_youtube_video(url, logger, refresh_metadata_only=False):
     1. Extracting video ID
     2. Checking for cached transcription
     3. Downloading audio if needed
-    
+
     Returns tuple of (youtube_data, youtube_id) where youtube_data contains
     metadata and local audio path
     """
@@ -539,14 +582,14 @@ def preprocess_youtube_video(url, logger, refresh_metadata_only=False):
         )
         if existing_transcription:
             logger.debug(
-                f"preprocess_youtube_video: Using existing transcription for YouTube video"
+                "preprocess_youtube_video: Using existing transcription for YouTube video"
             )
             return existing_youtube_data, youtube_id
         elif refresh_metadata_only and "media_metadata" in existing_youtube_data:
             # In refresh-metadata-only mode, if we have the metadata but no transcription,
             # we can still use the existing data for metadata updates
             logger.debug(
-                f"preprocess_youtube_video: Using existing metadata for YouTube video in refresh-metadata-only mode"
+                "preprocess_youtube_video: Using existing metadata for YouTube video in refresh-metadata-only mode"
             )
             return existing_youtube_data, youtube_id
 
@@ -560,7 +603,7 @@ def preprocess_youtube_video(url, logger, refresh_metadata_only=False):
 
 
 def print_report(report):
-    logger.info(f"\nReport:")
+    logger.info("\nReport:")
     logger.info(f"Files processed: {report['processed']}")
     logger.info(f"Files skipped: {report['skipped']}")
     logger.info(f"Files with errors: {report['errors']}")
@@ -591,7 +634,13 @@ def merge_reports(reports):
         "private_videos": 0,
     }
     for report in reports:
-        for key in ["processed", "skipped", "errors", "fully_indexed", "private_videos"]:
+        for key in [
+            "processed",
+            "skipped",
+            "errors",
+            "fully_indexed",
+            "private_videos",
+        ]:
             combined_report[key] += report.get(key, 0)
         combined_report["error_details"].extend(report.get("error_details", []))
         combined_report["warnings"].extend(report.get("warnings", []))
@@ -654,7 +703,9 @@ def main():
         help="Only refresh metadata without creating embeddings or uploading to Pinecone",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument('--site', required=True, help='Site ID for environment variables')
+    parser.add_argument(
+        "--site", required=True, help="Site ID for environment variables"
+    )
     args = parser.parse_args()
 
     initialize_environment(args)
@@ -696,10 +747,11 @@ def main():
 
     # Limit processes to prevent resource exhaustion
     num_processes = min(4, cpu_count())
-    with Pool(processes=num_processes,
-             initializer=worker,
-             initargs=(task_queue, result_queue, args, stop_event)) as pool:
-
+    with Pool(
+        processes=num_processes,
+        initializer=worker,
+        initargs=(task_queue, result_queue, args, stop_event),
+    ) as pool:
         # Set up graceful shutdown handlers for clean termination
         def graceful_shutdown(_signum, _frame):
             logging.info("\nReceived interrupt signal. Shutting down gracefully...")
@@ -736,7 +788,7 @@ def main():
                     try:
                         # 5 minute timeout for result processing
                         item_id, report = result_queue.get(timeout=300)
-                        
+
                         # Update item status and tracking
                         if item_id is not None:
                             ingest_queue.update_item_status(
@@ -744,8 +796,11 @@ def main():
                                 "completed" if report["errors"] == 0 else "error",
                             )
                             # Remove completed item from active tracking
-                            items_to_process = [item for item in items_to_process 
-                                              if item["id"] != item_id]
+                            items_to_process = [
+                                item
+                                for item in items_to_process
+                                if item["id"] != item_id
+                            ]
 
                         # Aggregate results and update progress
                         overall_report = merge_reports([overall_report, report])
@@ -761,7 +816,9 @@ def main():
 
                     except Empty:
                         # Log timeout but continue - workers may still be processing
-                        logging.info("Main loop: Timeout while waiting for results. Continuing...")
+                        logging.info(
+                            "Main loop: Timeout while waiting for results. Continuing..."
+                        )
 
         except Exception as e:
             logging.error(f"Error processing items: {str(e)}")

@@ -36,6 +36,8 @@ See @crawler-TODO.md
 - Detailed per-document logging with document IDs
 - Summary logging at the end of processing
 - External access to metrics via `get_metrics_summary()` method
+- Direct console printing via `print_summary()` method for clean integration
+- Used by both SQL and PDF ingestion scripts for consistent statistics reporting
 - Proper handling of both overlap and non-overlap code paths
 - Intelligent chunk merging to reach target word counts
 

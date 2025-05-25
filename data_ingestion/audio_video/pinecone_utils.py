@@ -1,12 +1,14 @@
+import logging
 import os
 import re
 import sys
-import hashlib
-import logging
-from pinecone import Pinecone, ServerlessSpec, PineconeException, NotFoundException
+
+from pinecone import NotFoundException, Pinecone, PineconeException, ServerlessSpec
 
 # Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 from data_ingestion.utils.document_hash import generate_document_hash
 
 logger = logging.getLogger(__name__)
@@ -35,15 +37,16 @@ Rate Limits:
 - Retries: Exponential backoff
 """
 
+
 def create_embeddings(chunks, client):
     """
     Generates embeddings for text chunks using OpenAI's API.
-    
+
     Batch Processing:
     - Processes all chunks in single API call
     - Maintains chunk order for vector mapping
     - Returns flat list of embeddings
-    
+
     Rate Limits: Determined by OpenAI API quotas
     """
     texts = [chunk["text"] for chunk in chunks]
@@ -58,12 +61,12 @@ def create_embeddings(chunks, client):
 def load_pinecone(index_name=None):
     """
     Initializes or connects to Pinecone index with error handling.
-    
+
     Index Creation Strategy:
     - Attempts creation first (idempotent)
     - Falls back to existing index
     - Validates index parameters
-    
+
     Error Handling:
     409: Index exists (normal operation)
     500: Infrastructure issues
@@ -75,7 +78,9 @@ def load_pinecone(index_name=None):
     try:
         dimension_str = os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION")
         if not dimension_str:
-            raise ValueError("OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set")
+            raise ValueError(
+                "OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set"
+            )
         pc.create_index(
             index_name,
             dimension=int(dimension_str),
@@ -84,7 +89,9 @@ def load_pinecone(index_name=None):
         )
     except PineconeException as e:
         if e.status == 409:
-            logger.info(f"Index {index_name} already exists. Proceeding with existing index.")
+            logger.info(
+                f"Index {index_name} already exists. Proceeding with existing index."
+            )
         elif e.status == 500:
             logger.error("Internal Server Error. Please try again later.")
         else:
@@ -104,13 +111,13 @@ def store_in_pinecone(
     url=None,
     interrupt_event=None,
     s3_key=None,
-    album=None
+    album=None,
 ):
     """
     Stores vector embeddings with metadata in Pinecone.
-    
+
     Vector ID Format: type||library||title||content_hash||chunk_number
-    
+
     Metadata Schema:
     - text: Raw chunk content
     - start/end_time: Chunk boundaries
@@ -122,12 +129,12 @@ def store_in_pinecone(
     - album: Optional grouping
     - filename: For audio files
     - url: For YouTube content
-    
+
     Batch Processing:
     - 100 vectors per upsert
     - Atomic operations
     - Interruptible for long runs
-    
+
     Error Handling:
     - 429: Rate limit exceeded
     - Others: Infrastructure issues
@@ -139,27 +146,31 @@ def store_in_pinecone(
     # Sanitization for vector ID components
     title = title if title is not None else "Unknown Title"
     title = title.replace("'", "'")  # Replace smart quotes for compatibility
-    sanitized_title = re.sub(r'[^\x00-\x7F]+', '', title)  # ASCII-only for IDs
-    
+    sanitized_title = re.sub(r"[^\x00-\x7F]+", "", title)  # ASCII-only for IDs
+
     vectors = []
-    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
         # Generate document-level hash instead of chunk content hash
         document_hash = generate_document_hash(
             source=url or s3_key or "unknown_source",
             title=title,
             author=author,
-            library=library_name
+            library=library_name,
         )
-        
+
         # Replace offensive single quote with acceptable one
         if title:
             title = title.replace("’", "'")
-            
+
         # Sanitize the title to ensure it's ASCII-compatible
-        sanitized_title = re.sub(r'[^\x00-\x7F]+', '', title) if title else 'Unknown_Title'
-        
-        chunk_id = f"{'youtube' if is_youtube_video else 'audio'}||{library_name}||" +\
-                   f"{sanitized_title}||{document_hash}||chunk{i+1}"
+        sanitized_title = (
+            re.sub(r"[^\x00-\x7F]+", "", title) if title else "Unknown_Title"
+        )
+
+        chunk_id = (
+            f"{'youtube' if is_youtube_video else 'audio'}||{library_name}||"
+            + f"{sanitized_title}||{document_hash}||chunk{i + 1}"
+        )
 
         # Duration calculation for content navigation
         duration = chunk["end"] - chunk["start"]
@@ -169,7 +180,7 @@ def store_in_pinecone(
             "text": chunk["text"],
             "start_time": chunk["start"],
             "end_time": chunk["end"],
-            "duration": round(duration, 1), 
+            "duration": round(duration, 1),
             "library": library_name,
             "author": author,
             "type": "youtube" if is_youtube_video else "audio",
@@ -183,7 +194,7 @@ def store_in_pinecone(
         # Only add the filename field if it's not a YouTube video and s3_key is provided
         if not is_youtube_video and s3_key:
             # Extract relative path for audio files
-            filename = s3_key.split('public/audio/', 1)[-1]
+            filename = s3_key.split("public/audio/", 1)[-1]
             metadata["filename"] = filename
 
         # Only add the url field if it's not None
@@ -198,8 +209,8 @@ def store_in_pinecone(
         if interrupt_event and interrupt_event.is_set():
             logger.info("Interrupt detected. Stopping Pinecone upload...")
             return
-            
-        batch = vectors[i: i + 100]
+
+        batch = vectors[i : i + 100]
         try:
             pinecone_index.upsert(vectors=batch)
         except Exception as e:
@@ -222,12 +233,12 @@ def store_in_pinecone(
 def clear_library_vectors(index, library_name):
     """
     Purges all vectors for a specific library.
-    
+
     Safety Features:
     - Library-scoped deletion only
     - No cascade effects
     - Atomic operation
-    
+
     Error Cases:
     - Missing index
     - Permission issues

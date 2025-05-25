@@ -199,6 +199,37 @@ documents using `retriever.getRelevantDocuments(sanitizedQuestion)`. This call d
 defined in the site configuration. These pre-fetched documents (as `finalDocs`) were then passed to `makeChain`, causing
 `makeChain`'s own `retrievalSequence` (which contains the correct library filtering logic) to be bypassed.
 
+## Mistake: Document Type Validation Too Strict in Text Splitter
+
+**Problem**: The `SpacyTextSplitter.split_documents()` method was using `isinstance(doc, Document)` to validate input
+documents, but this failed when different scripts imported `Document` from different sources (local vs LangChain).
+
+**Wrong**: Strict type checking against local Document class:
+
+```python
+# In text_splitter_utils.py
+if not isinstance(doc, Document):
+    error_msg = f"Expected Document object, got {type(doc)}"
+    self.logger.error(error_msg)
+    raise ValueError(error_msg)
+```
+
+**Correct**: Duck typing approach checking for required attributes:
+
+```python
+# Check if doc has required attributes (supports both local Document and LangChain Document)
+if not hasattr(doc, 'page_content') or not hasattr(doc, 'metadata'):
+    error_msg = f"Expected Document object with 'page_content' and 'metadata' attributes, got {type(doc)}"
+    self.logger.error(error_msg)
+    raise ValueError(error_msg)
+```
+
+**Root Cause**: SQL ingestion script imports `Document` from `langchain_core.documents` while text splitter defines its
+own local `Document` class. The `isinstance` check fails even though both classes have the same interface.
+
+**Solution**: Use duck typing to check for required attributes rather than exact type matching, allowing compatibility
+with both local and LangChain Document classes.
+
 **Wrong**:
 
 ```typescript

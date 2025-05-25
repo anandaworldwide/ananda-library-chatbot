@@ -1,6 +1,14 @@
 #!/usr/bin/env python
-import sys
+import argparse
+import hashlib
 import os
+import shutil
+import signal
+import sqlite3
+import sys
+
+from pydub import AudioSegment
+from tqdm import tqdm
 
 # Get the absolute path of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -9,13 +17,6 @@ parent_dir = os.path.dirname(os.path.dirname(current_dir))
 # Add parent directory to Python path
 sys.path.insert(0, parent_dir)
 
-import argparse
-import hashlib
-import sqlite3
-from pydub import AudioSegment
-import shutil
-from tqdm import tqdm
-import signal
 
 """
 Audio File Deduplication Script
@@ -43,49 +44,63 @@ Notes:
 - The folder structure from the comparison folder is preserved in the destination folder.
 """
 
+
 def get_cache_path(comparison_folder):
-    return os.path.join(os.path.dirname(os.path.dirname(comparison_folder)), "audio_hash_cache.db")
+    return os.path.join(
+        os.path.dirname(os.path.dirname(comparison_folder)), "audio_hash_cache.db"
+    )
+
 
 def init_cache_db(db_path):
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS audio_hashes
-                 (file_path TEXT PRIMARY KEY, hash TEXT, mtime REAL)''')
+    c.execute("""CREATE TABLE IF NOT EXISTS audio_hashes
+                 (file_path TEXT PRIMARY KEY, hash TEXT, mtime REAL)""")
     conn.commit()
     return conn
+
 
 def load_hash_cache(comparison_folder):
     db_path = get_cache_path(comparison_folder)
     return init_cache_db(db_path)
 
+
 def save_hash_cache(conn):
     conn.commit()
     conn.close()
+
 
 def signal_handler(sig, frame):
     print("\nCtrl+C detected. Saving cache and exiting...")
     save_hash_cache(cache_conn)
     sys.exit(0)
 
+
 def get_audio_hash(file_path, cache_conn):
     try:
         mtime = os.path.getmtime(file_path)
         c = cache_conn.cursor()
-        c.execute("SELECT hash FROM audio_hashes WHERE file_path = ? AND mtime = ?", (file_path, mtime))
+        c.execute(
+            "SELECT hash FROM audio_hashes WHERE file_path = ? AND mtime = ?",
+            (file_path, mtime),
+        )
         result = c.fetchone()
-        
+
         if result:
             return result[0]
 
         audio = AudioSegment.from_file(file_path)
         audio_hash = hashlib.md5(audio.raw_data).hexdigest()
-        c.execute("INSERT OR REPLACE INTO audio_hashes (file_path, hash, mtime) VALUES (?, ?, ?)",
-                  (file_path, audio_hash, mtime))
+        c.execute(
+            "INSERT OR REPLACE INTO audio_hashes (file_path, hash, mtime) VALUES (?, ?, ?)",
+            (file_path, audio_hash, mtime),
+        )
         cache_conn.commit()
         return audio_hash
     except Exception as e:
         print(f"Error processing {file_path}: {str(e)}")
         return None
+
 
 def get_audio_info(file_path):
     """Get audio file information."""
@@ -100,6 +115,7 @@ def get_audio_info(file_path):
     except Exception as e:
         print(f"Error getting info for {file_path}: {str(e)}")
         return None
+
 
 def compare_folders(source_folder, comparison_folder, destination_folder, cache_conn):
     """Compare audio files and report duplicates."""
@@ -137,7 +153,9 @@ def compare_folders(source_folder, comparison_folder, destination_folder, cache_
         os.path.join(root, file)
         for root, _, files in os.walk(comparison_folder)
         for file in files
-        if file.lower().endswith((".mp3", ".wav", ".flac", ".ogg", ".aac", ".aif", ".m4a"))
+        if file.lower().endswith(
+            (".mp3", ".wav", ".flac", ".ogg", ".aac", ".aif", ".m4a")
+        )
     ]
     print(f"Found {len(comparison_files)} files in comparison folder.")
 
@@ -190,7 +208,8 @@ def main():
     )
     parser.add_argument("source_folder", help="Path to the source folder")
     parser.add_argument(
-        "comparison_folder", help="Path to the folder to compare against the source folder"
+        "comparison_folder",
+        help="Path to the folder to compare against the source folder",
     )
     parser.add_argument("destination_folder", help="Path to copy non-duplicate files")
     args = parser.parse_args()
@@ -201,7 +220,10 @@ def main():
     cache_conn = load_hash_cache(args.comparison_folder)
     try:
         compare_folders(
-            args.source_folder, args.comparison_folder, args.destination_folder, cache_conn
+            args.source_folder,
+            args.comparison_folder,
+            args.destination_folder,
+            cache_conn,
         )
     finally:
         save_hash_cache(cache_conn)

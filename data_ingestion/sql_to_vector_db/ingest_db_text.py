@@ -1146,6 +1146,10 @@ def main():
                 print(
                     f"Highest document ID processed overall: {last_processed_id_session}"
                 )  # Updated phrasing
+
+            # Print chunking statistics
+            print()
+            text_splitter.metrics.print_summary()
         else:
             print("Exiting as no data was fetched.")
 

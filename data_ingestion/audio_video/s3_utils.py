@@ -1,15 +1,18 @@
+import logging
 import os
+import random
+import time
+from collections import defaultdict
+
 import boto3
 from botocore.exceptions import ClientError
-import logging
-from collections import defaultdict
-import time
-import random
 
 logger = logging.getLogger(__name__)
 
+
 class S3UploadError(Exception):
     """Custom exception for S3 upload errors."""
+
     pass
 
 
@@ -22,7 +25,7 @@ def get_bucket_name():
 
 
 def exponential_backoff(attempt):
-    return min(5, (2 ** attempt) + random.uniform(0, 1))
+    return min(5, (2**attempt) + random.uniform(0, 1))
 
 
 def upload_to_s3(file_path, s3_key, max_attempts=5):
@@ -38,10 +41,12 @@ def upload_to_s3(file_path, s3_key, max_attempts=5):
             logger.info(f"Successfully uploaded {file_path} to {bucket_name}/{s3_key}")
             return None
         except ClientError as e:
-            if e.response['Error']['Code'] == 'RequestTimeTooSkewed':
+            if e.response["Error"]["Code"] == "RequestTimeTooSkewed":
                 if attempt < max_attempts - 1:
                     wait_time = exponential_backoff(attempt)
-                    logger.info(f"RequestTimeTooSkewed error. Retrying in {wait_time:.2f} seconds...")
+                    logger.info(
+                        f"RequestTimeTooSkewed error. Retrying in {wait_time:.2f} seconds..."
+                    )
                     time.sleep(wait_time)
                 else:
                     error_message = f"Failed to upload {file_path} after {max_attempts} attempts: {str(e)}"

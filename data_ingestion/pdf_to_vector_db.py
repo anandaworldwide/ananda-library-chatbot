@@ -907,6 +907,10 @@ async def run(keep_data: bool, library_name: str) -> None:
         f"Ingestion run complete. Scanned {len(pdf_file_paths)} files. Actually processed content from {files_actually_processed_in_this_run} files in this session."
     )
 
+    # Print chunking statistics
+    print()
+    text_splitter.metrics.print_summary()
+
 
 def main():
     """Parse arguments and run the script."""

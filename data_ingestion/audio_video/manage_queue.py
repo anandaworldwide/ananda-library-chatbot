@@ -2,7 +2,7 @@
 """
 Media Ingestion Queue Manager
 
-A robust CLI tool for managing distributed media ingestion workflows. Handles queuing and status 
+A robust CLI tool for managing distributed media ingestion workflows. Handles queuing and status
 tracking for audio files and YouTube content across multiple processing environments.
 
 Technical Specifications:
@@ -36,7 +36,7 @@ Configuration:
   Required:
   - library_config.json: Defines target libraries and S3 paths
   - --site: Environment identifier (dev/staging/prod)
-  
+
   Optional:
   - --queue: Alternate queue name for parallel processing
   - --debug: Enhanced logging output
@@ -57,8 +57,17 @@ Dependencies:
   Python: >=3.7
 """
 
-import sys
+import argparse
+import json
+import logging
 import os
+import sys
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+import pytz
+from openpyxl import load_workbook
+from tqdm import tqdm
 
 # Get the absolute path of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -67,28 +76,23 @@ parent_dir = os.path.dirname(os.path.dirname(current_dir))
 # Add parent directory to Python path
 sys.path.insert(0, parent_dir)
 
-import argparse
-from datetime import timedelta
-import logging
-from tqdm import tqdm
-from openpyxl import load_workbook
-from collections import defaultdict
-import pytz
-from datetime import datetime
-import json
+
 from data_ingestion.audio_video.IngestQueue import IngestQueue
-from pyutil.logging_utils import configure_logging
-from data_ingestion.audio_video.youtube_utils import (
-    extract_youtube_id, 
-    get_playlist_videos,
-    load_youtube_data_map
-)
 from data_ingestion.audio_video.media_utils import get_file_hash
-from data_ingestion.audio_video.processing_time_estimates import get_estimate, estimate_total_processing_time
+from data_ingestion.audio_video.processing_time_estimates import (
+    estimate_total_processing_time,
+    get_estimate,
+)
+from data_ingestion.audio_video.youtube_utils import (
+    extract_youtube_id,
+    get_playlist_videos,
+    load_youtube_data_map,
+)
 from pyutil.env_utils import load_env
+from pyutil.logging_utils import configure_logging
 
 # Load library configuration
-with open('library_config.json', 'r') as f:
+with open("library_config.json") as f:
     LIBRARY_CONFIG = json.load(f)
 
 logger = logging.getLogger(__name__)
@@ -106,10 +110,10 @@ def initialize_environment(args):
 def get_unique_files(directory_path):
     """
     Recursively scans directory for media files and deduplicates using file hashes.
-    
+
     Performance Note: For large directories, this performs I/O-intensive hash calculations.
     Memory Usage: Stores only file paths and hashes, not file contents.
-    
+
     Returns: List of unique file paths, preserving the first occurrence of duplicate content
     """
     unique_files = {}
@@ -133,12 +137,12 @@ def get_unique_files(directory_path):
 def process_audio_input(input_path, queue, default_author, library):
     """
     Routes audio processing based on input type (single file vs directory).
-    
+
     Validation:
     - Verifies library exists in config
     - Checks file extensions
     - Ensures input path exists
-    
+
     S3 Path Structure: public/audio/{library_name}/{relative_path}
     """
     # Check if the library is in the config file
@@ -149,7 +153,7 @@ def process_audio_input(input_path, queue, default_author, library):
 
     if os.path.isfile(input_path):
         if input_path.lower().endswith((".mp3", ".wav", ".flac")):
-            s3_folder = library.lower()  
+            s3_folder = library.lower()
             s3_key = f"public/audio/{s3_folder}/{os.path.basename(input_path)}"
             item_id = queue.add_item(
                 "audio_file",
@@ -158,7 +162,7 @@ def process_audio_input(input_path, queue, default_author, library):
                     "author": default_author,
                     "library": LIBRARY_CONFIG[library],
                     "s3_folder": s3_folder,
-                    "s3_key": s3_key
+                    "s3_key": s3_key,
                 },
             )
             if item_id:
@@ -186,7 +190,7 @@ def process_directory(directory_path, queue, default_author, library):
 
     unique_files = get_unique_files(directory_path)
     added_items = []
-    s3_folder = library.lower() 
+    s3_folder = library.lower()
 
     # Process unique files with tqdm
     for file_path in tqdm(unique_files, desc="Processing unique files"):
@@ -194,7 +198,7 @@ def process_directory(directory_path, queue, default_author, library):
         relative_path = os.path.relpath(file_path, directory_path)
         # Combine the s3_folder with the relative path
         s3_key = f"public/audio/{s3_folder}/{relative_path}"
-        
+
         item_id = queue.add_item(
             "audio_file",
             {
@@ -202,7 +206,7 @@ def process_directory(directory_path, queue, default_author, library):
                 "author": default_author,
                 "library": LIBRARY_CONFIG[library],
                 "s3_folder": s3_folder,
-                "s3_key": s3_key
+                "s3_key": s3_key,
             },
         )
         if item_id:
@@ -216,7 +220,7 @@ def process_directory(directory_path, queue, default_author, library):
 def add_to_queue(args, queue, source=None):
     """
     Central routing function for all queue additions. Handles YouTube videos, playlists, and audio files.
-    
+
     source: Optional playlist URL for tracking video origins in bulk imports
     """
     if args.video:
@@ -261,7 +265,9 @@ def add_to_queue(args, queue, source=None):
 
     elif args.audio or args.directory:
         input_path = args.audio or args.directory
-        added_items = process_audio_input(input_path, queue, args.default_author, args.library)
+        added_items = process_audio_input(
+            input_path, queue, args.default_author, args.library
+        )
         if added_items:
             logger.info(f"Added {len(added_items)} audio file(s) to queue")
         else:
@@ -275,7 +281,7 @@ def truncate_path(file_path, num_dirs=3):
     """
     Shortens file paths for display while preserving meaningful context.
     Example: /very/long/path/to/file.mp3 -> .../path/to/file.mp3
-    
+
     num_dirs: Number of trailing directories to preserve
     """
     parts = file_path.split(os.sep)
@@ -286,7 +292,7 @@ def list_queue_items(queue):
     """
     Displays queue contents in a formatted table with dynamic column widths.
     Converts timestamps to PST and truncates long paths for readability.
-    
+
     Output format:
     ID  Type  Status  URL/File  Last Updated
     """
@@ -375,9 +381,11 @@ def reset_stuck_items(queue):
         f"Reset {reset_count} items from error or interrupted state. Ready for processing."
     )
 
+
 def remove_completed_items(queue):
     removed_count = queue.remove_completed_items()
     logger.info(f"Removed {removed_count} completed items from the queue")
+
 
 def reprocess_item(queue, item_id):
     success, message = queue.reprocess_item(item_id)
@@ -409,10 +417,10 @@ def remove_item(queue, item_id):
 def process_playlists_file(args, queue):
     """
     Processes an Excel file containing playlist information for bulk imports.
-    
+
     Expected Excel format:
     Title | Default Author | Library | Playlist URL
-    
+
     Features:
     - Deduplicates videos across playlists
     - Tracks source playlists for duplicate videos
@@ -420,7 +428,7 @@ def process_playlists_file(args, queue):
     """
     workbook = load_workbook(filename=args.playlists_file, read_only=True)
     sheet = workbook.active
-    
+
     all_videos = []
     video_sources = defaultdict(list)  # Tracks which playlists contain each video
     processed_playlists = 0
@@ -430,19 +438,19 @@ def process_playlists_file(args, queue):
         title, default_author, library, playlist_url = row
         videos = get_playlist_videos(playlist_url)
         processed_playlists += 1
-        
+
         # Track video sources for duplicate reporting
         for video in videos:
             all_videos.append(video)
-            video_sources[video['url']].append(title)
+            video_sources[video["url"]].append(title)
 
     # Deduplicate videos while preserving first occurrence
-    unique_videos = {v['url']: v for v in all_videos}.values()
+    unique_videos = {v["url"]: v for v in all_videos}.values()
     duplicates_removed = len(all_videos) - len(unique_videos)
 
     # Add unique videos to queue with original metadata
     for video in unique_videos:
-        args.video = video['url']
+        args.video = video["url"]
         args.default_author = default_author
         args.library = library
         add_to_queue(args, queue, source=playlist_url)
@@ -468,14 +476,26 @@ def print_queue_status(queue, items=None):
 
     audio_estimate = get_estimate("audio_file")
     video_estimate = get_estimate("youtube_video")
-    
-    if audio_estimate and audio_estimate.get('time') is not None and audio_estimate.get('size') is not None:
-        print(f"Average processing time for audio files: {timedelta(seconds=int(audio_estimate['time']))} for {audio_estimate['size'] / (1024*1024):.2f} MB")
+
+    if (
+        audio_estimate
+        and audio_estimate.get("time") is not None
+        and audio_estimate.get("size") is not None
+    ):
+        print(
+            f"Average processing time for audio files: {timedelta(seconds=int(audio_estimate['time']))} for {audio_estimate['size'] / (1024 * 1024):.2f} MB"
+        )
     else:
         print("No data available for audio file processing times.")
-    
-    if video_estimate and video_estimate.get('time') is not None and video_estimate.get('size') is not None:
-        print(f"Average processing time for YouTube videos: {timedelta(seconds=int(video_estimate['time']))} for {video_estimate['size'] / (1024*1024):.2f} MB")
+
+    if (
+        video_estimate
+        and video_estimate.get("time") is not None
+        and video_estimate.get("size") is not None
+    ):
+        print(
+            f"Average processing time for YouTube videos: {timedelta(seconds=int(video_estimate['time']))} for {video_estimate['size'] / (1024 * 1024):.2f} MB"
+        )
     else:
         print("No data available for YouTube video processing times.")
 
@@ -492,30 +512,30 @@ def process_urls_file(args, queue):
         logger.error("https://youtu.be/VIDEO_ID1")
         logger.error("https://youtu.be/VIDEO_ID2")
         return
-    
-    with open(args.urls_file, 'r') as f:
+
+    with open(args.urls_file) as f:
         urls = [line.strip() for line in f if line.strip()]
-    
+
     if not urls:
         logger.error(f"No valid URLs found in {args.urls_file}")
         return
-        
+
     processed = 0
     skipped = 0
-    
+
     for url in urls:
         youtube_id = extract_youtube_id(url)
         if not youtube_id:
             logger.error(f"Invalid YouTube URL: {url}")
             continue
-            
+
         # Check if already processed via youtube_data_map
         youtube_data_map = load_youtube_data_map()
         if youtube_id in youtube_data_map:
             logger.info(f"Skipping already processed video: {url}")
             skipped += 1
             continue
-            
+
         item_id = queue.add_item(
             "youtube_video",
             {
@@ -530,7 +550,7 @@ def process_urls_file(args, queue):
             logger.info(f"Added YouTube video to queue: {item_id} - {url}")
         else:
             logger.error(f"Failed to add YouTube video to queue: {url}")
-    
+
     logger.info(f"Processed {processed} videos")
     logger.info(f"Skipped {skipped} already processed videos")
 
@@ -538,12 +558,12 @@ def process_urls_file(args, queue):
 def main():
     """
     Main CLI entry point with comprehensive argument parsing and operation routing.
-    
+
     Operation Groups:
     1. Queue Management (clear, reset, remove)
     2. Content Addition (video, audio, playlists)
     3. Status/Monitoring (list, status)
-    
+
     Environment Setup:
     - Requires site parameter for AWS credential configuration
     - Optional debug mode for enhanced logging
@@ -566,8 +586,8 @@ def main():
     )
     parser.add_argument(
         "--reprocess-failed",
-        action="store_true", 
-        help="Reprocess items in error or interrupted state"
+        action="store_true",
+        help="Reprocess items in error or interrupted state",
     )
     parser.add_argument(
         "--remove-completed",
@@ -581,8 +601,12 @@ def main():
         action="store_true",
         help="Reset all items in the queue for reprocessing",
     )
-    parser.add_argument("--playlists-file", help="Path to XLSX file containing playlist information")
-    parser.add_argument("--queue", default=None, help="Specify an alternative queue name")
+    parser.add_argument(
+        "--playlists-file", help="Path to XLSX file containing playlist information"
+    )
+    parser.add_argument(
+        "--queue", default=None, help="Specify an alternative queue name"
+    )
     parser.add_argument(
         "--reprocess-processing-items",
         action="store_true",
@@ -590,10 +614,11 @@ def main():
     )
     parser.add_argument("--remove", help="Remove a specific item from the queue by ID")
     parser.add_argument("--status", action="store_true", help="Print the queue status")
-    parser.add_argument('--site', required=True, help='Site ID for environment variables')
     parser.add_argument(
-        "--urls-file", 
-        help="Path to text file containing YouTube URLs (one per line)"
+        "--site", required=True, help="Site ID for environment variables"
+    )
+    parser.add_argument(
+        "--urls-file", help="Path to text file containing YouTube URLs (one per line)"
     )
     args = parser.parse_args()
 
@@ -605,23 +630,30 @@ def main():
         logger.info(f"Using queue: {args.queue}")
 
     # Check for conflicting arguments
-    management_args = sum([bool(x) for x in [
-        args.status,
-        args.remove,
-        args.playlists_file,
-        args.reprocess_all,
-        args.reprocess,
-        args.list,
-        args.clear,
-        args.reprocess_failed,
-        args.reprocess_processing_items,
-        args.remove_completed,
-        args.urls_file,
-        any([args.video, args.playlist, args.audio, args.directory])
-    ]])
+    management_args = sum(
+        [
+            bool(x)
+            for x in [
+                args.status,
+                args.remove,
+                args.playlists_file,
+                args.reprocess_all,
+                args.reprocess,
+                args.list,
+                args.clear,
+                args.reprocess_failed,
+                args.reprocess_processing_items,
+                args.remove_completed,
+                args.urls_file,
+                any([args.video, args.playlist, args.audio, args.directory]),
+            ]
+        ]
+    )
 
     if management_args > 1:
-        logger.error("Error: Multiple operations specified. Please use only one command at a time.")
+        logger.error(
+            "Error: Multiple operations specified. Please use only one command at a time."
+        )
         parser.print_help()
         return
 
@@ -648,13 +680,17 @@ def main():
         remove_completed_items(queue)
     elif args.urls_file:
         if not args.default_author or not args.library:
-            logger.error("For adding items, you must specify both --default-author and --library")
+            logger.error(
+                "For adding items, you must specify both --default-author and --library"
+            )
             parser.print_help()
             return
         process_urls_file(args, queue)
     elif any([args.video, args.playlist, args.audio, args.directory]):
         if not args.default_author or not args.library:
-            logger.error("For adding items, you must specify both --default-author and --library")
+            logger.error(
+                "For adding items, you must specify both --default-author and --library"
+            )
             parser.print_help()
             return
         add_to_queue(args, queue)

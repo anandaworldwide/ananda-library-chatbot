@@ -1,30 +1,41 @@
-import os
-import tempfile
-import sqlite3
 import gzip
 import json
-import time
-from openai import OpenAI, APIError, APITimeoutError, APIConnectionError
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log
-)
-from tqdm import tqdm
 import logging
+import os
 import re
 import signal
-from data_ingestion.audio_video.media_utils import get_file_hash, split_audio, get_media_metadata
-from data_ingestion.audio_video.youtube_utils import load_youtube_data_map, save_youtube_data_map
+import sqlite3
+import tempfile
 from datetime import datetime
-import hashlib
+
+from openai import APIConnectionError, APIError, APITimeoutError, OpenAI
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+from tqdm import tqdm
+
+from data_ingestion.audio_video.media_utils import (
+    get_file_hash,
+    get_media_metadata,
+    split_audio,
+)
+from data_ingestion.audio_video.youtube_utils import (
+    load_youtube_data_map,
+    save_youtube_data_map,
+)
 
 logger = logging.getLogger(__name__)
 
-TRANSCRIPTIONS_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "media", "transcriptions.db"))
-TRANSCRIPTIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "media", "transcriptions"))
+TRANSCRIPTIONS_DB_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "media", "transcriptions.db")
+)
+TRANSCRIPTIONS_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "media", "transcriptions")
+)
 
 # Global list to store chunk lengths
 chunk_lengths = []
@@ -44,12 +55,12 @@ class RateLimitError(Exception):
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=4, max=60),
     retry=(
-        retry_if_exception_type(APIConnectionError) |
-        retry_if_exception_type(APITimeoutError) |
-        retry_if_exception_type(APIError)
+        retry_if_exception_type(APIConnectionError)
+        | retry_if_exception_type(APITimeoutError)
+        | retry_if_exception_type(APIError)
     ),
     before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True
+    reraise=True,
 )
 def transcribe_chunk(
     client, chunk, previous_transcript=None, cumulative_time=0, file_name=""
@@ -59,19 +70,18 @@ def transcribe_chunk(
             chunk.export(temp_file.name, format="mp3")
             chunk_size = os.path.getsize(temp_file.name)
 
-            transcription_options = {
-                "file": open(temp_file.name, "rb"),
-                "model": "whisper-1",
-                "response_format": "verbose_json",
-                "timestamp_granularities": ["word"],
-            }
+            with open(temp_file.name, "rb") as audio_file:
+                transcription_options = {
+                    "file": audio_file,
+                    "model": "whisper-1",
+                    "response_format": "verbose_json",
+                    "timestamp_granularities": ["word"],
+                }
 
-            if previous_transcript:
-                transcription_options["prompt"] = previous_transcript
+                if previous_transcript:
+                    transcription_options["prompt"] = previous_transcript
 
-            transcript = client.audio.transcriptions.create(**transcription_options)
-
-            transcription_options["file"].close()
+                transcript = client.audio.transcriptions.create(**transcription_options)
 
         os.unlink(temp_file.name)
         transcript_dict = transcript.model_dump()
@@ -95,19 +105,29 @@ def transcribe_chunk(
 
         return simplified_transcript
     except (APIConnectionError, APITimeoutError) as e:
-        logger.warning(f"OpenAI API connection error for file {file_name}: {e}. Retrying...")
+        logger.warning(
+            f"OpenAI API connection error for file {file_name}: {e}. Retrying..."
+        )
         raise
     except APIError as e:
         if e.status_code == 429:
             logger.error(f"OpenAI API rate limit exceeded for file {file_name}: {e}")
             raise RateLimitError("Rate limit exceeded")
-        elif e.status_code == 400 and "audio file could not be decoded" in str(e).lower():
-            logger.error(f"OpenAI API error for file {file_name}: {e}. Unsupported audio format.")
-            raise UnsupportedAudioFormatError(f"Unsupported audio format for file {file_name}")
+        elif (
+            e.status_code == 400 and "audio file could not be decoded" in str(e).lower()
+        ):
+            logger.error(
+                f"OpenAI API error for file {file_name}: {e}. Unsupported audio format."
+            )
+            raise UnsupportedAudioFormatError(
+                f"Unsupported audio format for file {file_name}"
+            )
         logger.error(f"OpenAI API error for file {file_name}: {e}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error transcribing chunk for file {file_name}: {str(e)}")
+        logger.error(
+            f"Unexpected error transcribing chunk for file {file_name}: {str(e)}"
+        )
         logger.error(
             f"Full response: {transcript_dict if 'transcript_dict' in locals() else 'Not available'}"
         )
@@ -166,11 +186,15 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
     try:
         conn = sqlite3.connect(TRANSCRIPTIONS_DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT json_file FROM transcriptions WHERE file_hash = ?", (file_hash,))
+        c.execute(
+            "SELECT json_file FROM transcriptions WHERE file_hash = ?", (file_hash,)
+        )
         result = c.fetchone()
         conn.close()
     except sqlite3.OperationalError:
-        logger.warning(f"Database file not found or inaccessible. Initializing new database at {TRANSCRIPTIONS_DB_PATH}")
+        logger.warning(
+            f"Database file not found or inaccessible. Initializing new database at {TRANSCRIPTIONS_DB_PATH}"
+        )
         init_db()
         return None
 
@@ -190,22 +214,10 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
     return None
 
 
-def get_file_hash(file_path=None, youtube_id=None):
-    """Generate MD5 hash from either file path or YouTube ID"""
-    if youtube_id:
-        # For YouTube videos, hash the ID to match existing format
-        return hashlib.md5(youtube_id.encode('utf-8')).hexdigest()
-    elif file_path:
-        # Existing file path hashing logic
-        return hashlib.md5(file_path.encode('utf-8')).hexdigest()
-    else:
-        raise ValueError("Either file_path or youtube_id must be provided")
-
-
 def save_transcription(file_path, transcripts, youtube_id=None):
     """
     Save transcription to gzipped JSON file and update database.
-    
+
     Args:
         file_path: Path to original audio file (or None for YouTube)
         transcripts: List of transcription segments or dict with transcription data
@@ -213,32 +225,37 @@ def save_transcription(file_path, transcripts, youtube_id=None):
     """
     # Generate hash based on either file_path or youtube_id
     file_hash = get_file_hash(file_path=file_path, youtube_id=youtube_id)
-    
+
     # Convert list of transcripts to expected format if needed
     if isinstance(transcripts, list):
         transcription_data = {
-            'file_path': file_path,
-            'youtube_id': youtube_id,
-            'text': ' '.join(segment.get('text', '') for segment in transcripts),
-            'words': [word for segment in transcripts for word in segment.get('words', [])],
-            'timestamp': datetime.utcnow().isoformat(),
-            'media_type': 'video' if youtube_id else 'audio'
+            "file_path": file_path,
+            "youtube_id": youtube_id,
+            "text": " ".join(segment.get("text", "") for segment in transcripts),
+            "words": [
+                word for segment in transcripts for word in segment.get("words", [])
+            ],
+            "timestamp": datetime.utcnow().isoformat(),
+            "media_type": "video" if youtube_id else "audio",
         }
     else:
         transcription_data = transcripts
-        transcription_data['file_path'] = file_path
-        transcription_data['timestamp'] = datetime.utcnow().isoformat()
-        transcription_data['media_type'] = 'video' if youtube_id else 'audio'
+        transcription_data["file_path"] = file_path
+        transcription_data["timestamp"] = datetime.utcnow().isoformat()
+        transcription_data["media_type"] = "video" if youtube_id else "audio"
         if youtube_id:
-            transcription_data['youtube_id'] = youtube_id
+            transcription_data["youtube_id"] = youtube_id
 
     if youtube_id:
         youtube_data_map = load_youtube_data_map()
-        if youtube_id in youtube_data_map and 'media_metadata' in youtube_data_map[youtube_id]:
-            metadata = youtube_data_map[youtube_id]['media_metadata']
-            transcription_data['youtube_metadata'] = {
-                'title': metadata.get('title'),
-                'url': metadata.get('url')
+        if (
+            youtube_id in youtube_data_map
+            and "media_metadata" in youtube_data_map[youtube_id]
+        ):
+            metadata = youtube_data_map[youtube_id]["media_metadata"]
+            transcription_data["youtube_metadata"] = {
+                "title": metadata.get("title"),
+                "url": metadata.get("url"),
             }
 
     # Generate unique filename based on content
@@ -249,7 +266,7 @@ def save_transcription(file_path, transcripts, youtube_id=None):
     os.makedirs(TRANSCRIPTIONS_DIR, exist_ok=True)
 
     # Save to gzipped JSON file
-    with gzip.open(json_filepath, 'wt', encoding='utf-8') as f:
+    with gzip.open(json_filepath, "wt", encoding="utf-8") as f:
         json.dump(transcription_data, f)
 
     # Update database
@@ -258,7 +275,7 @@ def save_transcription(file_path, transcripts, youtube_id=None):
         c = conn.cursor()
         c.execute(
             "INSERT OR REPLACE INTO transcriptions (file_hash, json_file, file_path, timestamp) VALUES (?, ?, ?, ?)",
-            (file_hash, json_filename, file_path, transcription_data['timestamp'])
+            (file_hash, json_filename, file_path, transcription_data["timestamp"]),
         )
         conn.commit()
         conn.close()
@@ -286,9 +303,11 @@ def transcribe_media(
 
     file_name = os.path.basename(file_path) if file_path else f"YouTube_{youtube_id}"
 
-    existing_transcription = get_saved_transcription(file_path, is_youtube_video, youtube_id)
+    existing_transcription = get_saved_transcription(
+        file_path, is_youtube_video, youtube_id
+    )
     if existing_transcription and not force:
-        logger.debug(f"transcribe_media: Using existing transcription")
+        logger.debug("transcribe_media: Using existing transcription")
         return existing_transcription
 
     client = OpenAI()
@@ -329,17 +348,17 @@ def transcribe_media(
                     cumulative_time += chunk.duration_seconds
                 else:
                     logger.error(
-                        f"Empty or invalid transcript for chunk {i+1} in {file_name}"
+                        f"Empty or invalid transcript for chunk {i + 1} in {file_name}"
                     )
             except RateLimitError:
-                logger.error(f"Rate limit exceeded. Terminating process.")
+                logger.error("Rate limit exceeded. Terminating process.")
                 return None
             except UnsupportedAudioFormatError as e:
                 logger.error(f"{e}. Stopping processing for file {file_name}.")
                 return None
             except Exception as e:
                 logger.error(
-                    f"Error transcribing chunk {i+1} for file {file_name}. Exception: {str(e)}"
+                    f"Error transcribing chunk {i + 1} for file {file_name}. Exception: {str(e)}"
                 )
                 raise  # Re-raise the exception to be caught by the outer try-except
 
@@ -350,7 +369,9 @@ def transcribe_media(
             return None
 
         if transcripts:
-            save_transcription(file_path, transcripts, youtube_id if is_youtube_video else None)
+            save_transcription(
+                file_path, transcripts, youtube_id if is_youtube_video else None
+            )
             return transcripts
 
         logger.error(f"No transcripts generated for {file_name}")
@@ -366,7 +387,6 @@ def transcribe_media(
 
 def combine_small_chunks(chunks, min_chunk_size, max_chunk_size):
     i = 0
-    combined = False
     while i < len(chunks) - 1:
         current_chunk = chunks[i]
         next_chunk = chunks[i + 1]
@@ -385,7 +405,6 @@ def combine_small_chunks(chunks, min_chunk_size, max_chunk_size):
                 current_chunk["end"] = next_chunk["end"]
                 current_chunk["words"].extend(next_chunk["words"])
                 chunks.pop(i + 1)
-                combined = True
             else:
                 # Move to next chunk if combining would exceed max_chunk_size
                 i += 1
@@ -398,13 +417,15 @@ def combine_small_chunks(chunks, min_chunk_size, max_chunk_size):
 class TimeoutException(Exception):
     pass
 
+
 def timeout_handler(signum, frame):
     raise TimeoutException()
+
 
 def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
     global chunk_lengths  # Ensure we are using the global list
     chunks = []
-    
+
     # Handle case where transcript is a list of transcripts
     # michaelo 11/22/24: I'm guessing this is what happened when I got a string instead of a transcript object
     if isinstance(transcript, list):
@@ -414,15 +435,12 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
         for t in transcript:
             all_words.extend(t.get("words", []))
             full_text += " " + t.get("text", "")
-        transcript = {
-            "words": all_words,
-            "text": full_text.strip()
-        }
-    
+        transcript = {"words": all_words, "text": full_text.strip()}
+
     words = transcript["words"]
     original_text = transcript["text"]
     total_words = len(words)
-    
+
     logger.debug(f"Starting chunk_transcription with {total_words} words.")
 
     if not words or not original_text.strip():
@@ -431,7 +449,7 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
 
     # Filter out music chunks
     original_word_count = len(words)
-    words = [word for word in words if not re.match(r'^[♪🎵🎶♫♬🔊]+$', word["word"])]
+    words = [word for word in words if not re.match(r"^[♪🎵🎶♫♬🔊]+$", word["word"])]
     total_words = len(words)
     if total_words != original_word_count:
         logger.debug(f"Filtered out music chunks. Remaining words: {total_words}")
@@ -459,16 +477,22 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
             end_time = current_chunk[-1]["end"]
 
             # Build a regex pattern to match the words in the current chunk
-            pattern = r'\b' + r'\W*'.join(re.escape(word["word"]) for word in current_chunk) + r'[\W]*'
+            pattern = (
+                r"\b"
+                + r"\W*".join(re.escape(word["word"]) for word in current_chunk)
+                + r"[\W]*"
+            )
 
             match = re.search(pattern, original_text)
             if match:
                 chunk_text = match.group(0)
                 # Ensure the chunk ends with punctuation if present
                 end_pos = match.end()
-                while end_pos < len(original_text) and re.match(r'\W', original_text[end_pos]):
+                while end_pos < len(original_text) and re.match(
+                    r"\W", original_text[end_pos]
+                ):
                     end_pos += 1
-                chunk_text = original_text[match.start():end_pos]
+                chunk_text = original_text[match.start() : end_pos]
             else:
                 chunk_text = " ".join(word["word"] for word in current_chunk)
 
@@ -553,7 +577,7 @@ def save_youtube_transcription(youtube_data, file_path, transcripts):
     # Don't call save_transcription here since it's already called in transcribe_media
     file_hash = get_file_hash(file_path)
     youtube_data_map = load_youtube_data_map()
-    
+
     # Get media metadata and store it in youtube_data
     try:
         title, author, duration, url, album = get_media_metadata(file_path)
@@ -561,12 +585,14 @@ def save_youtube_transcription(youtube_data, file_path, transcripts):
             "title": title,
             "author": author,
             "duration": duration,
-            "url": url
+            "url": url,
         }
     except Exception as e:
         logger.warning(f"Failed to get media metadata for YouTube video: {e}")
-    
+
     youtube_data["file_hash"] = file_hash
-    youtube_data["file_size"] = youtube_data.get("file_size", os.path.getsize(file_path))
+    youtube_data["file_size"] = youtube_data.get(
+        "file_size", os.path.getsize(file_path)
+    )
     youtube_data_map[youtube_data["youtube_id"]] = youtube_data
     save_youtube_data_map(youtube_data_map)
