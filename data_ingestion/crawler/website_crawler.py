@@ -105,12 +105,7 @@ def chunk_content(
     content: str, chunk_size: int = 600, chunk_overlap: int = 120
 ) -> list[str]:
     """Split content into overlapping chunks using spaCy paragraph-based chunking"""
-    text_splitter = SpacyTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separator="\n\n",
-        pipeline="en_core_web_sm",
-    )
+    text_splitter = SpacyTextSplitter()
 
     chunks = text_splitter.split_text(content)
     logging.debug(f"Created {len(chunks)} chunks from content using spaCy chunking")
@@ -889,12 +884,7 @@ def sanitize_for_id(text: str) -> str:
 
 def create_chunks_from_page(page_content) -> list[str]:
     """Create text chunks from page content using spaCy."""
-    text_splitter = SpacyTextSplitter(
-        chunk_size=600,
-        chunk_overlap=120,  # 20% overlap
-        separator="\n\n",
-        pipeline="en_core_web_sm",
-    )
+    text_splitter = SpacyTextSplitter()
 
     # Combine title and content, using the correct attribute name
     full_text = f"{page_content.title}\n\n{page_content.content}"

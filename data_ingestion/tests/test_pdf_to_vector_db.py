@@ -133,12 +133,7 @@ async def test_process_document(mock_env):
         )
 
         # Instantiate SpacyTextSplitter
-        text_splitter = SpacyTextSplitter(
-            chunk_size=30,  # Smaller chunk size for testing
-            chunk_overlap=5,
-            separator="\n\n",
-            pipeline="en_core_web_sm",
-        )
+        text_splitter = SpacyTextSplitter()
 
         # Mock process_chunk to be an async function
         with patch(

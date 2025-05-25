@@ -37,6 +37,47 @@
 **Principle**: Test-as-you-go approach ensures each component is solid before moving to the next, provides immediate
 feedback, and prevents accumulation of bugs until the end of the project.
 
+## Mistake: Metrics Recording in Multiple Code Paths
+
+**Problem**: When implementing comprehensive logging for the SpacyTextSplitter, metrics were only being recorded in one
+code path (the "without overlap" branch), causing documents processed through the "with overlap" branch to not be
+tracked in the metrics summary.
+
+**Wrong**: Metrics recording only in one return path:
+
+```python
+# In split_text method
+if self.chunk_overlap > 0 and len(chunks) > 1:
+    # Apply overlap logic
+    return result  # No metrics recorded here!
+
+# Only recorded metrics here (without overlap path)
+self.metrics.log_document_metrics(...)
+return chunks
+```
+
+**Correct**: Ensure metrics are recorded in all code paths by extracting to a helper method:
+
+```python
+def _log_chunk_metrics(self, chunks: list[str], word_count: int, document_id: str = None):
+    """Log detailed chunking metrics for a document."""
+    # All logging and metrics recording logic here
+    self.metrics.log_document_metrics(...)
+
+# In split_text method
+if self.chunk_overlap > 0 and len(chunks) > 1:
+    # Apply overlap logic
+    self._log_chunk_metrics(result, word_count, document_id)
+    return result
+
+# Also record metrics for non-overlap path
+self._log_chunk_metrics(chunks, word_count, document_id)
+return chunks
+```
+
+**Detection**: Debug logging showed documents being processed but metrics only reflecting the first document. Always
+test metrics accumulation across different code paths.
+
 ## Mistake: Inconsistent Chunking Strategy Across Ingestion Scripts
 
 **Problem**: Different ingestion scripts were using different text splitting approaches despite the project

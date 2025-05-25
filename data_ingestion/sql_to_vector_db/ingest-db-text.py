@@ -1110,12 +1110,7 @@ def main():
                     "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
                 )
             embeddings_model = OpenAIEmbeddings(model=model_name, chunk_size=500)
-            text_splitter = SpacyTextSplitter(
-                chunk_size=600,
-                chunk_overlap=120,  # 20% overlap
-                separator="\n\n",
-                pipeline="en_core_web_sm",
-            )
+            text_splitter = SpacyTextSplitter()
 
             (
                 processed_count_session,

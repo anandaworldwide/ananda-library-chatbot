@@ -6,3 +6,4 @@
 /audio_video/queue-*/
 /audio_video/data/
 **/ingestion_checkpoints/
+/pdf_corpus_analysis_*

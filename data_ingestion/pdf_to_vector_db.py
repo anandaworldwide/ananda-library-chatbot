@@ -707,12 +707,7 @@ async def run(keep_data: bool, library_name: str) -> None:
         )
 
     # Initialize text splitter
-    text_splitter = SpacyTextSplitter(
-        chunk_size=600,
-        chunk_overlap=120,  # 20% overlap
-        separator="\n\n",  # Note: escaped for string literal, SpacyTextSplitter will handle it
-        pipeline="en_core_web_sm",
-    )
+    text_splitter = SpacyTextSplitter()
 
     # Initialize OpenAI embeddings
     try:
