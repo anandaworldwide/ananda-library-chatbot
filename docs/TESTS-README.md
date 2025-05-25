@@ -125,3 +125,91 @@ The `bin/test_api_security.sh` script provides comprehensive security testing fo
 - Combined token and cookie authentication
 
 Run it with: `./bin/test_api_security.sh <password> <site_auth_cookie>`
+
+## Python Data Ingestion Testing
+
+### Overview
+
+The Python data ingestion pipeline includes comprehensive testing infrastructure using pytest.
+
+### Test Directory Structure
+
+- **`data_ingestion/tests/`**: Contains all Python tests for data ingestion functionality
+  - Test coverage for spaCy text chunking utilities
+  - Pinecone client initialization and operations
+  - Document processing and hashing
+  - Environment variable handling
+  - Signal handling for graceful shutdowns
+
+### Running Python Tests
+
+From the `data_ingestion` directory:
+
+```bash
+# Run all Python tests
+cd data_ingestion
+python -m pytest
+
+# Run with coverage
+python -m pytest --cov=. --cov-report=html
+
+# Run specific test files
+python -m pytest tests/test_spacy_text_splitter.py
+
+# Run with verbose output
+python -m pytest -v
+```
+
+### Key Test Areas
+
+#### Text Chunking Tests (`test_spacy_text_splitter.py`)
+
+- **Semantic Chunking**: Validates spaCy paragraph-based text splitting
+- **Chunk Overlap**: Ensures proper overlap between adjacent chunks
+- **Edge Cases**: Handles empty text, very long sentences, and missing paragraphs
+- **Custom Separators**: Tests fallback chunking strategies
+- **Token Counting**: Verifies accurate token counting for chunk sizing
+
+#### Pinecone Integration Tests
+
+- **Client Initialization**: Tests Pinecone client setup with various configurations
+- **Environment Variables**: Validates required environment variable handling
+- **Vector Operations**: Tests document processing and vector database interactions
+- **Error Handling**: Validates graceful error handling for API failures
+
+#### Document Processing Tests
+
+- **Hash Generation**: Tests document-level hashing utility
+- **Metadata Extraction**: Validates metadata processing for different content types
+- **Checkpoint Management**: Tests ingestion checkpoint saving and loading
+- **Signal Handling**: Validates graceful shutdown mechanisms
+
+### Dependencies
+
+Python testing uses these key dependencies:
+
+- **pytest**: Primary testing framework
+- **pytest-asyncio**: For async test support
+- **pytest-mock**: For mocking external dependencies
+- **numpy<2.0**: Vector operations (with version constraint for compatibility)
+
+### Environment Setup for Testing
+
+Tests can be run with site-specific configurations:
+
+```bash
+# Test with specific site environment
+python -m pytest --site ananda
+
+# Test with mock environment (default)
+python -m pytest
+```
+
+### Integration with CI/CD
+
+Python tests are designed to work with continuous integration:
+
+- Use environment variable mocking for external dependencies
+- Include timeout settings for long-running operations
+- Provide detailed error reporting for debugging
+- Support parallel test execution where appropriate

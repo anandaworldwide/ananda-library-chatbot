@@ -5,6 +5,10 @@ import hashlib
 import logging
 from pinecone import Pinecone, ServerlessSpec, PineconeException, NotFoundException
 
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from data_ingestion.utils.document_hash import generate_document_hash
+
 logger = logging.getLogger(__name__)
 
 """
@@ -139,9 +143,14 @@ def store_in_pinecone(
     
     vectors = []
     for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-        # Content-based deduplication hash
-        content_hash = hashlib.md5(chunk["text"].encode()).hexdigest()[:8]
-                
+        # Generate document-level hash instead of chunk content hash
+        document_hash = generate_document_hash(
+            source=url or s3_key or "unknown_source",
+            title=title,
+            author=author,
+            library=library_name
+        )
+        
         # Replace offensive single quote with acceptable one
         if title:
             title = title.replace("’", "'")
@@ -150,7 +159,7 @@ def store_in_pinecone(
         sanitized_title = re.sub(r'[^\x00-\x7F]+', '', title) if title else 'Unknown_Title'
         
         chunk_id = f"{'youtube' if is_youtube_video else 'audio'}||{library_name}||" +\
-                   f"{sanitized_title}||{content_hash}||chunk{i+1}"
+                   f"{sanitized_title}||{document_hash}||chunk{i+1}"
 
         # Duration calculation for content navigation
         duration = chunk["end"] - chunk["start"]

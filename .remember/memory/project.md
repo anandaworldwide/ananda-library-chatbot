@@ -4,6 +4,57 @@
 
 See @crawler-TODO.md
 
+## Shared Utilities Integration Status
+
+**Discovery**: During verification of the shared utilities refactor completion, three additional ingestion scripts were
+found that are not fully using the new shared utilities:
+
+1. **`data_ingestion/db-to-pdf/db-to-pdfs.py`** - Partially updated (missing `remove_html_tags` import)
+2. **`data_ingestion/pdf_to_vector_db.py`** - Partially updated (missing several major utilities)
+3. **`data_ingestion/crawler/website_crawler.py`** - Not updated (only using `generate_document_hash`)
+
+**Status**: Project completion revised from 100% to 85% complete. Remaining updates needed to achieve full code
+deduplication and consistent error handling across all ingestion methods.
+
+## Python Linting Setup
+
+**Ruff Configuration**: The project uses Ruff for Python linting and formatting:
+
+- **Configuration**: `pyproject.toml` contains Ruff settings following PEP 8
+- **Extensions**: VS Code/Cursor should have the Ruff extension (`charliermarsh.ruff`) installed
+- **Settings**: `.vscode/settings.json` configures Ruff as the default linter and formatter (environment-agnostic)
+- **Installation**: Ruff is included in `requirements.in` and should be installed via `pip install ruff`
+- **Features**: Auto-fix on save, import organization, unused import detection, unused variable detection
+- **Rules**: Enables Pyflakes (F), pycodestyle (E), isort (I), pyupgrade (UP), flake8-bugbear (B), simplify (SIM), and
+  complexity (C90)
+- **Developer Setup**: `.vscode/settings.json.example` provides guidance for setting Python interpreter paths per
+  environment
+- **Auto-detection**: The settings rely on VS Code/Cursor's auto-detection of Python interpreters rather than hardcoded
+  paths
+
+## Data Ingestion Testing Infrastructure
+
+**Python Testing Setup**: The project now includes comprehensive pytest-based testing for data ingestion:
+
+- **Location**: `data_ingestion/tests/` directory contains all Python tests
+- **Key Dependencies**: pytest, pytest-asyncio, pytest-mock, numpy<2.0 (version constraint important)
+- **Test Coverage**: spaCy text chunking, Pinecone operations, document hashing, signal handling, web crawler
+  functionality
+- **Running Tests**: From `data_ingestion/` directory use `python -m pytest`
+- **Site-Specific Testing**: Tests support `--site` argument for environment-specific configurations
+- **Web Crawler Tests**: Comprehensive test coverage in `test_crawler.py` including SQLite operations, config loading,
+  failure handling, and daemon behavior
+
+## spaCy Chunking Strategy Requirements
+
+**Core Implementation**: All data ingestion now uses spaCy for semantic chunking:
+
+- **Default Configuration**: 600 tokens per chunk with 20% overlap
+- **Language Model**: Requires spaCy English model installation
+- **Fallback Strategy**: Automatic fallback to sentence-based chunking when paragraphs not detected
+- **Performance**: RAG evaluation shows significant improvement over fixed-size chunking
+- **Integration**: Implemented across PDF, audio/video, web crawling, and SQL ingestion scripts
+
 ## S3 Bucket Policy for Public Access
 
 The user wants to restrict public access to a specific path within the S3 bucket.
@@ -20,8 +71,8 @@ The user wants to restrict public access to a specific path within the S3 bucket
 }
 ```
 
-**Current Preference (PublicReadGetObject Statement)**:
-The `Resource` should be restricted to a specific path, e.g., `public/audio/*`.
+**Current Preference (PublicReadGetObject Statement)**: The `Resource` should be restricted to a specific path, e.g.,
+`public/audio/*`.
 
 ```json
 {
@@ -35,12 +86,14 @@ The `Resource` should be restricted to a specific path, e.g., `public/audio/*`.
 
 ### Dependency Version Alignment
 
-- All shared dependencies across web and data_ingestion must match the versions in web/package.json. Web versions take priority.
+- All shared dependencies across web and data_ingestion must match the versions in web/package.json. Web versions take
+  priority.
 - If adding or updating a dependency in any package, ensure the version matches web/package.json if it exists there.
 
 ### Vercel Monorepo Local Package Build Order Fix
 
-**Problem:** When building a monorepo subdirectory (e.g., web/) in Vercel, ensure all dependencies are properly configured and any local package references are removed.
+**Problem:** When building a monorepo subdirectory (e.g., web/) in Vercel, ensure all dependencies are properly
+configured and any local package references are removed.
 
 **Fix:** If you have removed a local package from the project:
 
@@ -50,13 +103,14 @@ The `Resource` should be restricted to a specific path, e.g., `public/audio/*`.
 
 ### Browserslist Error in Next.js Build
 
-**Problem:** Vercel build fails with `Cannot find module 'browserslist'` during the Next.js build process. This happens when processing CSS files with autoprefixer in the Next.js application.
+**Problem:** Vercel build fails with `Cannot find module 'browserslist'` during the Next.js build process. This happens
+when processing CSS files with autoprefixer in the Next.js application.
 
 **Fix:**
 
 - Add browserslist directly to the devDependencies of the package running Next.js (web/package.json):
 
-  ```
+  ```npm
   "browserslist": "^4.23.0"
   ```
 
@@ -86,21 +140,15 @@ To prevent test files from being included in production builds while maintaining
 }
 ```
 
-2. Update the main `tsconfig.json` to exclude test files:
+1. Update the main `tsconfig.json` to exclude test files:
 
 ```json
 {
-  "exclude": [
-    "node_modules",
-    "**/*.test.ts",
-    "**/*.test.tsx",
-    "jest.setup.ts",
-    "jest.config.cjs"
-  ]
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx", "jest.setup.ts", "jest.config.cjs"]
 }
 ```
 
-3. Configure Jest to use the test-specific TypeScript config:
+1. Configure Jest to use the test-specific TypeScript config:
 
 ```js
 {
@@ -123,7 +171,8 @@ This setup ensures that:
 
 ### Monorepo Package Structure Update
 
-**Previous Structure**: The project used a local package `shared-utils` for shared utilities between web and data_ingestion.
+**Previous Structure**: The project used a local package `shared-utils` for shared utilities between web and
+data_ingestion.
 
 **Current Structure**:
 
@@ -151,15 +200,20 @@ When adding new shared functionality:
 
 ### Script Argument for Environment Loading
 
-**Situation**: Scripts like `bin/evaluate_rag_system.py` that need to access environment-specific configurations (e.g., API keys for different sites like 'ananda' or 'crystal') should use a consistent mechanism for loading these configurations.
+**Situation**: Scripts like `bin/evaluate_rag_system.py` that need to access environment-specific configurations (e.g.,
+API keys for different sites like 'ananda' or 'crystal') should use a consistent mechanism for loading these
+configurations.
 
-**Previous (Problematic)**: Some scripts might hardcode the environment file (e.g., `.env.ananda`) or lack a way to specify the target site, making them less flexible.
+**Previous (Problematic)**: Some scripts might hardcode the environment file (e.g., `.env.ananda`) or lack a way to
+specify the target site, making them less flexible.
 
 **Correct (Preferred)**:
 
-1.  Add a command-line argument, typically `--site`, to the script using `argparse`.
-2.  Utilize a shared utility function, like `pyutil.env_utils.load_env(site_name)`, to load the appropriate `.env.<site_name>` file.
-3.  Ensure that functions relying on environment variables (e.g., `initialize_pinecone`, `load_environment`) fetch these variables _after_ `load_env` has been called.
+1. Add a command-line argument, typically `--site`, to the script using `argparse`.
+2. Utilize a shared utility function, like `pyutil.env_utils.load_env(site_name)`, to load the appropriate
+   `.env.<site_name>` file.
+3. Ensure that functions relying on environment variables (e.g., `initialize_pinecone`, `load_environment`) fetch these
+   variables _after_ `load_env` has been called.
 
 **Example Snippet (`bin/evaluate_rag_system.py`)**:
 
@@ -194,4 +248,51 @@ if __name__ == "__main__":
     main()
 ```
 
-This approach standardizes how scripts handle site-specific configurations, improving maintainability and usability across different environments/sites.
+This approach standardizes how scripts handle site-specific configurations, improving maintainability and usability
+across different environments/sites.
+
+## PDF Test Hanging Issue Resolution
+
+**Problem**: PDF to vector DB tests were hanging due to `MagicMock` objects having `__next__` attribute by default,
+causing the `clear_library_text_vectors` function to enter an infinite loop in the generator handling code path.
+
+**Solution**: Explicitly remove the `__next__` attribute from `MagicMock` objects when testing functions that check for
+generators/iterators:
+
+```python
+mock_response = MagicMock()
+if hasattr(mock_response, '__next__'):
+    delattr(mock_response, '__next__')
+```
+
+**Additional Fixes Applied**:
+
+- Fixed environment variable names (`PINECONE_INGEST_INDEX_NAME` vs `PINECONE_INGEST_INDEX`)
+- Fixed checkpoint field names (`processed_files` vs `processed_docs`)
+- Fixed signal handler exit code (1 vs 0)
+- Fixed import paths for `load_dotenv` patching
+- Set global variables required by cleanup function
+
+All PDF to vector DB tests now pass successfully.
+
+## User Preferences and Project Rules
+
+### Testing Philosophy
+
+- **Remove Obsolete Tests**: When functions are moved to shared utilities with their own comprehensive test coverage,
+  remove the obsolete tests from the original scripts rather than duplicating test coverage
+- **Shared Utilities Testing**: The project has 207 tests across all shared utility modules, providing comprehensive
+  coverage for moved functionality
+
+### Development Environment
+
+- **Python Version**: Python 3.11.9 with pyenv
+- **Virtual Environment**: `ananda-library-chatbot`
+- **Testing Framework**: pytest with pytest-asyncio for async tests
+- **Package Management**: pip with requirements.txt
+
+### Code Organization Principles
+
+- **Shared Utilities**: All common functionality should be moved to `data_ingestion/utils/` modules
+- **Import Patterns**: Use absolute imports from project root with proper sys.path setup
+- **Path Management**: Simple, readable path setup preferred over complex try/except blocks

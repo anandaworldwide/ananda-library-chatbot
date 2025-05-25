@@ -214,9 +214,11 @@ pyee==11.0.1
     # via playwright
 pygments==2.19.1
     # via rich
-pymysql==1.1.0
+pymupdf==1.24.5
     # via -r requirements.in
-pypdf2==3.0.1
+pymupdfb==1.24.3
+    # via pymupdf
+pymysql==1.1.0
     # via -r requirements.in
 pytest==8.3.5
     # via

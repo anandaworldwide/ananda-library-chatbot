@@ -23,10 +23,19 @@ all data ingestion methods.
 
 ## PDF Ingestion ✅
 
-- [x] Update `db-to-pdfs.py` Python script to use the new chunking strategy
 - [x] Convert `pdf_to_vector_db.ts` to Python with spaCy chunking (`pdf_to_vector_db.py`)
 - [x] Add configuration options for chunk size and overlap percentage
+- [x] **IMPROVED**: Changed from page-by-page to full-document processing for better chunking quality
+- [x] **FIXED**: Eliminated chunk ID overwrites by processing entire PDFs as single documents
 - [ ] Test with a variety of PDF formats and layouts
+
+**Key Improvement**: Modified PDF processing to concatenate all pages into a single document before chunking. This:
+
+- Preserves context across page boundaries
+- Allows spaCy to make optimal chunking decisions on complete content
+- Eliminates artificial paragraph breaks at page boundaries
+- Removes need for page-specific hashing (simplified back to document-level hashing)
+- Improves overall chunk quality and semantic coherence
 
 ## Audio/Video Transcript Ingestion
 
@@ -46,6 +55,25 @@ all data ingestion methods.
 - [ ] Update `sql_to_vector_db` scripts to use the new chunking strategy
 - [ ] Test with different column types and content formats
 - [ ] Ensure metadata is preserved correctly with the new chunking approach
+
+## Encoding strategy question
+
+- [x] Decide whether hash in pine cone ID is helpful or if there's a better strategy. It seems like we would
+      want a hash that joined together all the chunks.
+
+**RESOLVED**: Implemented document-level hashing using a centralized utility (`data_ingestion/utils/document_hash.py`).
+All chunks from the same document now share the same hash, enabling easy bulk operations:
+
+- **Before**: `text||Crystal Clarity||Art_Science_of_Raja_Yoga||9353b288||chunk1` (unique per chunk)
+- **After**: `text||Crystal Clarity||Art_Science_of_Raja_Yoga||345345345||chunk1` (same hash for all chunks)
+
+Hash is generated from document metadata (source + title + author + library) rather than chunk content.
+Updated all ingestion scripts: PDF, audio/video, SQL, and web crawler.
+
+text||Crystal Clarity||Art**_Science_of_Raja_Yoga||9353b288||chunk1
+text||Crystal Clarity||Art_**Science*of_Raja_Yoga||26198964||chunk2
+text||Crystal Clarity||Art\*\*\_Science_of_Raja_Yoga||7ed8c82b||chunk3
+text||Crystal Clarity||Art*\*\*Science_of_Raja_Yoga||168b146a||chunk4
 
 ## Integration and Testing
 

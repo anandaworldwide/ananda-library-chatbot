@@ -231,11 +231,17 @@ Data is stored across multiple services:
   - `transcribe_and_ingest_media.py`: Main script orchestrating the process for various media types.
   - **Steps:**
     1. **Source Acquisition:** Fetches files from local paths, S3, or downloads from URLs.
-    2. **Preprocessing:** Extracts text from PDFs, transcribes audio/video.
-    3. **Chunking:** Splits large documents/transcripts into smaller, manageable chunks.
+    2. **Preprocessing:** Extracts text from PDFs using PyMuPDF, transcribes audio/video.
+    3. **Chunking:** Uses spaCy for semantic paragraph-based chunking (600 tokens, 20% overlap) which significantly
+       outperforms fixed-size chunking. Includes fallback to sentence-based chunking for texts without paragraphs.
     4. **Metadata Extraction:** Gathers relevant metadata (source, author, title, etc.).
     5. **Embedding:** Generates vector embeddings for text chunks.
-    6. **Upserting:** Uploads vectors and associated metadata to the correct Pinecone namespace.
+    6. **Upserting:** Uploads vectors and associated metadata to the correct Pinecone namespace using document-level
+       hashing for efficient bulk operations.
+  - **PDF Processing:** Converted from TypeScript (`pdf_to_vector_db.ts`) to Python (`pdf_to_vector_db.py`) with
+    improved full-document processing instead of page-by-page to preserve context across page boundaries.
+  - **Document Hashing:** Implements centralized document-level hashing (`data_ingestion/utils/document_hash.py`)
+    where all chunks from the same document share the same hash, enabling easy bulk operations and deduplication.
   - Uses helper scripts for specific tasks (`youtube_utils.py`, `s3_utils.py`, `pinecone_utils.py`).
   - Manages tasks potentially via a queue (`IngestQueue.py`, `manage_queue.py`).
 - **Related Questions Generation:**

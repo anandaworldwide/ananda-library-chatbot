@@ -209,6 +209,42 @@ debugging, and to avoid charges for using the Firebase services.
    pyenv local ananda-library-chatbot
    ```
 
+5. Install Python dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### Python Code Quality and Linting
+
+This project uses [Ruff](https://github.com/astral-sh/ruff) for Python linting and formatting. The configuration
+follows PEP 8 standards and includes automatic fixing of common issues.
+
+**Setup for VS Code/Cursor:**
+
+1. Install the Ruff extension: Search for "Ruff" by Charlie Marsh in the Extensions panel
+2. The project includes pre-configured settings in `.vscode/settings.json` that will:
+   - Enable Ruff as the default linter and formatter
+   - Auto-fix issues on save
+   - Organize imports automatically
+   - Show linting errors in the Problems panel
+
+**Manual linting commands:**
+
+```bash
+# Check for linting issues
+ruff check .
+
+# Fix auto-fixable issues
+ruff check --fix .
+
+# Format code
+ruff format .
+```
+
+**Note for contributors:** If VS Code/Cursor doesn't auto-detect your Python interpreter, refer to
+`.vscode/settings.json.example` for guidance on setting the interpreter path for your specific environment.
+
 ## Data Ingestion
 
 This project supports ingesting data from multiple sources:

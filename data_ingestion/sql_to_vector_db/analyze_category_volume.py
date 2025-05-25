@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Analyzes the volume of text content per category from a WordPress MySQL database.
 
@@ -11,26 +11,19 @@ import os
 import sys
 import argparse
 import pymysql
-import re
 from collections import defaultdict
 from tqdm import tqdm
-from bs4 import BeautifulSoup
+from typing import Dict, List, Any
 
-# Add the python directory to the path so we can import util
-# Assumes running from workspace root or data_ingestion/sql_to_vector_db
-try:
-    # Running from workspace root
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-    from pyutil.env_utils import load_env
-except ImportError:
-    # Running from data_ingestion/sql_to_vector_db
-    try:
-        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))) # Go up three levels
-        from pyutil.env_utils import load_env
-    except ImportError:
-        print("Error: Could not find the 'pyutil' module. Make sure the script is run from the workspace root or the 'data_ingestion/sql_to_vector_db' directory.")
-        sys.exit(1)
+# Add project root to Python path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+sys.path.insert(0, parent_dir)
 
+from pyutil.env_utils import load_env
+
+# Import shared utilities
+from data_ingestion.utils.text_processing import remove_html_tags, replace_smart_quotes
 
 # --- Argument Parsing ---
 def parse_arguments():
@@ -90,41 +83,6 @@ def close_db_connection(connection):
     if connection and connection.open:
         connection.close()
         print("Database connection closed.")
-
-# --- Text Cleaning Utilities (Copied from ingest-db-text.py) ---
-def remove_html_tags(text):
-    """Removes HTML tags, script, style elements, and excessive whitespace from text."""
-    if not text:
-        return ""
-    soup = BeautifulSoup(text, "html.parser")
-    for script_or_style in soup(["script", "style"]):
-        script_or_style.decompose()
-    text = soup.get_text()
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
-
-def replace_smart_quotes(text):
-    """Replaces common 'smart' quotes and other special characters with standard ASCII equivalents."""
-    if not text:
-        return ""
-    smart_quotes = {
-        "\u2018": "'", "\u2019": "'", # Single quotes
-        "\u201c": '"', "\u201d": '"', # Double quotes
-        "\u2032": "'", "\u2033": '"', # Prime symbols
-        "\u2014": "-", "\u2013": "-", # Dashes
-        "\u2026": "...",             # Ellipsis
-        "\u2011": "-",               # Non-breaking hyphen
-        "\u00A0": " ",               # Non-breaking space
-        "\u00AB": '"', "\u00BB": '"', # Guillemets
-        "\u201A": ",", "\u201E": ",", # Low single/double quotes as commas
-        "\u2022": "*",               # Bullet
-        "\u2010": "-",               # Hyphen
-    }
-    for smart, standard in smart_quotes.items():
-        text = text.replace(smart, standard)
-    # Keep basic ASCII and common whitespace
-    text = ''.join(c for c in text if ord(c) < 128 or c in [' ', '\n', '\t'])
-    return text
 
 # --- Site Configuration (Simplified from ingest-db-text.py) ---
 def get_config(site):

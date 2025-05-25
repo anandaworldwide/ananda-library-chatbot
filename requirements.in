@@ -25,7 +25,7 @@ openpyxl==3.1.5
 pinecone-client==5.0.1
 pinecone-plugin-interface==0.0.7
 playwright==1.40.0
-PyPDF2==3.0.1
+pymupdf==1.24.5
 pydub==0.25.1
 pymysql==1.1.0
 pytest-mock
@@ -33,6 +33,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 pytz==2024.1
 readability-lxml
+ruff
 s3transfer==0.10.2
 spacy==3.8.6
 tenacity==8.2.2

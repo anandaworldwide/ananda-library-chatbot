@@ -6,37 +6,45 @@
 # and therefore this script itself does not perform any text chunking.
 #
 # TODO: Deprecate this method of converting a database to pdf files to then be ingested is old now we have a
-# separate script that ingests directly from mysql database into pinecone so this is no longer needed we 
+# separate script that ingests directly from mysql database into pinecone so this is no longer needed we
 # should delete this as soon as we're sure that the new method is stable. 4/25/2025
 
+import argparse
+import logging
 import os
 import shutil
+import sys
+import time
 import traceback
+import warnings
+
+# Add project root to sys.path to allow absolute imports from data_ingestion
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+import pymysql
 import requests
 from fpdf import FPDF
-import pymysql
-from bs4 import BeautifulSoup
-import time
-import sys
+from PyPDF2 import PdfReader, PdfWriter
+from PyPDF2.errors import PdfReadError
+from PyPDF2.generic import TextStringObject
 from requests import RequestException
 from tqdm import tqdm
-import warnings
+
+from data_ingestion.utils.text_processing import remove_html_tags, replace_smart_quotes
 from pyutil.env_utils import load_env
-import argparse
-from PyPDF2 import PdfReader, PdfWriter
-from PyPDF2.generic import TextStringObject
-import logging
-from PyPDF2.errors import PdfReadError
 
 # Suppress specific warning from fpdf
 warnings.filterwarnings("ignore", message="cmap value too big/small")
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -81,39 +89,6 @@ def get_db_connection(db_config):
     except pymysql.MySQLError as err:
         print(f"Error connecting to MySQL: {err}")
         return None
-
-
-def remove_html_tags(text):
-    return BeautifulSoup(text, "html.parser").get_text()
-
-
-def replace_smart_quotes(text):
-    # Dictionary of smart quote characters to their standard ASCII equivalents
-    smart_quotes = {
-        "\u2018": "'",
-        "\u2019": "'",
-        "\u201c": '"',
-        "\u201d": '"',
-        "\u2032": "'",
-        "\u2033": '"',
-        "\u2014": "-",
-        "\u2013": "-",
-        "\u2026": "...",
-        "\u2011": "-",
-        "\u00A0": " ",
-        "\u00AB": '"',
-        "\u00BB": '"',
-        "\u201A": ",",
-        "\u201E": ",",
-        "\u2022": "*",
-        "\u2010": "-",
-    }
-
-    # Replace smart quotes with standard quotes
-    for smart_quote, ascii_quote in smart_quotes.items():
-        text = text.replace(smart_quote, ascii_quote)
-
-    return text
 
 
 def get_data_from_wp(post_id, db, cursor):
@@ -177,7 +152,7 @@ def get_data_from_wp(post_id, db, cursor):
 
 
 def get_pdf_attachments(cursor):
-    query = f"""
+    query = """
     SELECT 
         p.ID,
         p.post_title,
@@ -219,16 +194,16 @@ def setup_font_cache():
 
     # Get the directory where the script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
     # Create a font_cache directory in the script's directory
     font_cache_dir = os.path.join(script_dir, "font_cache")
     os.makedirs(font_cache_dir, exist_ok=True)
-    
+
     destination_path = os.path.join(font_cache_dir, "Times New Roman.ttf")
-    
+
     if not os.path.exists(destination_path):
         shutil.copy(unicode_font_path, destination_path)
-    
+
     print(f"Font cache path: {destination_path}")
     return destination_path
 
@@ -241,12 +216,14 @@ def setup_pdf_folder(site):
 
 def get_total_posts_count(cursor, post_types):
     count_query = f"""SELECT COUNT(*) FROM wp_posts 
-                     WHERE post_status='publish' AND post_type IN ({','.join(['%s']*len(post_types))})"""
+                     WHERE post_status='publish' AND post_type IN ({",".join(["%s"] * len(post_types))})"""
     cursor.execute(count_query, post_types)
     return cursor.fetchone()[0]
 
 
-def process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db):
+def process_posts_api_version(
+    cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db
+):
     """
     Process posts using an API call to retrieve additional information.
     This version is used when the full WordPress database is not available.
@@ -263,12 +240,12 @@ def process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unico
             child.post_title AS CHILD_TITLE
         FROM 
             wp_posts AS child
-            LEFT JOIN wp_posts AS parent ON child.post_parent = parent.ID AND parent.post_type IN ({','.join(['%s']*len(post_types))})
-            LEFT JOIN wp_posts AS parent2 ON parent.post_parent = parent2.ID AND parent2.post_type IN ({','.join(['%s']*len(post_types))})
-            LEFT JOIN wp_posts AS parent3 ON parent2.post_parent = parent3.ID AND parent3.post_type IN ({','.join(['%s']*len(post_types))})
+            LEFT JOIN wp_posts AS parent ON child.post_parent = parent.ID AND parent.post_type IN ({",".join(["%s"] * len(post_types))})
+            LEFT JOIN wp_posts AS parent2 ON parent.post_parent = parent2.ID AND parent2.post_type IN ({",".join(["%s"] * len(post_types))})
+            LEFT JOIN wp_posts AS parent3 ON parent2.post_parent = parent3.ID AND parent3.post_type IN ({",".join(["%s"] * len(post_types))})
         WHERE 
             child.post_status = 'publish' 
-            AND child.post_type IN ({','.join(['%s']*len(post_types))})
+            AND child.post_type IN ({",".join(["%s"] * len(post_types))})
         ORDER BY 
             child.ID;
     """
@@ -354,7 +331,9 @@ def process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unico
     return n, skipped
 
 
-def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, base_url):
+def process_posts_full_db_version(
+    cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, base_url
+):
     """
     Process posts using only the database, without making API calls.
     This version is used when the full WordPress database dump is available.
@@ -382,12 +361,12 @@ def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, u
                    child.post_name, '/') AS permalink
         FROM 
             wp_posts AS child
-            LEFT JOIN wp_posts AS parent ON child.post_parent = parent.ID AND parent.post_type IN ({','.join(['%s']*len(post_types))})
-            LEFT JOIN wp_posts AS parent2 ON parent.post_parent = parent2.ID AND parent2.post_type IN ({','.join(['%s']*len(post_types))})
-            LEFT JOIN wp_posts AS parent3 ON parent2.post_parent = parent3.ID AND parent3.post_type IN ({','.join(['%s']*len(post_types))})
+            LEFT JOIN wp_posts AS parent ON child.post_parent = parent.ID AND parent.post_type IN ({",".join(["%s"] * len(post_types))})
+            LEFT JOIN wp_posts AS parent2 ON parent.post_parent = parent2.ID AND parent2.post_type IN ({",".join(["%s"] * len(post_types))})
+            LEFT JOIN wp_posts AS parent3 ON parent2.post_parent = parent3.ID AND parent3.post_type IN ({",".join(["%s"] * len(post_types))})
         WHERE 
             child.post_status = 'publish' 
-            AND child.post_type IN ({','.join(['%s']*len(post_types))})
+            AND child.post_type IN ({",".join(["%s"] * len(post_types))})
         ORDER BY 
             child.ID;
     """
@@ -401,9 +380,20 @@ def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, u
         if row is None:
             continue
 
-        (id, content, post_name, parent_title_1, parent_title_2, parent_title_3, 
-         child_post_title, post_author, post_date, post_type, permalink) = row
-        
+        (
+            id,
+            content,
+            post_name,
+            parent_title_1,
+            parent_title_2,
+            parent_title_3,
+            child_post_title,
+            post_author,
+            post_date,
+            post_type,
+            permalink,
+        ) = row
+
         # Sanitize post_name to ensure it is safe for use as a filename
         safe_post_name = "-".join(
             "".join(c if c.isalnum() or c.isspace() else " " for c in post_name).split()
@@ -440,7 +430,9 @@ def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, u
             continue
 
         # Get author name
-        cursor.execute("SELECT display_name FROM wp_users WHERE ID = %s", (post_author,))
+        cursor.execute(
+            "SELECT display_name FROM wp_users WHERE ID = %s", (post_author,)
+        )
         author_result = cursor.fetchone()
         author_name = author_result[0] if author_result else None
 
@@ -467,38 +459,58 @@ def process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, u
     return n, skipped
 
 
-def process_posts(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, site_config):
-    if site_config.get('use_api', False):
-        return process_posts_api_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db)
+def process_posts(
+    cursor,
+    post_types,
+    total_posts,
+    pdf_folder,
+    unicode_font_path_cache,
+    db,
+    site_config,
+):
+    if site_config.get("use_api", False):
+        return process_posts_api_version(
+            cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db
+        )
     else:
-        return process_posts_full_db_version(cursor, post_types, total_posts, pdf_folder, unicode_font_path_cache, db, site_config['base_url'])
+        return process_posts_full_db_version(
+            cursor,
+            post_types,
+            total_posts,
+            pdf_folder,
+            unicode_font_path_cache,
+            db,
+            site_config["base_url"],
+        )
 
 
 def create_pdf(post_title, author_name, permalink, content, unicode_font_path_cache):
     """
     Create a PDF file from post content.
-    
+
     Args:
         post_title (str): Title of the post
         author_name (str): Author name
         permalink (str): URL of the original post
         content (str): The post content
         unicode_font_path_cache (str): Path to the font file
-        
+
     Returns:
         FPDF: PDF document object
     """
     pdf = FPDF()
     pdf.add_page()
-    
+
     # Try to use a Unicode-compatible font that's likely to be on macOS
     try:
-        pdf.add_font("Arial Unicode MS", "", "/Library/Fonts/Arial Unicode.ttf", uni=True)
+        pdf.add_font(
+            "Arial Unicode MS", "", "/Library/Fonts/Arial Unicode.ttf", uni=True
+        )
         font_name = "Arial Unicode MS"
     except FileNotFoundError:
         print("Arial Unicode MS font not found. Falling back to built-in font.")
         font_name = "Helvetica"
-    
+
     pdf.set_font(font_name, "", 14)
 
     post_title = replace_smart_quotes(post_title)
@@ -521,10 +533,10 @@ def create_pdf(post_title, author_name, permalink, content, unicode_font_path_ca
     pdf.set_font(font_name, "", 14)
     content = replace_smart_quotes(content)
     content = remove_html_tags(content)
-    
+
     # First write the title
     pdf.multi_cell(0, 10, f"{post_title}\n\n")
-    
+
     pdf.multi_cell(0, 10, content)
 
     return pdf
@@ -561,9 +573,7 @@ def process_attachments(cursor, base_url, pdf_folder):
         try:
             if download_pdf(attachment_url, new_path):
                 logging.info(f"Downloaded: {new_filename}")
-                set_pdf_metadata(
-                    new_path, title, None, attachment_url
-                )
+                set_pdf_metadata(new_path, title, None, attachment_url)
                 logging.info(f"Set metadata for: {new_filename}")
                 tqdm.write(f"Downloaded and processed: {new_filename}")
                 processed_count += 1
@@ -572,14 +582,18 @@ def process_attachments(cursor, base_url, pdf_folder):
                 print(f"Failed to download: {attachment_url}")
                 error_count += 1
         except Exception as e:
-            error_msg = f"Error processing attachment {id}: {str(e)}\n{traceback.format_exc()}"
+            error_msg = (
+                f"Error processing attachment {id}: {str(e)}\n{traceback.format_exc()}"
+            )
             logging.error(error_msg)
             print(error_msg)
             error_count += 1
             if os.path.exists(new_path):
                 os.remove(new_path)
 
-    print(f"\nProcessed: {processed_count}, Skipped: {skipped_count}, Errors: {error_count}, Total: {len(attachments)}")
+    print(
+        f"\nProcessed: {processed_count}, Skipped: {skipped_count}, Errors: {error_count}, Total: {len(attachments)}"
+    )
     return processed_count
 
 
@@ -598,13 +612,15 @@ def set_pdf_metadata(file_path, title, author, subject):
                 try:
                     return TextStringObject(str(value))
                 except Exception as e:
-                    logging.warning(f"Error creating TextStringObject for '{value}': {str(e)}")
+                    logging.warning(
+                        f"Error creating TextStringObject for '{value}': {str(e)}"
+                    )
                     return TextStringObject("")
 
             metadata = {
                 "/Title": safe_text_string(title),
                 "/Author": safe_text_string(author or "Unknown"),
-                "/Subject": safe_text_string(subject)
+                "/Subject": safe_text_string(subject),
             }
 
             writer.add_metadata(metadata)
@@ -652,15 +668,17 @@ def main():
     attempt = 0
 
     # Configure logging
-    logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
     while attempt < max_retries:
         try:
             db = get_db_connection(db_config)
             if db is None:
                 raise pymysql.MySQLError("Failed to connect to the database")
-            
-            cursor = db.cursor() 
+
+            cursor = db.cursor()
 
             total_posts = get_total_posts_count(cursor, site_config["post_types"])
 
@@ -689,8 +707,8 @@ def main():
             handle_unexpected_error(e)
             raise
         finally:
-            if 'db' in locals() and db is not None:
-                close_db_connection(db, cursor if 'cursor' in locals() else None)
+            if "db" in locals() and db is not None:
+                close_db_connection(db, cursor if "cursor" in locals() else None)
 
     if attempt == max_retries:
         print("Max retries reached. Exiting.")

@@ -32,7 +32,6 @@ ananda-library-chatbot/
 ├── bin/                          # Utility scripts for various development/operational tasks.
 │
 ├── components/                   # Reusable React components used across the application UI.
-│   └── CollectionSelector.jsx    # A specific UI component for selecting collections.
 │
 ├── config/                       # Configuration files for the application.
 │   └── pinecone.ts               # Configuration related to the Pinecone vector database.
@@ -44,23 +43,21 @@ ananda-library-chatbot/
 │   │   └── website_crawler.py  # Main script for crawling websites.
 │   ├── scripts/                 # Other data ingestion scripts (processing, queue management).
 │   ├── sql_to_vector_db/       # Scripts for converting SQL database content to vector embeddings.
-│   ├── pdf_to_vector_db.py    # Script for ingesting PDFs directly (Python based).
+│   ├── utils/                   # Python utility modules for data ingestion pipeline.
+│   ├── pdf_to_vector_db.py    # Script for ingesting PDFs directly (Python based, replaces TypeScript version).
 │   └── tests/                   # Tests for the data ingestion scripts.
 │
 ├── declarations/                 # TypeScript declaration files (.d.ts) for libraries without native types.
-│   └── pdf-parse.d.ts          # Type definitions for the 'pdf-parse' library.
 │
 ├── hooks/                        # Custom React hooks for managing state and logic within components.
 │
 ├── instructions/                 # Contains instructions or documentation, like adding comments.
-│   └── add-comments.md         # Markdown file with instructions.
 │
 ├── migrations/                   # Scripts for database schema migrations or data transformations.
 │
 ├── pages/                        # Next.js Pages Router directory.
 │   └── api/                      # API routes defined using the Pages Router.
 │       ├── audio/                # API routes related to audio processing.
-│       │   └── [filename].ts     # Dynamic route for specific audio files.
 │       ├── *.ts                  # Various API endpoints (e.g., login, vote, contact, answers).
 │
 ├── pyutil/                       # Python utility functions used across Python scripts.
@@ -71,7 +68,6 @@ ananda-library-chatbot/
 │   │   ├── ananda-public/
 │   │   ├── crystal/
 │   │   └── jairam/
-│   └── robots.txt                # Instructions for web crawlers.
 │
 ├── scripts/                      # General project scripts (Node.js/TypeScript) for build, dev, data ingestion, etc.
 │
@@ -80,7 +76,6 @@ ananda-library-chatbot/
 ├── site-config/                  # Configuration specific to different site deployments or instances.
 │   ├── config.json               # Main site configuration file.
 │   ├── prompts/                  # Prompt configurations for the AI model for different site versions.
-│   └── README.md                 # Documentation for site configuration.
 │
 ├── styles/                       # CSS files, including global styles, module-specific styles, and component styles.
 │
@@ -97,7 +92,6 @@ ananda-library-chatbot/
         └── ananda-ai-chatbot/    # A WordPress plugin for the Ananda AI Chatbot.
             ├── assets/           # CSS and JS assets for the plugin.
             ├── *.php             # PHP files for the plugin logic.
-            └── composer.json     # PHP dependencies for the plugin.
 ```
 
 ## Key Root Files
