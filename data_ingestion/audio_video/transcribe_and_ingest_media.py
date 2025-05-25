@@ -17,6 +17,20 @@ Key Features:
 - Rate limiting protection
 - Progress bars and detailed logging
 - Graceful shutdown handling
+
+Command Line Options:
+  -s, --site SITE              Site ID for environment variables (required)
+  -f, --force                  Force re-transcription and re-indexing
+  -c, --clear-vectors          Clear existing vectors before processing
+  -D, --dryrun                 Perform a dry run without sending data to Pinecone or S3
+  -o, --override-conflicts     Continue processing even if filename conflicts are found
+  -r, --refresh-metadata-only  Only refresh metadata without creating embeddings or uploading to Pinecone
+  -d, --debug                  Enable debug logging
+
+Usage Examples:
+  python transcribe_and_ingest_media.py -s ananda
+  python transcribe_and_ingest_media.py -s ananda -f -d
+  python transcribe_and_ingest_media.py -s ananda -D -r
 """
 
 import argparse
@@ -628,6 +642,94 @@ def print_report(report):
     print_chunk_statistics(report["chunk_lengths"])
 
 
+def print_enhanced_chunk_statistics(chunk_lengths):
+    """
+    Print enhanced spaCy-style chunking statistics similar to other ingestion scripts.
+
+    Provides detailed analysis of chunk quality including target range achievement,
+    distribution analysis, and quality metrics.
+    """
+    if not chunk_lengths:
+        print("No chunks to analyze.")
+        return
+
+    total_chunks = len(chunk_lengths)
+    total_words = sum(chunk_lengths)
+    avg_words = total_words / total_chunks
+    min_words = min(chunk_lengths)
+    max_words = max(chunk_lengths)
+
+    # Target range analysis (225-450 words as per spaCy chunking strategy)
+    target_range_chunks = sum(1 for length in chunk_lengths if 225 <= length <= 450)
+    target_percentage = (target_range_chunks / total_chunks) * 100
+
+    # Distribution analysis
+    very_small = sum(1 for length in chunk_lengths if length < 100)
+    small = sum(1 for length in chunk_lengths if 100 <= length < 225)
+    target = target_range_chunks
+    large = sum(1 for length in chunk_lengths if 450 < length <= 800)
+    very_large = sum(1 for length in chunk_lengths if length > 800)
+
+    print("📊 Chunk Analysis Summary:")
+    print(f"  Total chunks processed: {total_chunks:,}")
+    print(f"  Total words processed: {total_words:,}")
+    print(f"  Average words per chunk: {avg_words:.1f}")
+    print(f"  Range: {min_words} - {max_words} words")
+    print()
+
+    print("🎯 Target Range Achievement (225-450 words):")
+    print(
+        f"  Chunks in target range: {target_range_chunks:,}/{total_chunks:,} ({target_percentage:.1f}%)"
+    )
+    print()
+
+    print("📈 Distribution Analysis:")
+    print(
+        f"  Very small (<100 words):   {very_small:,} chunks ({very_small / total_chunks * 100:.1f}%)"
+    )
+    print(
+        f"  Small (100-224 words):     {small:,} chunks ({small / total_chunks * 100:.1f}%)"
+    )
+    print(
+        f"  Target (225-450 words):    {target:,} chunks ({target / total_chunks * 100:.1f}%)"
+    )
+    print(
+        f"  Large (451-800 words):     {large:,} chunks ({large / total_chunks * 100:.1f}%)"
+    )
+    print(
+        f"  Very large (>800 words):   {very_large:,} chunks ({very_large / total_chunks * 100:.1f}%)"
+    )
+    print()
+
+    # Quality assessment
+    if target_percentage >= 70:
+        quality = "Excellent"
+        emoji = "🟢"
+    elif target_percentage >= 50:
+        quality = "Good"
+        emoji = "🟡"
+    elif target_percentage >= 30:
+        quality = "Fair"
+        emoji = "🟠"
+    else:
+        quality = "Needs Improvement"
+        emoji = "🔴"
+
+    print(f"{emoji} Chunking Quality: {quality}")
+
+    # Recommendations
+    if very_small > total_chunks * 0.1:  # More than 10% very small chunks
+        print(
+            f"⚠️  High number of very small chunks ({very_small}). Consider adjusting chunking parameters."
+        )
+    if very_large > total_chunks * 0.05:  # More than 5% very large chunks
+        print(
+            f"⚠️  Large chunks detected ({very_large}). May impact processing efficiency."
+        )
+
+    print()
+
+
 def merge_reports(reports):
     """
     Combines multiple processing reports into a single aggregate report.
@@ -672,6 +774,12 @@ def graceful_shutdown(pool, queue, items_to_process, overall_report, _signum, _f
     for item in items_to_process:
         queue.update_item_status(item["id"], "interrupted")
     print_report(overall_report)
+
+    # Print spaCy chunking statistics on graceful shutdown as well
+    if overall_report["chunk_lengths"]:
+        print("\nSpaCy Chunking Statistics:")
+        print_enhanced_chunk_statistics(overall_report["chunk_lengths"])
+
     reset_terminal()
     sys.exit(0)
 
@@ -689,7 +797,10 @@ def main():
         description="Audio and video transcription and indexing script"
     )
     parser.add_argument(
-        "--force", action="store_true", help="Force re-transcription and re-indexing"
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force re-transcription and re-indexing",
     )
     parser.add_argument(
         "-c",
@@ -698,23 +809,28 @@ def main():
         help="Clear existing vectors before processing",
     )
     parser.add_argument(
+        "-D",
         "--dryrun",
         action="store_true",
         help="Perform a dry run without sending data to Pinecone or S3",
     )
     parser.add_argument(
+        "-o",
         "--override-conflicts",
         action="store_true",
         help="Continue processing even if filename conflicts are found",
     )
     parser.add_argument(
+        "-r",
         "--refresh-metadata-only",
         action="store_true",
         help="Only refresh metadata without creating embeddings or uploading to Pinecone",
     )
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument(
-        "--site", required=True, help="Site ID for environment variables"
+        "-d", "--debug", action="store_true", help="Enable debug logging"
+    )
+    parser.add_argument(
+        "-s", "--site", required=True, help="Site ID for environment variables"
     )
     args = parser.parse_args()
 
@@ -773,6 +889,12 @@ def main():
             for item in items_to_process:
                 ingest_queue.update_item_status(item["id"], "interrupted")
             print_report(overall_report)
+
+            # Print spaCy chunking statistics on graceful shutdown as well
+            if overall_report["chunk_lengths"]:
+                print("\nSpaCy Chunking Statistics:")
+                print_enhanced_chunk_statistics(overall_report["chunk_lengths"])
+
             reset_terminal()
             sys.exit(0)
 
@@ -836,6 +958,11 @@ def main():
 
     print("\nOverall Processing Report:")
     print_report(overall_report)
+
+    # Print spaCy chunking statistics similar to other ingestion scripts
+    if overall_report["chunk_lengths"]:
+        print("\nSpaCy Chunking Statistics:")
+        print_enhanced_chunk_statistics(overall_report["chunk_lengths"])
 
     queue_status = ingest_queue.get_queue_status()
     logging.info(f"Final queue status: {queue_status}")

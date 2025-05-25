@@ -45,6 +45,7 @@ this chunking strategy across all data ingestion methods.
 
 - [x] Update `transcribe_and_ingest_media.py` to use the new chunking strategy
 - [ ] Test it.
+- [ ] Make sure punctuation is not being stripped out.
 
 **Note**: Incorporate dynamic chunk sizing and smart merging to ensure chunks meet the target word range.
 

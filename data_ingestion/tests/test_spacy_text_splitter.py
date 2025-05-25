@@ -268,3 +268,81 @@ def test_dynamic_chunk_size_long_text():
     assert splitter.chunk_overlap == 300, (
         f"Expected overlap=300 for long text, got {splitter.chunk_overlap}"
     )
+
+
+def test_punctuation_preservation():
+    """Test that spaCy chunking preserves punctuation marks in text."""
+    splitter = SpacyTextSplitter()
+
+    # Text with various punctuation marks
+    text_with_punctuation = """
+    Hello, world! How are you today? I'm doing well, thank you. 
+    That's great to hear. Let's discuss some topics: science, technology, and art.
+    
+    Here are some examples:
+    • First bullet point
+    • Second bullet point with "quotes"
+    • Third point with (parentheses) and [brackets]
+    
+    Mathematical expressions: 2 + 2 = 4, π ≈ 3.14159, and x² + y² = z².
+    
+    Contractions work too: don't, won't, can't, I'll, we're, they've.
+    
+    Special characters: @username, #hashtag, $100, 50%, & more symbols!
+    """
+
+    doc = Document(page_content=text_with_punctuation)
+    chunks = splitter.split_documents([doc])
+
+    # Verify chunks were created
+    assert len(chunks) > 0, "Should create at least one chunk"
+
+    # Collect all chunk text
+    all_chunk_text = " ".join(chunk.page_content for chunk in chunks)
+
+    # Test preservation of various punctuation marks that are actually in the text
+    punctuation_marks = [
+        ",",
+        "!",
+        "?",
+        ".",
+        "'",
+        '"',
+        ":",
+        "(",
+        ")",
+        "[",
+        "]",
+        "•",
+        "=",
+        "+",
+        "²",
+        "≈",
+        "@",
+        "#",
+        "$",
+        "%",
+        "&",
+    ]
+
+    for mark in punctuation_marks:
+        assert mark in all_chunk_text, (
+            f"Punctuation mark '{mark}' should be preserved in chunks"
+        )
+
+    # Test preservation of contractions
+    contractions = ["don't", "won't", "can't", "I'll", "we're", "they've"]
+    for contraction in contractions:
+        assert contraction in all_chunk_text, (
+            f"Contraction '{contraction}' should be preserved"
+        )
+
+    # Verify that chunks contain meaningful sentences with punctuation
+    for chunk in chunks:
+        chunk_text = chunk.page_content.strip()
+        if len(chunk_text) > 20:  # Only check substantial chunks
+            # Should contain some punctuation (not just letters and spaces)
+            has_punctuation = any(char in chunk_text for char in ".,!?;:")
+            assert has_punctuation, f"Chunk should contain punctuation: '{chunk_text}'"
+
+    print(f"Punctuation preservation test passed. Created {len(chunks)} chunks.")

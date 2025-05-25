@@ -25,7 +25,6 @@ import argparse
 import json
 import math
 import os
-import re
 import sys
 import time
 from datetime import datetime
@@ -40,7 +39,7 @@ sys.path.append(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-from data_ingestion.utils.document_hash import generate_document_hash
+from data_ingestion.utils.pinecone_utils import generate_vector_id
 from data_ingestion.utils.progress_utils import (
     ProgressConfig,
     ProgressTracker,
@@ -711,33 +710,6 @@ def clear_library_vectors(
 
 
 # --- Processing & Upsertion ---
-def generate_vector_id(
-    library_name: str,
-    title: str,
-    content_chunk: str,
-    chunk_index: int,
-    author: str = None,
-    permalink: str = None,
-) -> str:
-    """Generates a unique and reproducible vector ID based on metadata and content."""
-    # Format: text||libraryName||sanitizedTitle||documentHash||chunkN
-
-    # Sanitize title: replace whitespace, remove non-alphanumeric/underscore, limit length
-    sanitized_title = re.sub(r"\s+", "_", title)
-    sanitized_title = re.sub(
-        r"[^a-zA-Z0-9_\-]", "", sanitized_title
-    )  # Allow hyphens too
-    sanitized_title = sanitized_title[
-        :50
-    ]  # Limit title part length to avoid overly long IDs
-
-    # Generate document-level hash instead of chunk content hash
-    document_hash = generate_document_hash(
-        source=permalink or title, title=title, author=author, library=library_name
-    )
-
-    # Combine parts with '||' separator
-    return f"text||{library_name}||{sanitized_title}||{document_hash}||chunk{chunk_index + 1}"
 
 
 def process_and_upsert_batch(
@@ -796,12 +768,13 @@ def process_and_upsert_batch(
 
                 # Generate the unique ID for this specific chunk vector
                 pinecone_id = generate_vector_id(
-                    post_data["library"],
-                    post_data["title"],
-                    doc.page_content,
-                    i,  # Chunk index (0-based)
-                    post_data["author"],
-                    post_data["permalink"],
+                    library_name=post_data["library"],
+                    title=post_data["title"],
+                    content_chunk=doc.page_content,
+                    chunk_index=i,  # Chunk index (0-based)
+                    source_location="db",
+                    content_type="text",
+                    source_id=post_data["author"],
                 )
                 # Construct the metadata dictionary to be stored with the vector in Pinecone
                 metadata = {

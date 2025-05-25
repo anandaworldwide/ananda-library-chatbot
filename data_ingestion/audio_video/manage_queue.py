@@ -32,24 +32,49 @@ manage:
   - Remove completed (--remove-completed)
   - Process status (--status)
 
+Command Line Options:
+  Content Addition:
+    -v, --video URL              YouTube video URL
+    -p, --playlist URL           YouTube playlist URL
+    -a, --audio PATH             Path to audio file
+    -D, --directory PATH         Path to directory containing audio files
+    -u, --urls-file PATH         Path to text file containing YouTube URLs (one per line)
+    -P, --playlists-file PATH    Path to XLSX file containing playlist information
+
+  Queue Management:
+    -l, --list                   List all items in the processing queue
+    -c, --clear                  Clear all items from the queue
+    -f, --reprocess-failed       Reprocess items in error or interrupted state
+    -C, --remove-completed       Remove all completed items from the queue
+    -r, --reprocess ID           Reprocess a specific item by ID
+    -R, --reprocess-all          Reset all items in the queue for reprocessing
+    -I, --reprocess-processing-items  Reprocess items in processing state
+    -x, --remove ID              Remove a specific item from the queue by ID
+
+  Status & Configuration:
+    -S, --status                 Print the queue status
+    -s, --site SITE              Site ID for environment variables (required)
+    -q, --queue NAME             Specify an alternative queue name
+    -d, --debug                  Enable debug logging
+
+  Required for Adding Content:
+    -A, --default-author NAME    Default author of the media
+    -L, --library NAME           Name of the library
+
 Configuration:
   Required:
   - library_config.json: Defines target libraries and S3 paths
-  - --site: Environment identifier (dev/staging/prod)
-
-  Optional:
-  - --queue: Alternate queue name for parallel processing
-  - --debug: Enhanced logging output
+  - -s/--site: Environment identifier (dev/staging/prod)
 
 Example Usage:
   Add content:
-    ./manage_queue.py --video URL --default-author "Name" --library "LibraryName" --site dev
-    ./manage_queue.py --directory /path/to/files --default-author "Name" --library "LibraryName" --site dev
-    ./manage_queue.py --urls-file youtube_urls.txt --default-author "Name" --library "LibraryName" --site dev
+    ./manage_queue.py -v URL -A "Name" -L "LibraryName" -s dev
+    ./manage_queue.py -D /path/to/files -A "Name" -L "LibraryName" -s dev
+    ./manage_queue.py -u youtube_urls.txt -A "Name" -L "LibraryName" -s dev
 
   Monitor:
-    ./manage_queue.py --list --site dev
-    ./manage_queue.py --status --site dev
+    ./manage_queue.py -l -s dev
+    ./manage_queue.py -S -s dev
 
 Dependencies:
   AWS: S3, DynamoDB
@@ -572,53 +597,72 @@ def main():
     parser = argparse.ArgumentParser(description="Manage the ingest queue")
 
     # Add operation arguments
-    parser.add_argument("--video", help="YouTube video URL")
-    parser.add_argument("--playlist", help="YouTube playlist URL")
-    parser.add_argument("--audio", help="Path to audio file")
-    parser.add_argument("--directory", help="Path to directory containing audio files")
-    parser.add_argument("--default-author", help="Default author of the media")
-    parser.add_argument("--library", help="Name of the library")
+    parser.add_argument("-v", "--video", help="YouTube video URL")
+    parser.add_argument("-p", "--playlist", help="YouTube playlist URL")
+    parser.add_argument("-a", "--audio", help="Path to audio file")
     parser.add_argument(
-        "--list", action="store_true", help="List all items in the processing queue"
+        "-D", "--directory", help="Path to directory containing audio files"
+    )
+    parser.add_argument("-A", "--default-author", help="Default author of the media")
+    parser.add_argument("-L", "--library", help="Name of the library")
+    parser.add_argument(
+        "-l",
+        "--list",
+        action="store_true",
+        help="List all items in the processing queue",
     )
     parser.add_argument(
-        "--clear", action="store_true", help="Clear all items from the queue"
+        "-c", "--clear", action="store_true", help="Clear all items from the queue"
     )
     parser.add_argument(
+        "-f",
         "--reprocess-failed",
         action="store_true",
         help="Reprocess items in error or interrupted state",
     )
     parser.add_argument(
+        "-C",
         "--remove-completed",
         action="store_true",
         help="Remove all completed items from the queue",
     )
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument("--reprocess", help="Reprocess a specific item by ID")
     parser.add_argument(
+        "-d", "--debug", action="store_true", help="Enable debug logging"
+    )
+    parser.add_argument("-r", "--reprocess", help="Reprocess a specific item by ID")
+    parser.add_argument(
+        "-R",
         "--reprocess-all",
         action="store_true",
         help="Reset all items in the queue for reprocessing",
     )
     parser.add_argument(
-        "--playlists-file", help="Path to XLSX file containing playlist information"
+        "-P",
+        "--playlists-file",
+        help="Path to XLSX file containing playlist information",
     )
     parser.add_argument(
-        "--queue", default=None, help="Specify an alternative queue name"
+        "-q", "--queue", default=None, help="Specify an alternative queue name"
     )
     parser.add_argument(
+        "-I",
         "--reprocess-processing-items",
         action="store_true",
         help="Reprocess items in processing state",
     )
-    parser.add_argument("--remove", help="Remove a specific item from the queue by ID")
-    parser.add_argument("--status", action="store_true", help="Print the queue status")
     parser.add_argument(
-        "--site", required=True, help="Site ID for environment variables"
+        "-x", "--remove", help="Remove a specific item from the queue by ID"
     )
     parser.add_argument(
-        "--urls-file", help="Path to text file containing YouTube URLs (one per line)"
+        "-S", "--status", action="store_true", help="Print the queue status"
+    )
+    parser.add_argument(
+        "-s", "--site", required=True, help="Site ID for environment variables"
+    )
+    parser.add_argument(
+        "-u",
+        "--urls-file",
+        help="Path to text file containing YouTube URLs (one per line)",
     )
     args = parser.parse_args()
 

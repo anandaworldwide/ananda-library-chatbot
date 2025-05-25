@@ -169,6 +169,74 @@ class TestAudioProcessing(unittest.TestCase):
             f"Process transcription test completed. Number of chunks: {len(chunks)}"
         )
 
+    def test_chunk_transcription_preserves_punctuation(self):
+        """Test that chunked transcription preserves punctuation from original text."""
+        logger.debug("Starting punctuation preservation test")
+
+        # Create a mock transcription with punctuation
+        mock_transcription = {
+            "text": "Hello, world! How are you today? I'm doing well, thank you. That's great to hear.",
+            "words": [
+                {"word": "Hello", "start": 0.0, "end": 0.5},
+                {"word": "world", "start": 0.6, "end": 1.0},
+                {"word": "How", "start": 1.5, "end": 1.7},
+                {"word": "are", "start": 1.8, "end": 2.0},
+                {"word": "you", "start": 2.1, "end": 2.3},
+                {"word": "today", "start": 2.4, "end": 2.8},
+                {"word": "I'm", "start": 3.0, "end": 3.2},
+                {"word": "doing", "start": 3.3, "end": 3.6},
+                {"word": "well", "start": 3.7, "end": 4.0},
+                {"word": "thank", "start": 4.1, "end": 4.3},
+                {"word": "you", "start": 4.4, "end": 4.6},
+                {"word": "That's", "start": 5.0, "end": 5.3},
+                {"word": "great", "start": 5.4, "end": 5.7},
+                {"word": "to", "start": 5.8, "end": 5.9},
+                {"word": "hear", "start": 6.0, "end": 6.3},
+            ],
+        }
+
+        # Chunk the transcription
+        chunks = chunk_transcription(mock_transcription)
+
+        # Verify chunks were created
+        self.assertIsNotNone(chunks)
+        self.assertTrue(len(chunks) > 0)
+
+        # Check that punctuation is preserved in chunk text
+        all_chunk_text = " ".join(chunk["text"] for chunk in chunks)
+
+        # Verify specific punctuation marks are preserved
+        self.assertIn(",", all_chunk_text, "Commas should be preserved in chunk text")
+        self.assertIn(
+            "!", all_chunk_text, "Exclamation marks should be preserved in chunk text"
+        )
+        self.assertIn(
+            "?", all_chunk_text, "Question marks should be preserved in chunk text"
+        )
+        self.assertIn(".", all_chunk_text, "Periods should be preserved in chunk text")
+        self.assertIn(
+            "'", all_chunk_text, "Apostrophes should be preserved in chunk text"
+        )
+
+        # Verify that the chunk text contains actual sentences with punctuation
+        # rather than just space-separated words
+        for chunk in chunks:
+            chunk_text = chunk["text"]
+            # If chunk has multiple words, it should contain some punctuation or natural spacing
+            if len(chunk["words"]) > 1:
+                # Check that it's not just words joined with single spaces (which would indicate
+                # punctuation was stripped)
+                words_only = " ".join(word["word"] for word in chunk["words"])
+                self.assertNotEqual(
+                    chunk_text.strip(),
+                    words_only.strip(),
+                    f"Chunk text '{chunk_text}' should preserve punctuation, not just join words '{words_only}'",
+                )
+
+        logger.debug(
+            f"Punctuation preservation test completed. Chunks: {[chunk['text'] for chunk in chunks]}"
+        )
+
     def test_pinecone_storage_success(self):
         logger.debug("Starting Pinecone storage success test")
         transcription = transcribe_media(self.trimmed_audio_path)

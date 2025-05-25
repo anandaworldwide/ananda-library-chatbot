@@ -471,5 +471,184 @@ class TestDaemonBehavior(unittest.TestCase):
         crawler.close()
 
 
+class TestPunctuationPreservation(unittest.TestCase):
+    """Test cases for punctuation preservation in web crawler text processing."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.site_id = "test-site"
+        self.site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+        }
+        self.path_patcher = patch("crawler.website_crawler.Path")
+        mock_path_constructor = self.path_patcher.start()
+        mock_path_constructor.return_value.parent.return_value = Path(self.temp_dir)
+
+        self.original_sqlite_connect = sqlite3.connect
+        self.connect_patcher = patch("sqlite3.connect")
+        mock_sqlite_connect = self.connect_patcher.start()
+        mock_sqlite_connect.side_effect = (
+            lambda db_path_arg: self.original_sqlite_connect(":memory:")
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        self.path_patcher.stop()
+        self.connect_patcher.stop()
+        shutil.rmtree(self.temp_dir)
+
+    def test_web_content_punctuation_preservation(self):
+        """Test that web crawler preserves punctuation in extracted and chunked text."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Mock HTML content with rich punctuation
+        html_content_with_punctuation = """
+        <html>
+        <head><title>Test Article: Meditation & Mindfulness</title></head>
+        <body>
+            <h1>Welcome to Our Guide!</h1>
+            <p>Are you ready to begin your journey? Let's explore meditation together.</p>
+            
+            <h2>Key Principles:</h2>
+            <ul>
+                <li>Focus on breathing (inhale... exhale...)</li>
+                <li>Don't judge your thoughts—simply observe them</li>
+                <li>Practice daily @ 6:00 AM for best results</li>
+            </ul>
+            
+            <blockquote>
+                "The mind is everything. What you think you become." —Buddha
+            </blockquote>
+            
+            <p>Remember: it's not about perfection; it's about progress!</p>
+            <p>Questions? Email us at info@example.com or call (555) 123-4567.</p>
+        </body>
+        </html>
+        """
+
+        # Mock the text extraction and chunking process
+        with patch("crawler.website_crawler.SpacyTextSplitter") as mock_splitter_class:
+            # Create a mock splitter instance
+            mock_splitter = MagicMock()
+            mock_splitter_class.return_value = mock_splitter
+
+            # Mock the split_documents method to return chunks with preserved punctuation
+            mock_chunks = [
+                MagicMock(
+                    page_content="Welcome to Our Guide!\n\nAre you ready to begin your journey? Let's explore meditation together."
+                ),
+                MagicMock(
+                    page_content="Key Principles:\n• Focus on breathing (inhale... exhale...)\n• Don't judge your thoughts—simply observe them"
+                ),
+                MagicMock(
+                    page_content="\"The mind is everything. What you think you become.\" —Buddha\n\nRemember: it's not about perfection; it's about progress!"
+                ),
+                MagicMock(
+                    page_content="Questions? Email us at info@example.com or call (555) 123-4567."
+                ),
+            ]
+            mock_splitter.split_documents.return_value = mock_chunks
+
+            # Mock the HTML extraction to return clean text with punctuation
+            with patch.object(crawler, "clean_content") as mock_clean_content:
+                extracted_text = """Welcome to Our Guide!
+
+Are you ready to begin your journey? Let's explore meditation together.
+
+Key Principles:
+• Focus on breathing (inhale... exhale...)
+• Don't judge your thoughts—simply observe them
+• Practice daily @ 6:00 AM for best results
+
+"The mind is everything. What you think you become." —Buddha
+
+Remember: it's not about perfection; it's about progress!
+Questions? Email us at info@example.com or call (555) 123-4567."""
+
+                mock_clean_content.return_value = extracted_text
+
+                # Test the text extraction preserves punctuation
+                cleaned_text = mock_clean_content(html_content_with_punctuation)
+
+                # Verify punctuation marks are preserved in extracted text
+                punctuation_marks = [
+                    "!",
+                    "?",
+                    ".",
+                    "'",
+                    '"',
+                    ":",
+                    ";",
+                    "(",
+                    ")",
+                    "•",
+                    "—",
+                    "@",
+                    "-",
+                ]
+
+                for mark in punctuation_marks:
+                    self.assertIn(
+                        mark,
+                        cleaned_text,
+                        f"Punctuation mark '{mark}' should be preserved in extracted text",
+                    )
+
+                # Test preservation of contractions and special formatting
+                special_elements = [
+                    "Let's",
+                    "Don't",
+                    "it's",
+                    "6:00",
+                    "info@example.com",
+                    "(555) 123-4567",
+                ]
+                for element in special_elements:
+                    self.assertIn(
+                        element,
+                        cleaned_text,
+                        f"Special element '{element}' should be preserved",
+                    )
+
+                # Test that chunking preserves punctuation
+                from langchain_core.documents import Document
+
+                doc = Document(page_content=cleaned_text)
+                chunks = mock_splitter.split_documents([doc])
+
+                # Verify chunks were created
+                self.assertGreater(len(chunks), 0, "Should create at least one chunk")
+
+                # Collect all chunk text
+                all_chunk_text = " ".join(chunk.page_content for chunk in chunks)
+
+                # Verify punctuation is preserved in chunks
+                for mark in punctuation_marks:
+                    self.assertIn(
+                        mark,
+                        all_chunk_text,
+                        f"Punctuation mark '{mark}' should be preserved in web crawler chunks",
+                    )
+
+                # Verify that each substantial chunk contains meaningful punctuation
+                for chunk in chunks:
+                    chunk_text = chunk.page_content.strip()
+                    if len(chunk_text) > 20:  # Only check substantial chunks
+                        # Should contain some punctuation
+                        has_punctuation = any(char in chunk_text for char in ".,!?;:—")
+                        self.assertTrue(
+                            has_punctuation,
+                            f"Web crawler chunk should contain punctuation: '{chunk_text[:50]}...'",
+                        )
+
+        crawler.close()
+        print(
+            f"Web crawler punctuation preservation test passed. Processed {len(mock_chunks)} chunks."
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

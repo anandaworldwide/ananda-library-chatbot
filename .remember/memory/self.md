@@ -1145,6 +1145,54 @@ while word_index < len(words):
 **Key Principles**:
 
 - **Never reformat timestamped content** - preserve original word objects as source of truth
+
+## Mistake: Punctuation Stripped from Audio Transcription Chunks
+
+**Problem**: The spaCy-based audio chunking implementation was stripping punctuation from chunk text by only using
+individual word objects without preserving the original text formatting.
+
+**Wrong**: Building chunk text only from individual word objects:
+
+```python
+# Build chunk text from the actual timestamped words (preserves exact content)
+chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
+```
+
+**Correct**: Extract text from original transcription to preserve punctuation:
+
+```python
+# Extract the corresponding text segment from the original text to preserve punctuation
+# Build a regex pattern to match the words in the current chunk
+pattern = (
+    r"\b"
+    + r"\W*".join(re.escape(word["word"]) for word in chunk_words)
+    + r"[\W]*"
+)
+
+match = re.search(pattern, original_text)
+if match:
+    chunk_text = match.group(0)
+    # Ensure the chunk ends with punctuation if present
+    end_pos = match.end()
+    while end_pos < len(original_text) and re.match(
+        r"\W", original_text[end_pos]
+    ):
+        end_pos += 1
+    chunk_text = original_text[match.start() : end_pos]
+else:
+    # Fallback to word joining if regex match fails
+    chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
+```
+
+**Detection**: User reported that text stored in Pinecone for transcribed audio had no punctuation, despite the original
+transcription JSON files containing punctuation. The issue was in the chunking process where only the `word` field was
+used instead of extracting from the original text with punctuation preserved.
+
+**Prevention**: Added `test_chunk_transcription_preserves_punctuation()` test in
+`data_ingestion/tests/test__audio_processing.py` that verifies punctuation is preserved in chunked transcription text.
+The test uses a mock transcription with various punctuation marks and ensures they appear in the final chunk text rather
+than being stripped out.
+
 - **Use spaCy for guidance only** - leverage dynamic sizing but don't let it change the text
 - **Maintain perfect timestamp accuracy** - critical for audio/video playback functionality
 - **Avoid fuzzy matching** - any word misalignment breaks timestamp synchronization
@@ -1282,3 +1330,267 @@ except Exception as e:
 
 **Detection**: Tests were failing with specific error messages about type mismatches and unexpected return values.
 Always update test expectations when implementation changes, especially for dynamic behavior.
+
+## Documentation Best Practice: Include Command Line Options in Header Comments
+
+**Context**: When working with command line scripts, especially complex ones with multiple options, it's important to
+document the available options directly in the script's header comment for easy reference.
+
+**Good Practice**: Include a "Command Line Options" section in the docstring that lists all available arguments with
+their descriptions, plus usage examples:
+
+```python
+"""
+Script Description
+
+Command Line Options:
+  --site SITE                   Site ID for environment variables (required)
+  --force                       Force re-transcription and re-indexing
+  -c, --clear-vectors          Clear existing vectors before processing
+  --dryrun                     Perform a dry run without sending data to Pinecone or S3
+  --override-conflicts         Continue processing even if filename conflicts are found
+  --refresh-metadata-only      Only refresh metadata without creating embeddings or uploading to Pinecone
+  --debug                      Enable debug logging
+
+Usage Examples:
+  python script.py --site ananda
+  python script.py --site ananda --force --debug
+  python script.py --site ananda --dryrun --refresh-metadata-only
+"""
+```
+
+**Benefits**:
+
+- Users can quickly understand available options without running `--help`
+- Documentation stays in sync with the actual argument parser
+- Provides context-specific usage examples
+- Improves script discoverability and usability
+
+## Command Line Usability: Single Character Options
+
+**Context**: For frequently used command line scripts, adding single character options alongside long-form options
+significantly improves usability and reduces typing.
+
+**Good Practice**: Add both short and long forms for all command line arguments:
+
+```python
+parser.add_argument("-f", "--force", action="store_true", help="Force re-transcription and re-indexing")
+parser.add_argument("-s", "--site", required=True, help="Site ID for environment variables")
+parser.add_argument("-D", "--dryrun", action="store_true", help="Perform a dry run without sending data to Pinecone or S3")
+parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
+```
+
+**Benefits**:
+
+- Faster typing for frequent users: `-s ananda -f -d` vs `--site ananda --force --debug`
+- Maintains backward compatibility with existing long-form options
+- Follows Unix convention of providing both short and long options
+- Reduces command line length for complex operations
+
+**Character Selection Guidelines**:
+
+- Use first letter of the option when possible (`-f` for `--force`, `-d` for `--debug`)
+- Use meaningful alternatives when first letter conflicts (`-D` for `--dryrun` when `-d` is taken)
+- Avoid confusing combinations (don't use `-l` and `-1` together)
+- Document both forms in header comments and help text
+
+## Punctuation Preservation Tests Completion
+
+**Context**: Successfully implemented and verified punctuation preservation tests across all data ingestion types to
+ensure chunking processes don't strip out punctuation marks.
+
+**Test Coverage Completed**:
+
+- **SpaCy Text Splitter**: `test_spacy_text_splitter.py::test_punctuation_preservation` ✅
+- **PDF Processing**: `test_pdf_to_vector_db.py::test_punctuation_preservation_in_pdf_processing` ✅
+- **Web Crawler**: `test_crawler.py::TestPunctuationPreservation::test_web_content_punctuation_preservation` ✅
+- **Database Text Ingestion**: `test_ingest_db_text.py::TestPunctuationPreservation` (2 tests) ✅
+- **Audio Processing**: `test__audio_processing.py::TestAudioProcessing::test_chunk_transcription_preserves_punctuation`
+  ✅
+
+**Key Fix Applied**: Fixed case sensitivity issue in database text ingestion test where "don't" was changed to "Don't"
+to match actual text content.
+
+**Punctuation Marks Tested**: `,!?.'":()•—=+@#$%&[]` plus contractions and special formatting like email addresses and
+phone numbers.
+
+**Test Results**: All 9 punctuation-related tests now pass successfully, ensuring robust punctuation preservation across
+the entire data ingestion pipeline.
+
+## Mistake: Overly Aggressive Vector ID Sanitization
+
+**Problem**: The `generate_vector_id` function in `ingest_db_text.py` was using overly aggressive sanitization that
+stripped out valid ASCII punctuation marks that Pinecone actually allows.
+
+**Wrong**: Removing all non-alphanumeric characters except underscore and hyphen:
+
+```python
+# Overly restrictive - removes valid punctuation
+sanitized_title = re.sub(r"\s+", "_", title)
+sanitized_title = re.sub(r"[^a-zA-Z0-9_\-]", "", sanitized_title)
+```
+
+This stripped out colons, percent signs, hash symbols, and other valid ASCII characters, causing:
+
+- Unnecessary data loss in titles
+- Reduced readability ("How to Meditate: A Guide" → "HowtoMeditateAGuide")
+- Potential ID collisions from over-sanitization
+
+**Correct**: Only remove null characters (the only character Pinecone prohibits):
+
+```python
+# Conservative sanitization - preserve meaningful punctuation
+sanitized_title = re.sub(r"\s+", " ", title.strip())  # Normalize whitespace
+sanitized_title = re.sub(r"\x00", "", sanitized_title)  # Remove null characters only
+```
+
+**Pinecone Record ID Requirements**: ASCII except `\0` - spaces and punctuation ARE allowed.
+
+**Impact**: Preserves meaningful title information while maintaining Pinecone compatibility. Updated tests to verify
+punctuation preservation and null character removal.
+
+## Shared Vector ID Generation Implementation
+
+**Context**: Successfully consolidated vector ID generation across all ingestion methods into a shared utility in
+`pinecone_utils.py` to ensure consistency and reduce code duplication.
+
+**Implementation Details**:
+
+- **Location**: Added vector ID functions to `data_ingestion/utils/pinecone_utils.py` (better than separate file)
+- **Format**:
+  `{library}||{source_location}||{content_type}||{sanitized_title}||{source_id}||{content_hash}||{chunk_index}`
+- **Key Feature**: Chunk index comes after content hash for easy prefix-based deletion
+- **Sanitization**: Only removes null characters (\x00), preserves all other ASCII including punctuation
+- **Functions Added**:
+  - `generate_vector_id()` - Main generation function
+  - `_sanitize_text()` - Conservative sanitization helper
+  - `extract_metadata_from_vector_id()` - Parsing utility
+
+**Benefits**:
+
+- **Consistency**: All ingestion methods now use identical vector ID format
+- **Prefix Deletion**: Can delete all chunks for a title using prefix like `audio||Library||title||hash||`
+- **Richer metadata**: Can filter by both where data came from AND what type it is
+- **Clean chunk numbering**: Simple integers like `0`, `1`, `2`
+
+**Example Results**:
+
+- Database text: `Test Library||db||text||Article Title||Test Author||4b2ce3cb||0`
+- Audio file: `Ananda Sangha||file||audio||How to Commune with God||Swami Kriyananda||5b2a1057||4`
+
+**Testing**: All 20 tests in `test_ingest_db_text.py` pass, confirming backward compatibility and correct
+implementation.
+
+## Vector ID Format Update - 7-Part Structure Implementation
+
+**Context**: Successfully updated the vector ID format from 5-part to 7-part structure for better organization and
+prefix-based deletion capabilities.
+
+**Changes Made**:
+
+1. **Updated `generate_vector_id()` function signature** in `data_ingestion/utils/pinecone_utils.py`:
+
+   - Changed `source_type` parameter to `source_location`
+   - Added new `content_type` parameter with default "text"
+   - Updated parameter order and documentation
+
+2. **New Vector ID Format**:
+
+   ```
+   {library}||{source_location}||{content_type}||{sanitized_title}||{source_id}||{content_hash}||{chunk_index}
+   ```
+
+3. **Updated `extract_metadata_from_vector_id()`** to parse 7 parts instead of 5
+
+4. **Updated SQL ingestion wrapper** in `ingest_db_text.py` to use new parameters:
+
+   ```python
+   return shared_generate_vector_id(
+       library_name=library_name,
+       title=title,
+       content_chunk=content_chunk,
+       chunk_index=chunk_index,
+       source_location="db",
+       content_type="text",
+       source_id=author,
+   )
+   ```
+
+5. **Updated tests** to expect 7-part format and correct title position (index 3)
+
+**Benefits Achieved**:
+
+- **Better organization**: Clear separation between source location and content type
+- **Perfect prefix deletion**: `Test Library||db||text||Article Title||Test Author||a1b2c3d4||`
+- **Richer metadata**: Can filter by both where data came from AND what type it is
+- **Clean chunk numbering**: Simple integers like `0`, `1`, `2`
+
+**Example Results**:
+
+- Database text: `Test Library||db||text||Article Title||Test Author||4b2ce3cb||0`
+- Audio file: `Ananda Sangha||file||audio||How to Commune with God||Swami Kriyananda||5b2a1057||4`
+
+**Testing**: All 20 tests in `test_ingest_db_text.py` pass, confirming backward compatibility and correct
+implementation.
+
+## Mistake: Messy Vector ID Function Wrappers
+
+**Problem**: The SQL ingestion file had a confusing mix of local wrapper functions and renamed imports for vector ID
+generation, creating unnecessary complexity and maintenance burden.
+
+**Wrong**: Creating local wrapper functions that just call shared utilities:
+
+```python
+# Local wrapper function (unnecessary)
+def generate_vector_id(
+    library_name: str,
+    title: str,
+    content_chunk: str,
+    chunk_index: int,
+    author: str = None,
+    permalink: str = None,
+) -> str:
+    # Import shared utility from pinecone_utils
+    from data_ingestion.utils.pinecone_utils import (
+        generate_vector_id as shared_generate_vector_id,
+    )
+
+    # Use shared utility with database source location and text content type
+    return shared_generate_vector_id(
+        library_name=library_name,
+        title=title,
+        content_chunk=content_chunk,
+        chunk_index=chunk_index,
+        source_location="db",
+        content_type="text",
+        source_id=author,
+    )
+```
+
+**Correct**: Import and use the shared function directly:
+
+```python
+# At top of file
+from data_ingestion.utils.pinecone_utils import generate_vector_id
+
+# In code
+pinecone_id = generate_vector_id(
+    library_name=post_data["library"],
+    title=post_data["title"],
+    content_chunk=doc.page_content,
+    chunk_index=i,
+    source_location="db",
+    content_type="text",
+    source_id=post_data["author"],
+)
+```
+
+**Benefits**:
+
+- **Eliminates code duplication**: No need for wrapper functions
+- **Reduces complexity**: Direct imports are clearer than renamed aliases
+- **Easier maintenance**: Changes to shared function don't require updating wrappers
+- **Better readability**: Clear what function is being called and where it comes from
+
+**Test Updates**: Updated test calls to use the new parameter names and structure, ensuring all 20 tests continue to
+pass.

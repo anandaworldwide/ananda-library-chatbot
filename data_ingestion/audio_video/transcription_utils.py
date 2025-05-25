@@ -524,12 +524,30 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
             if not chunk_words:
                 break
 
-            # Build chunk text from the actual timestamped words (preserves exact content)
-            chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
-
-            # Use exact timestamps from the word objects
+            # Extract the corresponding text segment from the original text to preserve punctuation
             start_time = chunk_words[0]["start"]
             end_time = chunk_words[-1]["end"]
+
+            # Build a regex pattern to match the words in the current chunk
+            pattern = (
+                r"\b"
+                + r"\W*".join(re.escape(word["word"]) for word in chunk_words)
+                + r"[\W]*"
+            )
+
+            match = re.search(pattern, original_text)
+            if match:
+                chunk_text = match.group(0)
+                # Ensure the chunk ends with punctuation if present
+                end_pos = match.end()
+                while end_pos < len(original_text) and re.match(
+                    r"\W", original_text[end_pos]
+                ):
+                    end_pos += 1
+                chunk_text = original_text[match.start() : end_pos]
+            else:
+                # Fallback to word joining if regex match fails
+                chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
 
             chunks.append(
                 {

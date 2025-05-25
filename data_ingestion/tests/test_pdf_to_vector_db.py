@@ -262,3 +262,158 @@ async def test_process_chunk(mock_env):
         assert vector_data[0] == expected_id  # Check ID
         assert vector_data[1] == [0.1, 0.2, 0.3]  # Check embedding
         assert vector_data[2] == expected_metadata  # Check metadata
+
+
+@pytest.mark.asyncio
+async def test_punctuation_preservation_in_pdf_processing(mock_env):
+    """Test that PDF processing preserves punctuation through the entire pipeline"""
+    with (
+        patch(
+            "data_ingestion.utils.text_splitter_utils.SpacyTextSplitter.split_documents"
+        ) as mock_split_documents,
+        patch("data_ingestion.utils.progress_utils.is_exiting", return_value=False),
+        patch("pdf_to_vector_db.is_exiting", return_value=False),
+    ):
+        # Create a document with rich punctuation
+        pdf_text_with_punctuation = """
+        Chapter 1: Introduction to Meditation
+        
+        Welcome to this comprehensive guide! Are you ready to begin? 
+        Let's explore the fundamentals: breathing, posture, and mindfulness.
+        
+        Key points to remember:
+        • Focus on your breath (inhale... exhale...)
+        • Maintain proper posture—straight but relaxed
+        • Don't judge your thoughts; simply observe them
+        
+        "The mind is everything. What you think you become." —Buddha
+        
+        Mathematical precision: 4 + 4 = 8, but meditation isn't about numbers.
+        It's about being present @ this moment, 100% focused.
+        
+        Questions? Comments? We'll address them in Chapter 2.
+        """
+
+        # Mock the text splitter to return chunks that preserve punctuation
+        mock_chunks = [
+            Document(
+                page_content="Chapter 1: Introduction to Meditation\n\nWelcome to this comprehensive guide! Are you ready to begin?",
+                metadata={
+                    "source": "https://test.com/doc",
+                    "title": "Test Document",
+                    "page": 0,
+                },
+            ),
+            Document(
+                page_content="Let's explore the fundamentals: breathing, posture, and mindfulness.\n\nKey points to remember:\n• Focus on your breath (inhale... exhale...)\n• Maintain proper posture—straight but relaxed\n• Don't judge your thoughts; simply observe them",
+                metadata={
+                    "source": "https://test.com/doc",
+                    "title": "Test Document",
+                    "page": 0,
+                },
+            ),
+            Document(
+                page_content="\"The mind is everything. What you think you become.\" —Buddha\n\nMathematical precision: 4 + 4 = 8, but meditation isn't about numbers.\nIt's about being present @ this moment, 100% focused.",
+                metadata={
+                    "source": "https://test.com/doc",
+                    "title": "Test Document",
+                    "page": 0,
+                },
+            ),
+            Document(
+                page_content="Questions? Comments? We'll address them in Chapter 2.",
+                metadata={
+                    "source": "https://test.com/doc",
+                    "title": "Test Document",
+                    "page": 0,
+                },
+            ),
+        ]
+
+        mock_split_documents.return_value = mock_chunks
+
+        # Create a mock document with the punctuation-rich text
+        mock_doc = Document(
+            page_content=pdf_text_with_punctuation,
+            metadata={
+                "pdf": {
+                    "info": {
+                        "Title": "Test Document",
+                        "Subject": "https://test.com/doc",
+                    }
+                },
+                "page": 0,
+                "source": "https://test.com/doc",
+            },
+        )
+
+        # Mock the process_chunk function to capture the chunks being processed
+        processed_chunks = []
+
+        async def mock_process_chunk(
+            chunk, pinecone_index, embeddings, chunk_index, library
+        ):
+            processed_chunks.append(chunk)
+
+        with patch("pdf_to_vector_db.process_chunk", side_effect=mock_process_chunk):
+            mock_pinecone_index = AsyncMock()
+            mock_embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+            text_splitter = SpacyTextSplitter()
+
+            await pdf_ingestion.process_document(
+                mock_doc,
+                mock_pinecone_index,
+                mock_embeddings,
+                0,
+                "test-library",
+                text_splitter,
+            )
+
+        # Verify that chunks were processed
+        assert len(processed_chunks) > 0, "Should have processed at least one chunk"
+
+        # Collect all processed chunk text
+        all_chunk_text = " ".join(chunk.page_content for chunk in processed_chunks)
+
+        # Test preservation of various punctuation marks
+        punctuation_marks = [
+            ":",
+            "!",
+            "?",
+            ".",
+            "'",
+            '"',
+            "(",
+            ")",
+            "•",
+            "—",
+            "=",
+            "+",
+            "@",
+        ]
+
+        for mark in punctuation_marks:
+            assert mark in all_chunk_text, (
+                f"Punctuation mark '{mark}' should be preserved in PDF chunks"
+            )
+
+        # Test preservation of contractions and special formatting
+        special_elements = ["Let's", "isn't", "Don't", "We'll"]
+        for element in special_elements:
+            assert element in all_chunk_text, (
+                f"Special element '{element}' should be preserved"
+            )
+
+        # Verify that each chunk contains meaningful punctuation
+        for chunk in processed_chunks:
+            chunk_text = chunk.page_content.strip()
+            if len(chunk_text) > 10:  # Only check substantial chunks
+                # Should contain some punctuation
+                has_punctuation = any(char in chunk_text for char in ".,!?;:—")
+                assert has_punctuation, (
+                    f"PDF chunk should contain punctuation: '{chunk_text[:50]}...'"
+                )
+
+        print(
+            f"PDF punctuation preservation test passed. Processed {len(processed_chunks)} chunks."
+        )
