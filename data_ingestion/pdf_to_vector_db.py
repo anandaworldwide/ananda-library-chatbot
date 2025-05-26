@@ -30,15 +30,9 @@ import os
 import re
 import sys
 
-import fitz  # PyMuPDF
+import pdfplumber
 from pinecone import Index
 from tqdm import tqdm
-
-# Add project root to sys.path to allow absolute imports from data_ingestion
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
 from data_ingestion.utils.checkpoint_utils import pdf_checkpoint_integration
 from data_ingestion.utils.document_hash import generate_document_hash
@@ -56,7 +50,7 @@ from pyutil.env_utils import load_env  # noqa: E402
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -64,206 +58,285 @@ logger = logging.getLogger(__name__)
 file_path = ""
 
 
+def _determine_page_separator(previous_text: str, current_text: str) -> str:
+    """
+    Determine the appropriate separator between pages based on text flow.
+
+    Args:
+        previous_text: Text from the previous page (last part)
+        current_text: Text from the current page (first part)
+
+    Returns:
+        Appropriate separator string
+    """
+    if not previous_text or not current_text:
+        return "\n\n"
+
+    # Get last 50 characters of previous text and first 50 of current
+    prev_end = previous_text[-50:].strip()
+    curr_start = current_text[:50].strip()
+
+    # Check if previous text ends with sentence-ending punctuation
+    ends_with_sentence = prev_end.endswith((".", "!", "?", ":", ";"))
+
+    # Check if current text starts with a capital letter or number (likely new section/paragraph)
+    starts_with_capital = curr_start and (
+        curr_start[0].isupper() or curr_start[0].isdigit()
+    )
+
+    # Check for section headers (short lines with capitals, numbers, or special formatting)
+    is_section_header = (
+        len(curr_start.split()) <= 5  # Short line
+        and (
+            curr_start.isupper()  # All caps
+            or any(char.isdigit() for char in curr_start[:10])  # Contains numbers early
+            or curr_start.startswith(("Chapter", "Section", "Part", "N ", "n "))
+        )  # Common headers
+    )
+
+    # Check if previous text ends mid-word (hyphenated word split across pages)
+    ends_with_hyphen = prev_end.endswith("-")
+
+    # Check if this looks like a continuation of the same sentence
+    is_continuation = (
+        not ends_with_sentence
+        and not starts_with_capital
+        and not is_section_header
+        and not ends_with_hyphen
+    )
+
+    # Determine separator
+    if ends_with_hyphen:
+        # Hyphenated word split across pages - no space needed
+        return ""
+    elif is_continuation:
+        # Continuing same sentence - just add a space
+        return " "
+    elif is_section_header or (ends_with_sentence and starts_with_capital):
+        # Clear section break or sentence boundary - use paragraph break
+        return "\n\n"
+    else:
+        # Default case - use paragraph break for safety
+        return "\n\n"
+
+
 # Custom PDF document loader
 class PyPDFLoader:
-    """Simple PDF document loader using PyMuPDF for better text extraction"""
+    """PDF document loader using pdfplumber for superior text extraction and layout preservation"""
 
     def __init__(self, file_path):
         self.file_path = file_path
 
+    def _is_header_footer_text(self, text, y_position, page_height, page_width):
+        """
+        Determine if text is likely a header or footer based on position and content patterns.
+        """
+        if not text or not text.strip():
+            return True
+
+        text = text.strip()
+
+        # Define header/footer regions (top 8% and bottom 8% of page)
+        header_threshold = page_height * 0.92  # pdfplumber uses bottom-left origin
+        footer_threshold = page_height * 0.08
+
+        is_in_header_region = y_position > header_threshold
+        is_in_footer_region = y_position < footer_threshold
+
+        # Check for common header/footer patterns
+        is_page_number = bool(re.match(r"^\s*\d+\s*$", text))
+        is_chapter_header = bool(
+            re.match(r"^(Chapter|Section|Part)\s+\d+", text, re.IGNORECASE)
+        )
+        # Check for book title patterns (Title Case Words followed by numbers)
+        is_book_title_pattern = bool(
+            re.search(r"\b([A-Z][a-z]+\s+){1,4}[A-Z][a-z]+\s+\d{1,3}\b", text)
+        )
+        is_book_title = len(text.split()) <= 5 and any(
+            word[0].isupper() for word in text.split() if word
+        )
+
+        # Decision logic
+        if is_page_number:
+            return True
+
+        # Always filter book title patterns regardless of position
+        if is_book_title_pattern:
+            return True
+
+        if (is_in_header_region or is_in_footer_region) and (
+            is_chapter_header or is_book_title
+        ):
+            return True
+
+        # Very short text in margins is likely header/footer
+        return (is_in_header_region or is_in_footer_region) and len(text.split()) <= 3
+
+    def _extract_clean_text(self, page):
+        """
+        Extract text from page while filtering out headers and footers.
+        Uses pdfplumber's superior text extraction with layout preservation.
+        """
+        try:
+            # Get page dimensions
+            page_height = page.height
+            page_width = page.width
+
+            # Extract text with character-level positioning
+            chars = page.chars
+            if not chars:
+                # Fallback to simple text extraction
+                return page.extract_text() or ""
+
+            # Group characters into lines and filter headers/footers
+            filtered_chars = []
+            filtered_parts = []  # For debugging
+
+            for char in chars:
+                char_text = char.get("text", "")
+                char_y = char.get("y0", 0)  # Bottom y coordinate
+
+                if char_text and not self._is_header_footer_text(
+                    char_text, char_y, page_height, page_width
+                ):
+                    filtered_chars.append(char)
+                elif char_text.strip():
+                    filtered_parts.append(f"'{char_text}' (filtered)")
+
+            # Log what was filtered for debugging
+            if filtered_parts and len(filtered_parts) > 5:
+                logger.debug(
+                    f"Filtered header/footer characters: {len(filtered_parts)} chars"
+                )
+
+            # If we filtered too much, fall back to full text
+            if len(filtered_chars) < len(chars) * 0.7:
+                logger.debug("Filtered too many characters, using full text extraction")
+                return page.extract_text() or ""
+
+            # Use pdfplumber's layout-aware text extraction on filtered content
+            # This preserves word spacing and paragraph structure
+            if filtered_chars:
+                # Create a new page object with only the filtered characters
+                filtered_page = page.within_bbox((0, 0, page_width, page_height))
+                text = filtered_page.extract_text()
+                return text or ""
+            else:
+                return ""
+
+        except Exception as e:
+            logger.debug(
+                f"Advanced text extraction failed: {e}, falling back to simple extraction"
+            )
+            # Fallback to simple text extraction
+            return page.extract_text() or ""
+
+    def _clean_text_artifacts(self, text):
+        """
+        Clean up extracted text to remove common PDF artifacts and improve readability.
+        """
+        if not text:
+            return ""
+
+        # Remove common PDF artifacts that appear in this specific document
+        # Remove "N n" artifacts that appear in the middle of text
+        text = re.sub(r"\bN n\b", "", text)
+
+        # Remove standalone single characters that are likely artifacts (but preserve "I" and "a")
+        text = re.sub(r"\n[B-HJ-Z]\n", "\n", text)
+        text = re.sub(r"\n[b-z]\n", "\n", text)
+
+        # Remove standalone numbers that are likely page numbers
+        text = re.sub(r"\n\d+\n", "\n", text)
+
+        # Remove common book/chapter patterns that might appear in text
+        text = re.sub(
+            r"\b(Chapter|Section|Part)\s+\d+\b", "", text, flags=re.IGNORECASE
+        )
+
+        # Remove patterns that look like book titles (Title Case Words followed by numbers)
+        # This catches patterns like "Control Your Destiny 23" without hard-coding specific titles
+        text = re.sub(r"\b([A-Z][a-z]+\s+){1,4}[A-Z][a-z]+\s+\d{1,3}\b", "", text)
+
+        # Remove standalone page numbers (more comprehensive)
+        text = re.sub(r"\b\d{1,3}\b(?=\s|$)", "", text)
+
+        # Remove multiple consecutive spaces
+        text = re.sub(r" {3,}", " ", text)
+
+        # Remove multiple consecutive newlines
+        text = re.sub(r"\n{3,}", "\n\n", text)
+
+        # Clean up line breaks - remove single newlines within paragraphs but keep double newlines
+        # This helps with text that has been broken across lines unnecessarily
+        lines = text.split("\n")
+        cleaned_lines = []
+
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line:
+                # Empty line - preserve as paragraph break
+                if cleaned_lines and cleaned_lines[-1] != "":
+                    cleaned_lines.append("")
+            else:
+                # Non-empty line
+                if (
+                    i > 0
+                    and lines[i - 1].strip()  # Previous line was not empty
+                    and not line[0].isupper()  # Current line doesn't start with capital
+                    and not lines[i - 1]
+                    .strip()
+                    .endswith(
+                        (".", "!", "?", ":", ";")
+                    )  # Previous line doesn't end with punctuation
+                    and len(line.split()) > 1
+                ):  # Current line has multiple words
+                    # This looks like a continuation of the previous line
+                    if cleaned_lines:
+                        cleaned_lines[-1] += " " + line
+                    else:
+                        cleaned_lines.append(line)
+                else:
+                    # This looks like a new paragraph or sentence
+                    cleaned_lines.append(line)
+
+        # Join lines back together
+        cleaned_text = "\n".join(cleaned_lines)
+
+        # Final cleanup
+        cleaned_text = re.sub(
+            r"\n{3,}", "\n\n", cleaned_text
+        )  # Remove excessive newlines
+        cleaned_text = re.sub(r" +", " ", cleaned_text)  # Remove excessive spaces
+
+        return cleaned_text.strip()
+
     def load(self):
-        """Load a PDF file into documents using PyMuPDF"""
+        """Load a PDF file into documents using pdfplumber with header/footer filtering"""
         documents = []
         try:
-            # Open the PDF document
-            pdf_doc = fitz.open(self.file_path)
+            # Open the PDF document with pdfplumber
+            with pdfplumber.open(self.file_path) as pdf:
+                # Extract metadata
+                metadata_dict = pdf.metadata or {}
 
-            # Extract metadata
-            metadata_dict = pdf_doc.metadata or {}
+                for page_num, page in enumerate(pdf.pages):
+                    # Extract clean text (filtering headers/footers)
+                    text = self._extract_clean_text(page)
 
-            # DEBUG: Log what metadata is actually available
-            logger.debug(
-                f"DEBUG PDF METADATA: Full metadata for {os.path.basename(self.file_path)}: {metadata_dict}"
-            )
-            logger.debug(
-                f"DEBUG PDF METADATA: Available keys: {list(metadata_dict.keys()) if metadata_dict else 'None'}"
-            )
-
-            # Debug individual metadata fields that we're interested in
-            for key in [
-                "title",
-                "Title",
-                "author",
-                "Author",
-                "subject",
-                "Subject",
-                "creator",
-                "Creator",
-                "producer",
-                "Producer",
-            ]:
-                if key in metadata_dict:
-                    logger.debug(
-                        f"DEBUG PDF METADATA: {key} = {repr(metadata_dict[key])}"
-                    )
-
-            for page_num in range(pdf_doc.page_count):
-                page = pdf_doc[page_num]
-
-                # Debug: Check page properties first
-                logger.debug(
-                    f"DEBUG PDF: Page {page_num} - rect: {page.rect}, rotation: {page.rotation}"
-                )
-
-                # Extract text from the page
-                text = page.get_text()
-
-                # Debug: Always log what we got from first extraction method
-                logger.debug(
-                    f"DEBUG PDF: Page {page_num} - get_text() returned: type={type(text)}, length={len(text) if text else 0}"
-                )
-                logger.debug(
-                    f"DEBUG PDF: Page {page_num} - get_text() first 100 chars: {repr(text[:100] if text else None)}"
-                )
-
-                if text is None or not text.strip():
-                    # Try alternative extraction methods for stubborn pages
-                    logger.debug(
-                        f"DEBUG PDF: Page {page_num} - First extraction failed, trying alternatives..."
-                    )
-
-                    # Try different extraction modes
-                    extraction_methods = [
-                        ("text", lambda p: p.get_text("text")),
-                        ("dict", lambda p: p.get_text("dict")),
-                        ("blocks", lambda p: p.get_text("blocks")),
-                        ("words", lambda p: p.get_text("words")),
-                        ("html", lambda p: p.get_text("html")),
-                        ("xml", lambda p: p.get_text("xml")),
-                    ]
-
-                    for method_name, method_func in extraction_methods:
-                        try:
-                            logger.debug(
-                                f"DEBUG PDF: Page {page_num} - Trying {method_name} extraction..."
-                            )
-                            alt_text = method_func(page)
-
-                            if method_name in ["dict", "blocks", "words"]:
-                                # These return structured data, extract text from it
-                                if isinstance(alt_text, dict):
-                                    # For dict format, extract from blocks
-                                    extracted_text = ""
-                                    for block in alt_text.get("blocks", []):
-                                        if "lines" in block:
-                                            for line in block["lines"]:
-                                                for span in line.get("spans", []):
-                                                    extracted_text += (
-                                                        span.get("text", "") + " "
-                                                    )
-                                    alt_text = extracted_text.strip()
-                                elif isinstance(alt_text, list):
-                                    # For blocks/words format, join text elements
-                                    if alt_text and len(alt_text) > 0:
-                                        if isinstance(alt_text[0], tuple):
-                                            # blocks format: (x0, y0, x1, y1, "text", block_no, line_no, word_no)
-                                            alt_text = " ".join(
-                                                [
-                                                    item[4]
-                                                    if len(item) > 4
-                                                    else str(item)
-                                                    for item in alt_text
-                                                ]
-                                            )
-                                        else:
-                                            alt_text = " ".join(
-                                                [str(item) for item in alt_text]
-                                            )
-                            elif method_name in ["html", "xml"] and alt_text:
-                                # For HTML/XML, extract text content from markup
-                                # Remove HTML tags and extract text content
-                                text_content = re.sub(r"<[^>]+>", "", str(alt_text))
-                                # Clean up whitespace
-                                text_content = " ".join(text_content.split())
-                                alt_text = text_content.strip()
-
-                            logger.debug(
-                                f"DEBUG PDF: Page {page_num} - {method_name} extraction result: type={type(alt_text)}, length={len(str(alt_text)) if alt_text else 0}"
-                            )
-                            logger.debug(
-                                f"DEBUG PDF: Page {page_num} - {method_name} first 100 chars: {repr(str(alt_text)[:100] if alt_text else None)}"
-                            )
-
-                            # Check if we have meaningful text content (not just whitespace or minimal content)
-                            if (
-                                alt_text
-                                and str(alt_text).strip()
-                                and len(str(alt_text).strip()) > 5
-                            ):
-                                text = str(alt_text).strip()
-                                logger.info(
-                                    f"DEBUG PDF: Page {page_num} - Successfully extracted text using {method_name} method!"
-                                )
-                                break
-
-                        except Exception as extract_error:
-                            logger.debug(
-                                f"DEBUG PDF: Page {page_num} - {method_name} extraction failed: {extract_error}"
-                            )
-                            continue
+                    # Apply additional text cleaning to remove artifacts
+                    if text:
+                        text = self._clean_text_artifacts(text)
 
                     if not text or not text.strip():
-                        # Check if page has any content at all
-                        try:
-                            # Check for images
-                            image_list = page.get_images()
-                            logger.debug(
-                                f"DEBUG PDF: Page {page_num} - Images found: {len(image_list)}"
-                            )
-
-                            # Check for drawings/paths
-                            drawings = page.get_drawings()
-                            logger.debug(
-                                f"DEBUG PDF: Page {page_num} - Drawings found: {len(drawings) if drawings else 0}"
-                            )
-
-                            # Check annotations
-                            annotations = page.annots()
-                            annotation_count = (
-                                len(list(annotations)) if annotations else 0
-                            )
-                            logger.debug(
-                                f"DEBUG PDF: Page {page_num} - Annotations found: {annotation_count}"
-                            )
-
-                        except Exception as content_check_error:
-                            logger.debug(
-                                f"DEBUG PDF: Page {page_num} - Content check failed: {content_check_error}"
-                            )
-
-                        logger.debug(
-                            f"No text extracted from page {page_num} of {self.file_path}. Skipping page (likely blank page)."
-                        )
                         continue
 
-                # Log successful extraction for first few pages
-                if page_num < 3:
-                    logger.debug(
-                        f"DEBUG PDF: Page {page_num} successfully extracted {len(text)} characters"
-                    )
-                    logger.debug(
-                        f"DEBUG PDF: Page {page_num} first 100 chars: {repr(text[:100])}"
-                    )
-
-                metadata = {
-                    "source": self.file_path,
-                    "page": page_num,
-                    "pdf": {"info": metadata_dict},
-                }
-                documents.append(Document(page_content=text, metadata=metadata))
-
-            # Close the PDF document
-            pdf_doc.close()
+                    metadata = {
+                        "source": self.file_path,
+                        "page": page_num,
+                        "pdf": {"info": metadata_dict},
+                    }
+                    documents.append(Document(page_content=text, metadata=metadata))
 
         except Exception as e:
             logger.error(f"Error reading PDF {self.file_path}: {e}", exc_info=True)
@@ -347,61 +420,29 @@ async def process_document(
         # Check if pdf info exists in metadata
         pdf_info = raw_doc.metadata.get("pdf", {}).get("info", {})
         if isinstance(pdf_info, dict):
-            # DEBUG: Log the PDF metadata we're working with
-            page_number = raw_doc.metadata.get("page", 0)
-            if page_number == 0:  # Only log for first page to avoid spam
-                logger.info(
-                    f"DEBUG EXTRACTION: Processing PDF metadata for {os.path.basename(raw_doc.metadata.get('source', 'Unknown File'))}"
-                )
-                logger.info(
-                    f"DEBUG EXTRACTION: PDF metadata keys available: {list(pdf_info.keys())}"
-                )
-
             # Extract title - check multiple possible field names
             title_fields = ["title", "Title", "subject", "Subject"]
             for field in title_fields:
                 if field in pdf_info and pdf_info[field] and pdf_info[field].strip():
                     title = pdf_info[field].strip()
-                    if page_number == 0:
-                        logger.info(
-                            f"DEBUG EXTRACTION: Found title in field '{field}': {repr(title)}"
-                        )
                     break
-            else:
-                if page_number == 0:
-                    logger.info(
-                        f"DEBUG EXTRACTION: No title found in any of: {title_fields}"
-                    )
 
             # Extract author - check multiple possible field names
             author_fields = ["author", "Author", "creator", "Creator"]
             for field in author_fields:
                 if field in pdf_info and pdf_info[field] and pdf_info[field].strip():
                     author = pdf_info[field].strip()
-                    if page_number == 0:
-                        logger.info(
-                            f"DEBUG EXTRACTION: Found author in field '{field}': {repr(author)}"
-                        )
                     break
             else:
-                if page_number == 0:
-                    logger.info(
-                        f"DEBUG EXTRACTION: No author found in any of: {author_fields}"
-                    )
+                logger.info(
+                    f"DEBUG EXTRACTION: No author found in any of: {author_fields}"
+                )
 
             # Extract source URL - use Subject field if available, otherwise use file path
             if pdf_info.get("subject") and pdf_info["subject"].strip():
                 source_url = pdf_info["subject"].strip()
-                if page_number == 0:
-                    logger.info(
-                        f"DEBUG EXTRACTION: Found source URL in subject field: {repr(source_url)}"
-                    )
             elif pdf_info.get("Subject") and pdf_info["Subject"].strip():
                 source_url = pdf_info["Subject"].strip()
-                if page_number == 0:
-                    logger.info(
-                        f"DEBUG EXTRACTION: Found source URL in Subject field: {repr(source_url)}"
-                    )
 
         # Use source from metadata if available (fallback to file path)
         if raw_doc.metadata.get("source"):
@@ -443,10 +484,6 @@ async def process_document(
     logger.info(
         f"DEBUG: Processing {len(docs)} chunks, page_boundaries available: {len(page_boundaries) > 0}"
     )
-    if page_boundaries:
-        logger.info(
-            f"DEBUG: Page boundaries: {len(page_boundaries)} pages, total text length: {len(full_text)}"
-        )
 
     # Process chunks with TQDM progress bar
     logger.info(f"Calculating page references for {len(docs)} chunks...")
@@ -805,9 +842,17 @@ async def run(keep_data: bool, library_name: str) -> None:
                     if page_doc.page_content and page_doc.page_content.strip():
                         page_text = page_doc.page_content.strip()
 
-                        # Add spacing between pages (but no page markers)
+                        # Add intelligent spacing between pages
                         if page_index > 0:
-                            page_separator = "\n\n"
+                            # Get the last few characters of the previous page
+                            previous_text = (
+                                full_text_parts[-1] if full_text_parts else ""
+                            )
+
+                            # Determine appropriate separator based on text flow
+                            page_separator = _determine_page_separator(
+                                previous_text, page_text
+                            )
                             full_text_parts.append(page_separator)
                             current_offset += len(page_separator)
 

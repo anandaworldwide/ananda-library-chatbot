@@ -86,21 +86,12 @@ import argparse
 import json
 import logging
 import os
-import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
 
 import pytz
 from openpyxl import load_workbook
 from tqdm import tqdm
-
-# Get the absolute path of the current script
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Get the parent directory of data_ingestion
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-# Add parent directory to Python path
-sys.path.insert(0, parent_dir)
-
 
 from data_ingestion.audio_video.IngestQueue import IngestQueue
 from data_ingestion.audio_video.media_utils import get_file_hash

@@ -18,12 +18,6 @@ import time
 import traceback
 import warnings
 
-# Add project root to sys.path to allow absolute imports from data_ingestion
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
 import pymysql
 import requests
 from fpdf import FPDF

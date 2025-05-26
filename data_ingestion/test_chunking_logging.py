@@ -6,11 +6,6 @@ comprehensive logging and metrics collection is working properly.
 """
 
 import logging
-import sys
-from pathlib import Path
-
-# Add the data_ingestion directory to the path
-sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.text_splitter_utils import Document, SpacyTextSplitter
 

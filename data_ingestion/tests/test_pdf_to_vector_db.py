@@ -1,15 +1,8 @@
-import os
-import sys
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-# Add parent directory to path for importing modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
-
-# Import the module to test
 import pdf_to_vector_db as pdf_ingestion
+import pytest
 
 from data_ingestion.utils.document_hash import generate_document_hash
 from data_ingestion.utils.embeddings_utils import OpenAIEmbeddings

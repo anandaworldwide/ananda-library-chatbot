@@ -47,21 +47,12 @@ from openai import OpenAI
 from tenacity import RetryError
 from tqdm import tqdm
 
-# Get the absolute path of the current script
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Get the parent directory of data_ingestion
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-# Add parent directory to Python path
-sys.path.insert(0, parent_dir)
-
-
 from data_ingestion.audio_video.IngestQueue import IngestQueue
 from data_ingestion.audio_video.media_utils import (
     get_media_metadata,
     print_chunk_statistics,
 )
 from data_ingestion.audio_video.pinecone_utils import (
-    clear_library_vectors,
     create_embeddings,
     load_pinecone,
     store_in_pinecone,
@@ -83,6 +74,7 @@ from data_ingestion.audio_video.youtube_utils import (
     download_youtube_audio,
     extract_youtube_id,
 )
+from data_ingestion.utils.pinecone_utils import clear_library_vectors
 from pyutil.env_utils import load_env
 from pyutil.logging_utils import configure_logging
 
@@ -848,7 +840,21 @@ def main():
     if args.clear_vectors:
         try:
             index = load_pinecone()
-            clear_library_vectors(index, args.library)
+            # Get unique libraries from queue items
+            all_items = ingest_queue.get_all_items()
+            libraries = set()
+            for item in all_items:
+                if item.get("data", {}).get("library"):
+                    libraries.add(item["data"]["library"])
+
+            if not libraries:
+                logger.warning(
+                    "No libraries found in queue items. Skipping vector clearing."
+                )
+            else:
+                for library in libraries:
+                    logger.info(f"Clearing vectors for library: {library}")
+                    clear_library_vectors(index, library, ask_confirmation=False)
         except Exception as e:
             logger.error(f"Error clearing vectors: {str(e)}")
             if not args.override_conflicts:

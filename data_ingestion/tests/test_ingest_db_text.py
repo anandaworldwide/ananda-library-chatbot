@@ -2,7 +2,6 @@
 """Unit tests for the SQL database text ingestion functionality."""
 
 import os
-import sys
 import tempfile
 import unittest
 from datetime import datetime
@@ -10,15 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pymysql
 
-# Add parent directory to path for importing modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
-
-# Import the module to test
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../sql_to_vector_db"))
-)
-import ingest_db_text
-
+from data_ingestion.sql_to_vector_db import ingest_db_text
 from data_ingestion.utils.text_splitter_utils import Document
 
 
@@ -72,7 +63,7 @@ class TestArgumentParsing(unittest.TestCase):
 class TestEnvironmentLoading(unittest.TestCase):
     """Test cases for environment variable loading."""
 
-    @patch("ingest_db_text.load_env")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.load_env")
     @patch.dict(
         "os.environ",
         {
@@ -88,15 +79,16 @@ class TestEnvironmentLoading(unittest.TestCase):
         """Test successful environment loading."""
         # Should not raise any exceptions
         ingest_db_text.load_environment("test-site")
-        mock_load_env.assert_called_once_with("test-site")
+        mock_load_env.assert_called_once_with("TEST-SITE")
 
-    @patch("ingest_db_text.load_env")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.load_env")
     @patch.dict(
         "os.environ",
         {
             "DB_USER": "test_user",
             # Missing other required variables
         },
+        clear=True,
     )
     def test_load_environment_missing_vars(self, mock_load_env):
         """Test error when required environment variables are missing."""
@@ -131,7 +123,7 @@ class TestDatabaseUtilities(unittest.TestCase):
             self.assertEqual(config["charset"], "utf8mb4")
             self.assertEqual(config["collation"], "utf8mb4_unicode_ci")
 
-    @patch("ingest_db_text.pymysql.connect")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.pymysql.connect")
     def test_get_db_connection_success(self, mock_connect):
         """Test successful database connection."""
         mock_connection = MagicMock()
@@ -148,7 +140,7 @@ class TestDatabaseUtilities(unittest.TestCase):
         self.assertEqual(result, mock_connection)
         mock_connect.assert_called_once_with(**config)
 
-    @patch("ingest_db_text.pymysql.connect")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.pymysql.connect")
     @patch("time.sleep")
     def test_get_db_connection_retry_then_success(self, mock_sleep, mock_connect):
         """Test database connection with retry logic."""
@@ -395,11 +387,11 @@ class TestVectorIdGeneration(unittest.TestCase):
 
 
 class TestPunctuationPreservation(unittest.TestCase):
-    """Test cases for punctuation preservation in database text processing."""
+    """Test cases for punctuation preservation in ingested text."""
 
-    @patch("ingest_db_text.pymysql.connect")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.pymysql.connect")
     def test_fetch_data_punctuation_preservation(self, mock_connect):
-        """Test that database text fetching and processing preserves punctuation."""
+        """Test that punctuation is preserved when fetching data from the DB."""
         # Mock database connection and cursor
         mock_connection = MagicMock()
         mock_cursor = MagicMock()
@@ -452,8 +444,12 @@ class TestPunctuationPreservation(unittest.TestCase):
 
         # Test the fetch_data function
         with (
-            patch("ingest_db_text.remove_html_tags") as mock_remove_html,
-            patch("ingest_db_text.replace_smart_quotes") as mock_replace_quotes,
+            patch(
+                "data_ingestion.sql_to_vector_db.ingest_db_text.remove_html_tags"
+            ) as mock_remove_html,
+            patch(
+                "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
+            ) as mock_replace_quotes,
         ):
             # Mock text processing to preserve punctuation
             cleaned_text = """Welcome to our meditation guide! Are you ready to begin?
@@ -464,7 +460,7 @@ Let's explore the fundamentals: breathing, posture, and mindfulness.
 • Don't judge your thoughts—simply observe them
 • Practice daily @ 6:00 AM for best results
 
-"The mind is everything. What you think you become." —Buddha
+\"The mind is everything. What you think you become.\" —Buddha
 
 Remember: it's not about perfection; it's about progress!
 Questions? Email us at info@example.com or call (555) 123-4567."""
@@ -472,9 +468,8 @@ Questions? Email us at info@example.com or call (555) 123-4567."""
             mock_remove_html.return_value = cleaned_text
             mock_replace_quotes.return_value = cleaned_text
 
-            # Call the function
             processed_data = ingest_db_text.fetch_data(
-                mock_connection, site_config, "Test Library", authors, "test"
+                mock_connection, site_config, "Test Library", authors, "test-site"
             )
 
             # Verify data was processed
@@ -507,15 +502,15 @@ Questions? Email us at info@example.com or call (555) 123-4567."""
                     f"Punctuation mark '{mark}' should be preserved in database content",
                 )
 
-                # Test preservation of contractions and special formatting
-                special_elements = [
-                    "Let's",
-                    "Don't",
-                    "it's",
-                    "6:00",
-                    "info@example.com",
-                    "(555) 123-4567",
-                ]
+            # Test preservation of contractions and special formatting
+            special_elements = [
+                "Let's",
+                "Don't",
+                "it's",
+                "6:00",
+                "info@example.com",
+                "(555) 123-4567",
+            ]
             for element in special_elements:
                 self.assertIn(
                     element, content, f"Special element '{element}' should be preserved"
@@ -532,11 +527,11 @@ Questions? Email us at info@example.com or call (555) 123-4567."""
             )
             self.assertEqual(processed_item["library"], "Test Library")
 
-    @patch("ingest_db_text.SpacyTextSplitter")
+    @patch("data_ingestion.utils.text_splitter_utils.SpacyTextSplitter")
     def test_process_and_upsert_batch_punctuation_preservation(
         self, mock_splitter_class
     ):
-        """Test that batch processing preserves punctuation through chunking."""
+        """Test that punctuation is preserved throughout the processing and upserting batch."""
         # Create mock text splitter
         mock_splitter = MagicMock()
         mock_splitter_class.return_value = mock_splitter

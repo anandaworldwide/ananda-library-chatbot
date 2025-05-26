@@ -30,10 +30,6 @@ from typing import Any
 from pinecone import Pinecone
 from tqdm import tqdm
 
-# Add project root to Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-sys.path.insert(0, project_root)
-
 from pyutil.env_utils import load_env
 
 

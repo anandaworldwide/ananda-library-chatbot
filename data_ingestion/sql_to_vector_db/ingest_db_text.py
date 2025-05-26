@@ -102,15 +102,13 @@ def parse_arguments():
 
 
 # --- Environment Loading ---
-def load_environment(site: str):
-    """Loads environment variables from the site-specific .env file using the load_env utility."""
-    try:
-        load_env(site)
-        print(f"Loaded environment for site: {site} using load_env utility.")
-    except Exception as e:
-        # Catch potential errors from load_env (e.g., file not found handled inside)
-        print(f"Error loading environment using load_env for site '{site}': {e}")
-        sys.exit(1)
+def load_environment(site_name: str) -> dict:
+    """
+    Load environment variables for a specific site and return a dictionary of database connection details.
+    Uses the load_env utility to load environment variables with the site name as a prefix.
+    """
+    load_env(f"{site_name.upper()}")
+    print(f"Loaded environment for site: {site_name} using load_env utility.")
 
     required_vars = [
         "DB_USER",
@@ -122,10 +120,16 @@ def load_environment(site: str):
     ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
     if missing_vars:
-        print(
-            f"Error: Missing required environment variables: {', '.join(missing_vars)}"
+        raise SystemExit(
+            f"Missing required environment variables: {', '.join(missing_vars)}"
         )
-        sys.exit(1)
+
+    return {
+        "user": os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASSWORD"),
+        "host": os.getenv("DB_HOST"),
+        "raise_on_warnings": True,
+    }
 
 
 # --- Database Utilities ---

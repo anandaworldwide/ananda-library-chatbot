@@ -15,11 +15,6 @@ from collections import defaultdict
 import pymysql
 from tqdm import tqdm
 
-# Add project root to Python path for imports
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-sys.path.insert(0, parent_dir)
-
 # Import shared utilities
 from data_ingestion.utils.text_processing import remove_html_tags, replace_smart_quotes
 from pyutil.env_utils import load_env
@@ -166,8 +161,6 @@ def analyze_category_content(db_connection, site_config: dict):
 
             print("Analyzing content volume per category...")
             for row in tqdm(results, desc="Analyzing Posts"):
-                post_id = row["ID"]
-
                 # 1. Clean content
                 cleaned_content = remove_html_tags(row["post_content"])
                 cleaned_content = replace_smart_quotes(cleaned_content)

@@ -7,18 +7,8 @@ transcription JSON files. It ensures each transcription file has a reference to 
 
 import gzip
 import json
-import os
 import sqlite3
-import sys
 from pathlib import Path
-
-# Get the absolute path of the current script
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Get the parent directory of data_ingestion
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-# Add parent directory to Python path
-sys.path.insert(0, parent_dir)
-
 
 # Database and transcription file locations relative to script location
 TRANSCRIPTIONS_DB_PATH = (

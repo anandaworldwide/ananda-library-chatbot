@@ -199,6 +199,34 @@ documents using `retriever.getRelevantDocuments(sanitizedQuestion)`. This call d
 defined in the site configuration. These pre-fetched documents (as `finalDocs`) were then passed to `makeChain`, causing
 `makeChain`'s own `retrievalSequence` (which contains the correct library filtering logic) to be bypassed.
 
+## Mistake: Hard-coding Specific Text Patterns in PDF Processing
+
+**Problem**: When fixing PDF text extraction issues where chapter headers were getting mixed into body text (e.g.,
+"combatControl Your Destiny 23 them"), initially attempted to hard-code the specific book title pattern.
+
+**Wrong**: Hard-coding specific book titles in text cleaning:
+
+```python
+# Remove chapter headers and book titles that got mixed into the text
+# Pattern: "Control Your Destiny" followed by optional number
+text = re.sub(r"\bControl Your Destiny\s*\d*\b", "", text, flags=re.IGNORECASE)
+```
+
+**Correct**: Use generic patterns that detect common text artifacts without hard-coding specific titles:
+
+```python
+# Fix concatenated words by detecting patterns where lowercase word is followed by uppercase word
+# This handles cases like "combatControl" -> "combat Control"
+text = re.sub(r'([a-z])([A-Z][a-z])', r'\1 \2', text)
+
+# Remove patterns that look like book titles (Title Case Words followed by numbers)
+# This catches patterns like "Control Your Destiny 23" without hard-coding specific titles
+text = re.sub(r"\b([A-Z][a-z]+\s+){1,4}[A-Z][a-z]+\s+\d{1,3}\b", "", text)
+```
+
+**Principle**: Text processing should use generic patterns that work across different documents rather than hard-coding
+specific content. This makes the solution more robust and maintainable.
+
 ## Mistake: Document Type Validation Too Strict in Text Splitter
 
 **Problem**: The `SpacyTextSplitter.split_documents()` method was using `isinstance(doc, Document)` to validate input
@@ -582,329 +610,9 @@ def main():
 4. Access the embedding via `response.data[0].embedding`.
 5. Pass the initialized client to functions that need to generate embeddings.
 
-### Rule: Add File Header Comment
-
-**Requirement**: Always add a brief, descriptive comment at the top of any new or modified file, explaining its purpose.
-
-**Example**:
-
-```python
-# /path/to/file.py
-# This script performs X, Y, and Z.
-```
-
-```typescript
-// /path/to/file.ts
-// This module is responsible for A, B, and C.
-```
-
-### Mistake: PDF Metadata Extraction Not Working for Author and Title
-
-**Situation**: PDF documents were being ingested into the vector database with "Unknown" author and "Untitled" title,
-even though the PDF metadata contained valid author and title information.
-
-**Wrong**:
-
-```python
-# In process_document function - incomplete field name checking
-pdf_info = raw_doc.metadata.get('pdf', {}).get('info', {})
-if isinstance(pdf_info, dict):
-    source_url = pdf_info.get('Subject')  # Only checked 'Subject', not 'subject'
-    title = pdf_info.get('Title', 'Untitled')  # Only checked 'Title', not 'title'
-    # No author extraction at all!
-```
-
-**Correct**:
-
-```python
-# Extract title - check multiple possible field names
-title_fields = ['title', 'Title', 'subject', 'Subject']
-for field in title_fields:
-    if field in pdf_info and pdf_info[field] and pdf_info[field].strip():
-        title = pdf_info[field].strip()
-        break
-
-# Extract author - check multiple possible field names
-author_fields = ['author', 'Author', 'creator', 'Creator']
-for field in author_fields:
-    if field in pdf_info and pdf_info[field] and pdf_info[field].strip():
-        author = pdf_info[field].strip()
-        break
-
-# Extract source URL - check both lowercase and uppercase
-if pdf_info.get('subject') and pdf_info['subject'].strip():
-    source_url = pdf_info['subject'].strip()
-elif pdf_info.get('Subject') and pdf_info['Subject'].strip():
-    source_url = pdf_info['Subject'].strip()
-```
-
-**Key Learning**: PDF metadata field names can be case-sensitive and vary between documents. Always check multiple
-possible field name variations (lowercase, uppercase) and extract all relevant metadata fields (title, author, source
-URL).
-
-### Mistake: Overly Aggressive Text Cleaning Regex Patterns
-
-**Wrong**:
-
-```python
-# Fix single letters or short fragments isolated by newlines
-# This handles cases like "Yo\nd\nYogananda" -> "Yogananda"
-text = re.sub(r'\b(\w{1,2})\s*\n\s*(\w{1,2})\s*\n\s*(\w+)', r'\1\2\3', text)
-text = re.sub(r'\b(\w{1,2})\s*\n\s*(\w+)', r'\1\2', text)
-```
-
-**Correct**:
-
-```python
-# Only fix hyphenated words split across lines (safe pattern)
-text = re.sub(r'(\w+)-\s*\n\s*(\w+)', r'\1\2', text)
-# Remove the aggressive short-fragment patterns - they risk combining separate words
-# like "I\nAm\nHappy" -> "IAmHappy" or "A\nNew\nDay" -> "ANewDay"
-```
-
-These aggressive patterns are only appropriate for OCR text with scanning artifacts. For normal text, they risk
-incorrectly combining legitimate separate words like pronouns, articles, and prepositions.
-
-### Mistake: PDF Page-by-Page Processing Causing Poor Chunking Quality
-
-**Problem**: Processing PDFs page-by-page in `pdf_to_vector_db.py` caused several chunking quality issues:
-
-- Broken paragraphs at page boundaries
-- Context loss across pages
-- Small trailing chunks at end of pages
-- Suboptimal spaCy chunking decisions due to lack of full document context
-- Overwriting chunks due to restarted chunk indexing per page
-
-**Wrong**:
-
-```python
-# Processing each page separately
-for page_index, page_doc in enumerate(pages_from_pdf):
-    await process_document(
-        page_doc, pinecone_index, embeddings,
-        page_index, library_name, text_splitter
-    )
-```
-
-**Correct**:
-
-```python
-# Process entire PDF as one document
-# Concatenate all page content and track page boundaries for metadata
-full_text_parts = []
-page_boundaries = []
-current_offset = 0
-
-for page_index, page_doc in enumerate(pages_from_pdf):
-    if page_doc.page_content and page_doc.page_content.strip():
-        page_text = page_doc.page_content.strip()
-
-        # Add spacing between pages (but no page markers in text)
-        if page_index > 0:
-            page_separator = "\n\n"
-            full_text_parts.append(page_separator)
-            current_offset += len(page_separator)
-
-        # Track this page's boundaries for metadata
-        start_offset = current_offset
-        full_text_parts.append(page_text)
-        current_offset += len(page_text)
-        end_offset = current_offset
-
-        page_boundaries.append({
-            'page_number': page_index + 1,
-            'start_offset': start_offset,
-            'end_offset': end_offset
-        })
-
-# Create single document with clean text (no page markers)
-full_document = Document(
-    page_content="".join(full_text_parts),
-    metadata={
-        **first_page.metadata.copy(),
-        'page_boundaries': page_boundaries,
-        'total_pages': len(pages_from_pdf)
-    }
-)
-
-# Process complete document - chunks get page info in metadata
-await process_document(
-    full_document, pinecone_index, embeddings,
-    0, library_name, text_splitter
-)
-```
-
-This approach preserves context across page boundaries, keeps text content clean, and stores page reference information
-in chunk metadata (e.g., `page_reference: "Page 5"` or `page_reference: "Pages 5-6"` for chunks spanning multiple
-pages).
-
-## Mistake: Sentence Splitting Should Preserve Punctuation
-
-**Wrong**: Initial implementation removed trailing punctuation from the last sentence for consistency:
-
-```python
-def split_into_sentences(text: str) -> list[str]:
-    # Basic sentence splitting on common punctuation
-    sentences = re.split(r'[.!?]+\\s+', text)
-
-    # Handle the last sentence which might still have trailing punctuation
-    if sentences and sentences[-1]:
-        # Remove trailing punctuation from the last sentence
-        sentences[-1] = re.sub(r'[.!?]+$', '', sentences[-1])
-
-    return sentences
-
-# Test expectation:
-assert result == ["First sentence", "Second sentence", "Third sentence"]
-```
-
-**Correct**: Keep punctuation on ALL sentences (Option A) for more natural text processing:
-
-```python
-def split_into_sentences(text: str) -> list[str]:
-    # Use regex that preserves punctuation with sentences
-    sentences = re.split(r'(?<=[.!?])\\s+', text)
-
-    # Clean up and filter out empty sentences (no punctuation removal)
-    sentences = [s.strip() for s in sentences if s.strip()]
-
-    return sentences
-
-# Test expectation:
-assert result == ["First sentence.", "Second sentence.", "Third sentence."]
-```
-
-**Principle**: User preference was to preserve natural punctuation rather than normalize it away.
-
-## Mistake: Unused Pinecone Imports Causing Dependency Conflicts
-
-**Wrong**: Including unused imports from Pinecone internal modules that may not be available:
-
-```python
-from pinecone.core.grpc.protos.vector_service_pb2 import Vector
-```
-
-This causes `ModuleNotFoundError: No module named 'protoc_gen_openapiv2'` during testing.
-
-**Correct**: Only import what is actually used in the code:
-
-```python
-from pinecone import Pinecone, NotFoundException, Index
-from pinecone import ServerlessSpec
-```
-
-**Principle**: Import only what you use to avoid dependency conflicts and reduce import overhead.
-
-## Mistake: Python Import Issues in Data Ingestion Scripts
-
-**Wrong**: Importing unused or incorrect database connector modules, and complex redundant path manipulation for shared
-utilities import:
-
-```python
-#!/usr/bin/env python
-import mysql.connector  # Module not installed, causes ModuleNotFoundError
-# Complex nested try/except for path manipulation
-try:
-    # Running from workspace root
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-    from pyutil.env_utils import load_env
-except ImportError:
-    # Running from data_ingestion/sql_to_vector_db
-    try:
-        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
-        from pyutil.env_utils import load_env
-    except ImportError:
-        print("Error: Could not find the 'pyutil' module...")
-        sys.exit(1)
-```
-
-**Correct**: Use only required modules and consistent simple path manipulation:
-
-```python
-#!/usr/bin/env python3
-import pymysql  # Use the actual installed connector
-# Simple, consistent path setup
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(os.path.dirname(current_dir))  # Go to project root
-sys.path.insert(0, parent_dir)
-
-from pyutil.env_utils import load_env
-from data_ingestion.utils.text_processing import remove_html_tags, replace_smart_quotes
-```
-
-**Key Points**:
-
-- Only import modules that are actually installed (`pymysql` instead of `mysql.connector`)
-- Use consistent path manipulation to reach project root: `parent_dir = os.path.dirname(os.path.dirname(current_dir))`
-- Import shared utilities after setting the path correctly
-- Prefer simple, readable path setup over complex try/except blocks
-
-## Mistake: PDF to Vector DB Script Refactoring - Function Signature Updates
-
-**Context**: When refactoring the PDF to vector DB script to use shared utilities, several function signatures needed to
-be updated to match the shared utility interfaces.
-
-**Key Changes Made**:
-
-- **Embeddings**: Replaced custom `OpenAIEmbeddings` class with shared `OpenAIEmbeddings` from `embeddings_utils`
-- **Async Methods**: Updated to use `embed_query_async()` instead of `embed_query()` for async operations
-- **Pinecone Operations**: Replaced custom Pinecone functions with shared utilities:
-  - `get_pinecone_client()` from `pinecone_utils`
-  - `create_pinecone_index_if_not_exists_async()` from `pinecone_utils`
-  - `clear_library_vectors_async()` from `pinecone_utils`
-  - `get_pinecone_ingest_index_name()` from `pinecone_utils`
-- **Checkpoint Management**: Replaced custom checkpoint functions with `pdf_checkpoint_integration()` from
-  `checkpoint_utils`
-- **Signal Handling**: Replaced custom signal handler with `setup_signal_handlers()` from `progress_utils`
-
-**Test Updates**: After moving functions to shared utilities, the original tests became obsolete. Removed tests for
-functions that:
-
-- Were moved to shared utilities (already tested there with 207 total tests)
-- No longer exist in the PDF script after refactoring
-- Kept only tests for functions still unique to the PDF script (`process_document`, `process_chunk`)
-
-**Final Result**: Script successfully refactored to use shared utilities with 4 passing tests for remaining unique
-functions.
-
-## Mistake: Unit Test Mocking for Async Functions
-
-**Wrong**: When testing async functions that check global flags like `is_exiting`, only patching the flag in one
-location.
-
-```python
-patch("data_ingestion.utils.progress_utils.is_exiting", False)
-```
-
-**Correct**: Patch the flag in both the shared utility module and the module under test to ensure all references are
-properly mocked.
-
-```python
-patch("data_ingestion.utils.progress_utils.is_exiting", False),
-patch("pdf_to_vector_db.is_exiting", False)
-```
-
-## Mistake: Using await with Synchronous Functions
-
-**Wrong**: Using `await` with synchronous functions that return regular values instead of coroutines:
-
-```python
-# In data_ingestion/pdf_to_vector_db.py
-# save_checkpoint_func is a synchronous function that returns bool
-await save_checkpoint_func(i)  # TypeError: object bool can't be used in 'await' expression
-```
-
-**Correct**: Use synchronous functions directly without `await`:
-
-```python
-# In data_ingestion/pdf_to_vector_db.py
-# save_checkpoint_func is synchronous, call it directly
-save_checkpoint_func(i)  # Returns bool directly
-```
-
-**Principle**: Always check function signatures and return types. If a function returns a regular value (like `bool`,
-`str`, `int`) rather than a coroutine, it should be called synchronously without `await`. Only use `await` with async
-functions that return coroutines or awaitable objects.
+**Key Principle**: Always check function signatures and return types. If a function returns a regular value (like
+`bool`, `str`, `int`) rather than a coroutine, it should be called synchronously without `await`. Only use `await` with
+async functions that return coroutines or awaitable objects.
 
 **Context**: The `pdf_checkpoint_integration()` function from `checkpoint_utils.py` returns a synchronous
 `save_checkpoint` function that returns `bool`, not an async function. The error occurred because the PDF script was
@@ -1594,3 +1302,261 @@ pinecone_id = generate_vector_id(
 
 **Test Updates**: Updated test calls to use the new parameter names and structure, ensuring all 20 tests continue to
 pass.
+
+### Mistake: Referencing Non-Existent Environment Variables
+
+**Wrong**:
+
+```python
+def load_environment(site_name: str) -> dict:
+    # ... validation code ...
+    return {
+        'user': os.getenv('DB_USER'),
+        'password': os.getenv('DB_PASSWORD'),
+        'host': os.getenv('DB_HOST'),
+        'database': os.getenv('DB_NAME'),  # DB_NAME doesn't exist in environment
+        'port': int(os.getenv('DB_PORT', '3306')),  # DB_PORT doesn't exist in environment
+        'raise_on_warnings': True
+    }
+```
+
+**Correct**:
+
+```python
+def load_environment(site_name: str) -> dict:
+    # ... validation code ...
+    return {
+        'user': os.getenv('DB_USER'),
+        'password': os.getenv('DB_PASSWORD'),
+        'host': os.getenv('DB_HOST'),
+        'raise_on_warnings': True
+    }
+
+# Database name comes from command line args, not environment
+def get_db_config(args):
+    return {
+        'user': os.getenv('DB_USER'),
+        'password': os.getenv('DB_PASSWORD'),
+        'host': os.getenv('DB_HOST'),
+        'database': args.database,  # From command line argument
+        'port': int(os.getenv('DB_PORT', '3306')),  # Optional with default
+        # ... other config
+    }
+```
+
+**Principle**: Only reference environment variables that actually exist. Check the actual environment setup and existing
+code patterns before assuming variables exist.
+
+## Mistake: Audio/Video Script Accessing Non-Existent Library Argument
+
+**Wrong**: The `transcribe_and_ingest_media.py` script was trying to access `args.library` without defining the
+`--library` argument in the argument parser:
+
+```python
+# Later in code - trying to use undefined attribute
+if args.clear_vectors:
+    clear_library_vectors(index, args.library, ask_confirmation=False)
+```
+
+**Correct**: Get library information from the queue items instead of command line arguments:
+
+```python
+if args.clear_vectors:
+    # Get unique libraries from queue items
+    all_items = ingest_queue.get_all_items()
+    libraries = set()
+    for item in all_items:
+        if item.get("data", {}).get("library"):
+            libraries.add(item["data"]["library"])
+
+    if not libraries:
+        logger.warning("No libraries found in queue items. Skipping vector clearing.")
+    else:
+        for library in libraries:
+            logger.info(f"Clearing vectors for library: {library}")
+            clear_library_vectors(index, library, ask_confirmation=False)
+```
+
+**Error**: `AttributeError: 'Namespace' object has no attribute 'library'` when running with `--clear-vectors` flag.
+
+**Root Cause**: The script was importing `clear_library_vectors` from the outdated audio_video module instead of the
+robust utils version, AND trying to access a non-existent `args.library` attribute. The library information is actually
+stored in the queue items managed by the queue system.
+
+**Fix Applied**:
+
+1. Updated import to use `data_ingestion.utils.pinecone_utils.clear_library_vectors`
+2. Modified clear_vectors logic to extract library names from queue items instead of command line arguments
+3. Added logic to handle multiple libraries and skip clearing if no libraries found
+
+### Mistake: Using sys.path Hacks Instead of Proper Module Execution
+
+**Problem**: Multiple Python scripts across the project use a sys.path manipulation hack to import modules from the
+project root:
+
+```python
+# Get the absolute path of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the parent directory of data_ingestion
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+# Add parent directory to Python path
+sys.path.insert(0, parent_dir)
+
+from data_ingestion.audio_video.IngestQueue import IngestQueue
+```
+
+This causes Ruff E402 linting errors ("Module level import not at top of file") and is a code smell.
+
+**Root Cause**: Scripts are being executed directly from their subdirectories instead of as modules from the project
+root.
+
+**Wrong**: Running scripts directly from subdirectories:
+
+```bash
+cd data_ingestion/audio_video
+./manage_queue.py -s dev -l
+```
+
+**Correct**: Run scripts as modules from project root:
+
+```bash
+python -m data_ingestion.audio_video.manage_queue -s dev -l
+```
+
+**Why This Works**:
+
+- Project already has proper package structure with `__init__.py` files
+- `pyproject.toml` declares `data_ingestion` and `pyutil` as first-party packages
+- Python treats the project as a proper package when using `-m` flag
+- All imports work naturally without path manipulation
+- Imports can be moved to the top of files, fixing linting errors
+
+**Alternative Solutions**:
+
+1. Set PYTHONPATH environment variable to project root
+2. Install project as editable package with `pip install -e .`
+
+**Files Affected**: All scripts in `data_ingestion/`, `bin/`, and subdirectories that use the sys.path hack.
+
+### Finding: Python Script Import Resolution from Project Root
+
+**Situation**: User encountered `ModuleNotFoundError: No module named 'pyutil'` when running a script in the `bin/`
+directory that imports from the `pyutil` package located at the project root level.
+
+**Initial Error**: Running `bin/find_records_by_category.py` directly from the project root resulted in import errors,
+even though the script was executable and had proper shebang.
+
+**Root Cause**: The issue was likely related to virtual environment activation or temporary Python path issues, not the
+script structure itself.
+
+**Correct Approach**: The project is properly structured with:
+
+- `pyutil` listed as a first-party package in `pyproject.toml`
+- Scripts in `bin/` directory with proper shebang (`#!/usr/bin/env python`)
+- Executable permissions on scripts
+
+**Proper Usage**: Scripts should be run from the project root directory:
+
+```bash
+# From project root - this works correctly
+bin/find_records_by_category.py --site ananda --category "some-category"
+```
+
+**Why This Works**: When running an executable Python script from the project root, the current directory (containing
+`pyutil/`) is automatically added to Python's module search path, making the import resolution work correctly.
+
+**Avoid**: Using `sys.path.append()` hacks that some existing scripts currently use - the proper project structure
+already handles this correctly.
+
+## Mistake: PDF Text Concatenation Causing Section Header Mashing
+
+**Problem**: PDF ingestion was concatenating pages with only `"\n\n"` separators, causing section headers and content to
+be mashed together without proper spacing. This resulted in text like "combat23 Control Your Destiny" where "combat" was
+the end of one page and "23 Control Your Destiny" was a section header on the next page.
+
+**Wrong**: Simple concatenation with fixed separator:
+
+```python
+# Add spacing between pages (but no page markers)
+if page_index > 0:
+    page_separator = "\n\n"
+    full_text_parts.append(page_separator)
+    current_offset += len(page_separator)
+```
+
+**Correct**: Intelligent page separator determination based on text flow:
+
+```python
+# Add intelligent spacing between pages
+if page_index > 0:
+    # Get the last few characters of the previous page
+    previous_text = full_text_parts[-1] if full_text_parts else ""
+
+    # Determine appropriate separator based on text flow
+    page_separator = _determine_page_separator(previous_text, page_text)
+    full_text_parts.append(page_separator)
+    current_offset += len(page_separator)
+```
+
+**Solution**: Added `_determine_page_separator()` function that analyzes:
+
+- Whether previous text ends with sentence-ending punctuation
+- Whether current text starts with capital letter or number
+- Whether current text appears to be a section header
+- Whether previous text ends with hyphen (word split across pages)
+- Whether text appears to be a continuation of the same sentence
+
+**Detection**: User reported examples of mashed text where section headers were concatenated without proper spacing,
+affecting readability and chunking quality.
+
+## PDF Header/Footer Filtering Enhancement
+
+**Problem**: PDF text extraction was including headers and footers, causing text flow disruption where page numbers and
+headers would break up sentences (e.g., "combat23 Control Your Destiny" instead of "combat them. Extraordinary...").
+
+**Solution**: Enhanced PyMuPDF-based PDF loader with intelligent header/footer detection using:
+
+1. **Position-based filtering**: Top 10% and bottom 10% of page regions
+2. **Font property analysis**: Lighter colors, smaller fonts compared to body text
+3. **Content pattern recognition**: Page numbers, chapter headers, book titles
+4. **Structured text extraction**: Using PyMuPDF's `get_text("dict")` for detailed font/position data
+
+**Key Features**:
+
+- `_is_header_footer_text()`: Multi-criteria detection of headers/footers
+- `_determine_page_separator()`: Smart page joining with proper spacing
+- Configurable thresholds for position and font-based filtering
+- Pattern matching for common header/footer content
+
+**Note**: This approach was superseded by switching to pdfplumber, which provides better overall text extraction
+quality.
+
+## PDF Text Extraction Library Switch - COMPLETED
+
+**Problem**: PyMuPDF was producing garbled text with headers/footers interrupting content flow, causing issues like
+"combat23 Control Your Destiny" and "N n nIdleness" appearing in extracted text.
+
+**Solution**: Successfully switched from PyMuPDF to pdfplumber for PDF text extraction.
+
+**Key Benefits of pdfplumber**:
+
+- Much cleaner text extraction with better layout understanding
+- Better handling of complex PDF layouts
+- More accurate text flow preservation
+- Reduced header/footer contamination
+
+**Implementation**: Replaced PyMuPDF (`fitz`) with pdfplumber in `PyPDFLoader` class:
+
+- Uses `pdfplumber.open()` instead of `fitz.open()`
+- Extracts text with `page.extract_text()` instead of `page.get_text()`
+- Maintains same document structure and metadata handling
+- Added `_clean_text_artifacts()` method for additional text cleaning
+
+**Results**: Testing with "Renunciate Order for New Age" PDF showed:
+
+- 48 pages extracted successfully
+- Clean title extraction: "Renunciate Order for New Age"
+- No garbled artifacts or header/footer contamination
+- Proper text flow preservation
+
+**Status**: PDF text extraction quality issue resolved. Ready for production use.

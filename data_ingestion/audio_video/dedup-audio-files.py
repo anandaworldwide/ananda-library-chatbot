@@ -1,4 +1,30 @@
 #!/usr/bin/env python
+"""
+Audio File Deduplication Script
+
+This script compares audio files between two folders to identify duplicates and copy non-duplicate files
+from the comparison folder to a destination folder.
+
+Functionality:
+1. Processes audio files in a source folder and generates content-based hashes.
+2. Compares audio files in a comparison folder against the source files.
+3. Identifies duplicate files based on their content hash.
+4. Copies non-duplicate files from the comparison folder to the specified destination folder, maintaining
+   the original folder structure.
+5. Provides detailed output about duplicates and non-duplicates.
+6. Caches file hashes to improve performance on subsequent runs.
+
+Usage:
+python dedup-audio-files.py <source_folder> <comparison_folder> <destination_folder>
+
+Supported audio formats: .mp3, .wav, .flac, .ogg, .aac
+
+Notes:
+- This script uses content-based hashing, ignoring metadata, to identify duplicates.
+- Non-duplicate files are copied from the comparison folder to the destination folder.
+- The folder structure from the comparison folder is preserved in the destination folder.
+"""
+
 import argparse
 import hashlib
 import os
@@ -9,40 +35,6 @@ import sys
 
 from pydub import AudioSegment
 from tqdm import tqdm
-
-# Get the absolute path of the current script
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Get the parent directory of data_ingestion
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-# Add parent directory to Python path
-sys.path.insert(0, parent_dir)
-
-
-"""
-Audio File Deduplication Script
-
-This script compares audio files between two folders to identify duplicates and copy non-duplicate files 
-from the comparison folder to a destination folder.
-
-Functionality:
-1. Processes audio files in a source folder and generates content-based hashes.
-2. Compares audio files in a comparison folder against the source files.
-3. Identifies duplicate files based on their content hash.
-4. Copies non-duplicate files from the comparison folder to the specified destination folder, maintaining 
-   the original folder structure.
-5. Provides detailed output about duplicates and non-duplicates.
-6. Caches file hashes to improve performance on subsequent runs.
-
-Usage: 
-python dedup-audio-files.py <source_folder> <comparison_folder> <destination_folder>
-
-Supported audio formats: .mp3, .wav, .flac, .ogg, .aac
-
-Notes:
-- This script uses content-based hashing, ignoring metadata, to identify duplicates.
-- Non-duplicate files are copied from the comparison folder to the destination folder.
-- The folder structure from the comparison folder is preserved in the destination folder.
-"""
 
 
 def get_cache_path(comparison_folder):
