@@ -2,9 +2,11 @@
 
 ## Objective
 
-Enhance the existing Python-based web crawler to support periodic re-crawling, avoid re-ingesting unchanged content, operate as a long-running daemon process, and be configurable for individual sites (single-tenancy). Develop a test suite using the `unittest` framework with `unittest.mock`, running tests with `pytest`.
+Enhance the existing Python-based web crawler to support periodic re-crawling, avoid re-ingesting unchanged content,
+operate as a long-running daemon process, and be configurable for individual sites (single-tenancy). Develop a test
+suite using the `unittest` framework with `unittest.mock`, running tests with `pytest`.
 
-From https://grok.com/chat/03d2d2d8-1b90-4d19-8c61-a0b5b7d3010c
+From <https://grok.com/chat/03d2d2d8-1b90-4d19-8c61-a0b5b7d3010c>
 
 ## Test Suite Guidelines
 
@@ -20,12 +22,19 @@ From https://grok.com/chat/03d2d2d8-1b90-4d19-8c61-a0b5b7d3010c
 
 ### Tasks
 
-- ✓ Ensure `load_config` in the crawler correctly loads a single site's configuration from `crawler_config/{site_id}-config.json` (where `{site_id}` is a command-line argument). This file should contain `domain`, `start_url`, `skip_patterns`, and `crawl_frequency_days`.
-- ✓ Set up a SQLite `crawl_queue` table with columns: `url`, `last_crawl`, `next_crawl`, `crawl_frequency`, `content_hash`, `last_error`. The SQLite database file should be named `crawler_queue_{site_id}.db` (where `{site_id}` corresponds to the currently running crawler's site ID) and stored in a `db/` subdirectory (e.g., `db/crawler_queue_{site_id}.db`).
-- ✓ Seed initial URLs for the configured site using `start_url` and `crawl_frequency_days` from its specific configuration.
+- ✓ Ensure `load_config` in the crawler correctly loads a single site's configuration from
+  `crawler_config/{site_id}-config.json` (where `{site_id}` is a command-line argument). This file should contain
+  `domain`, `start_url`, `skip_patterns`, and `crawl_frequency_days`.
+- ✓ Set up a SQLite `crawl_queue` table with columns: `url`, `last_crawl`, `next_crawl`, `crawl_frequency`,
+  `content_hash`, `last_error`. The SQLite database file should be named `crawler_queue_{site_id}.db` (where `{site_id}`
+  corresponds to the currently running crawler's site ID) and stored in a `db/` subdirectory (e.g.,
+  `db/crawler_queue_{site_id}.db`).
+- ✓ Seed initial URLs for the configured site using `start_url` and `crawl_frequency_days` from its specific
+  configuration.
 - ✓ Implement change detection by computing a SHA-256 hash in `clean_content` and checking it in `should_process`.
 - ✓ Update `crawl_queue` after crawling with `last_crawl`, `next_crawl`, and `content_hash`.
-- ✓ Implement a basic daemon loop in `main()` that polls `crawl_queue` for URLs where `next_crawl <= now` and sleeps when idle.
+- ✓ Implement a basic daemon loop in `main()` that polls `crawl_queue` for URLs where `next_crawl <= now` and sleeps
+  when idle.
 - ✓ BONUS: Implement intelligent retry mechanism with exponential backoff for temporary failures.
 
 ### Core Crawler Logic Enhancements (Phase 1) - SQLite Integration
@@ -79,12 +88,15 @@ From https://grok.com/chat/03d2d2d8-1b90-4d19-8c61-a0b5b7d3010c
 
 ## Phase 2: Multi-Domain Support, Rate Limiting, and Robustness
 
-**Goal**: Ensure the crawler is robustly configurable for any single domain, add rate limiting and `robots.txt` compliance, and enhance error handling and monitoring.
+**Goal**: Ensure the crawler is robustly configurable for any single domain, add rate limiting and `robots.txt`
+compliance, and enhance error handling and monitoring.
 
 ### Tasks for phase 2
 
-- Solidify single-tenancy support by ensuring all site-specific data (e.g., checkpoint files, SQLite DB as defined in Phase 1) is correctly isolated per `site_id`.
-- Implement rate limiting with a configurable `crawl_delay_seconds` in the site's `{site_id}-config.json` (default: 1 second).
+- Solidify single-tenancy support by ensuring all site-specific data (e.g., checkpoint files, SQLite DB as defined in
+  Phase 1) is correctly isolated per `site_id`.
+- Implement rate limiting with a configurable `crawl_delay_seconds` in the site's `{site_id}-config.json` (default: 1
+  second).
 - Add `robots.txt` compliance using `urllib.robotparser` to check permissions before crawling.
 - Enhance error handling by storing error messages in `crawl_queue.last_error`.
 - Add monitoring by logging crawl statistics (e.g., pages crawled, success rate).
@@ -94,7 +106,8 @@ From https://grok.com/chat/03d2d2d8-1b90-4d19-8c61-a0b5b7d3010c
 
 - Update `data_ingestion/tests/test_crawler.py`.
 - Write tests for:
-- Site-specific data isolation (e.g., distinct checkpoint and DB files are used for different `site_id`s, no cross-site interference).
+- Site-specific data isolation (e.g., distinct checkpoint and DB files are used for different `site_id`s, no cross-site
+  interference).
 - Rate limiting enforcement.
 - `robots.txt` compliance.
 - Error handling (storing errors in `crawl_queue`).
@@ -120,12 +133,6 @@ From https://grok.com/chat/03d2d2d8-1b90-4d19-8c61-a0b5b7d3010c
 - Health check endpoint response.
 - Integration test for a full crawl cycle (mocked Playwright and server).
 - Run tests with `pytest data_ingestion/tests/test_crawler.py -v`.
-
-## Timeline
-
-- **Phase 1 (1-2 weeks)**: Core functionality and initial tests.
-- **Phase 2 (2-3 weeks)**: Multi-domain, rate limiting, robustness, and tests.
-- **Phase 3 (1-2 weeks)**: Optimizations, health checks, and final tests.
 
 ## Notes
 

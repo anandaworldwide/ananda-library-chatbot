@@ -15,7 +15,6 @@ Key features:
 """
 
 import asyncio
-import hashlib
 import logging
 import os
 import re
@@ -564,43 +563,50 @@ def batch_upsert_vectors(
 def generate_vector_id(
     library_name: str,
     title: str,
-    content_chunk: str,
     chunk_index: int,
-    source_location: str = "unknown",
+    source_location: str,
+    source_identifier: str,
     content_type: str = "text",
-    source_id: str | None = None,
+    author: str | None = None,
 ) -> str:
     """
-    Generate a consistent vector ID for Pinecone storage.
+    Generate a consistent vector ID for Pinecone storage with document-level hashing.
 
     Args:
         library_name: Name of the library/collection
         title: Title of the source document/content
-        content_chunk: The actual text content being stored
         chunk_index: Index of this chunk within the source
-        source_location: Where the content came from (db, file, web, api, s3)
+        source_location: Where the content came from (web, db, pdf, api, s3)
         content_type: What type of content (text, audio, video, pdf)
-        source_id: Optional unique identifier for the source (author, speaker, etc.)
+        source_identifier: Unique identifier for the source (URL, file path, permalink, etc.)
+        author: Optional author for document hash generation
 
     Returns:
         A unique vector ID following Pinecone requirements
 
-    Format: {library}||{source_location}||{content_type}||{sanitized_title}||{source_id}||{content_hash}||{chunk_index}
+    Format: {content_type}||{library}||{source_location}||{sanitized_title}||{author}||{document_hash}||{chunk_index}
     """
+    from .document_hash import generate_document_hash
+
     # Sanitize inputs: only remove null characters (the only character Pinecone prohibits)
     # and normalize whitespace, but preserve meaningful punctuation
     sanitized_library = _sanitize_text(library_name)
     sanitized_title = _sanitize_text(title)
-    sanitized_source_id = _sanitize_text(source_id)[:20] if source_id else ""
+    sanitized_author = _sanitize_text(author)[:20] if author else ""
 
     # Limit title length to avoid overly long IDs
     sanitized_title = sanitized_title[:50]
 
-    # Generate content hash for uniqueness
-    content_hash = hashlib.md5(content_chunk.encode("utf-8")).hexdigest()[:8]
+    # Generate document-level hash for consistency across chunks
+    document_hash = generate_document_hash(
+        source=source_identifier,
+        title=title,
+        author=author,
+        library=library_name,
+    )
 
-    # Construct vector ID with new 7-part format
-    vector_id = f"{sanitized_library}||{source_location}||{content_type}||{sanitized_title}||{sanitized_source_id}||{content_hash}||{chunk_index}"
+    # Construct vector ID with new 7-part format (content_type first for compatibility)
+    vector_id = f"{content_type}||{sanitized_library}||{source_location}||{sanitized_title}||{sanitized_author}||{document_hash}||{chunk_index}"
 
     return vector_id
 
@@ -609,8 +615,9 @@ def _sanitize_text(text: str) -> str:
     """
     Sanitize text for use in vector IDs.
 
-    Only removes characters that Pinecone actually prohibits:
+    Removes characters that Pinecone prohibits:
     - Null characters (\x00)
+    - Non-ASCII characters (Pinecone requires ASCII-only vector IDs)
 
     Normalizes whitespace but preserves all other ASCII characters including
     punctuation, special characters, etc.
@@ -627,8 +634,11 @@ def _sanitize_text(text: str) -> str:
     # Normalize whitespace (collapse multiple spaces/tabs/newlines to single space)
     sanitized = re.sub(r"\s+", " ", text.strip())
 
-    # Remove null characters (the only character Pinecone prohibits)
+    # Remove null characters
     sanitized = re.sub(r"\x00", "", sanitized)
+
+    # Remove non-ASCII characters (Pinecone requires ASCII-only vector IDs)
+    sanitized = "".join(char for char in sanitized if ord(char) < 128)
 
     return sanitized
 
@@ -648,9 +658,9 @@ def extract_metadata_from_vector_id(vector_id: str) -> dict:
         if len(parts) < 7:
             return {"error": "Invalid vector ID format"}
 
-        library_name = parts[0]
-        source_location = parts[1]
-        content_type = parts[2]
+        content_type = parts[0]
+        library_name = parts[1]
+        source_location = parts[2]
         title = parts[3]
         source_id = parts[4] if parts[4] else None
         content_hash = parts[5]

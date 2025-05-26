@@ -11,10 +11,12 @@
 #           Loads config from crawler_config/[site]-config.json and .env.[site]. REQUIRED.
 #   --retry-failed: Retry URLs marked as 'permanent' failed in the database.
 #   --fresh-start: Delete the existing SQLite database and start from a clean slate.
+#   -c, --clear-vectors: Clear existing web content vectors for this site before crawling.
 #
 # Example usage:
 #   website_crawler.py --site ananda-public
 #   website_crawler.py --site ananda-public --retry-failed
+#   website_crawler.py --site ananda-public --clear-vectors
 
 # Standard library imports
 import argparse
@@ -42,10 +44,11 @@ from readability import Document  # Added import
 
 # Import shared utility
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.document_hash import generate_document_hash
 from utils.embeddings_utils import OpenAIEmbeddings
 from utils.pinecone_utils import (
+    clear_library_vectors,
     create_pinecone_index_if_not_exists,
+    generate_vector_id,
     get_pinecone_client,
     get_pinecone_ingest_index_name,
 )
@@ -100,11 +103,11 @@ class PageContent:
     metadata: dict
 
 
-# Function to split content into overlapping chunks using spaCy
+# Function to split content into overlapping chunks using spaCy with dynamic sizing
 def chunk_content(
     content: str, chunk_size: int = 600, chunk_overlap: int = 120
 ) -> list[str]:
-    """Split content into overlapping chunks using spaCy paragraph-based chunking"""
+    """Split content into overlapping chunks using spaCy paragraph-based chunking with dynamic sizing"""
     text_splitter = SpacyTextSplitter()
 
     chunks = text_splitter.split_text(content)
@@ -138,6 +141,12 @@ class WebsiteCrawler:
         self.start_url = ensure_scheme(self.domain)  # Start URL is now just the domain
         self.skip_patterns = self.config.get("skip_patterns", [])
         self.crawl_frequency_days = self.config.get("crawl_frequency_days", 14)
+
+        # Initialize shared text splitter with dynamic chunking strategy
+        self.text_splitter = SpacyTextSplitter(
+            separator="\n\n",
+            pipeline="en_core_web_sm",
+        )
 
         # Set up SQLite database for crawl queue
         db_dir = Path(__file__).parent / "db"
@@ -182,7 +191,12 @@ class WebsiteCrawler:
             self.conn.commit()
 
     def close(self):
-        """Close database connection"""
+        """Close database connection and print chunking metrics"""
+        # Print chunking metrics summary before closing
+        if hasattr(self, "text_splitter") and self.text_splitter:
+            logging.info("=== WEBSITE CRAWLER CHUNKING METRICS ===")
+            self.text_splitter.metrics.print_summary()
+
         if hasattr(self, "conn") and self.conn:
             self.conn.close()
 
@@ -628,192 +642,169 @@ class WebsiteCrawler:
         except Exception as e:
             logging.debug(f"Error in reveal_nav_items: {e}")
 
+    def _validate_response(self, response, url: str) -> tuple[bool, Exception | None]:
+        """Validate page response and return (should_continue, exception)."""
+        if not response:
+            logging.error(f"Failed to get response object from {url}")
+            return False, Exception("No response object")
+
+        if response.status >= 400:
+            error_msg = f"HTTP {response.status}"
+            logging.error(f"{error_msg} error for {url}")
+            return False, Exception(error_msg)
+
+        content_type = response.header_value("content-type")
+        if content_type and not content_type.lower().startswith("text/html"):
+            logging.info(f"Skipping non-HTML content ({content_type}) at {url}")
+            self.mark_url_status(url, "visited", content_hash="non_html")
+            return False, None  # None indicates successful skip, not error
+
+        return True, None
+
+    def _extract_page_content(
+        self, page, url: str
+    ) -> tuple[PageContent | None, list[str]]:
+        """Extract content and links from page."""
+        page.wait_for_selector("body", timeout=15000)
+
+        # Handle menu expansion
+        try:
+            page.evaluate("""() => {
+                document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item) => {
+                    if (!item.closest('.sub-menu')) { 
+                        item.classList.add('active');
+                        const submenu = item.querySelector(':scope > .sub-menu'); 
+                        if (submenu) {
+                            submenu.style.display = 'block';
+                            submenu.style.visibility = 'visible';
+                            submenu.style.opacity = '1';
+                        }
+                    }
+                });
+            }""")
+        except Exception as menu_e:
+            logging.debug(f"Non-critical menu handling failed for {url}: {menu_e}")
+
+        # Extract links and content
+        links = page.evaluate(
+            """() => Array.from(document.querySelectorAll('a[href]')).map(a => a.href).filter(href => href && !href.endsWith('#') && !href.includes('/#'))"""
+        )
+        valid_links = [link for link in links if self.is_valid_url(link)]
+        if len(links) != len(valid_links):
+            logging.debug(
+                f"Filtered out {len(links) - len(valid_links)} external/invalid links"
+            )
+
+        title = page.title() or "No Title Found"
+        logging.debug(f"Page title: {title}")
+        html_content = page.content()
+        clean_text = self.clean_content(html_content)
+        logging.debug(f"Cleaned text length: {len(clean_text)}")
+
+        schemed_valid_links = [ensure_scheme(link) for link in valid_links]
+
+        if not clean_text.strip() and title == "No Title Found":
+            logging.warning(f"No content or title extracted from {url}")
+            return None, schemed_valid_links
+
+        page_content = PageContent(
+            url=url,
+            title=title,
+            content=clean_text,
+            metadata={"type": "text", "source": url},
+        )
+        return page_content, schemed_valid_links
+
+    def _handle_crawl_exception(self, e: Exception, url: str) -> tuple[bool, bool]:
+        """Handle exceptions during crawling. Returns (restart_needed, should_retry)."""
+        if isinstance(e, PlaywrightTimeout):
+            logging.warning(
+                f"Timeout error crawling {url}: {e}. Flagging for browser restart."
+            )
+            return True, False
+
+        error_str = str(e)
+        if "Target page, context or browser has been closed" in error_str:
+            logging.warning(
+                f"Target closed error for {url}: {e}. Flagging for browser restart."
+            )
+            return True, False
+
+        if "playwright" in repr(e).lower() and (
+            "NS_ERROR_ABORT" in error_str
+            or "Navigation failed because browser has disconnected" in error_str
+        ):
+            logging.warning(
+                f"Browser/Navigation error encountered for {url}: {e}. Flagging for browser restart."
+            )
+            return True, False
+
+        if isinstance(e, RuntimeError) and "no running event loop" in error_str:
+            logging.error(
+                f"Caught 'no running event loop' error for {url}. Flagging for browser restart."
+            )
+            return True, False
+
+        # For other unexpected errors, log and stop retrying this URL
+        logging.error(f"Unexpected error crawling {url}: {e}")
+        logging.error(traceback.format_exc())
+        return False, False
+
     def crawl_page(
         self, browser, page, url: str
     ) -> tuple[PageContent | None, list[str], bool]:
-        # Added bool return value: restart_needed
+        """Crawl a single page and return content, links, and restart flag."""
         retries = 2
-        last_exception = None  # Keep track of the last error
-        restart_needed = False  # Initialize restart flag
+        last_exception = None
+        restart_needed = False
 
-        # Ensure the URL has a scheme before attempting to navigate
-        url = ensure_scheme(url)  # Overwrite url parameter
+        url = ensure_scheme(url)
 
         while retries > 0:
             try:
                 logging.debug(
                     f"Attempting to navigate to {url} (Attempts left: {retries})"
                 )
-                page.set_default_timeout(30000)  # 30 seconds page timeout
+                page.set_default_timeout(30000)
 
-                # --- Navigation Attempt ---
                 response = page.goto(url, wait_until="commit")
-                # --- Check Response ---
-                if not response:
-                    logging.error(f"Failed to get response object from {url}")
-                    last_exception = Exception("No response object")
-                    retries = 0  # Fail immediately if no response object
-                    continue
-                if response.status >= 400:
-                    error_msg = f"HTTP {response.status}"
-                    logging.error(f"{error_msg} error for {url}")
-                    last_exception = Exception(error_msg)
-                    retries = 0  # Don't retry HTTP errors generally
+
+                should_continue, exception = self._validate_response(response, url)
+                if not should_continue:
+                    if exception is None:  # Successful skip (non-HTML content)
+                        return None, [], False
+                    last_exception = exception
+                    retries = 0
                     continue
 
-                # --- Check Content-Type before proceeding ---
-                content_type = response.header_value("content-type")
-                if content_type and not content_type.lower().startswith("text/html"):
-                    logging.info(f"Skipping non-HTML content ({content_type}) at {url}")
-                    # Mark as visited because we successfully reached it, even if not processing
-                    self.mark_url_status(url, "visited", content_hash="non_html")
-                    return (
-                        None,
-                        [],
-                        False,
-                    )  # Return no content, no links, no restart needed
+                content, links = self._extract_page_content(page, url)
+                return content, links, False
 
-                # --- Wait and Extract (Only for HTML) ---
-                page.wait_for_selector(
-                    "body", timeout=15000
-                )  # Shorter wait for body after load
-
-                # Evaluate menu handling script (reverting to more complex version)
-                try:
-                    page.evaluate("""() => {
-                        document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item) => {
-                            // Only target top-level items, not items already within an expanded submenu
-                            if (!item.closest('.sub-menu')) { 
-                                item.classList.add('active'); // Add active class
-                                // Attempt to find the direct child submenu
-                                const submenu = item.querySelector(':scope > .sub-menu'); 
-                                if (submenu) {
-                                    // Directly set styles to ensure visibility
-                                    submenu.style.display = 'block';
-                                    submenu.style.visibility = 'visible';
-                                    submenu.style.opacity = '1'; // Add opacity for good measure
-                                }
-                            }
-                        });
-                    }""")
-                except Exception as menu_e:
-                    logging.debug(
-                        f"Non-critical menu handling failed for {url}: {menu_e}"
-                    )
-
-                links = page.evaluate(
-                    """() => Array.from(document.querySelectorAll('a[href]')).map(a => a.href).filter(href => href && !href.endsWith('#') && !href.includes('/#'))"""
-                )  # Added check for href existence
-                valid_links = [link for link in links if self.is_valid_url(link)]
-                if len(links) != len(valid_links):
-                    logging.debug(
-                        f"Filtered out {len(links) - len(valid_links)} external/invalid links"
-                    )
-
-                title = page.title() or "No Title Found"
-                logging.debug(f"Page title: {title}")
-                html_content = page.content()
-                clean_text = self.clean_content(html_content)
-                logging.debug(f"Cleaned text length: {len(clean_text)}")
-
-                # Ensure links have schemes before returning
-                schemed_valid_links = [ensure_scheme(link) for link in valid_links]
-
-                if (
-                    not clean_text.strip() and title == "No Title Found"
-                ):  # Be more specific about failure
-                    logging.warning(f"No content or title extracted from {url}")
-                    # Don't retry if no content, just mark as success with no data
-                    return (
-                        None,
-                        schemed_valid_links,
-                        False,
-                    )  # Return links found (with schemes), but no PageContent
-
-                # --- Success ---
-                return (
-                    PageContent(
-                        url=url,
-                        title=title,
-                        content=clean_text,
-                        metadata={"type": "text", "source": url},
-                    ),
-                    schemed_valid_links,
-                    False,
-                )
-
-            # --- Exception Handling within Retry Loop ---
-            except PlaywrightTimeout as e:
-                logging.warning(
-                    f"Timeout error crawling {url}: {e}. Flagging for browser restart."
-                )
+            except Exception as e:
+                restart_needed, should_retry = self._handle_crawl_exception(e, url)
                 last_exception = e
-                restart_needed = True
-                retries = 0  # Abort retries for this URL, trigger restart
 
-            except (
-                Exception
-            ) as e:  # Catch other potential Playwright errors or general exceptions
-                # Check if it's the "Target page/context/browser closed" error
-                if "Target page, context or browser has been closed" in str(e):
-                    logging.warning(
-                        f"Target closed error for {url}: {e}. Flagging for browser restart."
-                    )
-                    last_exception = e
-                    restart_needed = True
-                    retries = 0  # Abort retries for this URL, trigger restart
-
-                # Check for NS_ERROR_ABORT or similar navigation errors
-                elif "playwright" in repr(e).lower() and (
-                    "NS_ERROR_ABORT" in str(e)
-                    or "Navigation failed because browser has disconnected" in str(e)
-                ):
-                    logging.warning(
-                        f"Browser/Navigation error encountered for {url}: {e}. Flagging for browser restart."
-                    )
-                    last_exception = e
-                    restart_needed = True
-                    retries = 0  # Abort retries for this URL, trigger restart
-
-                # Handle potential asyncio runtime error directly
-                elif isinstance(e, RuntimeError) and "no running event loop" in str(e):
-                    logging.error(
-                        f"Caught 'no running event loop' error for {url}. Flagging for browser restart."
-                    )
-                    last_exception = e
-                    restart_needed = True
-                    retries = 0  # Abort retries for this URL, trigger restart
-
-                else:
-                    # For other unexpected errors, log and stop retrying this URL
-                    logging.error(f"Unexpected error crawling {url}: {e}")
-                    logging.error(traceback.format_exc())
-                    last_exception = e
-                    retries = 0  # Stop retrying on unexpected errors
-
-            # Decrement retries only if we are going to loop again and didn't flag for restart
-            if retries > 0 and not restart_needed:
-                retries -= 1
-                if retries > 0:
+                if restart_needed or not should_retry:
+                    retries = 0
+                elif retries > 1:
+                    retries -= 1
                     logging.info(f"Waiting 5s before next retry for {url}...")
-                    time.sleep(5)  # Add a small delay before retrying
+                    time.sleep(5)
+                else:
+                    retries = 0
 
-        # If loop finishes without success (or flagged for restart)
         if not restart_needed:
-            logging.error(
-                f"Giving up on {url} after exhausting retries or encountering fatal error. Last error: {last_exception}"
-            )
-            # Add to attempted URLs only on normal failure, not restart failure (handled in run_crawl_loop)
-            # Store the error message as well
             error_message = (
                 str(last_exception)
                 if last_exception
                 else "Unknown error during crawl attempt"
             )
+            logging.error(
+                f"Giving up on {url} after exhausting retries or encountering fatal error. Last error: {last_exception}"
+            )
             self.mark_url_status(url, "failed", error_message)
 
-        # Return based on whether restart is needed
-        return None, [], restart_needed  # Return restart flag
+        return None, [], restart_needed
 
     def create_embeddings(
         self, chunks: list[str], url: str, page_title: str
@@ -828,15 +819,16 @@ class WebsiteCrawler:
         embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
         vectors = []
 
-        clean_title = sanitize_for_id(page_title)
-        # Generate document-level hash instead of URL hash
-        document_hash = generate_document_hash(
-            source=url, title=page_title, library=self.domain
-        )
-
         for i, chunk in enumerate(chunks):
             vector = embeddings.embed_query(chunk)
-            chunk_id = f"text||{self.domain}||{clean_title}||{document_hash}||chunk{i}"
+            chunk_id = generate_vector_id(
+                library_name=self.domain,
+                title=page_title,
+                chunk_index=i,
+                source_location="web",
+                source_identifier=url,
+                content_type="text",
+            )
 
             chunk_metadata = {
                 "type": "text",
@@ -882,15 +874,24 @@ def sanitize_for_id(text: str) -> str:
     return text
 
 
-def create_chunks_from_page(page_content) -> list[str]:
-    """Create text chunks from page content using spaCy."""
-    text_splitter = SpacyTextSplitter()
+def create_chunks_from_page(page_content, text_splitter=None) -> list[str]:
+    """Create text chunks from page content using spaCy with dynamic sizing."""
+    if text_splitter is None:
+        text_splitter = SpacyTextSplitter(
+            separator="\n\n",
+            pipeline="en_core_web_sm",
+        )
 
     # Combine title and content, using the correct attribute name
     full_text = f"{page_content.title}\n\n{page_content.content}"
-    chunks = text_splitter.split_text(full_text)
 
-    logging.debug(f"Created {len(chunks)} chunks from page using spaCy")
+    # Use URL as document ID for metrics tracking
+    document_id = page_content.url
+    chunks = text_splitter.split_text(full_text, document_id=document_id)
+
+    logging.debug(
+        f"Created {len(chunks)} chunks from page using spaCy dynamic chunking"
+    )
     return chunks
 
 
@@ -913,8 +914,21 @@ def upsert_to_pinecone(vectors: list[dict], index: pinecone.Index, index_name: s
                 if i > 2:
                     print(".", end="", flush=True)
             except Exception as e:
+                error_msg = str(e)
                 logging.error(f"Error upserting batch starting at index {i}: {e}")
-                pass  # Continue with next batch
+
+                # Check for vector ID sanitization errors that should be treated as temporary failures
+                if (
+                    "Vector ID must be ASCII" in error_msg
+                    or "must be ASCII" in error_msg
+                ):
+                    logging.warning(
+                        "Vector ID sanitization error detected - this should be fixed by updated sanitization logic"
+                    )
+                    raise Exception(f"Vector ID sanitization error: {error_msg}") from e
+
+                # For other errors, continue with next batch
+                pass
         logging.info(f"Upsert of {total_vectors} vectors complete.")
 
 
@@ -937,6 +951,12 @@ def parse_arguments() -> argparse.Namespace:
         "--fresh-start",
         action="store_true",
         help="Delete the existing SQLite database and start from a clean slate.",
+    )
+    parser.add_argument(
+        "-c",
+        "--clear-vectors",
+        action="store_true",
+        help="Clear existing web content vectors for this site before crawling.",
     )
     return parser.parse_args()
 
@@ -976,25 +996,176 @@ def initialize_pinecone(env_file: str) -> pinecone.Index | None:
         return None
 
 
+def _handle_browser_restart(
+    p,
+    page,
+    browser,
+    pages_since_restart: int,
+    batch_results: list,
+    batch_start_time: float,
+    crawler: WebsiteCrawler,
+) -> tuple:
+    """Handle browser restart logic and stats calculation."""
+    batch_attempts = len(batch_results)
+    batch_successes = batch_results.count(True)
+    batch_success_rate = (
+        (batch_successes / batch_attempts * 100) if batch_attempts > 0 else 0
+    )
+
+    batch_elapsed_time = time.time() - batch_start_time
+    pages_per_minute = (
+        (pages_since_restart / batch_elapsed_time * 60)
+        if batch_elapsed_time > 0
+        else float("inf")
+    )
+
+    stats = crawler.get_queue_stats()
+    stats_message = (
+        f"\n--- Stats at {pages_since_restart} page boundary ---\n"
+        f"- Processing {pages_per_minute:.1f} pages/minute (last {pages_since_restart} pages)\n"
+        f"- Total {stats['visited']} visited pages of {stats['total']} total ({round(stats['visited'] / stats['total'] * 100 if stats['total'] > 0 else 0)}% success)\n"
+        f"- Success rate last {batch_attempts} attempts: {round(batch_success_rate)}%\n"
+        f"- Total {stats['pending']} pending, {stats['failed']} failed, {stats['pending_retry']} awaiting retry\n"
+        f"- Average retries per URL with retries: {stats['avg_retry_count']}\n"
+        f"--- End Stats ---"
+    )
+    for line in stats_message.split("\n"):
+        logging.info(line)
+
+    logging.info(
+        f"Restarting browser after {pages_since_restart} pages (or due to error)..."
+    )
+    try:
+        if page and not page.is_closed():
+            page.close()
+        if browser and browser.is_connected():
+            browser.close()
+    except Exception as close_err:
+        logging.warning(f"Error closing browser during restart: {close_err}")
+
+    browser = p.firefox.launch(
+        headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
+    )
+    page = browser.new_page()
+    page.set_extra_http_headers({"User-Agent": USER_AGENT})
+    logging.info("Browser restarted successfully.")
+
+    return browser, page, time.time(), []
+
+
+def _process_page_content(
+    content,
+    new_links: list,
+    url: str,
+    crawler: WebsiteCrawler,
+    pinecone_index,
+    index_name: str,
+) -> tuple[int, int]:
+    """Process page content and return (pages_processed_increment, pages_since_restart_increment)."""
+    if not content:
+        error_msg = f"No content extracted from {url}"
+        crawler.mark_url_status(url, "failed", error_msg)
+        return 0, 0
+
+    try:
+        chunks = create_chunks_from_page(content, crawler.text_splitter)
+        if chunks:
+            content_hash = hashlib.sha256(content.content.encode()).hexdigest()
+
+            if crawler.should_process_content(url, content_hash):
+                embeddings = crawler.create_embeddings(chunks, url, content.title)
+                upsert_to_pinecone(embeddings, pinecone_index, index_name)
+                logging.debug(f"Successfully processed and upserted: {url}")
+                logging.debug(
+                    f"Created {len(chunks)} chunks, {len(embeddings)} embeddings."
+                )
+            else:
+                logging.info(
+                    f"Content unchanged for {url}, skipping embeddings creation"
+                )
+
+            crawler.mark_url_status(url, "visited", content_hash=content_hash)
+        else:
+            crawler.mark_url_status(url, "visited", content_hash="no_content")
+            logging.warning(f"No content chunks created for {url}")
+
+        # Add new links to queue
+        for link in new_links:
+            if (
+                crawler.is_valid_url(link)
+                and not crawler.should_skip_url(link)
+                and not crawler.is_url_visited(link)
+            ):
+                crawler.add_url_to_queue(link)
+
+        return 1, 1  # Increment both counters for successful processing
+
+    except Exception as e:
+        logging.error(f"Failed to process page content {url}: {e}")
+        logging.error(traceback.format_exc())
+        crawler.mark_url_status(
+            url, "failed", f"Failed during content processing: {str(e)}"
+        )
+        return 0, 0
+
+
+def _cleanup_browser(page, browser) -> None:
+    """Clean up browser resources."""
+    if not is_exiting():
+        logging.info("Closing browser cleanly...")
+        try:
+            if "page" in locals() and page and not page.is_closed():
+                page.close()
+            if "browser" in locals() and browser and browser.is_connected():
+                browser.close()
+                logging.info("Browser closed.")
+        except Exception as e:
+            logging.warning(f"Error during clean browser close: {e}")
+    else:
+        logging.info(
+            "Exit requested via signal, skipping potentially blocking browser close."
+        )
+
+
+def _handle_url_processing(url: str, crawler: WebsiteCrawler, browser, page) -> bool:
+    """Handle URL processing setup and skip checks. Returns True if restart needed."""
+    crawler.current_processing_url = url
+    logging.info(f"Processing URL: {url}")
+
+    if crawler.should_skip_url(url):
+        logging.info(f"Skipping URL based on skip patterns: {url}")
+        crawler.mark_url_status(url, "failed", "Skipped by pattern rule")
+        crawler.current_processing_url = None
+        return False
+
+    content, new_links, restart_needed = crawler.crawl_page(browser, page, url)
+
+    if restart_needed:
+        logging.warning(f"Browser restart requested after attempting {url}.")
+        crawler.mark_url_status(url, "pending")
+        crawler.current_processing_url = None
+        return True
+
+    return False
+
+
 def run_crawl_loop(
     crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace
 ):
     """Run the main crawling loop."""
-    # Get index name (needed for upsert)
     index_name = os.getenv("PINECONE_INGEST_INDEX_NAME")
     if not index_name:
         logging.error(
             "PINECONE_INGEST_INDEX_NAME not found in environment during loop start."
         )
-        return  # Should not happen if initialize_pinecone succeeded
+        return
 
     pages_processed = 0
     pages_since_restart = 0
-    batch_results = []  # Track success/failure for the current batch
+    batch_results = []
     batch_start_time = time.time()
     PAGES_PER_RESTART = 50
 
-    # Log queue stats at start
     stats = crawler.get_queue_stats()
     logging.info(
         f"Initial queue stats: {stats['pending']} pending, {stats['visited']} visited, {stats['failed']} failed"
@@ -1002,121 +1173,45 @@ def run_crawl_loop(
 
     with sync_playwright() as p:
         browser = p.firefox.launch(
-            headless=True,
-            firefox_user_prefs={"media.volume_scale": "0.0"},  # Mute audio
+            headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
         )
-        page = browser.new_page()  # Create page initially
+        page = browser.new_page()
         page.set_extra_http_headers({"User-Agent": USER_AGENT})
-        should_continue_loop = True  # Flag to control the main loop
+        should_continue_loop = True
 
         try:
-            start_run_time = time.time()
-
-            # Modified loop condition to check exit flag using shared utilities
             while should_continue_loop and not is_exiting():
-                # Get next URL to process
                 url = crawler.get_next_url_to_crawl()
                 if not url:
-                    # No URLs ready to process, sleep then check again
                     logging.info(
                         "No URLs ready for processing. Sleeping for 60 seconds..."
                     )
                     time.sleep(60)
                     continue
 
-                # --- Browser Restart Logic ---
                 if pages_since_restart >= PAGES_PER_RESTART:
-                    # Calculate batch success rate
-                    batch_attempts = len(batch_results)
-                    batch_successes = batch_results.count(True)
-                    batch_success_rate = (
-                        (batch_successes / batch_attempts * 100)
-                        if batch_attempts > 0
-                        else 0
-                    )
-
-                    # Calculate and log stats
-                    batch_elapsed_time = time.time() - batch_start_time
-                    # Avoid division by zero if batch_elapsed_time is very small
-                    if batch_elapsed_time > 0:
-                        pages_per_minute = pages_since_restart / batch_elapsed_time * 60
-                    else:
-                        pages_per_minute = float("inf")  # Or some other indicator
-
-                    stats = crawler.get_queue_stats()
-
-                    stats_message = (
-                        f"\n--- Stats at {pages_since_restart} page boundary ---\n"
-                        f"- Processing {pages_per_minute:.1f} pages/minute (last {pages_since_restart} pages)\n"
-                        f"- Total {stats['visited']} visited pages of {stats['total']} total ({round(stats['visited'] / stats['total'] * 100 if stats['total'] > 0 else 0)}% success)\n"
-                        f"- Success rate last {batch_attempts} attempts: {round(batch_success_rate)}%\n"
-                        f"- Total {stats['pending']} pending, {stats['failed']} failed, {stats['pending_retry']} awaiting retry\n"
-                        f"- Average retries per URL with retries: {stats['avg_retry_count']}\n"
-                        f"--- End Stats ---"
-                    )
-                    for line in stats_message.split("\n"):
-                        logging.info(line)
-
-                    # Restart Browser
-                    logging.info(
-                        f"Restarting browser after {pages_since_restart} pages (or due to error)..."
-                    )
-                    try:
-                        if page and not page.is_closed():
-                            page.close()
-                        if browser and browser.is_connected():
-                            browser.close()
-                    except Exception as close_err:
-                        logging.warning(
-                            f"Error closing browser during restart: {close_err}"
+                    browser, page, batch_start_time, batch_results = (
+                        _handle_browser_restart(
+                            p,
+                            page,
+                            browser,
+                            pages_since_restart,
+                            batch_results,
+                            batch_start_time,
+                            crawler,
                         )
-
-                    browser = p.firefox.launch(
-                        headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
                     )
-                    page = browser.new_page()
-                    page.set_extra_http_headers({"User-Agent": USER_AGENT})
                     pages_since_restart = 0
-                    batch_start_time = time.time()
-                    batch_results = []  # Reset batch results for new batch
-                    logging.info("Browser restarted successfully.")
-                    # Skip to next iteration to avoid processing URL with potentially old page object
-                    # Continue is important here to ensure the loop condition re-evaluates
                     continue
 
-                crawler.current_processing_url = url  # Track current URL
-
-                logging.info(f"Processing URL: {url}")
-
-                # --- Add skip pattern check ---
-                if crawler.should_skip_url(url):
-                    logging.info(f"Skipping URL based on skip patterns: {url}")
-                    crawler.mark_url_status(url, "failed", "Skipped by pattern rule")
-                    crawler.current_processing_url = None  # Reset since we're skipping
-                    continue
-                # --- End skip pattern check ---
-
-                # Reset processing URL before crawl attempt
-                crawler.current_processing_url = url  # Track current URL
-                content, new_links, restart_needed = crawler.crawl_page(
-                    browser, page, url
-                )  # Capture restart flag
-
-                # --- Handle Restart Request ---
+                restart_needed = _handle_url_processing(url, crawler, browser, page)
                 if restart_needed:
-                    logging.warning(
-                        f"Browser restart requested after attempting {url}."
-                    )
-                    crawler.mark_url_status(
-                        url, "pending"
-                    )  # Mark as pending to try again
-                    # Force restart by setting counter past the limit
                     pages_since_restart = PAGES_PER_RESTART
-                    crawler.commit_db_changes()  # Save state before forcing restart
-                    crawler.current_processing_url = None
-                    continue  # Skip rest of loop, trigger restart block at the top of the next iteration
+                    crawler.commit_db_changes()
+                    continue
 
-                # --- Process Normal Result ---
+                content, new_links, _ = crawler.crawl_page(browser, page, url)
+
                 is_success = content is not None
                 batch_results.append(is_success)
 
@@ -1126,70 +1221,12 @@ def run_crawl_loop(
                     )
                     break
 
-                if content:  # Page crawled successfully
-                    pages_processed += 1
-                    pages_since_restart += 1  # Increment only on successful crawl
+                pages_inc, restart_inc = _process_page_content(
+                    content, new_links, url, crawler, pinecone_index, index_name
+                )
+                pages_processed += pages_inc
+                pages_since_restart += restart_inc
 
-                    try:
-                        chunks = create_chunks_from_page(content)
-                        if chunks:
-                            # Calculate content hash for change detection
-                            content_hash = hashlib.sha256(
-                                content.content.encode()
-                            ).hexdigest()
-
-                            # Check if content has changed (if we've seen this URL before)
-                            if crawler.should_process_content(url, content_hash):
-                                embeddings = crawler.create_embeddings(
-                                    chunks, url, content.title
-                                )
-                                upsert_to_pinecone(
-                                    embeddings, pinecone_index, index_name
-                                )
-                                logging.debug(
-                                    f"Successfully processed and upserted: {url}"
-                                )
-                                logging.debug(
-                                    f"Created {len(chunks)} chunks, {len(embeddings)} embeddings."
-                                )
-                            else:
-                                logging.info(
-                                    f"Content unchanged for {url}, skipping embeddings creation"
-                                )
-
-                            # Mark URL as visited with content hash
-                            crawler.mark_url_status(
-                                url, "visited", content_hash=content_hash
-                            )
-                        else:
-                            # No chunks created, still mark as visited but note the issue
-                            crawler.mark_url_status(
-                                url, "visited", content_hash="no_content"
-                            )
-                            logging.warning(f"No content chunks created for {url}")
-
-                        # Add new links to queue
-                        for link in new_links:
-                            if (
-                                crawler.is_valid_url(link)
-                                and not crawler.should_skip_url(link)
-                                and not crawler.is_url_visited(link)
-                            ):
-                                crawler.add_url_to_queue(link)
-
-                    except Exception as e:
-                        logging.error(f"Failed to process page content {url}: {e}")
-                        logging.error(traceback.format_exc())
-                        crawler.mark_url_status(
-                            url, "failed", f"Failed during content processing: {str(e)}"
-                        )
-
-                else:  # Page crawl failed normally
-                    # Get error message from attempted_urls if it was set there
-                    error_msg = f"No content extracted from {url}"
-                    crawler.mark_url_status(url, "failed", error_msg)
-
-                # Save changes after processing URL
                 crawler.commit_db_changes()
 
                 if is_exiting():
@@ -1204,31 +1241,87 @@ def run_crawl_loop(
             logging.error(f"Browser or main loop error: {e}")
             logging.error(traceback.format_exc())
         finally:
-            # Ensure browser is closed cleanly unless exit was requested
-            if not is_exiting():
-                logging.info("Closing browser cleanly...")
-                try:
-                    if "page" in locals() and page and not page.is_closed():
-                        page.close()
-                    if "browser" in locals() and browser and browser.is_connected():
-                        browser.close()
-                        logging.info("Browser closed.")
-                except Exception as e:
-                    logging.warning(f"Error during clean browser close: {e}")
-            else:
-                logging.info(
-                    "Exit requested via signal, skipping potentially blocking browser close."
-                )
+            _cleanup_browser(page, browser)
 
     if pages_processed == 0:
         logging.warning("No pages were crawled successfully in this run.")
     logging.info(f"Completed processing {pages_processed} pages during this run.")
 
 
+def handle_fresh_start(args: argparse.Namespace) -> None:
+    """Handle --fresh-start flag by deleting existing database."""
+    if not args.fresh_start:
+        return
+
+    script_dir = Path(__file__).resolve().parent
+    db_dir = script_dir / "db"
+    db_file_to_delete = db_dir / f"crawler_queue_{args.site}.db"
+
+    if db_file_to_delete.exists():
+        try:
+            os.remove(db_file_to_delete)
+            logging.info(
+                f"Successfully deleted database file for fresh start: {db_file_to_delete}"
+            )
+        except OSError as e:
+            logging.error(f"Error deleting database file {db_file_to_delete}: {e}")
+            print(
+                f"Error: Could not delete database file {db_file_to_delete} for fresh start. Please check permissions or delete manually. Exiting."
+            )
+            sys.exit(1)
+    else:
+        logging.info(
+            f"--fresh-start specified, but no existing database file found at {db_file_to_delete}. Proceeding with new database."
+        )
+
+
+def handle_clear_vectors(
+    args: argparse.Namespace,
+    pinecone_index: pinecone.Index,
+    domain: str,
+    crawler: WebsiteCrawler,
+) -> None:
+    """Handle --clear-vectors flag by clearing existing vectors."""
+    if not args.clear_vectors:
+        return
+
+    try:
+        logging.info(f"Clearing existing web content vectors for domain '{domain}'...")
+        success = clear_library_vectors(
+            pinecone_index, domain, dry_run=False, ask_confirmation=True
+        )
+        if not success:
+            logging.error("Vector clearing was cancelled or failed.")
+            crawler.close()
+            sys.exit(1)
+        logging.info("Vector clearing completed successfully.")
+    except Exception as e:
+        logging.error(f"Error clearing vectors: {e}")
+        crawler.close()
+        sys.exit(1)
+
+
+def cleanup_and_exit(crawler: WebsiteCrawler) -> None:
+    """Perform final cleanup and exit with appropriate code."""
+    if "crawler" in locals() and crawler:
+        logging.info("Performing final database commit and cleanup...")
+        crawler.commit_db_changes()
+        crawler.close()
+
+    if is_exiting():
+        logging.info("Exiting script now due to signal request.")
+        exit_code = 1
+    else:
+        logging.info("Script finished normally.")
+        exit_code = 0
+
+    sys.exit(exit_code)
+
+
 def main():
     args = parse_arguments()
 
-    # --- Load Site Configuration ---
+    # Load Site Configuration
     site_config = load_config(args.site)
     if not site_config:
         print(
@@ -1236,36 +1329,13 @@ def main():
         )
         sys.exit(1)
 
-    # --- Environment File ---
-    # Construct path relative to the script's location
+    # Environment File
     script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent.parent  # Go up two levels for project root
+    project_root = script_dir.parent.parent
     env_file = project_root / f".env.{args.site}"
 
-    # --- Handle --fresh-start ---
-    if args.fresh_start:
-        db_dir = (
-            script_dir / "db"
-        )  # Path to db directory within crawler script's directory
-        db_file_to_delete = db_dir / f"crawler_queue_{args.site}.db"
-        if db_file_to_delete.exists():
-            try:
-                os.remove(db_file_to_delete)
-                logging.info(
-                    f"Successfully deleted database file for fresh start: {db_file_to_delete}"
-                )
-            except OSError as e:
-                logging.error(f"Error deleting database file {db_file_to_delete}: {e}")
-                print(
-                    f"Error: Could not delete database file {db_file_to_delete} for fresh start. Please check permissions or delete manually. Exiting."
-                )
-                sys.exit(1)
-        else:
-            logging.info(
-                f"--fresh-start specified, but no existing database file found at {db_file_to_delete}. Proceeding with new database."
-            )
+    handle_fresh_start(args)
 
-    # Convert Path object to string for os.path.exists
     env_file_str = str(env_file)
     if not os.path.exists(env_file_str):
         print(
@@ -1277,7 +1347,7 @@ def main():
             f"Will load environment variables from: {os.path.abspath(env_file_str)}"
         )
 
-    # --- Get Domain & Start URL from Config ---
+    # Get Domain & Start URL from Config
     domain = site_config.get("domain")
     if not domain:
         logging.error(
@@ -1290,44 +1360,29 @@ def main():
     start_url = ensure_scheme(domain)
     logging.info(f"Configured domain: {domain}")
 
-    # Set up signal handlers using shared utilities
     setup_signal_handlers()
 
-    # Initialize crawler, passing site_id, config, and retry flag.
     crawler = WebsiteCrawler(
         site_id=args.site, site_config=site_config, retry_failed=args.retry_failed
     )
 
-    # Initialize Pinecone
     pinecone_index = initialize_pinecone(env_file)
     if not pinecone_index:
-        crawler.close()  # Close database connection
-        sys.exit(1)  # Exit if Pinecone initialization failed
+        crawler.close()
+        sys.exit(1)
 
-    # --- Start Crawl ---
+    handle_clear_vectors(args, pinecone_index, domain, crawler)
+
     try:
         logging.info(f"Starting crawl of {start_url} for site '{args.site}'")
-
-        # Run the main crawl loop
         run_crawl_loop(crawler, pinecone_index, args)
-
     except SystemExit:
         logging.info("Exiting due to SystemExit signal.")
     except Exception as e:
         logging.error(f"Unexpected error in main execution: {e}")
         logging.error(traceback.format_exc())
     finally:
-        if "crawler" in locals():
-            logging.info("Performing final database commit and cleanup...")
-            crawler.commit_db_changes()  # Ensure final save
-            crawler.close()  # Close database connection
-        if is_exiting():
-            logging.info("Exiting script now due to signal request.")
-        else:
-            logging.info("Script finished normally.")
-        # Use explicit exit code
-        exit_code = 1 if is_exiting() else 0
-        sys.exit(exit_code)
+        cleanup_and_exit(crawler)
 
 
 if __name__ == "__main__":

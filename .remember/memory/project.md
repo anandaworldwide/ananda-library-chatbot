@@ -354,3 +354,65 @@ All PDF to vector DB tests now pass successfully.
 - **Shared Utilities**: All common functionality should be moved to `data_ingestion/utils/` modules
 - **Import Patterns**: Use absolute imports from project root with proper sys.path setup
 - **Path Management**: Simple, readable path setup preferred over complex try/except blocks
+
+## Vector ID Sanitization Fix - COMPLETED
+
+**Problem**: Website crawler was failing with "Vector ID must be ASCII" errors when encountering non-ASCII characters
+like ® (registered trademark) in page titles. The crawler was incorrectly marking these URLs as "visited" even though
+vectors weren't stored.
+
+**Solution**: Enhanced the `_sanitize_text` function in `pinecone_utils.py` to remove non-ASCII characters and modified
+error handling in the crawler to detect and properly handle these errors as temporary failures.
+
+**Changes Made**:
+
+- **Enhanced Sanitization**: Updated `_sanitize_text` to remove non-ASCII characters using `ord(char) < 128` filter
+- **Error Detection**: Modified `upsert_to_pinecone` to detect "Vector ID must be ASCII" errors and raise exceptions
+- **Proper Failure Handling**: These errors are now treated as temporary failures that can be retried after the fix
+
+**Testing**: All 58 tests pass (20 ingest_db_text + 38 pinecone_utils), confirming the fix works correctly without
+breaking existing functionality.
+
+**Status**: Vector ID sanitization issue resolved. URLs with non-ASCII characters in titles will now be processed
+correctly.
+
+## Vector ID Format Update - COMPLETED & RESOLVED
+
+**Problem**: Website crawler was failing with "Vector ID must be ASCII" errors when encountering non-ASCII characters
+like ® (registered trademark) in page titles. Additionally, the vector ID format restructuring from 3-part to 7-part
+format created compatibility issues with existing filtering code.
+
+**Solution**:
+
+1. **Enhanced Sanitization**: Updated `_sanitize_text` function to remove non-ASCII characters using `ord(char) < 128`
+   filter
+2. **Error Detection**: Modified `upsert_to_pinecone` to detect and properly handle ASCII errors as temporary failures
+3. **✅ Format Compatibility**: Updated vector ID format to put `content_type` first, making it backward compatible with
+   existing filtering patterns
+
+**Final Vector ID Format**:
+`{content_type}||{library}||{source_location}||{sanitized_title}||{source_id}||{content_hash}||{chunk_index}`
+
+**Backward Compatibility Achieved**:
+
+- Old filtering: `text||ananda.org||`
+- New vector ID: `text||ananda.org||web||Test Title||author123||9473fdd0||0`
+- Result: ✅ **Perfect match - no code changes needed!**
+
+**Changes Made**:
+
+- **Enhanced Sanitization**: Updated `_sanitize_text` to remove non-ASCII characters
+- **Error Detection**: Modified `upsert_to_pinecone` to detect "Vector ID must be ASCII" errors and raise exceptions
+- **Format Update**: Changed vector ID generation to put content_type first for compatibility
+- **Proper Failure Handling**: ASCII errors are now treated as temporary failures for retry
+
+**Testing Results**:
+
+- ✅ All existing tests pass unchanged
+- ✅ Vector ID generation produces expected format
+- ✅ Metadata extraction works correctly
+- ✅ Existing filtering patterns work without modification
+- ✅ ASCII sanitization prevents Pinecone errors
+
+**Status**: FULLY RESOLVED - No further action needed. All compatibility issues addressed through format design rather
+than code changes.

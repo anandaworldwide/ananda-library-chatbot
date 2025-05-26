@@ -44,8 +44,8 @@ this chunking strategy across all data ingestion methods.
 ## Audio/Video Transcript Ingestion
 
 - [x] Update `transcribe_and_ingest_media.py` to use the new chunking strategy
-- [ ] Test it.
-- [ ] Make sure punctuation is not being stripped out.
+- [x] Test it.
+- [x] Make sure punctuation is not being stripped out.
 
 **Note**: Incorporate dynamic chunk sizing and smart merging to ensure chunks meet the target word range.
 
@@ -57,13 +57,26 @@ this chunking strategy across all data ingestion methods.
 - Fallback to legacy chunking if spaCy processing fails
 - Enhanced logging for chunk quality metrics and target range achievement
 
-## Web Crawling
+## Web Crawling ✅
 
-- [ ] Update `data_ingestion/crawler/website_crawler.py` to use the new chunking strategy
-- [ ] Test with various website layouts and content types
-- [ ] Ensure proper handling of HTML structure vs. extracted text
+- [x] Update `data_ingestion/crawler/website_crawler.py` to use the new chunking strategy
+- [x] Test with various website layouts and content types
+- [x] Ensure proper handling of HTML structure vs. extracted text
+- [x] **NEW**: Update chunk ID generation to use central utility for standardized vector database entries
 
-**Note**: Apply word count-based chunk sizing and enhanced overlaps for better context preservation.
+**Note**: Applied word count-based chunk sizing and enhanced overlaps for better context preservation.
+
+**Implementation Details**:
+
+- Updated `WebsiteCrawler` class to initialize shared `SpacyTextSplitter` instance
+- Modified `create_chunks_from_page()` to accept text splitter parameter for consistency
+- Added chunking metrics tracking and reporting at end of crawl sessions
+- Integrated comprehensive test suite covering short, medium, and long content scenarios
+- Verified document ID tracking for metrics and proper chunk quality measurement
+- **UPDATED**: Replaced custom chunk ID generation with central `generate_vector_id()` utility from `pinecone_utils.py`
+- **STANDARDIZED**: Chunk IDs now follow the 7-part format:
+  `library||source_location||content_type||title||source_id||content_hash||chunk_index`
+- **IMPROVED**: Consistent vector ID format across all ingestion methods for better database operations
 
 ## SQL Database Ingestion
 

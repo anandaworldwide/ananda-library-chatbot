@@ -199,6 +199,84 @@ documents using `retriever.getRelevantDocuments(sanitizedQuestion)`. This call d
 defined in the site configuration. These pre-fetched documents (as `finalDocs`) were then passed to `makeChain`, causing
 `makeChain`'s own `retrievalSequence` (which contains the correct library filtering logic) to be bypassed.
 
+## Mistake: Nested With Statements in Tests
+
+**Problem**: Ruff linting rule SIM117 flags nested `with` statements that should be combined into single `with`
+statements with multiple contexts for better readability and style.
+
+**Wrong**: Nested with statements:
+
+```python
+def test_example(self):
+    with patch.dict(os.environ, {"KEY": "value"}):
+        with patch("module.function") as mock_func:
+            # test code
+```
+
+**Correct**: Single with statement with multiple contexts:
+
+```python
+def test_example(self):
+    with (
+        patch.dict(os.environ, {"KEY": "value"}),
+        patch("module.function") as mock_func,
+    ):
+        # test code
+```
+
+**Detection**: Ruff automatically detects this pattern and suggests the fix. The parentheses around the context managers
+are required for Python 3.9+ when using multiple contexts.
+
+**Applied**: Fixed 14 instances in `data_ingestion/tests/test_pinecone_utils.py` - all 38 tests continue to pass after
+the refactor. Completed in two phases: initial 12 fixes, then 2 additional fixes for remaining nested with statements.
+
+## Mistake: Creating Separate Test Files Instead of Consolidating
+
+**Wrong**: Creating separate test files for related functionality:
+
+```
+data_ingestion/tests/test_crawler.py
+data_ingestion/tests/test_crawler_chunking.py  # Separate file
+```
+
+**Correct**: Keep related tests in the same file to avoid unnecessary file proliferation:
+
+```python
+# In data_ingestion/tests/test_crawler.py
+class TestCrawlerChunking(unittest.TestCase):
+    """Test cases for website crawler chunking functionality."""
+    # All chunking tests here
+```
+
+**Principle**: Group related tests together unless there's a compelling reason to separate them (e.g., different test
+environments, very large test files). This makes the codebase easier to navigate and maintain.
+
+## Mistake: Incorrect SpacyTextSplitter Constructor Parameters
+
+**Wrong**: Trying to pass `chunk_size` and `chunk_overlap` to `SpacyTextSplitter` constructor:
+
+```python
+text_splitter = SpacyTextSplitter(
+    chunk_size=600,
+    chunk_overlap=120,
+    separator="\n\n",
+    pipeline="en_core_web_sm",
+)
+```
+
+**Correct**: `SpacyTextSplitter` constructor only accepts `separator` and `pipeline` parameters:
+
+```python
+text_splitter = SpacyTextSplitter(
+    separator="\n\n",
+    pipeline="en_core_web_sm",
+)
+# chunk_size and chunk_overlap are set internally via dynamic sizing
+```
+
+**Detection**: Constructor signature inspection and test failures revealed the parameter mismatch. Always check the
+actual constructor signature before assuming parameter names.
+
 ## Mistake: Hard-coding Specific Text Patterns in PDF Processing
 
 **Problem**: When fixing PDF text extraction issues where chapter headers were getting mixed into body text (e.g.,
@@ -1127,436 +1205,428 @@ the entire data ingestion pipeline.
 
 ## Mistake: Overly Aggressive Vector ID Sanitization
 
-**Problem**: The `generate_vector_id` function in `ingest_db_text.py` was using overly aggressive sanitization that
-stripped out valid ASCII punctuation marks that Pinecone actually allows.
+**Problem**: The `_sanitize_text` function in `pinecone_utils.py` was only removing null characters but not non-ASCII
+characters like ® (registered trademark), causing Pinecone upsert failures with "Vector ID must be ASCII" errors. The
+crawler was treating these as successful operations and marking URLs as "visited" even though vectors weren't stored.
 
-**Wrong**: Removing all non-alphanumeric characters except underscore and hyphen:
-
-```python
-# Overly restrictive - removes valid punctuation
-sanitized_title = re.sub(r"\s+", "_", title)
-sanitized_title = re.sub(r"[^a-zA-Z0-9_\-]", "", sanitized_title)
-```
-
-This stripped out colons, percent signs, hash symbols, and other valid ASCII characters, causing:
-
-- Unnecessary data loss in titles
-- Reduced readability ("How to Meditate: A Guide" → "HowtoMeditateAGuide")
-- Potential ID collisions from over-sanitization
-
-**Correct**: Only remove null characters (the only character Pinecone prohibits):
+**Wrong**: Sanitization only removing null characters:
 
 ```python
-# Conservative sanitization - preserve meaningful punctuation
-sanitized_title = re.sub(r"\s+", " ", title.strip())  # Normalize whitespace
-sanitized_title = re.sub(r"\x00", "", sanitized_title)  # Remove null characters only
+def _sanitize_text(text: str) -> str:
+    # Normalize whitespace
+    sanitized = re.sub(r"\s+", " ", text.strip())
+    # Remove null characters (the only character Pinecone prohibits)
+    sanitized = re.sub(r"\x00", "", sanitized)
+    return sanitized
 ```
 
-**Pinecone Record ID Requirements**: ASCII except `\0` - spaces and punctuation ARE allowed.
+**Correct**: Remove both null characters and non-ASCII characters:
 
-**Impact**: Preserves meaningful title information while maintaining Pinecone compatibility. Updated tests to verify
-punctuation preservation and null character removal.
+```python
+def _sanitize_text(text: str) -> str:
+    # Normalize whitespace
+    sanitized = re.sub(r"\s+", " ", text.strip())
+    # Remove null characters
+    sanitized = re.sub(r"\x00", "", sanitized)
+    # Remove non-ASCII characters (Pinecone requires ASCII-only vector IDs)
+    sanitized = "".join(char for char in sanitized if ord(char) < 128)
+    return sanitized
+```
 
-## Shared Vector ID Generation Implementation
+**Additional Fix**: Modified `upsert_to_pinecone` to detect vector ID sanitization errors and raise exceptions so they
+can be handled as temporary failures for retry:
 
-**Context**: Successfully consolidated vector ID generation across all ingestion methods into a shared utility in
-`pinecone_utils.py` to ensure consistency and reduce code duplication.
+```python
+# Check for vector ID sanitization errors that should be treated as temporary failures
+if "Vector ID must be ASCII" in error_msg or "must be ASCII" in error_msg:
+    logging.warning(f"Vector ID sanitization error detected - this should be fixed by updated sanitization logic")
+    raise Exception(f"Vector ID sanitization error: {error_msg}")
+```
 
-**Implementation Details**:
+**Detection**: Error message "Vector ID must be ASCII, but got 'ananda.org||web||text||Restorative Ananda Yoga® Teacher
+Training — Ananda||||98c1ac34||0'" showed the ® character was causing the failure.
 
-- **Location**: Added vector ID functions to `data_ingestion/utils/pinecone_utils.py` (better than separate file)
-- **Format**:
-  `{library}||{source_location}||{content_type}||{sanitized_title}||{source_id}||{content_hash}||{chunk_index}`
-- **Key Feature**: Chunk index comes after content hash for easy prefix-based deletion
-- **Sanitization**: Only removes null characters (\x00), preserves all other ASCII including punctuation
-- **Functions Added**:
-  - `generate_vector_id()` - Main generation function
-  - `_sanitize_text()` - Conservative sanitization helper
-  - `extract_metadata_from_vector_id()` - Parsing utility
+## Vector ID Format Compatibility Issue Discovery - RESOLVED
+
+**Problem**: After the vector ID format was updated from 3-part to 7-part format, multiple scripts throughout the
+codebase were still using the old format for filtering operations, causing them to fail to find vectors created with the
+new format.
+
+**Old Format (3 parts)**: `text||{library_name}||` **New Format (7 parts)**:
+`{content_type}||{library}||{source_location}||{sanitized_title}||{source_id}||{content_hash}||{chunk_index}`
+
+**✅ RESOLUTION**: Updated the vector ID format to put `content_type` first instead of `library_name` first. This makes
+the new format backward compatible with existing filtering patterns.
+
+**Example**:
+
+- Old filtering pattern: `text||ananda.org||`
+- New vector ID: `text||ananda.org||web||Test Title||author123||9473fdd0||0`
+- Result: ✅ **Perfect match - no code changes needed!**
+
+**Impact**: All existing filtering code continues to work without modification. The format change resolved the
+compatibility issue completely.
+
+**Files That Were Affected**: No longer need updates since the format is now compatible:
+
+- `data_ingestion/utils/pinecone_utils.py` - ✅ Works unchanged
+- `data_ingestion/sql_to_vector_db/ingest_db_text.py` - ✅ Works unchanged
+- `data_ingestion/crawler/delete_by_skip_pattern.py` - ✅ Works unchanged
+- All other filtering scripts - ✅ Work unchanged
+
+**Solution Strategy**: Instead of updating all filtering code, updated the vector ID generation format to be backward
+compatible.
+
+**Detection Method**: Systematic search for `text||` patterns revealed the scope, but format change eliminated the need
+for individual fixes.
+
+**Testing**: Verified that `generate_vector_id()` produces compatible format and `extract_metadata_from_vector_id()`
+correctly parses the new structure.
+
+## Mistake: Function Complexity Exceeding Ruff Limits
+
+**Problem**: The `main` function in `data_ingestion/crawler/website_crawler.py` exceeded Ruff's complexity threshold
+(C901) with a complexity of 15 when the limit is 10. This was caused by multiple conditional branches and error handling
+blocks within a single function.
+
+**Wrong**: Monolithic main function with all logic inline:
+
+```python
+def main():
+    args = parse_arguments()
+
+    # Load Site Configuration
+    site_config = load_config(args.site)
+    if not site_config:
+        # error handling...
+        sys.exit(1)
+
+    # Handle --fresh-start
+    if args.fresh_start:
+        # 20+ lines of database deletion logic...
+
+    # Environment file validation
+    # More conditional logic...
+
+    # Handle --clear-vectors
+    if args.clear_vectors:
+        # 15+ lines of vector clearing logic...
+
+    # Main execution with try/catch
+    try:
+        # crawl logic...
+    finally:
+        # 10+ lines of cleanup logic...
+```
+
+**Correct**: Extract logical blocks into separate functions to reduce complexity:
+
+```python
+def handle_fresh_start(args: argparse.Namespace) -> None:
+    """Handle --fresh-start flag by deleting existing database."""
+    # Extracted database deletion logic
+
+def handle_clear_vectors(args: argparse.Namespace, pinecone_index: pinecone.Index, domain: str, crawler: WebsiteCrawler) -> None:
+    """Handle --clear-vectors flag by clearing existing vectors."""
+    # Extracted vector clearing logic
+
+def cleanup_and_exit(crawler: WebsiteCrawler) -> None:
+    """Perform final cleanup and exit with appropriate code."""
+    # Extracted cleanup and exit logic
+
+def main():
+    args = parse_arguments()
+    site_config = load_config(args.site)
+    # ... simplified main logic calling helper functions
+    handle_fresh_start(args)
+    # ... more simplified logic
+    handle_clear_vectors(args, pinecone_index, domain, crawler)
+    # ... simplified try/finally with cleanup_and_exit(crawler)
+```
 
 **Benefits**:
 
-- **Consistency**: All ingestion methods now use identical vector ID format
-- **Prefix Deletion**: Can delete all chunks for a title using prefix like `audio||Library||title||hash||`
-- **Richer metadata**: Can filter by both where data came from AND what type it is
-- **Clean chunk numbering**: Simple integers like `0`, `1`, `2`
+- Reduced main function complexity from 15 to under 10 (passing Ruff C901 check)
+- Improved code readability and maintainability
+- Each function has a single responsibility
+- Easier to test individual components
+- Better error isolation
 
-**Example Results**:
+**Detection**: Ruff linter error `C901 'main' is too complex (15 > 10)` identified the issue.
 
-- Database text: `Test Library||db||text||Article Title||Test Author||4b2ce3cb||0`
-- Audio file: `Ananda Sangha||file||audio||How to Commune with God||Swami Kriyananda||5b2a1057||4`
+**Principle**: When functions exceed complexity thresholds, extract logical blocks into separate functions rather than
+increasing the complexity limit.
 
-**Testing**: All 20 tests in `test_ingest_db_text.py` pass, confirming backward compatibility and correct
-implementation.
+## Mistake: crawl_page Method Complexity Exceeding Ruff Limits
 
-## Vector ID Format Update - 7-Part Structure Implementation
+**Problem**: The `crawl_page` method in `data_ingestion/crawler/website_crawler.py` exceeded Ruff's complexity threshold
+(C901) with a complexity of 16 when the limit is 10. This was caused by multiple conditional branches, exception
+handling blocks, and content extraction logic within a single method.
 
-**Context**: Successfully updated the vector ID format from 5-part to 7-part structure for better organization and
-prefix-based deletion capabilities.
-
-**Changes Made**:
-
-1. **Updated `generate_vector_id()` function signature** in `data_ingestion/utils/pinecone_utils.py`:
-
-   - Changed `source_type` parameter to `source_location`
-   - Added new `content_type` parameter with default "text"
-   - Updated parameter order and documentation
-
-2. **New Vector ID Format**:
-
-   ```
-   {library}||{source_location}||{content_type}||{sanitized_title}||{source_id}||{content_hash}||{chunk_index}
-   ```
-
-3. **Updated `extract_metadata_from_vector_id()`** to parse 7 parts instead of 5
-
-4. **Updated SQL ingestion wrapper** in `ingest_db_text.py` to use new parameters:
-
-   ```python
-   return shared_generate_vector_id(
-       library_name=library_name,
-       title=title,
-       content_chunk=content_chunk,
-       chunk_index=chunk_index,
-       source_location="db",
-       content_type="text",
-       source_id=author,
-   )
-   ```
-
-5. **Updated tests** to expect 7-part format and correct title position (index 3)
-
-**Benefits Achieved**:
-
-- **Better organization**: Clear separation between source location and content type
-- **Perfect prefix deletion**: `Test Library||db||text||Article Title||Test Author||a1b2c3d4||`
-- **Richer metadata**: Can filter by both where data came from AND what type it is
-- **Clean chunk numbering**: Simple integers like `0`, `1`, `2`
-
-**Example Results**:
-
-- Database text: `Test Library||db||text||Article Title||Test Author||4b2ce3cb||0`
-- Audio file: `Ananda Sangha||file||audio||How to Commune with God||Swami Kriyananda||5b2a1057||4`
-
-**Testing**: All 20 tests in `test_ingest_db_text.py` pass, confirming backward compatibility and correct
-implementation.
-
-## Mistake: Messy Vector ID Function Wrappers
-
-**Problem**: The SQL ingestion file had a confusing mix of local wrapper functions and renamed imports for vector ID
-generation, creating unnecessary complexity and maintenance burden.
-
-**Wrong**: Creating local wrapper functions that just call shared utilities:
+**Wrong**: Monolithic crawl_page method with all logic inline:
 
 ```python
-# Local wrapper function (unnecessary)
+def crawl_page(self, browser, page, url: str) -> tuple[PageContent | None, list[str], bool]:
+    retries = 2
+    last_exception = None
+    restart_needed = False
+
+    while retries > 0:
+        try:
+            # Navigation logic
+            response = page.goto(url, wait_until="commit")
+
+            # 15+ lines of response validation logic...
+            if not response:
+                # error handling...
+            if response.status >= 400:
+                # error handling...
+            if content_type and not content_type.lower().startswith("text/html"):
+                # skip logic...
+
+            # 25+ lines of content extraction logic...
+            page.wait_for_selector("body", timeout=15000)
+            # menu handling...
+            # link extraction...
+            # content cleaning...
+
+        except PlaywrightTimeout as e:
+            # 10+ lines of timeout handling...
+        except Exception as e:
+            # 20+ lines of complex exception classification...
+```
+
+**Correct**: Extract logical blocks into separate helper methods:
+
+```python
+def _validate_response(self, response, url: str) -> tuple[bool, Exception | None]:
+    """Validate page response and return (should_continue, exception)."""
+    # Extracted response validation logic
+
+def _extract_page_content(self, page, url: str) -> tuple[PageContent | None, list[str]]:
+    """Extract content and links from page."""
+    # Extracted content and link extraction logic
+
+def _handle_crawl_exception(self, e: Exception, url: str) -> tuple[bool, bool]:
+    """Handle exceptions during crawling. Returns (restart_needed, should_retry)."""
+    # Extracted exception classification logic
+
+def crawl_page(self, browser, page, url: str) -> tuple[PageContent | None, list[str], bool]:
+    """Crawl a single page and return content, links, and restart flag."""
+    retries = 2
+    last_exception = None
+    restart_needed = False
+
+    while retries > 0:
+        try:
+            response = page.goto(url, wait_until="commit")
+            should_continue, exception = self._validate_response(response, url)
+            if not should_continue:
+                # Handle validation result
+            content, links = self._extract_page_content(page, url)
+            return content, links, False
+        except Exception as e:
+            restart_needed, should_retry = self._handle_crawl_exception(e, url)
+            # Handle exception result
+```
+
+**Benefits**:
+
+- Reduced crawl_page method complexity from 16 to under 10 (passing Ruff C901 check)
+- Improved code readability and maintainability
+- Each helper method has a single, clear responsibility
+- Easier to test individual components in isolation
+- Better separation of concerns (validation, extraction, error handling)
+
+**Detection**: Ruff linter error `C901 'crawl_page' is too complex (16 > 10)` identified the issue.
+
+**Principle**: Complex methods should be decomposed into focused helper methods that handle specific aspects of the
+overall functionality.
+
+## Mistake: run_crawl_loop Function Complexity Exceeding Ruff Limits
+
+**Problem**: The `run_crawl_loop` function in `data_ingestion/crawler/website_crawler.py` exceeded Ruff's complexity
+threshold (C901) with a complexity of 26 when the limit is 10. This was caused by multiple logical blocks including
+browser restart logic, content processing, URL handling, and cleanup logic within a single function.
+
+**Wrong**: Monolithic run_crawl_loop function with all logic inline:
+
+```python
+def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace):
+    # Setup logic...
+
+    with sync_playwright() as p:
+        browser = p.firefox.launch(...)
+        page = browser.new_page()
+
+        try:
+            while should_continue_loop and not is_exiting():
+                url = crawler.get_next_url_to_crawl()
+
+                # 30+ lines of browser restart logic and stats calculation...
+                if pages_since_restart >= PAGES_PER_RESTART:
+                    # Calculate batch success rate
+                    # Calculate and log stats
+                    # Restart Browser
+                    # Reset counters
+
+                # 15+ lines of URL processing logic...
+                crawler.current_processing_url = url
+                if crawler.should_skip_url(url):
+                    # skip handling...
+                content, new_links, restart_needed = crawler.crawl_page(...)
+                if restart_needed:
+                    # restart handling...
+
+                # 25+ lines of content processing logic...
+                if content:
+                    chunks = create_chunks_from_page(...)
+                    # embedding creation...
+                    # link processing...
+
+        finally:
+            # 10+ lines of browser cleanup logic...
+```
+
+**Correct**: Extract logical blocks into focused helper functions:
+
+```python
+def _handle_browser_restart(p, page, browser, pages_since_restart: int, batch_results: list, batch_start_time: float, crawler: WebsiteCrawler) -> tuple:
+    """Handle browser restart logic and stats calculation."""
+    # Extracted browser restart and stats logic
+
+def _process_page_content(content, new_links: list, url: str, crawler: WebsiteCrawler, pinecone_index, index_name: str) -> tuple[int, int]:
+    """Process page content and return (pages_processed_increment, pages_since_restart_increment)."""
+    # Extracted content processing, embedding creation, and link handling logic
+
+def _cleanup_browser(page, browser) -> None:
+    """Clean up browser resources."""
+    # Extracted browser cleanup logic
+
+def _handle_url_processing(url: str, crawler: WebsiteCrawler, browser, page) -> bool:
+    """Handle URL processing setup and skip checks. Returns True if restart needed."""
+    # Extracted URL setup, skip checks, and initial crawling logic
+
+def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace):
+    """Run the main crawling loop."""
+    # Setup logic...
+
+    with sync_playwright() as p:
+        browser = p.firefox.launch(...)
+        page = browser.new_page()
+
+        try:
+            while not is_exiting():
+                url = crawler.get_next_url_to_crawl()
+
+                if pages_since_restart >= PAGES_PER_RESTART:
+                    browser, page, batch_start_time, batch_results = _handle_browser_restart(...)
+                    pages_since_restart = 0
+                    continue
+
+                restart_needed = _handle_url_processing(url, crawler, browser, page)
+                if restart_needed:
+                    pages_since_restart = PAGES_PER_RESTART
+                    continue
+
+                content, new_links, _ = crawler.crawl_page(browser, page, url)
+                pages_inc, restart_inc = _process_page_content(content, new_links, url, crawler, pinecone_index, index_name)
+                # Update counters and commit changes
+
+        finally:
+            _cleanup_browser(page, browser)
+```
+
+**Benefits**:
+
+- Reduced run_crawl_loop function complexity from 26 to under 10 (passing Ruff C901 check)
+- Improved code readability and maintainability
+- Each helper function has a single, clear responsibility
+- Easier to test individual components in isolation
+- Better separation of concerns (restart logic, content processing, URL handling, cleanup)
+- Simplified main loop logic focusing on orchestration rather than implementation details
+
+**Detection**: Ruff linter error `C901 'run_crawl_loop' is too complex (26 > 10)` identified the issue.
+
+**Principle**: Large orchestration functions should delegate specific responsibilities to focused helper functions,
+keeping the main function focused on high-level flow control.
+
+## Mistake: Sloppy Vector ID Generation Function with Multiple Optional Parameters
+
+**Problem**: The `generate_vector_id` function in `data_ingestion/utils/pinecone_utils.py` had a confusing interface
+with multiple optional parameters that served overlapping purposes, making it unclear which parameter to use for what
+purpose.
+
+**Wrong**: Confusing function signature with redundant parameters:
+
+```python
 def generate_vector_id(
     library_name: str,
     title: str,
-    content_chunk: str,
+    content_chunk: str,  # Used for chunk-level hashing
     chunk_index: int,
-    author: str = None,
-    permalink: str = None,
+    source_location: str = "unknown",
+    content_type: str = "text",
+    source_id: str | None = None,      # Could be URL, author, etc.
+    source_url: str | None = None,     # Redundant with source_id
+    document_hash: str | None = None,  # Manual override
 ) -> str:
-    # Import shared utility from pinecone_utils
-    from data_ingestion.utils.pinecone_utils import (
-        generate_vector_id as shared_generate_vector_id,
-    )
-
-    # Use shared utility with database source location and text content type
-    return shared_generate_vector_id(
-        library_name=library_name,
-        title=title,
-        content_chunk=content_chunk,
-        chunk_index=chunk_index,
-        source_location="db",
-        content_type="text",
-        source_id=author,
-    )
 ```
 
-**Correct**: Import and use the shared function directly:
+**Issues**:
+
+- `source_id` vs `source_url` - both identify the source
+- `content_chunk` vs `document_hash` - both for hashing
+- Complex conditional logic to decide which hash to use
+- Unclear which parameter to use in different scenarios
+- Inconsistent usage across different scripts
+
+**Correct**: Clean, single-purpose function with clear interface:
 
 ```python
-# At top of file
-from data_ingestion.utils.pinecone_utils import generate_vector_id
-
-# In code
-pinecone_id = generate_vector_id(
-    library_name=post_data["library"],
-    title=post_data["title"],
-    content_chunk=doc.page_content,
-    chunk_index=i,
-    source_location="db",
-    content_type="text",
-    source_id=post_data["author"],
-)
+def generate_vector_id(
+    library_name: str,
+    title: str,
+    chunk_index: int,
+    source_location: str,
+    source_identifier: str,  # Single source identifier (URL, file path, etc.)
+    content_type: str = "text",
+    author: str | None = None,
+) -> str:
 ```
 
 **Benefits**:
 
-- **Eliminates code duplication**: No need for wrapper functions
-- **Reduces complexity**: Direct imports are clearer than renamed aliases
-- **Easier maintenance**: Changes to shared function don't require updating wrappers
-- **Better readability**: Clear what function is being called and where it comes from
+- **Single responsibility**: Always generates document-level hashes internally
+- **No ambiguity**: One parameter for source identification
+- **Simplified interface**: Fewer parameters, clearer purpose
+- **Consistent behavior**: No conditional logic about which hash to use
+- **Obvious intent**: You're generating an ID for a document chunk
 
-**Test Updates**: Updated test calls to use the new parameter names and structure, ensuring all 20 tests continue to
-pass.
+**Impact**: This eliminated the hash inconsistency issue where chunks from the same document had different hashes,
+making bulk operations (like deleting all chunks from a document) difficult.
 
-### Mistake: Referencing Non-Existent Environment Variables
+**Files Updated**:
 
-**Wrong**:
+- `data_ingestion/utils/pinecone_utils.py` - Simplified function signature
+- `data_ingestion/crawler/website_crawler.py` - Updated to use new interface
+- `data_ingestion/sql_to_vector_db/ingest_db_text.py` - Updated to use new interface
+- `data_ingestion/tests/test_ingest_db_text.py` - Updated tests for new format
 
-```python
-def load_environment(site_name: str) -> dict:
-    # ... validation code ...
-    return {
-        'user': os.getenv('DB_USER'),
-        'password': os.getenv('DB_PASSWORD'),
-        'host': os.getenv('DB_HOST'),
-        'database': os.getenv('DB_NAME'),  # DB_NAME doesn't exist in environment
-        'port': int(os.getenv('DB_PORT', '3306')),  # DB_PORT doesn't exist in environment
-        'raise_on_warnings': True
-    }
-```
+**Detection**: User pointed out the architectural inconsistency when reviewing the hash generation logic.
 
-**Correct**:
+### Recent Test Status Check
 
-```python
-def load_environment(site_name: str) -> dict:
-    # ... validation code ...
-    return {
-        'user': os.getenv('DB_USER'),
-        'password': os.getenv('DB_PASSWORD'),
-        'host': os.getenv('DB_HOST'),
-        'raise_on_warnings': True
-    }
+**Date**: Current session **Status**: All tests passing successfully
 
-# Database name comes from command line args, not environment
-def get_db_config(args):
-    return {
-        'user': os.getenv('DB_USER'),
-        'password': os.getenv('DB_PASSWORD'),
-        'host': os.getenv('DB_HOST'),
-        'database': args.database,  # From command line argument
-        'port': int(os.getenv('DB_PORT', '3306')),  # Optional with default
-        # ... other config
-    }
-```
+**Python Tests (data_ingestion)**:
 
-**Principle**: Only reference environment variables that actually exist. Check the actual environment setup and existing
-code patterns before assuming variables exist.
+- 310 tests passed, 0 failed
+- Minor warnings about deprecation (`audioop` module) and test return values (non-breaking)
 
-## Mistake: Audio/Video Script Accessing Non-Existent Library Argument
+**Web Tests (Next.js)**:
 
-**Wrong**: The `transcribe_and_ingest_media.py` script was trying to access `args.library` without defining the
-`--library` argument in the argument parser:
+- 44 test suites passed, 380 tests passed, 32 skipped
+- Good test coverage across components, API routes, and utilities
 
-```python
-# Later in code - trying to use undefined attribute
-if args.clear_vectors:
-    clear_library_vectors(index, args.library, ask_confirmation=False)
-```
-
-**Correct**: Get library information from the queue items instead of command line arguments:
-
-```python
-if args.clear_vectors:
-    # Get unique libraries from queue items
-    all_items = ingest_queue.get_all_items()
-    libraries = set()
-    for item in all_items:
-        if item.get("data", {}).get("library"):
-            libraries.add(item["data"]["library"])
-
-    if not libraries:
-        logger.warning("No libraries found in queue items. Skipping vector clearing.")
-    else:
-        for library in libraries:
-            logger.info(f"Clearing vectors for library: {library}")
-            clear_library_vectors(index, library, ask_confirmation=False)
-```
-
-**Error**: `AttributeError: 'Namespace' object has no attribute 'library'` when running with `--clear-vectors` flag.
-
-**Root Cause**: The script was importing `clear_library_vectors` from the outdated audio_video module instead of the
-robust utils version, AND trying to access a non-existent `args.library` attribute. The library information is actually
-stored in the queue items managed by the queue system.
-
-**Fix Applied**:
-
-1. Updated import to use `data_ingestion.utils.pinecone_utils.clear_library_vectors`
-2. Modified clear_vectors logic to extract library names from queue items instead of command line arguments
-3. Added logic to handle multiple libraries and skip clearing if no libraries found
-
-### Mistake: Using sys.path Hacks Instead of Proper Module Execution
-
-**Problem**: Multiple Python scripts across the project use a sys.path manipulation hack to import modules from the
-project root:
-
-```python
-# Get the absolute path of the current script
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Get the parent directory of data_ingestion
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-# Add parent directory to Python path
-sys.path.insert(0, parent_dir)
-
-from data_ingestion.audio_video.IngestQueue import IngestQueue
-```
-
-This causes Ruff E402 linting errors ("Module level import not at top of file") and is a code smell.
-
-**Root Cause**: Scripts are being executed directly from their subdirectories instead of as modules from the project
-root.
-
-**Wrong**: Running scripts directly from subdirectories:
-
-```bash
-cd data_ingestion/audio_video
-./manage_queue.py -s dev -l
-```
-
-**Correct**: Run scripts as modules from project root:
-
-```bash
-python -m data_ingestion.audio_video.manage_queue -s dev -l
-```
-
-**Why This Works**:
-
-- Project already has proper package structure with `__init__.py` files
-- `pyproject.toml` declares `data_ingestion` and `pyutil` as first-party packages
-- Python treats the project as a proper package when using `-m` flag
-- All imports work naturally without path manipulation
-- Imports can be moved to the top of files, fixing linting errors
-
-**Alternative Solutions**:
-
-1. Set PYTHONPATH environment variable to project root
-2. Install project as editable package with `pip install -e .`
-
-**Files Affected**: All scripts in `data_ingestion/`, `bin/`, and subdirectories that use the sys.path hack.
-
-### Finding: Python Script Import Resolution from Project Root
-
-**Situation**: User encountered `ModuleNotFoundError: No module named 'pyutil'` when running a script in the `bin/`
-directory that imports from the `pyutil` package located at the project root level.
-
-**Initial Error**: Running `bin/find_records_by_category.py` directly from the project root resulted in import errors,
-even though the script was executable and had proper shebang.
-
-**Root Cause**: The issue was likely related to virtual environment activation or temporary Python path issues, not the
-script structure itself.
-
-**Correct Approach**: The project is properly structured with:
-
-- `pyutil` listed as a first-party package in `pyproject.toml`
-- Scripts in `bin/` directory with proper shebang (`#!/usr/bin/env python`)
-- Executable permissions on scripts
-
-**Proper Usage**: Scripts should be run from the project root directory:
-
-```bash
-# From project root - this works correctly
-bin/find_records_by_category.py --site ananda --category "some-category"
-```
-
-**Why This Works**: When running an executable Python script from the project root, the current directory (containing
-`pyutil/`) is automatically added to Python's module search path, making the import resolution work correctly.
-
-**Avoid**: Using `sys.path.append()` hacks that some existing scripts currently use - the proper project structure
-already handles this correctly.
-
-## Mistake: PDF Text Concatenation Causing Section Header Mashing
-
-**Problem**: PDF ingestion was concatenating pages with only `"\n\n"` separators, causing section headers and content to
-be mashed together without proper spacing. This resulted in text like "combat23 Control Your Destiny" where "combat" was
-the end of one page and "23 Control Your Destiny" was a section header on the next page.
-
-**Wrong**: Simple concatenation with fixed separator:
-
-```python
-# Add spacing between pages (but no page markers)
-if page_index > 0:
-    page_separator = "\n\n"
-    full_text_parts.append(page_separator)
-    current_offset += len(page_separator)
-```
-
-**Correct**: Intelligent page separator determination based on text flow:
-
-```python
-# Add intelligent spacing between pages
-if page_index > 0:
-    # Get the last few characters of the previous page
-    previous_text = full_text_parts[-1] if full_text_parts else ""
-
-    # Determine appropriate separator based on text flow
-    page_separator = _determine_page_separator(previous_text, page_text)
-    full_text_parts.append(page_separator)
-    current_offset += len(page_separator)
-```
-
-**Solution**: Added `_determine_page_separator()` function that analyzes:
-
-- Whether previous text ends with sentence-ending punctuation
-- Whether current text starts with capital letter or number
-- Whether current text appears to be a section header
-- Whether previous text ends with hyphen (word split across pages)
-- Whether text appears to be a continuation of the same sentence
-
-**Detection**: User reported examples of mashed text where section headers were concatenated without proper spacing,
-affecting readability and chunking quality.
-
-## PDF Header/Footer Filtering Enhancement
-
-**Problem**: PDF text extraction was including headers and footers, causing text flow disruption where page numbers and
-headers would break up sentences (e.g., "combat23 Control Your Destiny" instead of "combat them. Extraordinary...").
-
-**Solution**: Enhanced PyMuPDF-based PDF loader with intelligent header/footer detection using:
-
-1. **Position-based filtering**: Top 10% and bottom 10% of page regions
-2. **Font property analysis**: Lighter colors, smaller fonts compared to body text
-3. **Content pattern recognition**: Page numbers, chapter headers, book titles
-4. **Structured text extraction**: Using PyMuPDF's `get_text("dict")` for detailed font/position data
-
-**Key Features**:
-
-- `_is_header_footer_text()`: Multi-criteria detection of headers/footers
-- `_determine_page_separator()`: Smart page joining with proper spacing
-- Configurable thresholds for position and font-based filtering
-- Pattern matching for common header/footer content
-
-**Note**: This approach was superseded by switching to pdfplumber, which provides better overall text extraction
-quality.
-
-## PDF Text Extraction Library Switch - COMPLETED
-
-**Problem**: PyMuPDF was producing garbled text with headers/footers interrupting content flow, causing issues like
-"combat23 Control Your Destiny" and "N n nIdleness" appearing in extracted text.
-
-**Solution**: Successfully switched from PyMuPDF to pdfplumber for PDF text extraction.
-
-**Key Benefits of pdfplumber**:
-
-- Much cleaner text extraction with better layout understanding
-- Better handling of complex PDF layouts
-- More accurate text flow preservation
-- Reduced header/footer contamination
-
-**Implementation**: Replaced PyMuPDF (`fitz`) with pdfplumber in `PyPDFLoader` class:
-
-- Uses `pdfplumber.open()` instead of `fitz.open()`
-- Extracts text with `page.extract_text()` instead of `page.get_text()`
-- Maintains same document structure and metadata handling
-- Added `_clean_text_artifacts()` method for additional text cleaning
-
-**Results**: Testing with "Renunciate Order for New Age" PDF showed:
-
-- 48 pages extracted successfully
-- Clean title extraction: "Renunciate Order for New Age"
-- No garbled artifacts or header/footer contamination
-- Proper text flow preservation
-
-**Status**: PDF text extraction quality issue resolved. Ready for production use.
+**Conclusion**: No broken tests found. Test suite is healthy and all core functionality working correctly.

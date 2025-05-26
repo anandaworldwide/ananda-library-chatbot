@@ -17,8 +17,11 @@ Examples:
     # Analyze all text vectors
     python data_ingestion/bin/analyze_text_field_words.py --site ananda --prefix "text||"
 
-    # Analyze specific document
-    python data_ingestion/bin/analyze_text_field_words.py --site ananda --prefix "text||Crystal Clarity||Some_Title"
+    # Analyze specific document (new 7-part format)
+    python data_ingestion/bin/analyze_text_field_words.py --site ananda --prefix "text||Crystal Clarity||pdf||Some_Title"
+
+    # Analyze web content from specific library
+    python data_ingestion/bin/analyze_text_field_words.py --site ananda --prefix "text||ananda.org||web||"
 """
 
 import argparse

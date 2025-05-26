@@ -647,5 +647,146 @@ Questions? Email us at info@example.com or call (555) 123-4567."""
         )
 
 
+class TestCrawlerChunking(unittest.TestCase):
+    """Test cases for website crawler chunking functionality."""
+
+    def setUp(self):
+        """Set up test environment."""
+        from utils.text_splitter_utils import SpacyTextSplitter
+
+        self.text_splitter = SpacyTextSplitter()
+
+    def test_short_content_chunking(self):
+        """Test chunking of short web content."""
+        from crawler.website_crawler import PageContent, create_chunks_from_page
+
+        page_content = PageContent(
+            url="https://example.com/short",
+            title="Short Article",
+            content="This is a short article with just a few sentences. It should not be chunked into multiple pieces.",
+            metadata={},
+        )
+
+        chunks = create_chunks_from_page(page_content, self.text_splitter)
+
+        # Short content should result in a single chunk
+        self.assertEqual(len(chunks), 1)
+        self.assertIn("Short Article", chunks[0])
+        self.assertIn("short article", chunks[0])
+
+    def test_medium_content_chunking(self):
+        """Test chunking of medium-length web content with paragraphs."""
+        from crawler.website_crawler import PageContent, create_chunks_from_page
+
+        page_content = PageContent(
+            url="https://example.com/medium",
+            title="Medium Length Article",
+            content="""This is the first paragraph of a medium-length article. It contains several sentences that provide context and information about the topic being discussed.
+
+This is the second paragraph that continues the discussion. It adds more detail and expands on the concepts introduced in the first paragraph.
+
+This is the third paragraph that provides additional insights. It helps to build a comprehensive understanding of the subject matter.
+
+This is the fourth paragraph that concludes the article. It summarizes the key points and provides final thoughts on the topic.""",
+            metadata={},
+        )
+
+        chunks = create_chunks_from_page(page_content, self.text_splitter)
+
+        # Medium content should be chunked appropriately
+        self.assertGreaterEqual(len(chunks), 1)
+
+        # First chunk should contain the title
+        self.assertIn("Medium Length Article", chunks[0])
+
+        # Verify chunks contain content
+        all_content = " ".join(chunks)
+        self.assertIn("first paragraph", all_content)
+        self.assertIn("fourth paragraph", all_content)
+
+    def test_long_content_chunking(self):
+        """Test chunking of long web content."""
+        from crawler.website_crawler import PageContent, create_chunks_from_page
+
+        # Create a long article with multiple paragraphs
+        paragraphs = []
+        for i in range(20):
+            paragraphs.append(
+                f"This is paragraph number {i + 1}. It contains detailed information about a specific aspect of the topic. The content is designed to be comprehensive and informative, providing readers with valuable insights and knowledge."
+            )
+
+        page_content = PageContent(
+            url="https://example.com/long",
+            title="Very Long Comprehensive Article",
+            content="\n\n".join(paragraphs),
+            metadata={},
+        )
+
+        chunks = create_chunks_from_page(page_content, self.text_splitter)
+
+        # Long content should be chunked into multiple pieces
+        self.assertGreater(len(chunks), 1)
+
+        # First chunk should contain the title
+        self.assertIn("Very Long Comprehensive Article", chunks[0])
+
+        # Verify all content is preserved across chunks
+        all_content = " ".join(chunks)
+        self.assertIn("paragraph number 1", all_content)
+        self.assertIn("paragraph number 20", all_content)
+
+    def test_chunking_with_document_id(self):
+        """Test that document ID is properly passed for metrics tracking."""
+        from crawler.website_crawler import PageContent, create_chunks_from_page
+
+        page_content = PageContent(
+            url="https://example.com/metrics-test",
+            title="Metrics Test Article",
+            content="This is a test article for verifying that document IDs are properly tracked in chunking metrics.",
+            metadata={},
+        )
+
+        # Mock the text splitter to verify document_id is passed
+        with patch.object(
+            self.text_splitter, "split_text", wraps=self.text_splitter.split_text
+        ) as mock_split:
+            create_chunks_from_page(page_content, self.text_splitter)
+
+            # Verify split_text was called with document_id
+            mock_split.assert_called_once()
+            args, kwargs = mock_split.call_args
+            self.assertEqual(kwargs.get("document_id"), page_content.url)
+
+    def test_chunking_metrics_tracking(self):
+        """Test that chunking metrics are properly tracked."""
+        from crawler.website_crawler import PageContent, create_chunks_from_page
+        from utils.text_splitter_utils import ChunkingMetrics
+
+        page_content = PageContent(
+            url="https://example.com/metrics",
+            title="Metrics Tracking Test",
+            content="""This is a test article for metrics tracking. It has multiple paragraphs to ensure proper chunking behavior.
+
+This is the second paragraph that adds more content to test the chunking algorithm and metrics collection.
+
+This is the third paragraph that provides additional content for comprehensive testing of the chunking functionality.""",
+            metadata={},
+        )
+
+        # Clear any existing metrics
+        self.text_splitter.metrics = ChunkingMetrics()
+
+        create_chunks_from_page(page_content, self.text_splitter)
+
+        # Verify metrics were recorded
+        self.assertGreater(self.text_splitter.metrics.total_documents, 0)
+        self.assertGreater(self.text_splitter.metrics.total_chunks, 0)
+
+        # Get metrics summary
+        summary = self.text_splitter.get_metrics_summary()
+        self.assertIn("total_documents", summary)
+        self.assertIn("total_chunks", summary)
+
+
 if __name__ == "__main__":
     unittest.main()

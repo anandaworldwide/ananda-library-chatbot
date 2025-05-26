@@ -319,15 +319,15 @@ class TestVectorIdGeneration(unittest.TestCase):
         vector_id = ingest_db_text.generate_vector_id(
             library_name=library_name,
             title=title,
-            content_chunk=content_chunk,
             chunk_index=chunk_index,
             source_location="db",
+            source_identifier=permalink,
             content_type="text",
-            source_id=author,
+            author=author,
         )
 
-        # Should start with library||source_location||content_type||
-        self.assertTrue(vector_id.startswith("Test Library||db||text||"))
+        # Should start with content_type||library||source_location||
+        self.assertTrue(vector_id.startswith("text||Test Library||db||"))
 
         # Should contain sanitized title (preserves punctuation, only normalizes whitespace)
         self.assertIn("Test Article: Meditation & Mindfulness", vector_id)
@@ -335,14 +335,14 @@ class TestVectorIdGeneration(unittest.TestCase):
         # Should end with chunk number (0-based index, so chunk 0)
         self.assertTrue(vector_id.endswith("||0"))
 
-        # Should contain author in source_id position
+        # Should contain author
         self.assertIn("||Test Author||", vector_id)
 
-        # Should contain content hash
+        # Should contain document hash (not chunk hash)
         parts = vector_id.split("||")
         self.assertEqual(
             len(parts), 7
-        )  # library, source_location, content_type, title, source_id, hash, chunk_index
+        )  # content_type, library, source_location, title, author, document_hash, chunk_index
 
     def test_generate_vector_id_title_sanitization(self):
         """Test that vector ID preserves meaningful punctuation and only removes null characters."""
@@ -354,9 +354,9 @@ class TestVectorIdGeneration(unittest.TestCase):
         vector_id = ingest_db_text.generate_vector_id(
             library_name=library_name,
             title=title,
-            content_chunk=content_chunk,
             chunk_index=chunk_index,
             source_location="db",
+            source_identifier="https://example.com/test-article",
             content_type="text",
         )
 
@@ -376,9 +376,9 @@ class TestVectorIdGeneration(unittest.TestCase):
         vector_id_spaces = ingest_db_text.generate_vector_id(
             library_name=library_name,
             title=title_with_spaces,
-            content_chunk=content_chunk,
             chunk_index=chunk_index,
             source_location="db",
+            source_identifier="https://example.com/test-article",
             content_type="text",
         )
         parts_spaces = vector_id_spaces.split("||")

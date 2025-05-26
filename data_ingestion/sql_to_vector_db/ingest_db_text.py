@@ -774,11 +774,11 @@ def process_and_upsert_batch(
                 pinecone_id = generate_vector_id(
                     library_name=post_data["library"],
                     title=post_data["title"],
-                    content_chunk=doc.page_content,
                     chunk_index=i,  # Chunk index (0-based)
                     source_location="db",
+                    source_identifier=post_data["permalink"],
                     content_type="text",
-                    source_id=post_data["author"],
+                    author=post_data["author"],
                 )
                 # Construct the metadata dictionary to be stored with the vector in Pinecone
                 metadata = {
