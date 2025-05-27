@@ -876,6 +876,31 @@ strategy while preserving audio-specific features.
   `_legacy_chunk_transcription()`
 - `data_ingestion/spacy_chunking_strategy_update.md`: Marked task as completed with implementation details
 
+## Mistake: Overlap Logic Applied Before Chunk Merging
+
+**Problem**: In `SpacyTextSplitter.split_text()`, the overlap logic was using incorrect percentage calculation,
+resulting in ~12% overlap instead of the target 20%.
+
+**Wrong Calculation**:
+
+```python
+target_overlap_words = max(1, int(len(prev_words) * (self.chunk_overlap / self.chunk_size)))
+# With chunk_overlap=100, chunk_size=800: (100/800) = 0.125 = 12.5%
+```
+
+**Correct Calculation**:
+
+```python
+target_overlap_words = max(1, int(len(prev_words) * 0.20))
+# Direct 20% calculation
+```
+
+**Detection**: Web crawler chunks showed 7-15% overlap instead of expected 20%. The overlap was being applied but with
+wrong percentage due to using token-based ratio instead of direct percentage.
+
+**Fix Applied**: Changed overlap calculation to use direct 20% of previous chunk word count, achieving proper overlap
+percentages.
+
 ## Mistake: Timestamp Accuracy Risk in Audio Chunking with Text Mapping
 
 **Problem**: Initial spaCy-based audio chunking implementation used "fuzzy matching" to map spaCy's reformatted text
@@ -1349,8 +1374,6 @@ def main():
 - Reduced main function complexity from 15 to under 10 (passing Ruff C901 check)
 - Improved code readability and maintainability
 - Each function has a single responsibility
-- Easier to test individual components
-- Better error isolation
 
 **Detection**: Ruff linter error `C901 'main' is too complex (15 > 10)` identified the issue.
 
@@ -1630,3 +1653,113 @@ making bulk operations (like deleting all chunks from a document) difficult.
 - Good test coverage across components, API routes, and utilities
 
 **Conclusion**: No broken tests found. Test suite is healthy and all core functionality working correctly.
+
+## Refactoring: Complex Method Decomposition for Maintainability
+
+**Context**: The `text_splitter_utils.py` file had three methods flagged by Ruff for excessive complexity (C901):
+
+- `split_text` (complexity 39 > 10)
+- `log_document_metrics` (complexity 13 > 10)
+- `_merge_small_chunks` (complexity 12 > 10)
+
+**Solution**: Decomposed complex methods into smaller, focused helper methods:
+
+**`split_text` method refactoring**:
+
+- `_split_by_words()` - Handle word-based chunking for space separator
+- `_apply_word_overlap()` - Apply word-based overlap logic
+- `_split_by_sentences()` - Split text by sentences when exceeding chunk size
+- `_process_initial_splits()` - Process initial text splits based on separator
+- `_force_split_large_chunk()` - Force split single large chunks
+- `_apply_character_overlap()` - Apply character-based overlap logic
+
+**`log_document_metrics` method refactoring**:
+
+- `_update_word_count_distribution()` - Update word count tracking
+- `_update_chunk_size_distribution()` - Update chunk size tracking
+- `_detect_edge_cases()` - Detect and log edge cases
+- `_detect_anomalies()` - Detect and log anomalies
+
+**`_merge_small_chunks` method refactoring**:
+
+- `_finalize_current_merge()` - Finalize merge groups
+- `_handle_target_sized_chunk()` - Handle chunks in target range
+- `_should_preserve_chunk_separation()` - Determine chunk separation logic
+- `_handle_small_chunk_merging()` - Handle merging of small chunks
+
+**Results**:
+
+- All complexity issues resolved (Ruff C901 checks pass)
+- All existing tests continue to pass
+- Code is more maintainable and easier to understand
+- Each helper method has a single responsibility
+
+## Test Enhancement: Comprehensive Overlap Validation
+
+**Context**: Following the bug fix for 20% overlap calculation, comprehensive tests were added to prevent regression.
+
+**Added Tests**:
+
+1. **`test_twenty_percent_overlap_calculation()`**:
+
+   - Validates that chunks have proper 20% overlap based on word count
+   - Tests the specific bug fix where overlap was incorrectly calculated as ratio of chunk size
+   - Forces chunking with controlled chunk sizes to ensure multiple chunks
+   - Verifies actual overlap matches expected 20% ± 2 words tolerance
+   - Ensures overlap contains meaningful text, not just punctuation
+
+2. **`test_overlap_with_different_separators()`**:
+   - Tests overlap behavior with space separator (word-based chunking)
+   - Tests overlap behavior with paragraph separator (20% word-based overlap)
+   - Validates different overlap calculation methods for different separators
+
+**Key Validation Logic**:
+
+```python
+# Calculate expected overlap (20% of previous chunk)
+expected_overlap_words = max(1, int(len(prev_words) * 0.20))
+
+# Find actual overlap by checking word sequence matching
+actual_overlap_words = 0
+for j in range(1, min(len(prev_words), len(current_words)) + 1):
+    if current_words[:j] == prev_words[-j:]:
+        actual_overlap_words = j
+```
+
+**Coverage**: Tests now comprehensively validate the overlap fix that changed from chunk-size-based ratios to direct 20%
+word count calculation, ensuring chunks maintain proper context preservation for RAG retrieval.
+
+## Mistake: Using sys.path Hacks for Python Module Imports
+
+**Wrong**: Adding manual path manipulation to fix import issues in test files:
+
+```python
+import sys
+from pathlib import Path
+
+# Add the data_ingestion directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from utils.text_splitter_utils import Document, SpacyTextSplitter
+```
+
+**Correct**: Use proper Python module structure with relative imports:
+
+```python
+# Move test files to proper tests/ directory
+# Use relative imports from the correct module structure
+from ..utils.text_splitter_utils import Document, SpacyTextSplitter
+```
+
+**Root Cause**: Test files were placed in the wrong directory (`data_ingestion/` root instead of
+`data_ingestion/tests/`) and trying to import from a sibling `utils/` directory.
+
+**Proper Solution**:
+
+1. Move test files to the appropriate `tests/` directory
+2. Use relative imports (`from ..utils.module import Class`)
+3. Ensure proper `__init__.py` files exist in all package directories
+4. Run tests from the parent directory using `python -m pytest tests/`
+
+**Detection**: Import errors like `ModuleNotFoundError: No module named 'utils'` when running pytest indicate improper
+module structure rather than missing dependencies.

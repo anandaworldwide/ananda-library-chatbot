@@ -45,19 +45,8 @@ class ChunkingMetrics:
         self.edge_cases = []
         self.anomalies = []
 
-    def log_document_metrics(
-        self,
-        word_count: int,
-        chunk_count: int,
-        chunk_sizes: list[int],
-        chunk_overlaps: list[int],
-        document_id: str = None,
-    ):
-        """Log metrics for a single document."""
-        self.total_documents += 1
-        self.total_chunks += chunk_count
-
-        # Track word count distribution
+    def _update_word_count_distribution(self, word_count: int) -> None:
+        """Update word count distribution tracking."""
         if word_count < 200:
             self.word_count_distribution["<200"] += 1
         elif word_count < 1000:
@@ -67,7 +56,8 @@ class ChunkingMetrics:
         else:
             self.word_count_distribution["5000+"] += 1
 
-        # Track chunk size distribution
+    def _update_chunk_size_distribution(self, chunk_sizes: list[int]) -> None:
+        """Update chunk size distribution tracking."""
         for chunk in chunk_sizes:
             word_count_in_chunk = (
                 len(chunk.split()) if isinstance(chunk, str) else chunk
@@ -81,7 +71,10 @@ class ChunkingMetrics:
             else:
                 self.chunk_size_distribution["500+"] += 1
 
-        # Detect edge cases
+    def _detect_edge_cases(
+        self, word_count: int, chunk_count: int, document_id: str = None
+    ) -> None:
+        """Detect and log edge cases in document processing."""
         if word_count < 50:
             self.edge_cases.append(
                 f"Very short document: {word_count} words (ID: {document_id})"
@@ -96,7 +89,10 @@ class ChunkingMetrics:
                 f"Large document not chunked: {word_count} words, 1 chunk (ID: {document_id})"
             )
 
-        # Detect anomalies
+    def _detect_anomalies(
+        self, chunk_sizes: list[int], word_count: int, document_id: str = None
+    ) -> None:
+        """Detect and log anomalies in chunk sizes."""
         avg_chunk_size = (
             sum(
                 len(chunk.split()) if isinstance(chunk, str) else chunk
@@ -114,6 +110,26 @@ class ChunkingMetrics:
             self.anomalies.append(
                 f"Unexpectedly large chunks: avg {avg_chunk_size:.1f} words (ID: {document_id})"
             )
+
+    def log_document_metrics(
+        self,
+        word_count: int,
+        chunk_count: int,
+        chunk_sizes: list[int],
+        chunk_overlaps: list[int],
+        document_id: str = None,
+    ):
+        """Log metrics for a single document."""
+        self.total_documents += 1
+        self.total_chunks += chunk_count
+
+        # Update distributions
+        self._update_word_count_distribution(word_count)
+        self._update_chunk_size_distribution(chunk_sizes)
+
+        # Detect edge cases and anomalies
+        self._detect_edge_cases(word_count, chunk_count, document_id)
+        self._detect_anomalies(chunk_sizes, word_count, document_id)
 
     def log_summary(self, logger: logging.Logger):
         """Log a summary of all chunking metrics."""
@@ -416,11 +432,133 @@ class SpacyTextSplitter:
             document_id=document_id,
         )
 
+    def _finalize_current_merge(
+        self,
+        current_merged: list[str],
+        current_word_count: int,
+        merged_chunks: list[str],
+    ) -> tuple[list[str], int]:
+        """Finalize the current merge group and add to merged chunks."""
+        if current_merged:
+            merged_text = " ".join(current_merged)
+            merged_chunks.append(merged_text)
+            self.logger.debug(
+                f"Merged {len(current_merged)} chunks into {current_word_count} words"
+            )
+        return [], 0
+
+    def _handle_target_sized_chunk(
+        self,
+        chunk: str,
+        chunk_words: int,
+        document_id: str,
+        merged_chunks: list[str],
+        current_merged: list[str],
+        current_word_count: int,
+    ) -> tuple[list[str], int]:
+        """Handle chunks that are already in target range or too large."""
+        target_max_words = 450
+
+        # First, finalize any accumulated chunks
+        if current_merged:
+            merged_text = " ".join(current_merged)
+            merged_chunks.append(merged_text)
+            self.logger.debug(
+                f"Merged {len(current_merged)} small chunks into {len(merged_text.split())} words"
+            )
+
+        # Add this chunk as-is (it's already good size or too large to merge)
+        merged_chunks.append(chunk)
+        if chunk_words > target_max_words:
+            self.logger.debug(
+                f"Kept oversized chunk: {chunk_words} words (ID: {document_id})"
+            )
+        else:
+            self.logger.debug(
+                f"Kept target-sized chunk: {chunk_words} words (ID: {document_id})"
+            )
+
+        return [], 0
+
+    def _should_preserve_chunk_separation(
+        self,
+        merged_chunks: list[str],
+        min_chunks_for_total: int,
+        current_word_count: int,
+        chunk_words: int,
+    ) -> bool:
+        """Determine if we should preserve chunk separation to maintain multiple chunks."""
+        target_min_words = 225
+        return (
+            len(merged_chunks) >= min_chunks_for_total
+            and current_word_count + chunk_words >= target_min_words * 0.7
+        )
+
+    def _handle_small_chunk_merging(
+        self,
+        chunk: str,
+        chunk_words: int,
+        merged_chunks: list[str],
+        current_merged: list[str],
+        current_word_count: int,
+        min_chunks_for_total: int,
+    ) -> tuple[list[str], int]:
+        """Handle merging of small chunks."""
+        target_min_words = 225
+        target_max_words = 450
+
+        # If we already have enough chunks and this would create a reasonable chunk, preserve it
+        if self._should_preserve_chunk_separation(
+            merged_chunks, min_chunks_for_total, current_word_count, chunk_words
+        ):
+            # We have enough chunks, finalize current merge and preserve separation
+            if current_merged:
+                merged_text = " ".join(current_merged)
+                merged_chunks.append(merged_text)
+                self.logger.debug(
+                    f"Merged {len(current_merged)} chunks into {current_word_count} words (preserving multiple chunks)"
+                )
+
+            # Add this chunk separately to preserve multiple chunks
+            merged_chunks.append(chunk)
+            self.logger.debug(
+                f"Added small chunk separately to preserve multiple chunks: {chunk_words} words"
+            )
+            return [], 0
+        elif current_word_count + chunk_words <= target_max_words:
+            # Can add to current merge group
+            current_merged.append(chunk)
+            current_word_count += chunk_words
+
+            # If we've reached a good size, finalize this merge
+            if current_word_count >= target_min_words:
+                merged_text = " ".join(current_merged)
+                merged_chunks.append(merged_text)
+                self.logger.debug(
+                    f"Merged {len(current_merged)} chunks into {current_word_count} words"
+                )
+                return [], 0
+        else:
+            # Adding this chunk would exceed max, finalize current merge first
+            if current_merged:
+                merged_text = " ".join(current_merged)
+                merged_chunks.append(merged_text)
+                self.logger.debug(
+                    f"Merged {len(current_merged)} chunks into {current_word_count} words (below target)"
+                )
+
+            # Start new merge group with this chunk
+            return [chunk], chunk_words
+
+        return current_merged, current_word_count
+
     def _merge_small_chunks(
         self, chunks: list[str], document_id: str = None
     ) -> list[str]:
         """
         Merge small chunks to better meet the target word count range (225-450 words).
+
+        This function is less aggressive to preserve multiple chunks for overlap.
 
         Args:
             chunks (list[str]): The original chunks
@@ -434,6 +572,17 @@ class SpacyTextSplitter:
 
         target_min_words = 225
         target_max_words = 450
+
+        # Calculate total word count to decide strategy
+        total_words = sum(len(chunk.split()) for chunk in chunks)
+
+        # If total content is large enough for multiple chunks, be less aggressive about merging
+        min_chunks_for_total = max(2, total_words // target_max_words)
+
+        self.logger.debug(
+            f"Merge strategy: {total_words} total words, targeting {min_chunks_for_total} chunks minimum"
+        )
+
         merged_chunks = []
         current_merged = []
         current_word_count = 0
@@ -443,54 +592,24 @@ class SpacyTextSplitter:
 
             # If this chunk alone is already in target range or too large, handle it separately
             if chunk_words >= target_min_words:
-                # First, finalize any accumulated chunks
-                if current_merged:
-                    merged_text = " ".join(current_merged)
-                    merged_chunks.append(merged_text)
-                    self.logger.debug(
-                        f"Merged {len(current_merged)} small chunks into {len(merged_text.split())} words"
-                    )
-                    current_merged = []
-                    current_word_count = 0
-
-                # Add this chunk as-is (it's already good size or too large to merge)
-                merged_chunks.append(chunk)
-                if chunk_words > target_max_words:
-                    self.logger.debug(
-                        f"Kept oversized chunk: {chunk_words} words (ID: {document_id})"
-                    )
-                else:
-                    self.logger.debug(
-                        f"Kept target-sized chunk: {chunk_words} words (ID: {document_id})"
-                    )
+                current_merged, current_word_count = self._handle_target_sized_chunk(
+                    chunk,
+                    chunk_words,
+                    document_id,
+                    merged_chunks,
+                    current_merged,
+                    current_word_count,
+                )
             else:
                 # This chunk is too small, try to merge it
-                if current_word_count + chunk_words <= target_max_words:
-                    # Can add to current merge group
-                    current_merged.append(chunk)
-                    current_word_count += chunk_words
-
-                    # If we've reached a good size, finalize this merge
-                    if current_word_count >= target_min_words:
-                        merged_text = " ".join(current_merged)
-                        merged_chunks.append(merged_text)
-                        self.logger.debug(
-                            f"Merged {len(current_merged)} chunks into {current_word_count} words"
-                        )
-                        current_merged = []
-                        current_word_count = 0
-                else:
-                    # Adding this chunk would exceed max, finalize current merge first
-                    if current_merged:
-                        merged_text = " ".join(current_merged)
-                        merged_chunks.append(merged_text)
-                        self.logger.debug(
-                            f"Merged {len(current_merged)} chunks into {current_word_count} words (below target)"
-                        )
-
-                    # Start new merge group with this chunk
-                    current_merged = [chunk]
-                    current_word_count = chunk_words
+                current_merged, current_word_count = self._handle_small_chunk_merging(
+                    chunk,
+                    chunk_words,
+                    merged_chunks,
+                    current_merged,
+                    current_word_count,
+                    min_chunks_for_total,
+                )
 
         # Handle any remaining chunks in current_merged
         if current_merged:
@@ -518,6 +637,266 @@ class SpacyTextSplitter:
         )
 
         return merged_chunks
+
+    def _split_by_words(self, text: str, doc: spacy.language.Doc) -> list[str]:
+        """Split text into word-based chunks."""
+        words = (
+            [token.text for token in doc if not token.is_space] if doc else text.split()
+        )
+        if not words:
+            return []
+
+        chunks = []
+        current_chunk = []
+        current_size = 0
+
+        for word in words:
+            # Calculate size with space (except for first word)
+            word_size = len(word) + (1 if current_chunk else 0)
+
+            # If adding this word would exceed chunk_size, start a new chunk
+            if current_size + word_size > self.chunk_size and current_chunk:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = [word]
+                current_size = len(word)
+            else:
+                current_chunk.append(word)
+                current_size += word_size
+
+        # Add the last chunk
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+
+        self.logger.debug(f"Split text into {len(chunks)} word-based chunks")
+        return chunks
+
+    def _apply_word_overlap(self, chunks: list[str]) -> list[str]:
+        """Apply word-based overlap to chunks."""
+        if self.chunk_overlap <= 0 or len(chunks) <= 1:
+            return chunks
+
+        result = [chunks[0]]
+
+        for i in range(1, len(chunks)):
+            prev_chunk = chunks[i - 1]
+            current_chunk = chunks[i]
+
+            # Split into words for overlap calculation
+            prev_words = prev_chunk.split()
+
+            # Calculate overlap in words (approximate based on average word length)
+            avg_word_len = 5  # Approximate average word length including spaces
+            overlap_words = max(1, self.chunk_overlap // avg_word_len)
+            overlap_words = min(overlap_words, len(prev_words))
+
+            overlap_text = " ".join(prev_words[-overlap_words:])
+
+            # Add overlap to current chunk if it doesn't already start with it
+            if not current_chunk.startswith(overlap_text):
+                current_chunk = overlap_text + " " + current_chunk
+                self.logger.debug(
+                    f"Applied word-based overlap of {overlap_words} words between chunks"
+                )
+
+            result.append(current_chunk)
+
+        return result
+
+    def _split_by_sentences(
+        self, split_text: str, doc: spacy.language.Doc
+    ) -> list[str]:
+        """Split text into sentence-based chunks when it exceeds chunk_size."""
+        chunks = []
+
+        # Use pre-tokenized doc if possible, or re-tokenize this split
+        split_doc = (
+            next(
+                (d for d in doc.sents if d.text.strip() == split_text),
+                None,
+            )
+            if doc
+            else None
+        )
+        if not split_doc:
+            split_doc = self.nlp(split_text)
+            self.logger.debug("Re-tokenized split for sentence-based splitting")
+
+        current_chunk = []
+        current_size = 0
+
+        for sent in split_doc.sents:
+            sent_text = sent.text.strip()
+            if not sent_text:
+                continue
+
+            # If a single sentence is longer than chunk_size, keep it as its own chunk
+            if len(sent_text) > self.chunk_size:
+                # If we have accumulated text, add it as a chunk first
+                if current_chunk:
+                    chunks.append(" ".join(current_chunk))
+                    current_chunk = []
+                    current_size = 0
+                # Add the long sentence as its own chunk
+                chunks.append(sent_text)
+                self.logger.debug(
+                    f"Added long sentence as chunk: {len(sent_text)} chars"
+                )
+            # If adding this sentence would exceed chunk_size, start a new chunk
+            elif (
+                current_size + len(sent_text) + (1 if current_chunk else 0)
+                > self.chunk_size
+            ):
+                chunks.append(" ".join(current_chunk))
+                self.logger.debug(f"Created chunk of size {current_size} chars")
+                current_chunk = [sent_text]
+                current_size = len(sent_text)
+            # Otherwise, add to current chunk
+            else:
+                current_chunk.append(sent_text)
+                current_size += len(sent_text) + (1 if current_chunk else 0)
+
+        # Add any remaining text in the current chunk
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+            self.logger.debug(
+                f"Added final sentence chunk of size {current_size} chars"
+            )
+
+        return chunks
+
+    def _process_initial_splits(self, text: str, doc: spacy.language.Doc) -> list[str]:
+        """Process initial text splits based on separator."""
+        chunks = []
+
+        # First split by separator - these are our primary chunk boundaries
+        if self.separator and self.separator != " ":
+            # For non-space separators, split directly
+            initial_splits = text.split(self.separator)
+            self.logger.debug(
+                f"Split text into {len(initial_splits)} parts using separator '{self.separator}'"
+            )
+        else:
+            initial_splits = [text]
+
+        for split_text in initial_splits:
+            split_text = split_text.strip()
+            if not split_text:
+                continue
+
+            # If the split is longer than chunk_size, break it down further with spaCy
+            if len(split_text) > self.chunk_size:
+                try:
+                    sentence_chunks = self._split_by_sentences(split_text, doc)
+                    chunks.extend(sentence_chunks)
+                except Exception as e:
+                    error_msg = f"Error processing text with spaCy: {str(e)}"
+                    self.logger.error(error_msg)
+                    raise RuntimeError(error_msg) from e
+            else:
+                # If the split is smaller than chunk_size, add it directly
+                chunks.append(split_text)
+                self.logger.debug(
+                    f"Added small split as chunk: {len(split_text)} chars"
+                )
+
+        return chunks
+
+    def _force_split_large_chunk(self, chunks: list[str]) -> list[str]:
+        """Force split single large chunks into multiple chunks."""
+        if len(chunks) != 1 or len(chunks[0].split()) < 300:
+            return chunks
+
+        single_chunk = chunks[0]
+        chunk_words = single_chunk.split()
+        target_chunk_size = max(200, len(chunk_words) // 2)  # Split roughly in half
+
+        self.logger.info(
+            f"Forcing split of single large chunk ({len(chunk_words)} words) into multiple chunks"
+        )
+
+        # Split the single chunk into roughly equal parts
+        forced_chunks = []
+        current_chunk_words = []
+
+        for word in chunk_words:
+            current_chunk_words.append(word)
+
+            # If we've reached target size and we're at a sentence boundary, split here
+            if len(current_chunk_words) >= target_chunk_size and word.endswith(
+                (".", "!", "?", ":", ";")
+            ):
+                forced_chunks.append(" ".join(current_chunk_words))
+                current_chunk_words = []
+
+        # Add any remaining words
+        if current_chunk_words:
+            if forced_chunks:
+                # Add to last chunk if it's small
+                last_chunk_words = forced_chunks[-1].split()
+                if len(current_chunk_words) < 50:  # Very small remainder
+                    forced_chunks[-1] = " ".join(last_chunk_words + current_chunk_words)
+                else:
+                    forced_chunks.append(" ".join(current_chunk_words))
+            else:
+                forced_chunks.append(" ".join(current_chunk_words))
+
+        if len(forced_chunks) > 1:
+            self.logger.info(
+                f"Forced chunking created {len(forced_chunks)} chunks for overlap"
+            )
+            return forced_chunks
+
+        return chunks
+
+    def _apply_character_overlap(self, chunks: list[str]) -> list[str]:
+        """Apply character-based overlap to chunks."""
+        if self.chunk_overlap <= 0 or len(chunks) <= 1:
+            return chunks
+
+        result = [chunks[0]]
+
+        for i in range(1, len(chunks)):
+            prev_chunk = chunks[i - 1]
+            current_chunk = chunks[i]
+
+            # For single-character separators like space, use word-based overlap
+            if self.separator and len(self.separator) == 1 and self.separator.isspace():
+                # Split into words for overlap calculation
+                prev_words = prev_chunk.split()
+
+                # Calculate overlap in words (approximate based on average word length)
+                avg_word_len = 5  # Approximate average word length including spaces
+                overlap_words = max(1, self.chunk_overlap // avg_word_len)
+                overlap_words = min(overlap_words, len(prev_words))
+
+                overlap_text = " ".join(prev_words[-overlap_words:])
+
+                # Add overlap to current chunk if it doesn't already start with it
+                if not current_chunk.startswith(overlap_text):
+                    current_chunk = overlap_text + " " + current_chunk
+                    self.logger.debug(
+                        f"Applied word-based overlap of {overlap_words} words between chunks"
+                    )
+            else:
+                # Use character-based overlap for other separators
+                # Calculate overlap based on word count for better accuracy
+                prev_words = prev_chunk.split()
+                # Target 20% overlap of the previous chunk
+                target_overlap_words = max(1, int(len(prev_words) * 0.20))
+                target_overlap_words = min(target_overlap_words, len(prev_words))
+
+                overlap_text = " ".join(prev_words[-target_overlap_words:])
+
+                # Add overlap to current chunk if it doesn't already start with it
+                if not current_chunk.startswith(overlap_text):
+                    current_chunk = overlap_text + " " + current_chunk
+                    self.logger.debug(
+                        f"Applied overlap of {target_overlap_words} words ({len(overlap_text)} chars) between chunks"
+                    )
+
+            result.append(current_chunk)
+
+        return result
 
     def split_text(self, text: str, document_id: str = None) -> list[str]:
         """
@@ -576,273 +955,35 @@ class SpacyTextSplitter:
             if not text.strip():
                 return []
 
-            chunks = []
-
             # Handle space separator specially - split into word-based chunks
             if self.separator == " ":
-                words = (
-                    [token.text for token in doc if not token.is_space]
-                    if doc
-                    else text.split()
-                )
-                if not words:
-                    return []
+                chunks = self._split_by_words(text, doc)
+                chunks = self._apply_word_overlap(chunks)
+                self.logger.info(f"Split text into {len(chunks)} word-based chunks")
+                self._log_chunk_metrics(chunks, word_count, document_id)
+                return chunks
 
-                current_chunk = []
-                current_size = 0
+            # Process initial splits based on separator
+            chunks = self._process_initial_splits(text, doc)
+            self.logger.info(f"Split text into {len(chunks)} initial chunks")
 
-                for word in words:
-                    # Calculate size with space (except for first word)
-                    word_size = len(word) + (1 if current_chunk else 0)
-
-                    # If adding this word would exceed chunk_size, start a new chunk
-                    if current_size + word_size > self.chunk_size and current_chunk:
-                        chunks.append(" ".join(current_chunk))
-                        current_chunk = [word]
-                        current_size = len(word)
-                    else:
-                        current_chunk.append(word)
-                        current_size += word_size
-
-                # Add the last chunk
-                if current_chunk:
-                    chunks.append(" ".join(current_chunk))
-
-                self.logger.debug(f"Split text into {len(chunks)} word-based chunks")
-
-                # Apply word-based overlap for space separator
-                if self.chunk_overlap > 0 and len(chunks) > 1:
-                    result = []
-                    result.append(chunks[0])
-
-                    for i in range(1, len(chunks)):
-                        prev_chunk = chunks[i - 1]
-                        current_chunk = chunks[i]
-
-                        # Split into words for overlap calculation
-                        prev_words = prev_chunk.split()
-
-                        # Calculate overlap in words (approximate based on average word length)
-                        avg_word_len = (
-                            5  # Approximate average word length including spaces
-                        )
-                        overlap_words = max(1, self.chunk_overlap // avg_word_len)
-                        overlap_words = min(overlap_words, len(prev_words))
-
-                        overlap_text = " ".join(prev_words[-overlap_words:])
-
-                        # Add overlap to current chunk if it doesn't already start with it
-                        if not current_chunk.startswith(overlap_text):
-                            current_chunk = overlap_text + " " + current_chunk
-                            self.logger.debug(
-                                f"Applied word-based overlap of {overlap_words} words between chunks"
-                            )
-
-                        result.append(current_chunk)
-
-                    self.logger.info(
-                        f"Split text into {len(result)} word-based chunks with overlap"
-                    )
-                    return result
-                else:
-                    self.logger.info(
-                        f"Split text into {len(chunks)} word-based chunks without overlap"
-                    )
-                    return chunks
-
-            # First split by separator - these are our primary chunk boundaries
-            elif self.separator and self.separator != " ":
-                # For non-space separators, split directly
-                initial_splits = text.split(self.separator)
-                self.logger.debug(
-                    f"Split text into {len(initial_splits)} parts using separator '{self.separator}'"
-                )
-            else:
-                initial_splits = [text]
-
-            # Track if separator-based splits are already small enough (no overlap needed)
-            separator_splits_small = True
-
-            for split_text in initial_splits:
-                split_text = split_text.strip()
-                if not split_text:
-                    continue
-
-                # If the split is longer than chunk_size, break it down further with spaCy
-                if len(split_text) > self.chunk_size:
-                    separator_splits_small = (
-                        False  # At least one split needs further processing
-                    )
-                    try:
-                        # Use pre-tokenized doc if possible, or re-tokenize this split
-                        split_doc = (
-                            next(
-                                (d for d in doc.sents if d.text.strip() == split_text),
-                                None,
-                            )
-                            if doc
-                            else None
-                        )
-                        if not split_doc:
-                            split_doc = self.nlp(split_text)
-                            self.logger.debug(
-                                "Re-tokenized split for sentence-based splitting"
-                            )
-
-                        current_chunk = []
-                        current_size = 0
-
-                        for sent in split_doc.sents:
-                            sent_text = sent.text.strip()
-                            if not sent_text:
-                                continue
-
-                            # If a single sentence is longer than chunk_size, keep it as its own chunk
-                            if len(sent_text) > self.chunk_size:
-                                # If we have accumulated text, add it as a chunk first
-                                if current_chunk:
-                                    chunks.append(" ".join(current_chunk))
-                                    current_chunk = []
-                                    current_size = 0
-                                # Add the long sentence as its own chunk
-                                chunks.append(sent_text)
-                                self.logger.debug(
-                                    f"Added long sentence as chunk: {len(sent_text)} chars"
-                                )
-                            # If adding this sentence would exceed chunk_size, start a new chunk
-                            elif (
-                                current_size
-                                + len(sent_text)
-                                + (1 if current_chunk else 0)
-                                > self.chunk_size
-                            ):
-                                chunks.append(" ".join(current_chunk))
-                                self.logger.debug(
-                                    f"Created chunk of size {current_size} chars"
-                                )
-                                current_chunk = [sent_text]
-                                current_size = len(sent_text)
-                            # Otherwise, add to current chunk
-                            else:
-                                current_chunk.append(sent_text)
-                                current_size += len(sent_text) + (
-                                    1 if current_chunk else 0
-                                )
-
-                        # Add any remaining text in the current chunk
-                        if current_chunk:
-                            chunks.append(" ".join(current_chunk))
-                            self.logger.debug(
-                                f"Added final sentence chunk of size {current_size} chars"
-                            )
-                    except Exception as e:
-                        error_msg = f"Error processing text with spaCy: {str(e)}"
-                        self.logger.error(error_msg)
-                        raise RuntimeError(error_msg) from e
-                else:
-                    # If the split is smaller than chunk_size, add it directly
-                    chunks.append(split_text)
-                    self.logger.debug(
-                        f"Added small split as chunk: {len(split_text)} chars"
-                    )
-
-            # Apply chunk overlap if configured and appropriate
-            # Don't apply overlap if separator-based splits are small and using paragraph separator
-            if (
-                self.chunk_overlap > 0
-                and len(chunks) > 1
-                and not (separator_splits_small and self.separator == "\n\n")
-            ):
-                try:
-                    result = []
-                    result.append(chunks[0])
-
-                    for i in range(1, len(chunks)):
-                        prev_chunk = chunks[i - 1]
-                        current_chunk = chunks[i]
-
-                        # For single-character separators like space, use word-based overlap
-                        if (
-                            self.separator
-                            and len(self.separator) == 1
-                            and self.separator.isspace()
-                        ):
-                            # Split into words for overlap calculation
-                            prev_words = prev_chunk.split()
-                            current_words = current_chunk.split()
-
-                            # Calculate overlap in words (approximate based on average word length)
-                            avg_word_len = (
-                                5  # Approximate average word length including spaces
-                            )
-                            overlap_words = max(1, self.chunk_overlap // avg_word_len)
-                            overlap_words = min(overlap_words, len(prev_words))
-
-                            overlap_text = " ".join(prev_words[-overlap_words:])
-
-                            # Add overlap to current chunk if it doesn't already start with it
-                            if not current_chunk.startswith(overlap_text):
-                                current_chunk = overlap_text + " " + current_chunk
-                                self.logger.debug(
-                                    f"Applied word-based overlap of {overlap_words} words between chunks"
-                                )
-                        else:
-                            # Use character-based overlap for other separators
-                            overlap_size = min(self.chunk_overlap, len(prev_chunk))
-                            overlap_start = len(prev_chunk) - overlap_size
-
-                            # Adjust overlap_start to ensure it starts at a word boundary
-                            while overlap_start < len(prev_chunk) and overlap_start > 0:
-                                if (
-                                    prev_chunk[overlap_start - 1].isspace()
-                                    or prev_chunk[overlap_start].isspace()
-                                ):
-                                    break
-                                overlap_start -= 1
-
-                            # If we couldn't find a space, try moving forward
-                            if overlap_start == 0 and not prev_chunk[0].isspace():
-                                overlap_start = len(prev_chunk) - overlap_size
-                                while overlap_start < len(prev_chunk) - 1:
-                                    if prev_chunk[overlap_start].isspace():
-                                        overlap_start += 1
-                                        break
-                                    overlap_start += 1
-
-                            overlap_text = (
-                                prev_chunk[overlap_start:]
-                                if overlap_start < len(prev_chunk)
-                                else ""
-                            )
-
-                            # Add overlap to current chunk if it doesn't already start with it
-                            if not current_chunk.startswith(overlap_text):
-                                current_chunk = overlap_text + current_chunk
-                                self.logger.debug(
-                                    f"Applied character-based overlap of {len(overlap_text)} chars between chunks at word boundary"
-                                )
-
-                        result.append(current_chunk)
-
-                    self.logger.info(
-                        f"Split text into {len(result)} chunks with overlap"
-                    )
-                    # Post-process chunks to merge small ones and reach target word count
-                    result = self._merge_small_chunks(result, document_id)
-                    # Log detailed chunking metrics for overlap case
-                    self._log_chunk_metrics(result, word_count, document_id)
-                    return result
-                except Exception as e:
-                    error_msg = f"Error applying chunk overlap: {str(e)}"
-                    self.logger.error(error_msg)
-                    raise RuntimeError(error_msg) from e
-
-            self.logger.info(f"Split text into {len(chunks)} chunks without overlap")
-
-            # Post-process chunks to merge small ones and reach target word count
+            # STEP 1: Merge small chunks into larger ones first
             chunks = self._merge_small_chunks(chunks, document_id)
+            self.logger.info(f"After merging: {len(chunks)} chunks")
 
-            # Log detailed chunking metrics for non-overlap case
+            # STEP 1.5: Force chunking if we have only 1 chunk but enough content for multiple chunks
+            chunks = self._force_split_large_chunk(chunks)
+
+            # STEP 2: Apply overlap logic to the final merged chunks
+            try:
+                chunks = self._apply_character_overlap(chunks)
+                self.logger.info(f"Applied overlap to {len(chunks)} final chunks")
+            except Exception as e:
+                error_msg = f"Error applying chunk overlap: {str(e)}"
+                self.logger.error(error_msg)
+                raise RuntimeError(error_msg) from e
+
+            # Log detailed chunking metrics for final chunks
             self._log_chunk_metrics(chunks, word_count, document_id)
             return chunks
         except Exception as e:

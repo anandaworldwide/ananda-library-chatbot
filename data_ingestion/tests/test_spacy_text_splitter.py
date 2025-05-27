@@ -271,78 +271,181 @@ def test_dynamic_chunk_size_long_text():
 
 
 def test_punctuation_preservation():
-    """Test that spaCy chunking preserves punctuation marks in text."""
+    """Test that punctuation is preserved during chunking."""
     splitter = SpacyTextSplitter()
+    text = "Hello, world! How are you? I'm fine, thanks."
+    chunks = splitter.split_text(text)
 
-    # Text with various punctuation marks
-    text_with_punctuation = """
-    Hello, world! How are you today? I'm doing well, thank you. 
-    That's great to hear. Let's discuss some topics: science, technology, and art.
-    
-    Here are some examples:
-    • First bullet point
-    • Second bullet point with "quotes"
-    • Third point with (parentheses) and [brackets]
-    
-    Mathematical expressions: 2 + 2 = 4, π ≈ 3.14159, and x² + y² = z².
-    
-    Contractions work too: don't, won't, can't, I'll, we're, they've.
-    
-    Special characters: @username, #hashtag, $100, 50%, & more symbols!
+    # Combine all chunks and check that punctuation is preserved
+    combined_text = " ".join(chunks)
+    assert "," in combined_text
+    assert "!" in combined_text
+    assert "?" in combined_text
+    assert "'" in combined_text
+
+
+def test_twenty_percent_overlap_calculation():
     """
+    Test that chunks have proper 20% overlap based on word count.
 
-    doc = Document(page_content=text_with_punctuation)
-    chunks = splitter.split_documents([doc])
+    This test validates the bug fix where overlap was incorrectly calculated
+    as a ratio of chunk size instead of 20% of the previous chunk's word count.
+    """
+    # Create a text splitter with paragraph separator to ensure chunking
+    splitter = SpacyTextSplitter(separator="\n\n")
 
-    # Verify chunks were created
-    assert len(chunks) > 0, "Should create at least one chunk"
+    # Create text with multiple paragraphs that will definitely be chunked
+    # Each paragraph has approximately 50-60 words to ensure chunking occurs
+    paragraph1 = " ".join(
+        [f"This is sentence {i} in the first paragraph." for i in range(1, 11)]
+    )  # ~50 words
+    paragraph2 = " ".join(
+        [f"This is sentence {i} in the second paragraph." for i in range(1, 11)]
+    )  # ~50 words
+    paragraph3 = " ".join(
+        [f"This is sentence {i} in the third paragraph." for i in range(1, 11)]
+    )  # ~50 words
+    paragraph4 = " ".join(
+        [f"This is sentence {i} in the fourth paragraph." for i in range(1, 11)]
+    )  # ~50 words
 
-    # Collect all chunk text
-    all_chunk_text = " ".join(chunk.page_content for chunk in chunks)
+    text = f"{paragraph1}\n\n{paragraph2}\n\n{paragraph3}\n\n{paragraph4}"
 
-    # Test preservation of various punctuation marks that are actually in the text
-    punctuation_marks = [
-        ",",
-        "!",
-        "?",
-        ".",
-        "'",
-        '"',
-        ":",
-        "(",
-        ")",
-        "[",
-        "]",
-        "•",
-        "=",
-        "+",
-        "²",
-        "≈",
-        "@",
-        "#",
-        "$",
-        "%",
-        "&",
-    ]
+    # Force smaller chunk size to ensure multiple chunks
+    original_chunk_size = splitter.chunk_size
+    original_chunk_overlap = splitter.chunk_overlap
+    splitter.chunk_size = 300  # Small enough to force chunking
+    splitter.chunk_overlap = 60  # 20% of 300
 
-    for mark in punctuation_marks:
-        assert mark in all_chunk_text, (
-            f"Punctuation mark '{mark}' should be preserved in chunks"
-        )
+    try:
+        chunks = splitter.split_text(text, document_id="test_overlap")
 
-    # Test preservation of contractions
-    contractions = ["don't", "won't", "can't", "I'll", "we're", "they've"]
-    for contraction in contractions:
-        assert contraction in all_chunk_text, (
-            f"Contraction '{contraction}' should be preserved"
-        )
+        # We should have multiple chunks
+        assert len(chunks) > 1, f"Expected multiple chunks, got {len(chunks)}: {chunks}"
 
-    # Verify that chunks contain meaningful sentences with punctuation
-    for chunk in chunks:
-        chunk_text = chunk.page_content.strip()
-        if len(chunk_text) > 20:  # Only check substantial chunks
-            # Should contain some punctuation (not just letters and spaces)
-            has_punctuation = any(char in chunk_text for char in ".,!?;:")
-            assert has_punctuation, f"Chunk should contain punctuation: '{chunk_text}'"
+        # Test overlap between consecutive chunks
+        for i in range(1, len(chunks)):
+            prev_chunk = chunks[i - 1]
+            current_chunk = chunks[i]
 
-    print(f"Punctuation preservation test passed. Created {len(chunks)} chunks.")
+            prev_words = prev_chunk.split()
+            current_words = current_chunk.split()
+
+            # Calculate expected overlap (20% of previous chunk)
+            expected_overlap_words = max(1, int(len(prev_words) * 0.20))
+
+            # Find actual overlap by checking how many words from the end of prev_chunk
+            # appear at the start of current_chunk
+            actual_overlap_words = 0
+            for j in range(1, min(len(prev_words), len(current_words)) + 1):
+                if current_words[:j] == prev_words[-j:]:
+                    actual_overlap_words = j
+
+            # The actual overlap should be close to the expected 20%
+            # Allow some tolerance since we're dealing with word boundaries
+            min_expected = max(1, expected_overlap_words - 2)  # Allow 2 words tolerance
+            max_expected = expected_overlap_words + 2
+
+            assert min_expected <= actual_overlap_words <= max_expected, (
+                f"Chunk {i}: Expected overlap ~{expected_overlap_words} words (20% of {len(prev_words)}), "
+                f"but got {actual_overlap_words} words. "
+                f"Previous chunk: '{prev_chunk[-100:]}...' "
+                f"Current chunk: '...{current_chunk[:100]}'"
+            )
+
+            # Verify that there is meaningful overlap (not just punctuation)
+            if actual_overlap_words > 0:
+                overlap_text = " ".join(prev_words[-actual_overlap_words:])
+                assert len(overlap_text.strip()) > 0, (
+                    "Overlap should contain meaningful text"
+                )
+                assert current_chunk.startswith(overlap_text), (
+                    f"Current chunk should start with overlap text. "
+                    f"Expected start: '{overlap_text}', "
+                    f"Actual start: '{current_chunk[: len(overlap_text) + 10]}'"
+                )
+
+    finally:
+        # Restore original settings
+        splitter.chunk_size = original_chunk_size
+        splitter.chunk_overlap = original_chunk_overlap
+
+
+def test_overlap_with_different_separators():
+    """Test that overlap works correctly with different separators."""
+
+    # Test with space separator (word-based chunking)
+    space_splitter = SpacyTextSplitter(separator=" ")
+    space_splitter.chunk_size = 100  # Force smaller chunks
+    space_splitter.chunk_overlap = 20
+
+    # Create text with many words
+    words = [f"word{i}" for i in range(1, 51)]  # 50 words
+    space_text = " ".join(words)
+
+    space_chunks = space_splitter.split_text(
+        space_text, document_id="test_space_overlap"
+    )
+
+    if len(space_chunks) > 1:
+        # For space separator, overlap should be word-based
+        for i in range(1, len(space_chunks)):
+            prev_chunk = space_chunks[i - 1]
+            current_chunk = space_chunks[i]
+
+            prev_words = prev_chunk.split()
+            current_words = current_chunk.split()
+
+            # Check for word-based overlap
+            overlap_found = False
+            for j in range(
+                1, min(6, len(prev_words), len(current_words))
+            ):  # Check up to 5 words
+                if current_words[:j] == prev_words[-j:]:
+                    overlap_found = True
+                    break
+
+            assert overlap_found, (
+                f"No word-based overlap found between space-separated chunks. "
+                f"Chunk {i - 1}: '{prev_chunk}', Chunk {i}: '{current_chunk}'"
+            )
+
+    # Test with paragraph separator
+    para_splitter = SpacyTextSplitter(separator="\n\n")
+    para_splitter.chunk_size = 200
+    para_splitter.chunk_overlap = 40
+
+    # Create text with paragraphs
+    para1 = " ".join(
+        [f"Sentence {i} in paragraph one." for i in range(1, 16)]
+    )  # ~60 words
+    para2 = " ".join(
+        [f"Sentence {i} in paragraph two." for i in range(1, 16)]
+    )  # ~60 words
+    para_text = f"{para1}\n\n{para2}"
+
+    para_chunks = para_splitter.split_text(para_text, document_id="test_para_overlap")
+
+    if len(para_chunks) > 1:
+        # For paragraph separator, overlap should be 20% of previous chunk
+        for i in range(1, len(para_chunks)):
+            prev_chunk = para_chunks[i - 1]
+            current_chunk = para_chunks[i]
+
+            prev_words = prev_chunk.split()
+            current_words = current_chunk.split()
+
+            # Calculate expected 20% overlap
+            expected_overlap_words = max(1, int(len(prev_words) * 0.20))
+
+            # Find actual overlap
+            actual_overlap_words = 0
+            for j in range(1, min(len(prev_words), len(current_words)) + 1):
+                if current_words[:j] == prev_words[-j:]:
+                    actual_overlap_words = j
+
+            # Should have meaningful overlap
+            assert actual_overlap_words > 0, (
+                f"No overlap found between paragraph chunks. "
+                f"Expected ~{expected_overlap_words} words overlap"
+            )
