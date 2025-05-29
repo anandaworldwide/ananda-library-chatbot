@@ -113,7 +113,7 @@ def transcribe_chunk(
     except APIError as e:
         if e.status_code == 429:
             logger.error(f"OpenAI API rate limit exceeded for file {file_name}: {e}")
-            raise RateLimitError("Rate limit exceeded")
+            raise RateLimitError("Rate limit exceeded") from e
         elif (
             e.status_code == 400 and "audio file could not be decoded" in str(e).lower()
         ):
@@ -122,7 +122,7 @@ def transcribe_chunk(
             )
             raise UnsupportedAudioFormatError(
                 f"Unsupported audio format for file {file_name}"
-            )
+            ) from e
         logger.error(f"OpenAI API error for file {file_name}: {e}")
         raise
     except Exception as e:

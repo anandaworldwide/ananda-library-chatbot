@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
+from urllib.robotparser import RobotFileParser
 
 # Third party imports
 import pinecone
@@ -131,6 +132,19 @@ class WebsiteCrawler:
         self.start_url = ensure_scheme(self.domain)  # Start URL is now just the domain
         self.skip_patterns = self.config.get("skip_patterns", [])
         self.crawl_frequency_days = self.config.get("crawl_frequency_days", 14)
+        self.crawl_delay_seconds = self.config.get("crawl_delay_seconds", 1)
+
+        # Initialize robots.txt parser
+        self.robots_parser = RobotFileParser()
+        robots_url = f"{self.start_url.rstrip('/')}/robots.txt"
+        self.robots_parser.set_url(robots_url)
+        try:
+            self.robots_parser.read()
+            logging.info(f"Successfully loaded robots.txt from {robots_url}")
+        except Exception as e:
+            logging.warning(f"Could not load robots.txt from {robots_url}: {e}")
+            # Set to None to indicate robots.txt couldn't be loaded
+            self.robots_parser = None
 
         # Initialize shared text splitter with consistent configuration
         self.text_splitter = SpacyTextSplitter()
@@ -509,6 +523,17 @@ class WebsiteCrawler:
             if domain != self.domain:
                 logging.debug(f"Skipping external domain: {domain}")
                 return False
+
+            # Check robots.txt compliance
+            if self.robots_parser:
+                if not self.robots_parser.can_fetch(USER_AGENT, url):
+                    logging.debug(f"Robots.txt disallows crawling: {url}")
+                    return False
+            else:
+                # If robots.txt couldn't be loaded, log warning but continue
+                logging.debug(
+                    f"No robots.txt loaded, proceeding with caution for: {url}"
+                )
 
             # Skip non-http(s) URLs
             if parsed.scheme not in ["http", "https"]:
@@ -1179,6 +1204,13 @@ def _process_crawl_iteration(
     if is_exiting():
         logging.info("Exit requested after saving checkpoint, stopping loop.")
         return 0, 0, True  # Signal exit
+
+    # Rate limiting: Sleep between requests to be respectful to the server
+    if pages_inc > 0:  # Only delay if page was successfully processed
+        delay = crawler.crawl_delay_seconds
+        if delay > 0:
+            logging.debug(f"Rate limiting: sleeping for {delay} seconds")
+            time.sleep(delay)
 
     return pages_inc, restart_inc, False  # Continue normally
 

@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from crawler.website_crawler import WebsiteCrawler, ensure_scheme, load_config
 
@@ -789,6 +789,318 @@ This is the third paragraph that provides additional content for comprehensive t
         summary = self.text_splitter.get_metrics_summary()
         self.assertIn("total_documents", summary)
         self.assertIn("total_chunks", summary)
+
+
+class TestRobotsTxtCompliance(unittest.TestCase):
+    """Test cases for robots.txt compliance functionality."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.site_id = "test-site"
+        self.site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            "crawl_delay_seconds": 1,
+        }
+
+        # Mock Path to use temp directory
+        self.path_patcher = patch("crawler.website_crawler.Path")
+        mock_path_constructor = self.path_patcher.start()
+        mock_path_constructor.return_value.parent.return_value = Path(self.temp_dir)
+
+        # Mock sqlite3 to use in-memory database
+        self.original_sqlite_connect = sqlite3.connect
+        self.connect_patcher = patch("sqlite3.connect")
+        mock_sqlite_connect = self.connect_patcher.start()
+        mock_sqlite_connect.side_effect = (
+            lambda db_path_arg: self.original_sqlite_connect(":memory:")
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        self.path_patcher.stop()
+        self.connect_patcher.stop()
+        shutil.rmtree(self.temp_dir)
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_initialization_success(self, mock_robot_parser_class):
+        """Test successful robots.txt initialization."""
+        mock_parser = Mock()
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Verify robots.txt parser was initialized
+        mock_robot_parser_class.assert_called_once()
+        mock_parser.set_url.assert_called_once_with("https://example.com/robots.txt")
+        mock_parser.read.assert_called_once()
+
+        self.assertEqual(crawler.robots_parser, mock_parser)
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_initialization_failure(self, mock_robot_parser_class):
+        """Test robots.txt initialization failure handling."""
+        mock_parser = Mock()
+        mock_parser.read.side_effect = Exception("Network error")
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Verify that parser is set to None on failure
+        self.assertIsNone(crawler.robots_parser)
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_allows_crawling(self, mock_robot_parser_class):
+        """Test URL validation when robots.txt allows crawling."""
+        mock_parser = Mock()
+        mock_parser.can_fetch.return_value = True
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Test URL that should be allowed
+        test_url = "https://example.com/allowed-page"
+        result = crawler.is_valid_url(test_url)
+
+        self.assertTrue(result)
+        mock_parser.can_fetch.assert_called_with("Ananda Chatbot Crawler", test_url)
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_disallows_crawling(self, mock_robot_parser_class):
+        """Test URL validation when robots.txt disallows crawling."""
+        mock_parser = Mock()
+        mock_parser.can_fetch.return_value = False
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Test URL that should be disallowed
+        test_url = "https://example.com/disallowed-page"
+        result = crawler.is_valid_url(test_url)
+
+        self.assertFalse(result)
+        mock_parser.can_fetch.assert_called_with("Ananda Chatbot Crawler", test_url)
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_fallback_when_unavailable(self, mock_robot_parser_class):
+        """Test URL validation when robots.txt is unavailable."""
+        mock_parser = Mock()
+        mock_parser.read.side_effect = Exception("Network error")
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # When robots.txt is unavailable, crawler should proceed with caution
+        test_url = "https://example.com/some-page"
+        result = crawler.is_valid_url(test_url)
+
+        # Should return True since robots.txt check is skipped
+        self.assertTrue(result)
+        self.assertIsNone(crawler.robots_parser)
+        crawler.close()
+
+
+class TestRateLimiting(unittest.TestCase):
+    """Test cases for rate limiting functionality."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.site_id = "test-site"
+
+        # Mock Path to use temp directory
+        self.path_patcher = patch("crawler.website_crawler.Path")
+        mock_path_constructor = self.path_patcher.start()
+        mock_path_constructor.return_value.parent.return_value = Path(self.temp_dir)
+
+        # Mock sqlite3 to use in-memory database
+        self.original_sqlite_connect = sqlite3.connect
+        self.connect_patcher = patch("sqlite3.connect")
+        mock_sqlite_connect = self.connect_patcher.start()
+        mock_sqlite_connect.side_effect = (
+            lambda db_path_arg: self.original_sqlite_connect(":memory:")
+        )
+
+        # Mock robots.txt to avoid network calls
+        self.robots_patcher = patch("crawler.website_crawler.RobotFileParser")
+        mock_robot_parser_class = self.robots_patcher.start()
+        mock_parser = Mock()
+        mock_robot_parser_class.return_value = mock_parser
+
+    def tearDown(self):
+        """Clean up after tests."""
+        self.path_patcher.stop()
+        self.connect_patcher.stop()
+        self.robots_patcher.stop()
+        shutil.rmtree(self.temp_dir)
+
+    def test_crawl_delay_configuration(self):
+        """Test that crawl delay is properly configured from config file."""
+        site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            "crawl_delay_seconds": 2,
+        }
+
+        crawler = WebsiteCrawler(self.site_id, site_config)
+
+        self.assertEqual(crawler.crawl_delay_seconds, 2)
+        crawler.close()
+
+    def test_crawl_delay_default_value(self):
+        """Test default crawl delay when not specified in config."""
+        site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            # crawl_delay_seconds not specified
+        }
+
+        crawler = WebsiteCrawler(self.site_id, site_config)
+
+        self.assertEqual(crawler.crawl_delay_seconds, 1)  # Default value
+        crawler.close()
+
+    @patch("time.sleep")
+    def test_rate_limiting_enforcement(self, mock_sleep):
+        """Test that rate limiting sleep is enforced after successful page processing."""
+        from crawler.website_crawler import _process_crawl_iteration
+
+        site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            "crawl_delay_seconds": 3,
+        }
+
+        crawler = WebsiteCrawler(self.site_id, site_config)
+
+        # Mock the necessary components for _process_crawl_iteration
+        mock_browser = Mock()
+        mock_page = Mock()
+        mock_pinecone_index = Mock()
+        index_name = "test-index"
+        test_url = "https://example.com/test"
+
+        # Mock successful page processing
+        with (
+            patch("crawler.website_crawler._handle_url_processing", return_value=False),
+            patch.object(crawler, "crawl_page", return_value=(Mock(), [], False)),
+            patch("crawler.website_crawler.is_exiting", return_value=False),
+            patch("crawler.website_crawler._process_page_content", return_value=(1, 1)),
+            patch.object(crawler, "commit_db_changes"),
+        ):
+            pages_inc, restart_inc, should_exit = _process_crawl_iteration(
+                test_url,
+                crawler,
+                mock_browser,
+                mock_page,
+                mock_pinecone_index,
+                index_name,
+            )
+
+            # Verify rate limiting sleep was called
+            mock_sleep.assert_called_with(3)
+            self.assertEqual(pages_inc, 1)
+            self.assertEqual(restart_inc, 1)
+            self.assertFalse(should_exit)
+
+        crawler.close()
+
+    @patch("time.sleep")
+    def test_no_rate_limiting_on_failed_processing(self, mock_sleep):
+        """Test that rate limiting is not applied when page processing fails."""
+        from crawler.website_crawler import _process_crawl_iteration
+
+        site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            "crawl_delay_seconds": 2,
+        }
+
+        crawler = WebsiteCrawler(self.site_id, site_config)
+
+        # Mock the necessary components
+        mock_browser = Mock()
+        mock_page = Mock()
+        mock_pinecone_index = Mock()
+        index_name = "test-index"
+        test_url = "https://example.com/test"
+
+        # Mock failed page processing (pages_inc = 0)
+        with (
+            patch("crawler.website_crawler._handle_url_processing", return_value=False),
+            patch.object(crawler, "crawl_page", return_value=(None, [], False)),
+            patch("crawler.website_crawler.is_exiting", return_value=False),
+            patch("crawler.website_crawler._process_page_content", return_value=(0, 0)),
+            patch.object(crawler, "commit_db_changes"),
+        ):
+            pages_inc, restart_inc, should_exit = _process_crawl_iteration(
+                test_url,
+                crawler,
+                mock_browser,
+                mock_page,
+                mock_pinecone_index,
+                index_name,
+            )
+
+            # Verify rate limiting sleep was NOT called since pages_inc = 0
+            mock_sleep.assert_not_called()
+            self.assertEqual(pages_inc, 0)
+
+        crawler.close()
+
+    @patch("time.sleep")
+    def test_no_rate_limiting_when_delay_zero(self, mock_sleep):
+        """Test that no sleep occurs when crawl delay is set to 0."""
+        from crawler.website_crawler import _process_crawl_iteration
+
+        site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            "crawl_delay_seconds": 0,  # No delay
+        }
+
+        crawler = WebsiteCrawler(self.site_id, site_config)
+
+        # Mock the necessary components
+        mock_browser = Mock()
+        mock_page = Mock()
+        mock_pinecone_index = Mock()
+        index_name = "test-index"
+        test_url = "https://example.com/test"
+
+        # Mock successful page processing
+        with (
+            patch("crawler.website_crawler._handle_url_processing", return_value=False),
+            patch.object(crawler, "crawl_page", return_value=(Mock(), [], False)),
+            patch("crawler.website_crawler.is_exiting", return_value=False),
+            patch("crawler.website_crawler._process_page_content", return_value=(1, 1)),
+            patch.object(crawler, "commit_db_changes"),
+        ):
+            pages_inc, restart_inc, should_exit = _process_crawl_iteration(
+                test_url,
+                crawler,
+                mock_browser,
+                mock_page,
+                mock_pinecone_index,
+                index_name,
+            )
+
+            # Verify no sleep was called since delay is 0
+            mock_sleep.assert_not_called()
+            self.assertEqual(pages_inc, 1)
+
+        crawler.close()
 
 
 if __name__ == "__main__":

@@ -93,26 +93,26 @@ compliance, and enhance error handling and monitoring.
 
 ### Tasks for phase 2
 
-- Solidify single-tenancy support by ensuring all site-specific data (e.g., checkpoint files, SQLite DB as defined in
+- ✓ Solidify single-tenancy support by ensuring all site-specific data (e.g., checkpoint files, SQLite DB as defined in
   Phase 1) is correctly isolated per `site_id`.
-- Implement rate limiting with a configurable `crawl_delay_seconds` in the site's `{site_id}-config.json` (default: 1
+- ✓ Implement rate limiting with a configurable `crawl_delay_seconds` in the site's `{site_id}-config.json` (default: 1
   second).
-- Add `robots.txt` compliance using `urllib.robotparser` to check permissions before crawling.
-- Enhance error handling by storing error messages in `crawl_queue.last_error`.
-- Add monitoring by logging crawl statistics (e.g., pages crawled, success rate).
-- Implement graceful shutdown in `handle_exit` to save checkpoints and close SQLite connection.
+- ✓ Add `robots.txt` compliance using `urllib.robotparser` to check permissions before crawling.
+- ✓ Enhance error handling by storing error messages in `crawl_queue.last_error`.
+- ✓ Add monitoring by logging crawl statistics (e.g., pages crawled, success rate).
+- ✓ Implement graceful shutdown in `handle_exit` to save checkpoints and close SQLite connection.
 
 ### Testing for Phase 2
 
-- Update `data_ingestion/tests/test_crawler.py`.
+- ✓ Update `data_ingestion/tests/test_crawler.py`.
 - Write tests for:
-- Site-specific data isolation (e.g., distinct checkpoint and DB files are used for different `site_id`s, no cross-site
-  interference).
-- Rate limiting enforcement.
-- `robots.txt` compliance.
-- Error handling (storing errors in `crawl_queue`).
-- Monitoring (logging stats).
-- Run tests with `pytest data_ingestion/tests/test_crawler.py -v`.
+- ✓ Site-specific data isolation (e.g., distinct checkpoint and DB files are used for different `site_id`s, no
+  cross-site interference).
+- ✓ Rate limiting enforcement.
+- ✓ `robots.txt` compliance.
+- ✓ Error handling (storing errors in `crawl_queue`).
+- ✓ Monitoring (logging stats).
+- ✓ Run tests with `pytest data_ingestion/tests/test_crawler.py -v`.
 
 ## Phase 3: Optimization and Polish
 

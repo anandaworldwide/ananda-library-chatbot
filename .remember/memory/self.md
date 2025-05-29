@@ -2388,3 +2388,33 @@ to use ada-002 embeddings (1536) with a 3-large index (3072).
 - `OPENAI_INGEST_EMBEDDINGS_DIMENSION=3072` (for 3-large)
 
 **Principle**: Always use explicit environment configuration rather than inferring settings from other variables.
+
+## Mistake: Using Bare Except Clauses
+
+**Problem**: Ruff linting error E722 "Do not use bare `except`" occurs when using `except:` without specifying exception
+types.
+
+**Wrong**: Using bare except that catches all exceptions including system exceptions:
+
+```python
+try:
+    nltk.download('stopwords', quiet=True)
+    return set(stopwords.words('english'))
+except:  # E722 error - catches ALL exceptions
+    print("Warning: NLTK stopwords not available, using basic set")
+    return basic_set
+```
+
+**Correct**: Catch specific exceptions that are expected to occur:
+
+```python
+try:
+    nltk.download('stopwords', quiet=True)
+    return set(stopwords.words('english'))
+except (ImportError, LookupError, OSError) as e:  # Specific exceptions
+    print("Warning: NLTK stopwords not available, using basic set")
+    return basic_set
+```
+
+**Rationale**: Bare except clauses catch system-exiting exceptions like `KeyboardInterrupt` and `SystemExit`, which
+usually shouldn't be caught. Specific exception handling is more precise and safer.

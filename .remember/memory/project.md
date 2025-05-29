@@ -503,3 +503,31 @@ content ingestion:
 Three-step queue-based process:
 
 1. **Queue Status Check**: `manage_queue.py --status`
+
+## Reranking System - Ignore Functionality Added
+
+**Enhancement**: Added support for "ignore" option in relevance scoring for the markdown processing script.
+
+**Implementation**: Modified `reranking/process_markdown.py` to handle "ignore" as an alternative to numeric scores
+(0-3):
+
+- **Regex Pattern**: Updated `SCORE_PATTERN` to accept both `\d` (numeric scores) and case-insensitive "ignore"
+- **Processing Logic**: Documents marked as "ignore" are excluded from both evaluation and fine-tuning datasets
+- **Status Tracking**: Script now reports both scored documents and ignored documents in progress messages
+- **Documentation**: Updated module docstring and warning messages to reflect new functionality
+
+**Benefits**:
+
+- Allows human reviewers to intentionally skip documents without affecting processing completeness
+- Provides clear distinction between missing scores (error) and intentional exclusions (ignore)
+- Maintains data quality by excluding intentionally ignored documents from training datasets
+- Case-insensitive matching handles variations in user input ("ignore", "Ignore", "IGNORE")
+
+**Usage**: Human reviewers can now enter "ignore" instead of a numeric score for documents they want to exclude from the
+datasets while still marking the file as complete.
+
+**Template Updates**: Also updated `reranking/generate_markdown.py` to inform users about the ignore option:
+
+- Added ignore option to main instructions with clear explanation
+- Updated individual document scoring prompts to include "ignore=Skip" and "[Enter 0-3 or ignore]"
+- Maintains consistency between generation and processing scripts
