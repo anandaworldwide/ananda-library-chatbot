@@ -1,0 +1,186 @@
+---
+description: 
+globs: *.ts,*.php
+alwaysApply: false
+---
+# API & Backend Architecture Rules
+
+## API Structure
+
+The backend uses **Next.js API routes** with both Pages Router and App Router patterns:
+
+### Core Chat API
+- **Main endpoint**: [web/src/app/api/chat/v1/route.ts](mdc:web/src/app/api/chat/v1/route.ts)
+- **RAG Pipeline**: Powered by [web/src/utils/server/makechain.ts](mdc:web/src/utils/server/makechain.ts)
+- **Streaming responses** with source citations and related questions
+- **Authentication**: JWT required via [web/src/utils/server/appRouterJwtUtils.ts](mdc:web/src/utils/server/appRouterJwtUtils.ts)
+
+### Authentication Endpoints
+- **Login**: [web/src/pages/api/login.ts](mdc:web/src/pages/api/login.ts) - Username/password authentication
+- **Logout**: [web/src/pages/api/logout.ts](mdc:web/src/pages/api/logout.ts) - Clear auth cookies
+- **Token generation**: [web/src/pages/api/web-token.ts](mdc:web/src/pages/api/web-token.ts) - For external integration
+- **Admin mode**: [web/src/pages/api/sudoCookie.ts](mdc:web/src/pages/api/sudoCookie.ts) - Elevated privileges
+
+### Data Interaction APIs
+- **Voting**: [web/src/pages/api/vote.ts](mdc:web/src/pages/api/vote.ts) - User feedback on answers
+- **Likes**: [web/src/pages/api/like.ts](mdc:web/src/pages/api/like.ts) - Like functionality
+- **Answers**: [web/src/pages/api/answers.ts](mdc:web/src/pages/api/answers.ts) - Retrieve chat history
+- **Related Questions**: [web/src/pages/api/relatedQuestions.ts](mdc:web/src/pages/api/relatedQuestions.ts) - Generate suggestions
+
+## Authentication System
+
+### JWT Implementation
+- **Utilities**: [web/src/utils/server/jwtUtils.ts](mdc:web/src/utils/server/jwtUtils.ts)
+- **Middleware**: [web/src/utils/server/authMiddleware.ts](mdc:web/src/utils/server/authMiddleware.ts)
+- **App Router utils**: [web/src/utils/server/appRouterJwtUtils.ts](mdc:web/src/utils/server/appRouterJwtUtils.ts)
+- **HttpOnly cookies** for secure token storage
+- **Role-based access** (admin/user roles)
+
+### Password Management
+- **Utilities**: [web/src/utils/server/passwordUtils.ts](mdc:web/src/utils/server/passwordUtils.ts)
+- **bcrypt hashing** for secure password storage
+- **Firestore user collection** for credential storage
+
+### Rate Limiting
+- **Redis-based**: [web/src/utils/server/redisUtils.ts](mdc:web/src/utils/server/redisUtils.ts)
+- **Generic limiter**: [web/src/utils/server/genericRateLimiter.ts](mdc:web/src/utils/server/genericRateLimiter.ts)
+- **IP-based limits** with configurable thresholds
+- **Cleanup cron**: [web/src/pages/api/pruneRateLimits.ts](mdc:web/src/pages/api/pruneRateLimits.ts)
+
+## Database Integrations
+
+### Firestore (Primary Storage)
+- **Utilities**: [web/src/utils/server/firestoreUtils.ts](mdc:web/src/utils/server/firestoreUtils.ts)
+- **Service layer**: [web/src/services/firebase.ts](mdc:web/src/services/firebase.ts)
+- **Collections**:
+  - `chatLogs` - Conversation history with metadata
+  - `votes` - User feedback on answers
+  - `likes` - Like counts and user preferences
+  - `users` - Authentication credentials and roles
+  - `npsSurveys` - Net Promoter Score feedback
+
+### Pinecone (Vector Database)
+- **Configuration**: [web/src/config/pinecone.ts](mdc:web/src/config/pinecone.ts)
+- **Client utilities**: [web/src/utils/server/pinecone-client.ts](mdc:web/src/utils/server/pinecone-client.ts)
+- **Namespace separation** by site configuration
+- **Metadata filtering** for source attribution
+
+### Redis (Caching/Rate Limiting)
+- **Connection management**: [web/src/utils/server/redisUtils.ts](mdc:web/src/utils/server/redisUtils.ts)
+- **Key-value storage** for session data and limits
+- **TTL management** for automatic cleanup
+
+## LangChain Integration
+
+### Core Chain Logic
+- **Main chain**: [web/src/utils/server/makechain.ts](mdc:web/src/utils/server/makechain.ts)
+- **Retrieval sequence** with library filtering
+- **Context construction** with source citations
+- **Streaming response** handling
+
+### Model Configuration
+- **OpenAI integration** with configurable models
+- **System prompts** from [site-config/prompts/](mdc:site-config/prompts)
+- **Temperature and token limits** per site configuration
+- **Fallback handling** for API failures
+
+## Site Configuration System
+
+### Multi-Site Support
+- **Config file**: [site-config/config.json](mdc:site-config/config.json)
+- **Site-specific settings**:
+  - Pinecone namespace
+  - Model selection
+  - Feature flags
+  - UI customization
+  - System prompts
+
+### Environment Management
+- **Site-specific env files**: `.env.[site]`
+- **Shared configuration**: [web/src/utils/server/shared/loadSiteConfig.ts](mdc:web/src/utils/server/shared/loadSiteConfig.ts)
+- **Runtime validation** of required variables
+
+## Error Handling Standards
+
+### API Response Patterns
+```typescript
+// Standard error response
+return new Response(JSON.stringify({ 
+  error: 'Error message',
+  code: 'ERROR_CODE'
+}), {
+  status: 400,
+  headers: { 'Content-Type': 'application/json' }
+})
+
+// Success with data
+return new Response(JSON.stringify({
+  success: true,
+  data: responseData
+}), {
+  status: 200,
+  headers: { 'Content-Type': 'application/json' }
+})
+```
+
+### Logging Requirements
+- **Structured logging** with consistent format
+- **Error context** including user/session info
+- **Performance metrics** for optimization
+- **Security event logging** for audit trails
+
+## Security Standards
+
+### Input Validation
+- **Query sanitization** for SQL injection prevention
+- **Parameter validation** with type checking
+- **Content filtering** for malicious input
+- **Rate limiting** on all public endpoints
+
+### CORS Configuration
+- **Allowed origins** configured per environment
+- **Credential handling** for cross-origin requests
+- **Preflight request** support
+- **Security headers** (CSP, HSTS, etc.)
+
+### Environment Security
+- **Secret management** via environment variables
+- **API key rotation** procedures
+- **Database connection** security
+- **Third-party service** authentication
+
+## Testing Requirements
+
+### API Testing
+- **Jest test suite** in [web/__tests__/api/](mdc:web/__tests__/api)
+- **Mock implementations** for external services
+- **Authentication testing** with valid/invalid tokens
+- **Error handling** validation
+
+### Integration Testing
+- **End-to-end flows** from request to response
+- **Database interactions** with test data
+- **External service** mocking
+- **Performance benchmarks** for key endpoints
+
+## Monitoring and Analytics
+
+### Usage Tracking
+- **Request logging** with user attribution
+- **Response times** and error rates
+- **Feature usage** statistics
+- **User behavior** analytics
+
+### Health Monitoring
+- **System status** endpoints
+- **Database connectivity** checks
+- **External service** availability
+- **Resource usage** monitoring
+
+## WordPress Integration
+
+### Plugin Architecture
+- **Plugin directory**: [wordpress/plugins/ananda-ai-chatbot/](mdc:wordpress/plugins/ananda-ai-chatbot)
+- **Secure API client**: [wordpress/plugins/ananda-ai-chatbot/secure-api-client.php](mdc:wordpress/plugins/ananda-ai-chatbot/secure-api-client.php)
+- **Authentication bridge** between WordPress and backend
+- **Shortcode integration** for easy embedding

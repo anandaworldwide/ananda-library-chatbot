@@ -1,0 +1,254 @@
+---
+description: 
+globs: *.tsx
+alwaysApply: false
+---
+# Frontend & UI Development Rules
+
+## Architecture Overview
+
+The frontend is built with **Next.js 14**, **React**, **TypeScript**, and **Tailwind CSS** with a focus on responsive design and accessibility.
+
+### Core Technologies
+- **Framework**: Next.js 14 with App Router
+- **UI Library**: React with TypeScript
+- **Styling**: Tailwind CSS with utility-first approach
+- **State Management**: React hooks and Context API
+- **Testing**: Jest + React Testing Library
+
+## Component Structure
+
+### Component Organization
+- **Location**: [web/src/components/](mdc:web/src/components)
+- **Naming**: PascalCase for component files (e.g., `ChatInterface.tsx`)
+- **Structure**: Functional components with TypeScript interfaces
+- **Exports**: Named exports preferred over default exports
+
+### Key Components
+- **[web/src/components/ui/](mdc:web/src/components/ui)** - Reusable UI primitives
+- **[web/src/components/Header/](mdc:web/src/components/Header)** - Navigation and branding
+- **Chat components** - Main conversation interface
+- **Collection selectors** - Multi-library content switching
+
+### Component Standards
+```typescript
+// Preferred component structure
+interface ComponentProps {
+  title: string
+  isActive?: boolean
+  className?: string
+  onAction: (data: ActionData) => void
+}
+
+export function MyComponent({ title, isActive = false, className, onAction }: ComponentProps) {
+  // Component logic
+  return (
+    <div className={cn('base-styles', isActive && 'active-styles', className)}>
+      {/* Component content */}
+    </div>
+  )
+}
+```
+
+## Styling Standards
+
+### Tailwind CSS Usage
+- **Utility-first approach** for most styling needs
+- **Class merging**: Use [web/src/utils/cn.ts](mdc:web/src/utils/cn.ts) for conditional classes
+- **Responsive design**: Mobile-first with Tailwind breakpoints
+- **Dark mode support**: CSS variables in [web/src/styles/globals.css](mdc:web/src/styles/globals.css)
+
+### CSS Modules (When Needed)
+- **File naming**: `ComponentName.module.css`
+- **Class naming**: camelCase (e.g., `.chatContainer`, `.messageBox`)
+- **Usage**: For complex styling patterns not expressible with utilities
+
+### Styling Examples
+```typescript
+import { cn } from '@/utils/cn'
+
+// Conditional styling with cn utility
+const buttonClasses = cn(
+  'px-4 py-2 rounded-md font-medium transition-colors', // Base styles
+  variant === 'primary' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-900',
+  disabled && 'opacity-50 cursor-not-allowed',
+  className // Allow override via props
+)
+```
+
+## State Management
+
+### React Hooks
+- **Built-in hooks**: `useState`, `useEffect`, `useContext`, `useCallback`, `useMemo`
+- **Custom hooks**: Located in [web/src/hooks/](mdc:web/src/hooks)
+- **Key hooks**:
+  - `useChat` - Chat interface state management
+  - `useVote` - User feedback functionality
+  - `useMultipleCollections` - Library switching
+
+### Context Patterns
+- **Site configuration context** for multi-site support
+- **Authentication context** for user state
+- **Theme context** for dark/light mode
+- **Error boundary** context for error handling
+
+## Page Structure (App Router)
+
+### App Directory
+- **Location**: [web/src/app/](mdc:web/src/app)
+- **Routing**: File-based routing with App Router conventions
+- **Layouts**: Shared layouts for consistent UI structure
+- **Loading states**: `loading.tsx` files for async boundaries
+
+### Page Components
+```typescript
+// Example page structure
+export default function ChatPage() {
+  return (
+    <main className="min-h-screen bg-gradient-to-b from-white to-gray-50">
+      <Header />
+      <ChatInterface />
+      <Footer />
+    </main>
+  )
+}
+
+// With metadata export
+export const metadata = {
+  title: 'Chat - Ananda Library',
+  description: 'Ask questions about spiritual teachings'
+}
+```
+
+## User Experience Standards
+
+### Accessibility (a11y)
+- **Semantic HTML**: Proper element usage (`button`, `nav`, `main`, etc.)
+- **Labels**: All form controls must have associated labels
+- **Keyboard navigation**: Full keyboard accessibility
+- **Focus management**: Visible focus indicators and logical tab order
+- **ARIA attributes**: Used for dynamic content and custom controls
+- **Screen reader support**: Meaningful text alternatives
+
+### Responsive Design
+- **Mobile-first approach** with progressive enhancement
+- **Breakpoint usage**: Tailwind's responsive prefixes (`sm:`, `md:`, `lg:`, `xl:`)
+- **Touch-friendly targets**: Minimum 44px tap targets on mobile
+- **Flexible layouts**: Grid and flexbox for adaptive content
+
+### Performance
+- **Image optimization**: Next.js Image component with WebP format
+- **Lazy loading**: Defer non-critical content loading
+- **Code splitting**: Component-level code splitting
+- **Bundle optimization**: Tree shaking and dead code elimination
+
+## Interaction Patterns
+
+### Chat Interface
+- **Streaming responses**: Real-time message display
+- **Message bubbles**: Distinct styling for user vs assistant messages
+- **Source citations**: Linked references to original content
+- **Copy functionality**: One-click copying of responses
+- **Loading states**: Visual feedback during processing
+
+### Form Handling
+- **Validation**: Client-side validation with clear error messages
+- **Submission states**: Loading indicators and success feedback
+- **Error handling**: User-friendly error display
+- **Auto-save**: Preserve user input during navigation
+
+### Navigation
+- **Breadcrumbs**: Clear page hierarchy
+- **Active states**: Visual indication of current page/section
+- **Search functionality**: Accessible search interface
+- **Quick actions**: Keyboard shortcuts for power users
+
+## Testing Standards
+
+### Component Testing
+- **Location**: [web/__tests__/components/](mdc:web/__tests__/components)
+- **Framework**: Jest + React Testing Library
+- **Coverage**: Test user interactions, not implementation details
+- **Mocking**: Mock external dependencies and API calls
+
+### Testing Examples
+```typescript
+// Component test structure
+import { render, screen, fireEvent } from '@testing-library/react'
+import { MyComponent } from './MyComponent'
+
+describe('MyComponent', () => {
+  it('handles user interaction correctly', () => {
+    const mockAction = jest.fn()
+    render(<MyComponent onAction={mockAction} />)
+    
+    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+    expect(mockAction).toHaveBeenCalledWith(expectedData)
+  })
+})
+```
+
+### Integration Testing
+- **End-to-end flows**: Complete user journeys
+- **API integration**: Test with mocked backend responses
+- **Error scenarios**: Handle network failures and edge cases
+- **Accessibility testing**: Automated a11y checks
+
+## Error Handling
+
+### Error Boundaries
+- **React Error Boundaries** for component error catching
+- **Fallback UI**: User-friendly error messages
+- **Error reporting**: Log errors for debugging
+- **Recovery options**: Allow users to retry or navigate away
+
+### Loading States
+- **Skeleton screens**: Placeholder content during loading
+- **Progressive loading**: Show content as it becomes available
+- **Timeout handling**: Handle slow network conditions
+- **Error recovery**: Retry mechanisms for failed requests
+
+## Performance Optimization
+
+### Bundle Optimization
+- **Code splitting**: Route-based and component-based splitting
+- **Tree shaking**: Remove unused code
+- **Dynamic imports**: Lazy load non-critical components
+- **Vendor chunking**: Separate third-party libraries
+
+### Runtime Performance
+- **React optimization**: `memo`, `useCallback`, `useMemo` where appropriate
+- **Image optimization**: Proper sizing and format selection
+- **Network optimization**: Request batching and caching
+- **Memory management**: Cleanup effects and event listeners
+
+## Development Workflow
+
+### File Organization
+```
+web/src/
+├── app/                 # Next.js App Router pages
+├── components/          # Reusable components
+│   ├── ui/             # Base UI components
+│   └── Header/         # Feature-specific components
+├── hooks/              # Custom React hooks
+├── utils/              # Utility functions
+│   ├── client/         # Client-side utilities
+│   └── server/         # Server-side utilities
+├── styles/             # Global styles and CSS modules
+└── types/              # TypeScript type definitions
+```
+
+### Naming Conventions
+- **Components**: PascalCase (`ChatInterface.tsx`)
+- **Hooks**: camelCase with `use` prefix (`useChat.ts`)
+- **Utilities**: camelCase (`formatDate.ts`)
+- **CSS classes**: kebab-case or camelCase for modules
+- **Constants**: UPPER_SNAKE_CASE
+
+### Code Quality
+- **TypeScript strict mode**: Full type safety
+- **ESLint + Prettier**: Consistent code formatting
+- **Import organization**: Group and sort imports logically
+- **Component props**: Explicit interfaces for all props
+- **Documentation**: JSDoc comments for complex logic

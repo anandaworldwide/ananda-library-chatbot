@@ -566,49 +566,42 @@ Must cd into the web directory with 'cd web' before running 'npm test' to execut
 **Problem**: When running a Python script directly from its directory using `./script.py` instead of as a module with
 `python -m`, imports referencing the parent package fail.
 
-**Wrong**:
+**Wrong**: Adding manual sys.path manipulation to fix import issues:
 
 ```python
-# Using relative path calculation that might be unreliable
+# Using sys.path manipulation
 import sys
 import os
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-```
-
-**Correct**:
-
-```python
-# Directly calculate the absolute paths for reliable import resolution
-import sys
-import os
-# Get the absolute path of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# Get the parent directory of the package directory
 parent_dir = os.path.dirname(os.path.dirname(current_dir))
-# Add parent directory to Python path
 sys.path.insert(0, parent_dir)
 ```
 
-This solution ensures that Python can find the parent package when a script is run directly using `./script.py` from
-within its directory.
+**Correct**: Rely on Python path being set correctly and use proper module structure:
+
+```python
+# No sys.path manipulation needed - rely on proper Python path setup
+from pyutil.env_utils import load_env
+from data_ingestion.utils.text_processing import clean_text
+```
+
+**Key Principles**:
+
+- Python path should be set at the environment/project level
+- Scripts should not contain sys.path manipulation code
+- Use proper absolute imports from project root
+- Ensure proper `__init__.py` files exist in all package directories
+
+**Environment Setup**: The Python path should be configured externally (via IDE, virtual environment, or shell setup)
+rather than within individual scripts.
 
 ### Mistake: ModuleNotFoundError for Local Modules in Scripts
 
 **Situation**: When running a Python script from a subdirectory (e.g., `bin/myscript.py`) that imports a local module
 from another directory at the project root level (e.g., `pyutil/some_module.py`), a `ModuleNotFoundError` can occur
-because the script's directory is not automatically part of Python's search path for modules in the way that the current
-working directory is when you run `python -m`.
+because the Python path is not properly configured.
 
-**Wrong**: Script `bin/evaluate_rag_system.py` trying to import `from pyutil.env_utils import load_env` might fail if
-`bin/` is not the current working directory or if `pyutil` is not in a location Python automatically searches (like
-`site-packages`).
-
-**Correct**: To reliably import local modules from other directories within the same project, explicitly add the
-project's root directory (or the specific directory containing the module) to `sys.path` at the beginning of the script.
-
-**Example Snippet (`bin/evaluate_rag_system.py`)**:
+**Wrong**: Adding sys.path manipulation to individual scripts:
 
 ```python
 #!/usr/bin/env python3
@@ -616,18 +609,30 @@ import os
 import sys
 
 # Add project root to Python path
-# Assumes the script is in a subdirectory like 'bin' one level down from project root
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
 # Now, imports like this should work:
 from pyutil.env_utils import load_env
-
-# ... rest of the script ...
 ```
 
-This ensures that Python can find the `pyutil` directory (and other modules at the project root) regardless of how or
-from where the script is executed.
+**Correct**: Configure Python path externally and use clean imports:
+
+```python
+#!/usr/bin/env python3
+# No sys.path manipulation needed
+
+# Clean imports relying on proper Python path setup:
+from pyutil.env_utils import load_env
+from data_ingestion.utils.progress_utils import setup_signal_handlers
+```
+
+**Environment Configuration**: The Python path should be set up at the project/environment level (via virtualenv, IDE
+settings, or shell configuration) so that all modules can be imported cleanly without path manipulation in individual
+scripts.
+
+**Detection**: If you get `ModuleNotFoundError`, fix the Python path setup at the environment level rather than adding
+sys.path hacks to individual files.
 
 ### Mistake: Using outdated OpenAI Embedding API
 
@@ -1763,3 +1768,417 @@ from ..utils.text_splitter_utils import Document, SpacyTextSplitter
 
 **Detection**: Import errors like `ModuleNotFoundError: No module named 'utils'` when running pytest indicate improper
 module structure rather than missing dependencies.
+
+## Website Crawler --stop-after Option Implementation
+
+**Feature**: Added `--stop-after` command line option to website crawler for integration testing support.
+
+**Implementation Details**:
+
+- Added `--stop-after` argument to `parse_arguments()` function with type=int
+- Modified `run_crawl_loop()` to accept and use the stop_after parameter
+- Added check in main crawling loop to break when pages_processed >= stop_after
+- Updated script header documentation with new option and example usage
+- Logs when stop limit is reached for clear feedback
+
+**Usage**: `website_crawler.py --site ananda-public --stop-after 5`
+
+**Purpose**: Enables controlled crawling for integration tests that need a specific number of pages for validation.
+
+## Method Naming Refactoring: SpacyTextSplitter Misleading Method Names
+
+**Context**: After implementing token-based splitting in SpacyTextSplitter, several method names became misleading
+because they no longer matched their actual functionality.
+
+**Problem**: Method names suggested word-based or character-based operations when they actually performed token-based
+operations:
+
+- `_split_by_words()` - Actually split by tokens using spaCy tokenization
+- `_split_by_sentences()` - Still used sentences but with token-based size decisions
+- Log messages referred to "word-based chunks" when they were token-based
+
+**Solution**: Renamed methods to accurately reflect their functionality:
+
+- `_split_by_words()` → `_split_by_tokens()`
+- `_split_by_sentences()` → `_split_by_sentences_with_token_limits()`
+- Updated log message from "word-based chunks" to "token-based chunks"
+
+**Test Updates**: Updated test expectations to match current token-based implementation:
+
+- Very short text: 800 tokens (0 overlap) instead of 1000
+- Short text: 300 tokens (60 overlap) instead of 800/100
+- Medium text: 400 tokens (80 overlap) instead of 1200/200
+- Long text: 500 tokens (100 overlap) instead of 1600/300
+- Increased overlap test tolerance from ±2 to ±5 words for token boundary variations
+
+**Results**: All 20 tests pass, method names now accurately reflect their token-based functionality.
+
+**Files Modified**: `data_ingestion/utils/text_splitter_utils.py`, `data_ingestion/tests/test_text_splitter_utils.py`
+(renamed from `test_spacy_text_splitter.py`)
+
+## Test File Naming Convention: Match Source File Names
+
+**Context**: Test files should follow a consistent naming convention that clearly indicates which source file they test.
+
+**Problem**: Test file was named `test_spacy_text_splitter.py` but it was testing `text_splitter_utils.py`, creating
+confusion about which file was being tested.
+
+**Solution**: Used `git mv` to rename the test file to match the source file:
+
+- `tests/test_spacy_text_splitter.py` → `tests/test_text_splitter_utils.py`
+
+**Benefits**:
+
+- **Clear mapping**: Test file name directly corresponds to source file name
+- **Consistent convention**: Follows `test_{source_file_name}.py` pattern
+- **Preserved history**: Using `git mv` maintains file history and blame information
+- **No broken references**: All 20 tests continue to pass after rename
+
+**Principle**: Test files should use the pattern `test_{source_file_name}.py` to make it immediately clear which source
+file they test, regardless of the specific classes or functionality within that file.
+
+## Mistake: Integration Tests Should Skip When No Data Present
+
+**Context**: Integration tests for chunk quality verification were initially written to assert/fail when no test data
+was found in the Pinecone database.
+
+**Wrong**: Using assertions that cause test failures when no data is present:
+
+```python
+def test_crystal_clarity_pdf_chunks(self, chunk_analyzer):
+    vectors = chunk_analyzer.get_vectors_by_prefix("text||Crystal Clarity||pdf||")
+    assert len(vectors) > 0, "No Crystal Clarity PDF vectors found in test database"
+```
+
+**Correct**: Integration tests should skip gracefully when no test data is available:
+
+```python
+def test_crystal_clarity_pdf_chunks(self, chunk_analyzer):
+    vectors = chunk_analyzer.get_vectors_by_prefix("text||Crystal Clarity||pdf||")
+
+    if len(vectors) == 0:
+        pytest.skip(
+            "No Crystal Clarity PDF vectors found in test database. "
+            "Run manual ingestion first - see tests/INTEGRATION_TEST_SETUP.md"
+        )
+```
+
+**Principle**: Integration tests require real data to be meaningful. When no data is present, skipping is the correct
+behavior rather than failing, as it indicates the test environment needs setup rather than a code defect.
+
+## Mistake: Mock Arguments in Crawler Test Causing Type Comparison Error
+
+**Problem**: In crawler daemon test, passing `MagicMock()` as arguments without setting required attributes caused type
+comparison errors in the actual code.
+
+**Wrong**: Incomplete mock arguments:
+
+```python
+mock_args = MagicMock()
+mock_args.daemon = True  # Missing stop_after attribute
+run_crawl_loop(crawler, MagicMock(), mock_args)
+```
+
+**Correct**: Set all attributes that will be accessed in the code:
+
+```python
+mock_args = MagicMock()
+mock_args.daemon = True
+mock_args.stop_after = None  # Prevent comparison error with int
+run_crawl_loop(crawler, MagicMock(), mock_args)
+```
+
+**Detection**: Error message showed `'>=' not supported between instances of 'int' and 'MagicMock'` indicating missing
+attribute setup.
+
+## Web Crawler Metadata Field Standardization
+
+**Problem**: Web crawler was using inconsistent metadata field names compared to what integration tests expected.
+
+**Wrong**: Using non-standard field names:
+
+```python
+chunk_metadata = {
+    "content_type": "text",  # Should be "type" to match web production code
+    "source": url,           # Missing "url" field
+    "title": page_title,
+    "library": self.domain,
+    # ...
+}
+```
+
+**Correct**: Use field names that match the web production code:
+
+```python
+chunk_metadata = {
+    "type": "text",         # Matches web production code (route.ts uses "type")
+    "url": url,             # Required by integration tests
+    "source": url,          # Keep for backward compatibility
+    "title": page_title,
+    "library": self.domain,
+    # ...
+}
+```
+
+**Key Discovery**: The web production code (`web/src/app/api/chat/v1/route.ts`) uses
+`filter.$and.push({ type: { $in: activeTypes } })` for content type filtering, not `content_type`. Always check what
+field names the web application is actually expecting before standardizing metadata fields.
+
+**Impact**: Ensures consistency across all ingestion methods and allows integration tests to verify metadata
+preservation properly while maintaining compatibility with existing web application filtering logic.
+
+## Mistake: Function Complexity Warning - Extract Helper Methods
+
+**Problem**: Ruff complexity warning `C901: _split_by_sentences_with_token_limits is too complex (12 > 10)` occurs when
+a function has too many decision points and conditional branches.
+
+**Wrong**: Having all logic in a single large function with multiple nested conditions:
+
+```python
+def _split_by_sentences_with_token_limits(self, split_text: str, doc: spacy.language.Doc) -> list[str]:
+    chunks = []
+
+    # Document finding logic
+    split_doc = None
+    if doc:
+        for sent in doc.sents:
+            if sent.text.strip() == split_text.strip():
+                split_doc = sent
+                break
+
+    if not split_doc:
+        split_doc = self.nlp(split_text)
+
+    # Complex sentence processing with multiple conditions
+    for sent in split_doc.sents:
+        # Multiple if/elif/else branches for different sentence scenarios
+        # State management for token accumulation
+        # Multiple exit points and chunk finalization logic
+```
+
+**Correct**: Extract logical units into helper methods to reduce complexity:
+
+```python
+def _get_split_doc(self, split_text: str, doc: spacy.language.Doc):
+    """Get the spaCy doc for the split text, either from the original doc or by re-tokenizing."""
+    # Extract document finding logic
+
+def _add_accumulated_chunk(self, current_chunk_tokens: list, current_token_count: int, chunks: list[str]) -> tuple[list, int]:
+    """Add accumulated tokens as a chunk if they exist."""
+    # Extract chunk finalization logic
+
+def _process_sentence(self, sent, chunks: list[str], current_chunk_tokens: list, current_token_count: int) -> tuple[list, int]:
+    """Process a single sentence and update chunk state."""
+    # Extract sentence processing logic with all conditions
+
+def _split_by_sentences_with_token_limits(self, split_text: str, doc: spacy.language.Doc) -> list[str]:
+    """Split text into sentence-based chunks when it exceeds chunk_size, using token counts."""
+    # Main logic now calls helper methods, reducing complexity to under 10
+```
+
+**Benefits**:
+
+- Reduces cyclomatic complexity from 12 to under 10
+- Improves readability and maintainability
+- Makes testing easier by isolating logical units
+- Preserves all functionality (all tests still pass)
+
+## Mistake: Debug Logging Overwhelming from Third-Party Libraries
+
+**Problem**: Setting root logger to DEBUG level causes excessive debug output from all third-party libraries (Pinecone,
+OpenAI, spaCy, etc.), making it impossible to see your own debug messages.
+
+**Wrong**: Setting global debug level for everything:
+
+```python
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+```
+
+**Correct**: Set root logger to INFO and enable DEBUG only for your specific modules:
+
+```python
+# Configure logging - set root to INFO, enable DEBUG only for this module
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Enable DEBUG only for this script
+```
+
+**Result**: Clean debug output from your code without third-party library spam.
+
+**Applied to Files**:
+
+- `data_ingestion/pdf_to_vector_db.py` ✅
+- `data_ingestion/test_chunking_logging_debug.py` ✅
+- `data_ingestion/tests/test__audio_processing.py` ✅
+- `data_ingestion/db_to_pdf/db_to_pdfs.py` ✅
+
+**Note**: Website crawler (`data_ingestion/crawler/website_crawler.py`) already had correct logging setup.
+
+## Debug Strings for Small Chunk Analysis in SpacyTextSplitter
+
+**Context**: User asked for exact debug strings to look for when debugging small chunk issues in the data ingestion
+pipeline.
+
+**Primary Small Chunk Debug Messages**:
+
+1. **Very Small Chunks Warning**: `Very small chunks detected (ID: <document_id>): minimum <X> words` - Triggers when
+   any chunk has < 50 words
+2. **Very Large Chunks Warning**: `Very large chunks detected (ID: <document_id>): maximum <X> words` - Triggers when
+   any chunk > 800 words
+3. **Large Document Not Chunked**: `Large document not chunked (ID: <document_id>): <X> words in single chunk` -
+   Documents > 1000 words creating only 1 chunk
+
+**Chunk Merging Debug Messages**:
+
+4. **Merge Operations**: `Merged <X> chunks into <Y> words` with variants like "(below target)", "(preserving multiple
+   chunks)"
+5. **Merge Summary**: `Chunk merging (ID: <document_id>): <X> → <Y> chunks, target range: <A> → <B>`
+6. **Small Chunk Preservation**: `Added small chunk separately to preserve multiple chunks: <X> words`
+
+**Content-Specific Messages**:
+
+7. **Very Short Content**: `Very short content (<X> words): No chunking, size=<Y> tokens` - Documents < 200 words
+8. **Dynamic Sizing**: Messages about "Short/Medium/Long content" with token size adjustments
+9. **Token Operations**: Messages about "Applied token-based overlap" and "Split text into <X> token-based chunks"
+
+**Usage**: These messages help identify if small chunks are due to naturally fragmented content, ineffective merging, or
+content that's too short to chunk effectively. High frequency of warning messages indicates content that doesn't fit the
+target 225-450 word range.
+
+## Small Chunk Analysis Script Created
+
+**Context**: User needed to debug 9 small chunks identified during ingestion to understand their source and quality.
+
+**Solution**: Created `data_ingestion/bin/analyze_small_chunks.py` - a comprehensive script to analyze chunk quality in
+Pinecone:
+
+**Key Features**:
+
+- **Finds problematic chunks**: Flags chunks below/above configurable thresholds
+- **Detailed analysis**: Groups by source, shows word count distributions, content types
+- **Content preview**: Shows actual text content to understand why chunks are small
+- **CSV export**: Exports detailed analysis for review in Excel/Sheets
+- **Safe deletion**: Dry-run and batch deletion of problematic chunks
+- **Comprehensive stats**: Shows target range compliance and distribution patterns
+
+**Command Line Options (Fixed Naming)**:
+
+- `--small-threshold` (default 50): Flag chunks below this word count as small
+- `--large-threshold` (default 800): Flag chunks above this word count as large
+- `--show-content`: Display actual chunk text for analysis
+- `--export-csv`: Export results to CSV file
+- `--delete-small --dry-run`: Preview what would be deleted
+
+**Usage Examples**:
+
+```bash
+# Find small chunks (< 50 words)
+python analyze_small_chunks.py --site ananda --library ananda.org
+
+# Find very small chunks with content preview
+python analyze_small_chunks.py --site ananda --library ananda.org --small-threshold 30 --show-content
+
+# Export for detailed analysis
+python analyze_small_chunks.py --site ananda --library ananda.org --export-csv
+```
+
+**Naming Fix**: Initially used confusing `--min-words` and `--max-words` options that sounded like analysis ranges but
+actually defined thresholds for flagging problematic chunks. Renamed to `--small-threshold` and `--large-threshold` to
+clearly indicate their purpose.
+
+## Comprehensive Cursor Rules Generation - Ananda Library Chatbot
+
+**Situation**: User requested generation of comprehensive Cursor rules for the entire Ananda Library Chatbot project,
+with special attention to the docs folder and overall project structure.
+
+**Approach Taken**:
+
+1. **Memory consultation**: Read existing memory files to understand past learnings and project context
+2. **Documentation analysis**: Thoroughly reviewed all documentation files in the docs folder to understand:
+
+   - Product requirements ([docs/PRD.md](mdc:docs/PRD.md))
+   - Backend architecture ([docs/backend-structure.md](mdc:docs/backend-structure.md))
+   - Data ingestion strategy ([docs/data-ingestion.md](mdc:docs/data-ingestion.md))
+   - File organization ([docs/file-structure.md](mdc:docs/file-structure.md))
+   - Frontend guidelines ([docs/frontend-guidelines.md](mdc:docs/frontend-guidelines.md))
+   - Tech stack ([docs/tech-stack.md](mdc:docs/tech-stack.md))
+   - Security requirements ([docs/SECURITY-README.md](mdc:docs/SECURITY-README.md))
+   - Testing strategies ([docs/TESTS-README.md](mdc:docs/TESTS-README.md))
+
+3. **Project structure analysis**: Examined the complete codebase hierarchy to understand:
+   - Multi-technology stack (TypeScript/React, Python, PHP)
+   - Complex data ingestion pipelines with semantic chunking
+   - Multi-site configuration system
+   - Comprehensive testing infrastructure
+
+**Rules Created**:
+
+## Mistake: Function Complexity Violations (Ruff C901)
+
+**Problem**: Functions with multiple if-elif chains and complex logic exceed Ruff's cyclomatic complexity limit (C901
+rule, max 10).
+
+**Wrong**: Large monolithic function with multiple conditional branches:
+
+```python
+def _print_analysis_results(self, small_chunks, large_chunks, small_threshold, large_threshold, show_content):
+    """Print detailed analysis results."""
+    stats = self.chunk_stats
+
+    # Overall statistics section
+    print("\n📈 CHUNK QUALITY ANALYSIS RESULTS")
+    # ... 20+ lines of statistics printing
+
+    # Word count distribution section
+    print("\n📊 Word Count Distribution:")
+    # ... 10+ lines of distribution logic
+
+    # Small chunks analysis section
+    if small_chunks:
+        print(f"\n🔻 SMALL CHUNKS ANALYSIS")
+        # ... 15+ lines of analysis logic
+
+    # Large chunks analysis section
+    if large_chunks:
+        print(f"\n🔺 LARGE CHUNKS ANALYSIS")
+        # ... 15+ lines of similar analysis logic
+```
+
+**Correct**: Break down into focused, single-responsibility methods:
+
+```python
+def _print_analysis_results(self, small_chunks, large_chunks, small_threshold, large_threshold, show_content):
+    """Print detailed analysis results."""
+    self._print_overall_statistics(small_threshold, large_threshold)
+    self._print_distribution_statistics()
+
+    if small_chunks:
+        self._print_small_chunks_analysis(small_chunks, small_threshold, show_content)
+
+    if large_chunks:
+        self._print_large_chunks_analysis(large_chunks, large_threshold, show_content)
+
+def _print_overall_statistics(self, small_threshold: int, large_threshold: int):
+    """Print overall chunk statistics."""
+    # Single focused responsibility
+
+def _print_distribution_statistics(self):
+    """Print word count, source, and content type distributions."""
+    # Single focused responsibility
+```
+
+**Benefits**:
+
+- Each method has a single, clear responsibility
+- Complexity stays under Ruff's C901 limit (≤10)
+- Code is more readable and maintainable
+- Individual components can be tested independently
+- Reusable helper methods reduce duplication
+
+**Pattern**: Extract logical sections into private helper methods with descriptive names. Use the `_` prefix for
+internal methods.
