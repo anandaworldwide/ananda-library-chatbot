@@ -1,8 +1,10 @@
 import logging
+
 from colorama import Fore, Style, init
 
 # Initialize colorama
 init(autoreset=True)
+
 
 class ColorFormatter(logging.Formatter):
     def format(self, record):
@@ -12,6 +14,7 @@ class ColorFormatter(logging.Formatter):
             record.msg = f"{Fore.RED}{record.msg}{Style.RESET_ALL}"
         return super().format(record)
 
+
 def configure_logging(debug=False):
     root_logger = logging.getLogger()
     if not root_logger.handlers:  # Only add handler if none exist
@@ -19,28 +22,19 @@ def configure_logging(debug=False):
         handler = logging.StreamHandler()
         handler.setFormatter(formatter)
         root_logger.addHandler(handler)
-    
-    root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
 
-    # Configure specific loggers
-    loggers_to_adjust = [
-        "openai",
-        "httpx",
-        "httpcore",
-        "boto3",
-        "botocore",
-        "urllib3",
-        "s3transfer",
-        "subprocess",
-        "libavcodec",
-        "libavformat",
-        "libavdevice",
-        "libavfilter",
-        "libswscale",
-        "libswresample",
-        "libpostproc",
+    # Set root logger to WARNING level to reduce noise
+    root_logger.setLevel(logging.WARNING)
+
+    # Configure specific loggers for our code to be at debug level when debug=True
+    our_code_loggers = [
+        "data_ingestion",
+        "pyutil",
+        "__main__",  # For scripts run directly
     ]
-    for logger_name in loggers_to_adjust:
-        logging.getLogger(logger_name).setLevel(
-            logging.INFO if debug else logging.WARNING
-        )
+
+    for logger_name in our_code_loggers:
+        if debug:
+            logging.getLogger(logger_name).setLevel(logging.DEBUG)
+        else:
+            logging.getLogger(logger_name).setLevel(logging.INFO)

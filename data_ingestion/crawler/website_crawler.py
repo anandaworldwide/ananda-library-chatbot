@@ -105,18 +105,6 @@ class PageContent:
     metadata: dict
 
 
-# Function to split content into overlapping chunks using spaCy with dynamic sizing
-def chunk_content(
-    content: str, chunk_size: int = 600, chunk_overlap: int = 120
-) -> list[str]:
-    """Split content into overlapping chunks using spaCy paragraph-based chunking with dynamic sizing"""
-    text_splitter = SpacyTextSplitter()
-
-    chunks = text_splitter.split_text(content)
-    logging.debug(f"Created {len(chunks)} chunks from content using spaCy chunking")
-    return chunks
-
-
 def ensure_scheme(url: str, default_scheme: str = "https") -> str:
     """Ensure a URL has a scheme, adding a default if missing."""
     parsed = urlparse(url)
@@ -144,11 +132,8 @@ class WebsiteCrawler:
         self.skip_patterns = self.config.get("skip_patterns", [])
         self.crawl_frequency_days = self.config.get("crawl_frequency_days", 14)
 
-        # Initialize shared text splitter with dynamic chunking strategy
-        self.text_splitter = SpacyTextSplitter(
-            separator="\n\n",
-            pipeline="en_core_web_sm",
-        )
+        # Initialize shared text splitter with consistent configuration
+        self.text_splitter = SpacyTextSplitter()
 
         # Set up SQLite database for crawl queue
         db_dir = Path(__file__).parent / "db"
@@ -878,15 +863,14 @@ def sanitize_for_id(text: str) -> str:
 
 
 def create_chunks_from_page(page_content, text_splitter=None) -> list[str]:
-    """Create text chunks from page content using spaCy with dynamic sizing."""
-    if text_splitter is None:
-        text_splitter = SpacyTextSplitter(
-            separator="\n\n",
-            pipeline="en_core_web_sm",
-        )
+    """Create text chunks from page content using spaCy with built-in dynamic sizing."""
 
-    # Combine title and content, using the correct attribute name
+    # Combine title and content
     full_text = f"{page_content.title}\n\n{page_content.content}"
+
+    # Create text splitter using built-in dynamic sizing
+    if text_splitter is None:
+        text_splitter = SpacyTextSplitter()
 
     # Use URL as document ID for metrics tracking
     document_id = page_content.url

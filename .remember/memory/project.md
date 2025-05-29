@@ -170,6 +170,26 @@ deduplication and consistent error handling across all ingestion methods.
 - **Target Range**: 225-450 words per chunk with smart merging to achieve 70% target range compliance
 - **Metrics**: Comprehensive logging and statistics tracking across all ingestion methods
 
+## CLI Development Preferences
+
+**Long-form Arguments in Usage**: Always prefer displaying long-form command line arguments in usage statements instead
+of short forms.
+
+**Implementation**: In argparse, put the long-form option first in `add_argument()`:
+
+```python
+# Preferred - shows --video in usage
+parser.add_argument("--video", "-v", metavar="URL", help="YouTube video URL")
+
+# Avoid - shows -v in usage
+parser.add_argument("-v", "--video", metavar="URL", help="YouTube video URL")
+```
+
+**Rationale**: Long-form arguments are more self-documenting and easier to understand in help text and error messages.
+
+**Metavar Usage**: Always provide descriptive metavar values (e.g., `URL`, `PATH`, `ITEM_ID`, `NAME`) instead of letting
+argparse generate confusing ALL CAPS versions.
+
 ## S3 Bucket Policy for Public Access
 
 The user wants to restrict public access to a specific path within the S3 bucket.
@@ -473,3 +493,13 @@ format created compatibility issues with existing filtering code.
 
 **Status**: FULLY RESOLVED - No further action needed. All compatibility issues addressed through format design rather
 than code changes.
+
+## Integration Test Setup Updated for Queue Management
+
+**Updated**: `data_ingestion/tests/INTEGRATION_TEST_SETUP.md` to use the three-call queue management approach for audio
+content ingestion:
+
+**Previous Approach**: Single direct call to transcribe_and_ingest_media.py with specific input file **New Approach**:
+Three-step queue-based process:
+
+1. **Queue Status Check**: `manage_queue.py --status`

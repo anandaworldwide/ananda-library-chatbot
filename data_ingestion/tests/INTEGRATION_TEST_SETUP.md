@@ -111,12 +111,20 @@ python pdf_to_vector_db.py \
 ### 3. Ingest Audio Content
 
 ```bash
-# Audio transcriptions
-python audio_video/transcribe_and_ingest_media.py \
+# Step 1: Check queue status to ensure queue is empty
+python audio_video/manage_queue.py \
   --site test \
-  --library "ananda" \
-  --source-location "ananda" \
-  --input-file "media/test/unit-test-data/how-to-commune-with-god.mp3"
+  --status
+
+# Step 2: Queue up the audio work
+python audio_video/manage_queue.py \
+  --site test \
+  --audio "media/test/bhaktan-test/Energization & Yoga/Energization Exercises.mp3" \
+  --default-author "Test Author" \
+  --library bhaktan
+
+# Step 3: Execute the queue contents
+python audio_video/transcribe_and_ingest_media.py --site test
 ```
 
 ### 4. Ingest Web Content

@@ -2182,3 +2182,98 @@ def _print_distribution_statistics(self):
 
 **Pattern**: Extract logical sections into private helper methods with descriptive names. Use the `_` prefix for
 internal methods.
+
+## Mistake: Showing Full Traceback for Configuration Validation Errors
+
+**Problem**: When manage_queue.py encounters configuration validation errors (like invalid library names), it shows a
+full Python traceback even though a nice, user-friendly error message has already been logged.
+
+**Wrong**: Letting ValueError exceptions bubble up to the main function without handling:
+
+```python
+# In main() function - no exception handling
+if args.status:
+    print_queue_status(queue)
+elif any([args.video, args.playlist, args.audio, args.directory]):
+    add_to_queue(args, queue)  # Can raise ValueError for config errors
+# ... other operations
+```
+
+**Correct**: Add targeted exception handling for configuration validation errors:
+
+```python
+# In main() function - with proper exception handling
+try:
+    if args.status:
+        print_queue_status(queue)
+    elif any([args.video, args.playlist, args.audio, args.directory]):
+        add_to_queue(args, queue)
+    # ... other operations
+except ValueError as e:
+    # Don't print traceback for configuration validation errors -
+    # the error message has already been logged
+    if "library_config.json" in str(e) or "Library" in str(e):
+        return
+    else:
+        # Re-raise other ValueError exceptions that may need full tracebacks
+        raise
+```
+
+**Key Principle**: When you've already logged a clear, user-friendly error message, don't confuse users with technical
+tracebacks. Only show tracebacks for unexpected errors that need debugging.
+
+**Applied to**: `data_ingestion/audio_video/manage_queue.py` - Now gracefully exits on library config validation errors
+without showing traceback.
+
+## Mistake: Incorrect SpacyTextSplitter Parameter Usage in Website Crawler
+
+**Problem**: Website crawler was getting poor chunking statistics (14% chunks under 100 words, only 59.6% in 300-499
+range) due to incorrect `SpacyTextSplitter` parameter usage and manual dynamic sizing logic that conflicted with the
+class's built-in capabilities.
+
+**Wrong**: Attempting to pass `chunk_size` and `chunk_overlap` parameters to `SpacyTextSplitter` constructor and
+implementing manual dynamic sizing:
+
+```python
+# Incorrect - SpacyTextSplitter doesn't accept these parameters
+self.text_splitter = SpacyTextSplitter(
+    chunk_size=1200,  # ❌ Not a valid parameter
+    chunk_overlap=300,  # ❌ Not a valid parameter
+    separator="\n\n",
+    pipeline="en_core_web_sm",
+)
+
+# Incorrect - Manual dynamic sizing conflicts with built-in logic
+def _calculate_dynamic_chunk_size(word_count: int) -> tuple[int, int]:
+    if word_count < 1000:
+        return 800, 200  # ❌ Bypasses SpacyTextSplitter's logic
+```
+
+**Correct**: Use only valid `SpacyTextSplitter` parameters and rely on its built-in dynamic sizing:
+
+```python
+# Correct - Only use supported parameters
+self.text_splitter = SpacyTextSplitter(
+    separator="\n\n",
+    pipeline="en_core_web_sm",
+)
+
+# Correct - Let SpacyTextSplitter handle dynamic sizing internally
+def create_chunks_from_page(page_content, text_splitter=None) -> list[str]:
+    if text_splitter is None:
+        text_splitter = SpacyTextSplitter(
+            separator="\n\n",
+            pipeline="en_core_web_sm",
+        )
+    chunks = text_splitter.split_text(full_text, document_id=document_id)
+    return chunks
+```
+
+**Detection**: `TypeError: SpacyTextSplitter.__init__() got an unexpected keyword argument 'chunk_size'`
+
+**Impact**: After fix, achieved 60-90% target range compliance per page vs. previous poor performance. The
+`SpacyTextSplitter` class has sophisticated built-in dynamic sizing logic based on content length that shouldn't be
+overridden.
+
+**Valid SpacyTextSplitter Parameters**: Only `separator` and `pipeline` - the class handles dynamic chunk sizing
+internally via `_set_dynamic_chunk_size()` method.

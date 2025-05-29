@@ -108,7 +108,8 @@ from pyutil.env_utils import load_env
 from pyutil.logging_utils import configure_logging
 
 # Load library configuration
-with open("library_config.json") as f:
+script_dir = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(script_dir, "library_config.json")) as f:
     LIBRARY_CONFIG = json.load(f)
 
 logger = logging.getLogger(__name__)
@@ -588,71 +589,91 @@ def main():
     parser = argparse.ArgumentParser(description="Manage the ingest queue")
 
     # Add operation arguments
-    parser.add_argument("-v", "--video", help="YouTube video URL")
-    parser.add_argument("-p", "--playlist", help="YouTube playlist URL")
-    parser.add_argument("-a", "--audio", help="Path to audio file")
+    parser.add_argument("--video", "-v", metavar="URL", help="YouTube video URL")
+    parser.add_argument("--playlist", "-p", metavar="URL", help="YouTube playlist URL")
+    parser.add_argument("--audio", "-a", metavar="PATH", help="Path to audio file")
     parser.add_argument(
-        "-D", "--directory", help="Path to directory containing audio files"
+        "--directory",
+        "-D",
+        metavar="PATH",
+        help="Path to directory containing audio files",
     )
-    parser.add_argument("-A", "--default-author", help="Default author of the media")
-    parser.add_argument("-L", "--library", help="Name of the library")
     parser.add_argument(
-        "-l",
+        "--default-author", "-A", metavar="NAME", help="Default author of the media"
+    )
+    parser.add_argument("--library", "-L", metavar="NAME", help="Name of the library")
+    parser.add_argument(
         "--list",
+        "-l",
         action="store_true",
         help="List all items in the processing queue",
     )
     parser.add_argument(
-        "-c", "--clear", action="store_true", help="Clear all items from the queue"
+        "--clear", "-c", action="store_true", help="Clear all items from the queue"
     )
     parser.add_argument(
-        "-f",
         "--reprocess-failed",
+        "-f",
         action="store_true",
         help="Reprocess items in error or interrupted state",
     )
     parser.add_argument(
-        "-C",
         "--remove-completed",
+        "-C",
         action="store_true",
         help="Remove all completed items from the queue",
     )
     parser.add_argument(
-        "-d", "--debug", action="store_true", help="Enable debug logging"
+        "--debug", "-d", action="store_true", help="Enable debug logging"
     )
-    parser.add_argument("-r", "--reprocess", help="Reprocess a specific item by ID")
     parser.add_argument(
-        "-R",
+        "--reprocess", "-r", metavar="ITEM_ID", help="Reprocess a specific item by ID"
+    )
+    parser.add_argument(
         "--reprocess-all",
+        "-R",
         action="store_true",
         help="Reset all items in the queue for reprocessing",
     )
     parser.add_argument(
-        "-P",
         "--playlists-file",
+        "-P",
+        metavar="PATH",
         help="Path to XLSX file containing playlist information",
     )
     parser.add_argument(
-        "-q", "--queue", default=None, help="Specify an alternative queue name"
+        "--queue",
+        "-q",
+        metavar="NAME",
+        default=None,
+        help="Specify an alternative queue name",
     )
     parser.add_argument(
-        "-I",
         "--reprocess-processing-items",
+        "-I",
         action="store_true",
         help="Reprocess items in processing state",
     )
     parser.add_argument(
-        "-x", "--remove", help="Remove a specific item from the queue by ID"
+        "--remove",
+        "-x",
+        metavar="ITEM_ID",
+        help="Remove a specific item from the queue by ID",
     )
     parser.add_argument(
-        "-S", "--status", action="store_true", help="Print the queue status"
+        "--status", "-S", action="store_true", help="Print the queue status"
     )
     parser.add_argument(
-        "-s", "--site", required=True, help="Site ID for environment variables"
+        "--site",
+        "-s",
+        metavar="SITE",
+        required=True,
+        help="Site ID for environment variables",
     )
     parser.add_argument(
-        "-u",
         "--urls-file",
+        "-u",
+        metavar="PATH",
         help="Path to text file containing YouTube URLs (one per line)",
     )
     args = parser.parse_args()
@@ -693,46 +714,55 @@ def main():
         return
 
     # Route to appropriate operation handler
-    if args.status:
-        print_queue_status(queue)
-    elif args.remove:
-        remove_item(queue, args.remove)
-    elif args.playlists_file:
-        process_playlists_file(args, queue)
-    elif args.reprocess_all:
-        reprocess_all_items(queue)
-    elif args.reprocess:
-        reprocess_item(queue, args.reprocess)
-    elif args.list:
-        list_queue_items(queue)
-    elif args.clear:
-        clear_queue(queue)
-    elif args.reprocess_failed:
-        reset_stuck_items(queue)
-    elif args.reprocess_processing_items:
-        reset_processing_items(queue)
-    elif args.remove_completed:
-        remove_completed_items(queue)
-    elif args.urls_file:
-        if not args.default_author or not args.library:
-            logger.error(
-                "For adding items, you must specify both --default-author and --library"
-            )
+    try:
+        if args.status:
+            print_queue_status(queue)
+        elif args.remove:
+            remove_item(queue, args.remove)
+        elif args.playlists_file:
+            process_playlists_file(args, queue)
+        elif args.reprocess_all:
+            reprocess_all_items(queue)
+        elif args.reprocess:
+            reprocess_item(queue, args.reprocess)
+        elif args.list:
+            list_queue_items(queue)
+        elif args.clear:
+            clear_queue(queue)
+        elif args.reprocess_failed:
+            reset_stuck_items(queue)
+        elif args.reprocess_processing_items:
+            reset_processing_items(queue)
+        elif args.remove_completed:
+            remove_completed_items(queue)
+        elif args.urls_file:
+            if not args.default_author or not args.library:
+                logger.error(
+                    "For adding items, you must specify both --default-author and --library"
+                )
+                parser.print_help()
+                return
+            process_urls_file(args, queue)
+        elif any([args.video, args.playlist, args.audio, args.directory]):
+            if not args.default_author or not args.library:
+                logger.error(
+                    "For adding items, you must specify both --default-author and --library"
+                )
+                parser.print_help()
+                return
+            add_to_queue(args, queue)
+        else:
+            logger.error("No valid operation specified.")
             parser.print_help()
             return
-        process_urls_file(args, queue)
-    elif any([args.video, args.playlist, args.audio, args.directory]):
-        if not args.default_author or not args.library:
-            logger.error(
-                "For adding items, you must specify both --default-author and --library"
-            )
-            parser.print_help()
+    except ValueError as e:
+        # Don't print traceback for configuration validation errors -
+        # the error message has already been logged
+        if "library_config.json" in str(e) or "Library" in str(e):
             return
-        add_to_queue(args, queue)
-    else:
-        logger.error("No valid operation specified.")
-        parser.print_help()
-        return
+        else:
+            # Re-raise other ValueError exceptions that may need full tracebacks
+            raise
 
     # Display final queue status
     queue_status = queue.get_queue_status()

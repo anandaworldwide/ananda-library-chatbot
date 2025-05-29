@@ -461,6 +461,7 @@ def worker(task_queue, result_queue, args, stop_event):
     # Each worker maintains isolated OpenAI/Pinecone connections
     # to avoid resource sharing issues between processes
     configure_logging(args.debug)
+    logger = logging.getLogger(__name__)
     client = OpenAI()
     index = load_pinecone()
 
@@ -472,17 +473,17 @@ def worker(task_queue, result_queue, args, stop_event):
                 # Poison pill received - worker should terminate
                 break
 
-            logging.debug(f"Worker processing item: {item}")
+            logger.debug(f"Worker processing item: {item}")
             # Process item and report results back to main thread
             item_id, report = process_item(item, args, client, index)
-            logging.debug(f"Worker processed item: {item_id}, report: {report}")
+            logger.debug(f"Worker processed item: {item_id}, report: {report}")
             result_queue.put((item_id, report))
         except Empty:
             # No work available - keep checking until stop_event is set
             continue
         except Exception as e:
-            logging.error(f"Worker error: {str(e)}")
-            logging.exception("Full traceback:")
+            logger.error(f"Worker error: {str(e)}")
+            logger.exception("Full traceback:")
             # Ensure the item ID is included in the error report
             if "item" in locals():
                 result_queue.put((item["id"], {"errors": 1, "error_details": [str(e)]}))
@@ -886,7 +887,7 @@ def main():
     ) as pool:
         # Set up graceful shutdown handlers for clean termination
         def graceful_shutdown(_signum, _frame):
-            logging.info("\nReceived interrupt signal. Shutting down gracefully...")
+            logger.info("\nReceived interrupt signal. Shutting down gracefully...")
             stop_event.set()
             for _ in range(num_processes):
                 task_queue.put(None)
@@ -954,13 +955,13 @@ def main():
 
                     except Empty:
                         # Log timeout but continue - workers may still be processing
-                        logging.info(
+                        logger.info(
                             "Main loop: Timeout while waiting for results. Continuing..."
                         )
 
         except Exception as e:
-            logging.error(f"Error processing items: {str(e)}")
-            logging.exception("Full traceback:")
+            logger.error(f"Error processing items: {str(e)}")
+            logger.exception("Full traceback:")
 
     print("\nOverall Processing Report:")
     print_report(overall_report)
@@ -971,7 +972,7 @@ def main():
         print_enhanced_chunk_statistics(overall_report["chunk_lengths"])
 
     queue_status = ingest_queue.get_queue_status()
-    logging.info(f"Final queue status: {queue_status}")
+    logger.info(f"Final queue status: {queue_status}")
 
     # Explicitly reset the terminal state
     reset_terminal()

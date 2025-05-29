@@ -7,3 +7,4 @@
 /audio_video/data/
 **/ingestion_checkpoints/
 /pdf_corpus_analysis_*
+/queue*/*.json
