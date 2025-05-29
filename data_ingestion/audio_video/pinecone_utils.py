@@ -5,11 +5,7 @@ import sys
 
 from pinecone import NotFoundException, Pinecone, PineconeException, ServerlessSpec
 
-# Add parent directory to path for imports
-sys.path.append(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-from data_ingestion.utils.document_hash import generate_document_hash
+from data_ingestion.utils.pinecone_utils import generate_vector_id
 
 logger = logging.getLogger(__name__)
 
@@ -150,26 +146,18 @@ def store_in_pinecone(
 
     vectors = []
     for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
-        # Generate document-level hash instead of chunk content hash
-        document_hash = generate_document_hash(
-            source=url or s3_key or "unknown_source",
+        # Generate standardized vector ID using the shared utility
+        content_type = "video" if is_youtube_video else "audio"
+        source_location = "video" if is_youtube_video else "audio"
+
+        chunk_id = generate_vector_id(
+            library_name=library_name,
             title=title,
+            chunk_index=i,
+            source_location=source_location,
+            source_identifier=url or s3_key or "unknown_source",
+            content_type=content_type,
             author=author,
-            library=library_name,
-        )
-
-        # Replace offensive single quote with acceptable one
-        if title:
-            title = title.replace("’", "'")
-
-        # Sanitize the title to ensure it's ASCII-compatible
-        sanitized_title = (
-            re.sub(r"[^\x00-\x7F]+", "", title) if title else "Unknown_Title"
-        )
-
-        chunk_id = (
-            f"{'youtube' if is_youtube_video else 'audio'}||{library_name}||"
-            + f"{sanitized_title}||{document_hash}||chunk{i + 1}"
         )
 
         # Duration calculation for content navigation

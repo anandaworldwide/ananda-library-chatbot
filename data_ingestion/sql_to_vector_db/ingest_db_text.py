@@ -15,10 +15,12 @@ Command Line Arguments:
     --library-name: Required. Name of the library for Pinecone metadata.
     --keep-data: Optional. Keep existing data in Pinecone (resume from checkpoint).
     --batch-size: Optional. Number of documents to process in parallel for embeddings/upserts (default: 50).
+    --max-records: Optional. Maximum number of records to process (useful for testing or incremental processing).
     --dry-run: Optional. Perform all steps except Pinecone index creation, deletion, and upsertion.
 
 Example Usage:
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --keep-data
+    python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --max-records 100 --dry-run
 """
 
 import argparse
@@ -71,30 +73,44 @@ def parse_arguments():
     )
     parser.add_argument(
         "--site",
+        "-s",
         required=True,
         help="Site name (e.g., ananda, jairam) for config and env loading.",
     )
     parser.add_argument(
-        "--database", required=True, help="Name of the MySQL database to connect to."
+        "--database",
+        "-d",
+        required=True,
+        help="Name of the MySQL database to connect to.",
     )
     parser.add_argument(
         "--library-name",
+        "-l",
         required=True,
         help="Name of the library for Pinecone metadata.",
     )
     parser.add_argument(
         "--keep-data",
+        "-k",
         action="store_true",
         help="Keep existing data in Pinecone (resume from checkpoint).",
     )
     parser.add_argument(
         "--batch-size",
+        "-b",
         type=int,
         default=DEFAULT_BATCH_SIZE,
         help=f"Number of documents to process in parallel for embeddings/upserts (default: {DEFAULT_BATCH_SIZE}).",
     )
     parser.add_argument(
+        "--max-records",
+        "-m",
+        type=int,
+        help="Maximum number of records to process (useful for testing or incremental processing).",
+    )
+    parser.add_argument(
         "--dry-run",
+        "-n",
         action="store_true",
         help="Perform all steps except Pinecone index creation, deletion, and upsertion.",
     )
@@ -361,6 +377,11 @@ def get_config(site):
             "post_types": ["content"],  # WordPress post types to ingest
             "category_taxonomy": "library-category",  # The WP taxonomy name used for categories
         },
+        "test": {
+            "base_url": "https://test.anandalibrary.org/",  # Test base URL for constructing permalinks
+            "post_types": ["content"],  # WordPress post types to ingest
+            "category_taxonomy": "library-category",  # The WP taxonomy name used for categories
+        },
     }
     if site not in config:
         print(f"Error: Site configuration for '{site}' not found.")
@@ -399,7 +420,7 @@ def calculate_permalink(
 ) -> str:
     """Calculates the likely permalink based on WP structure and site-specific configurations, including multiple parent slugs."""
 
-    if site == "ananda" and post_type == "content":
+    if site in ["ananda", "test"] and post_type == "content":
         # Build the ancestor path by filtering out None slugs and joining them
         ancestor_slugs = [
             slug for slug in [parent_slug_3, parent_slug_2, parent_slug_1] if slug
@@ -429,7 +450,12 @@ def calculate_permalink(
 
 
 def fetch_data(
-    db_connection, site_config: dict, library_name: str, authors: dict, site: str
+    db_connection,
+    site_config: dict,
+    library_name: str,
+    authors: dict,
+    site: str,
+    max_records: int = None,
 ) -> list[dict]:
     """Fetches, cleans, and prepares post data from the database for ingestion."""
     post_types = site_config["post_types"]
@@ -484,15 +510,27 @@ def fetch_data(
             child.ID, child.post_content, child.post_name, PARENT_TITLE_1, PARENT_TITLE_2, PARENT_TITLE_3, PARENT3_AUTHOR_ID,
             CHILD_TITLE, child.post_author, child.post_date, child.post_type
         ORDER BY
-            child.ID; -- Order by ID for potentially easier debugging/checkpointing
+            child.ID -- Order by ID for potentially easier debugging/checkpointing
         """
+
+    # Add LIMIT clause if max_records is specified
+    if max_records:
+        query += f" LIMIT {max_records}"
+        print(f"Note: Limiting query to {max_records} records as requested.")
+
+    query += ";"
 
     processed_data = []
     try:
         with db_connection.cursor() as cursor:
             # Parameters: post_types for parents, category taxonomy, author taxonomy, post_types for child WHERE clause
             params = post_types * 3 + [category_taxonomy, author_taxonomy] + post_types
-            print("Executing main data fetching query (including authors)...")
+            if max_records:
+                print(
+                    f"Executing main data fetching query (limited to {max_records} records)..."
+                )
+            else:
+                print("Executing main data fetching query (including authors)...")
             start_time = time.time()
             cursor.execute(query, params)
             results = cursor.fetchall()  # Fetch all results at once
@@ -924,13 +962,19 @@ def handle_checkpoint_or_clear_data(
 
 
 def fetch_all_data(
-    db_connection, site_config: dict, library_name: str, site: str
+    db_connection,
+    site_config: dict,
+    library_name: str,
+    site: str,
+    max_records: int = None,
 ) -> list[dict]:
     """Fetches author and main post data."""
     print("Fetching author data...")
     authors = fetch_authors(db_connection)
     print("Fetching and preparing main post data...")
-    all_rows = fetch_data(db_connection, site_config, library_name, authors, site)
+    all_rows = fetch_data(
+        db_connection, site_config, library_name, authors, site, max_records
+    )
     if not all_rows:
         print("No data fetched from the database matching criteria.")
     return all_rows
@@ -1049,6 +1093,7 @@ def main():
     print(f"Target Library Name: {args.library_name}")
     print(f"Keep Existing Data: {args.keep_data}")
     print(f"Batch Size: {args.batch_size}")
+    print(f"Max Records: {args.max_records}")
     dry_run = args.dry_run
     if dry_run:
         print("\n*** DRY RUN MODE ENABLED ***")
@@ -1076,7 +1121,7 @@ def main():
         )
 
         all_rows = fetch_all_data(
-            db_connection, site_config, args.library_name, args.site
+            db_connection, site_config, args.library_name, args.site, args.max_records
         )
 
         if all_rows:

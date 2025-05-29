@@ -36,11 +36,11 @@ from pinecone import Index
 from tqdm import tqdm
 
 from data_ingestion.utils.checkpoint_utils import pdf_checkpoint_integration
-from data_ingestion.utils.document_hash import generate_document_hash
 from data_ingestion.utils.embeddings_utils import OpenAIEmbeddings
 from data_ingestion.utils.pinecone_utils import (
     clear_library_vectors,
     create_pinecone_index_if_not_exists,
+    generate_vector_id,
     get_pinecone_client,
     get_pinecone_ingest_index_name,
 )
@@ -715,19 +715,21 @@ async def process_chunk(
         )
         return
 
-    title = doc.metadata.get("title", "Untitled")
-    sanitized_title = "".join(
-        c if c.isalnum() or c == "_" else "_" for c in title.replace(" ", "_")
-    )[:40]
+    # Extract metadata
+    title = doc.metadata.get("title", "Unknown")
+    author = doc.metadata.get("author", "Unknown")
+    source_path = doc.metadata.get("source", "")
 
-    # Generate document-level hash for the complete document
-    document_hash = generate_document_hash(
-        source=doc.metadata.get("source", ""),
+    # Generate standardized vector ID using the shared utility
+    id = generate_vector_id(
+        library_name=library_name,
         title=title,
-        author=doc.metadata.get("author"),
-        library=library_name,
+        chunk_index=chunk_index,
+        source_location="pdf",
+        source_identifier=source_path,
+        content_type="text",
+        author=author,
     )
-    id = f"text||{library_name}||{sanitized_title}||{document_hash}||chunk{chunk_index + 1}"
 
     try:
         # Check for shutdown before expensive embedding operation

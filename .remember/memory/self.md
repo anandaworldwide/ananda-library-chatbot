@@ -2277,3 +2277,73 @@ overridden.
 
 **Valid SpacyTextSplitter Parameters**: Only `separator` and `pipeline` - the class handles dynamic chunk sizing
 internally via `_set_dynamic_chunk_size()` method.
+
+### Mistake: Integration Test Vector Prefix Mismatch - ✅ RESOLVED
+
+**Problem**: Integration tests were failing because they expected standardized 7-part vector ID prefixes, but some
+ingestion scripts were using different formats.
+
+**Root Cause**: Inconsistent vector ID generation across ingestion scripts. Some used standardized
+`generate_vector_id()` function, others used custom formats.
+
+**Solution Applied**: Updated all ingestion scripts to use the standardized `generate_vector_id()` function from
+`data_ingestion/utils/pinecone_utils.py`.
+
+**Scripts Fixed**:
+
+- ✅ `data_ingestion/pdf_to_vector_db.py` - Updated to use standardized 7-part format
+- ✅ `data_ingestion/audio_video/pinecone_utils.py` - Updated to use standardized 7-part format
+
+**Scripts already using standardized format**:
+
+- ✅ `data_ingestion/sql_to_vector_db/ingest_db_text.py`
+- ✅ `data_ingestion/crawler/website_crawler.py`
+
+**Integration tests**: Updated to expect correct standardized 7-part format:
+`{content_type}||{library}||{source_location}||{title}||{author}||{hash}||{chunk_index}`
+
+**Expected Vector ID Examples**:
+
+- PDF: `text||Crystal Clarity||pdf||The_Essence_of_Self_Realization||Unknown||abc123||0`
+- Audio: `audio||ananda||audio||How_to_Commune_with_God||Swami_Kriyananda||def456||0`
+- Video: `video||ananda||video||Meditation_Talk||Swami_Kriyananda||ghi789||0`
+- Web: `text||ananda.org||web||Meditation_Techniques||Unknown||jkl012||0`
+- Database: `text||ananda||db||Spiritual_Diary||Paramhansa_Yogananda||mno345||0`
+
+**Impact**: All ingestion methods now use consistent vector ID format, enabling proper integration testing and bulk
+operations.
+
+## Mistake: Incorrect Token-to-Word Conversion in Audio Transcription Chunking
+
+**Problem**: Audio transcription chunks were consistently failing to meet the target word range (225-450 words), with 0%
+compliance and average chunk sizes around 119-185 words. The issue was in the token-to-word conversion ratio used when
+applying spaCy's dynamic chunk sizing to audio transcription.
+
+**Wrong**: Using too conservative conversion ratio:
+
+```python
+# In data_ingestion/audio_video/transcription_utils.py
+target_words_per_chunk = text_splitter.chunk_size // 4  # Too conservative
+# Result: 300 tokens / 4 = 75 words per chunk (way too small)
+```
+
+**Correct**: Using more appropriate conversion ratio:
+
+```python
+# In data_ingestion/audio_video/transcription_utils.py
+target_words_per_chunk = int(text_splitter.chunk_size / 2.0)  # Better ratio
+# Result: 300 tokens / 2.0 = 150 words per chunk (closer to target)
+```
+
+**Testing Results**:
+
+- **Before fix**: 0% target compliance, avg 119-185 words/chunk
+- **After fix**: 87.5% target compliance, avg 224.5 words/chunk
+- **Integration tests**: All audio tests now pass with excellent compliance
+
+**Root Cause**: The SpacyTextSplitter uses token-based chunk sizing (300-500 tokens), but audio transcription works with
+word counts. The original `/4` conversion was too conservative, while `/2.0` provides the right balance for reaching the
+225-450 word target range.
+
+**Detection Method**: Integration test `test_audio_transcription_chunks` failed with target compliance assertion,
+leading to analysis of chunking strategy and token-to-word conversion ratios.

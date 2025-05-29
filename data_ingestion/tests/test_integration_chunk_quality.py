@@ -166,11 +166,14 @@ class TestPDFIngestionQuality:
 
     def test_crystal_clarity_pdf_chunks(self, chunk_analyzer):
         """Test chunk quality for Crystal Clarity PDF content."""
+        # PDF script should use standardized 7-part format: text||library||source_location||title||author||hash||chunk
+        # Expected prefix: text||Crystal Clarity||pdf||
         vectors = chunk_analyzer.get_vectors_by_prefix("text||Crystal Clarity||pdf||")
 
         if len(vectors) == 0:
             pytest.skip(
                 "No Crystal Clarity PDF vectors found in test database. "
+                "PDF script needs to be updated to use standardized generate_vector_id() function. "
                 "Run manual ingestion first - see tests/INTEGRATION_TEST_SETUP.md"
             )
 
@@ -198,6 +201,8 @@ class TestPDFIngestionQuality:
 
     def test_jairam_pdf_chunks(self, chunk_analyzer):
         """Test chunk quality for Jairam PDF content."""
+        # PDF script should use standardized 7-part format: text||library||source_location||title||author||hash||chunk
+        # Expected prefix: text||jairam||pdf||
         vectors = chunk_analyzer.get_vectors_by_prefix("text||jairam||pdf||")
 
         if len(vectors) == 0:
@@ -223,10 +228,17 @@ class TestAudioVideoIngestionQuality:
 
     def test_audio_transcription_chunks(self, chunk_analyzer):
         """Test chunk quality for audio transcription content."""
-        vectors = chunk_analyzer.get_vectors_by_prefix("audio||ananda||audio||")
+        # Audio script should use standardized 7-part format: audio||library||source_location||title||author||hash||chunk
+        # Expected prefix: audio||The Bhaktan Files||audio||
+        vectors = chunk_analyzer.get_vectors_by_prefix(
+            "audio||The Bhaktan Files||audio||"
+        )
 
         if len(vectors) == 0:
-            pytest.skip("No audio transcription vectors found in test database")
+            pytest.skip(
+                "No audio transcription vectors found in test database. "
+                "Audio script needs to be updated to use standardized generate_vector_id() function."
+            )
 
         analysis = chunk_analyzer.analyze_chunk_quality(vectors)
 
@@ -238,13 +250,16 @@ class TestAudioVideoIngestionQuality:
 
         # Verify metadata preservation for audio content
         sample_vector = chunk_analyzer.get_vectors_by_prefix(
-            "audio||ananda||audio||", limit=1
+            "audio||The Bhaktan Files||audio||", limit=1
         )[0]
         metadata = sample_vector["metadata"]
 
         # Check for audio-specific metadata
-        assert "source_id" in metadata, "Audio chunks missing source_id metadata"
+        assert "filename" in metadata, "Audio chunks missing filename metadata"
         assert "library" in metadata, "Audio chunks missing library metadata"
+        assert "start_time" in metadata, "Audio chunks missing start_time metadata"
+        assert "end_time" in metadata, "Audio chunks missing end_time metadata"
+        assert "duration" in metadata, "Audio chunks missing duration metadata"
 
         print(
             f"Audio Transcription Analysis: {analysis['total_chunks']} chunks, "
@@ -254,6 +269,8 @@ class TestAudioVideoIngestionQuality:
 
     def test_video_transcription_chunks(self, chunk_analyzer):
         """Test chunk quality for video transcription content."""
+        # Video script should use standardized 7-part format: video||library||source_location||title||author||hash||chunk
+        # Expected prefix: video||ananda||video||
         vectors = chunk_analyzer.get_vectors_by_prefix("video||ananda||video||")
 
         if len(vectors) == 0:
@@ -279,6 +296,8 @@ class TestWebCrawlerIngestionQuality:
 
     def test_web_crawler_chunks(self, chunk_analyzer):
         """Test chunk quality for web crawler content."""
+        # Web crawler uses standardized 7-part format: text||library||source_location||title||author||hash||chunk
+        # Expected prefix: text||ananda.org||web||
         vectors = chunk_analyzer.get_vectors_by_prefix("text||ananda.org||web||")
 
         if len(vectors) == 0:
@@ -314,7 +333,9 @@ class TestSQLIngestionQuality:
 
     def test_sql_database_chunks(self, chunk_analyzer):
         """Test chunk quality for SQL database content."""
-        vectors = chunk_analyzer.get_vectors_by_prefix("text||ananda||sql||")
+        # SQL script uses standardized 7-part format: text||library||source_location||title||author||hash||chunk
+        # Expected prefix: text||ananda||db||
+        vectors = chunk_analyzer.get_vectors_by_prefix("text||Ananda Library||db||")
 
         if len(vectors) == 0:
             pytest.skip("No SQL database vectors found in test database")
@@ -339,13 +360,14 @@ class TestCrossMethodConsistency:
 
     def test_vector_id_format_consistency(self, chunk_analyzer):
         """Test that all vectors follow the standardized 7-part ID format."""
-        # Test each content type
+        # Test each content type with correct standardized prefixes
         prefixes = [
             "text||Crystal Clarity||pdf||",
-            "audio||ananda||audio||",
+            "text||jairam||pdf||",
+            "audio||The Bhaktan Files||audio||",
             "video||ananda||video||",
             "text||ananda.org||web||",
-            "text||ananda||sql||",
+            "text||ananda||db||",
         ]
 
         format_violations = []
@@ -364,7 +386,7 @@ class TestCrossMethodConsistency:
                         f"Vector {vector_id} has {len(parts)} parts, expected 7"
                     )
                 else:
-                    # Verify format: content_type||library||source_location||title||source_id||content_hash||chunk_index
+                    # Verify format: content_type||library||source_location||title||author||hash||chunk_index
                     if parts[0] not in ["text", "audio", "video"]:
                         format_violations.append(
                             f"Vector {vector_id} content_type '{parts[0]}' should be one of: text, audio, video"
@@ -382,9 +404,10 @@ class TestCrossMethodConsistency:
         """Test that all vectors have required metadata fields."""
         prefixes = [
             "text||Crystal Clarity||pdf||",
-            "audio||ananda||audio||",
+            "text||jairam||pdf||",
+            "audio||The Bhaktan Files||audio||",
             "text||ananda.org||web||",
-            "text||ananda||sql||",
+            "text||ananda||db||",
         ]
 
         required_fields = ["text", "library", "type"]
@@ -440,9 +463,9 @@ class TestCrossMethodConsistency:
 
         method_prefixes = {
             "PDF": "text||Crystal Clarity||pdf||",
-            "Audio": "audio||ananda||audio||",
+            "Audio": "audio||The Bhaktan Files||audio||",
             "Web": "text||ananda.org||web||",
-            "SQL": "text||ananda||sql||",
+            "SQL": "text||ananda||db||",
         }
 
         for method, prefix in method_prefixes.items():

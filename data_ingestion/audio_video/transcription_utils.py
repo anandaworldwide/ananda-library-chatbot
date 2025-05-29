@@ -494,9 +494,9 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
         # Set dynamic chunk size based on content length (but work with words, not text)
         word_count = len(words)
         text_splitter._set_dynamic_chunk_size(word_count)
-        target_words_per_chunk = (
-            text_splitter.chunk_size // 4
-        )  # Rough tokens-to-words conversion
+        target_words_per_chunk = int(
+            text_splitter.chunk_size / 2.0
+        )  # More aggressive conversion to reach target word range
 
         logger.debug(
             f"Dynamic target: ~{target_words_per_chunk} words per chunk based on {word_count} total words"
