@@ -2347,3 +2347,44 @@ word counts. The original `/4` conversion was too conservative, while `/2.0` pro
 
 **Detection Method**: Integration test `test_audio_transcription_chunks` failed with target compliance assertion,
 leading to analysis of chunking strategy and token-to-word conversion ratios.
+
+### Mistake: Hardcoded Dimension Validation in RAG Evaluation
+
+**Problem**: The `evaluate_rag_system.py` script was using hardcoded logic to determine expected vector dimensions based
+on index names rather than using the actual embedding model dimensions from environment variables.
+
+**Wrong**: Hardcoded dimension logic based on index name comparison:
+
+```python
+expected_dimension = (
+    1536 if index_name == os.getenv("PINECONE_INDEX_NAME") else 3072
+)
+```
+
+**Correct**: Use environment variables for dimensions that match the embedding models:
+
+```python
+# In load_environment() - require dimension environment variables
+required_vars = [
+    "OPENAI_EMBEDDINGS_DIMENSION",
+    "OPENAI_INGEST_EMBEDDINGS_DIMENSION",
+    # ... other vars
+]
+
+# In main() - read dimensions from environment
+CURRENT_DIMENSION = int(os.getenv("OPENAI_EMBEDDINGS_DIMENSION"))
+NEW_DIMENSION = int(os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION"))
+
+# Pass to index validation
+current_index = get_pinecone_index(pinecone_client, CURRENT_INDEX_NAME, CURRENT_EMBEDDING_MODEL, CURRENT_DIMENSION)
+```
+
+**Impact**: Caused "Vector dimension 1536 does not match the dimension of the index 3072" errors when the script tried
+to use ada-002 embeddings (1536) with a 3-large index (3072).
+
+**Environment Configuration**: Each site's `.env.{site}` file should specify:
+
+- `OPENAI_EMBEDDINGS_DIMENSION=1536` (for ada-002)
+- `OPENAI_INGEST_EMBEDDINGS_DIMENSION=3072` (for 3-large)
+
+**Principle**: Always use explicit environment configuration rather than inferring settings from other variables.

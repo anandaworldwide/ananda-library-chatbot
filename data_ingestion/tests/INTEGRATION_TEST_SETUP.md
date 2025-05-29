@@ -142,9 +142,9 @@ python crawler/website_crawler.py \
 # SQL database content
 python sql_to_vector_db/ingest_db_text.py \
   --site test \
-  --library "ananda" \
-  --source-location "ananda" \
-  --max-records 20
+  --database anandalib_2025_03_06 \
+  --library "Ananda Library" \
+  --max-records 10
 ```
 
 ## Verification

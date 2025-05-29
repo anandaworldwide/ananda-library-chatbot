@@ -6,7 +6,7 @@ Key Operations:
 - Loads configurations via a `--site` argument, setting environment variables dynamically.
 - Connects to two Pinecone indexes (current: corpus-2025-02-15, new: test-2025-05-17--3-large-3072).
 - Processes a human-judged dataset (`evaluation_dataset_ananda.jsonl`) with queries and relevance scores.
-- For each query and system (current: text-embedding-ada-002, new: text-embedding-3-large):
+- For each query and system:
     - Tests multiple chunking strategies (fixed-size and spaCy-based) defined in CHUNKING_STRATEGIES.
     - Retrieves top-K documents, applying strategy-specific chunking.
     - Matches retrieved chunks to judged documents using `difflib.SequenceMatcher`.
@@ -17,7 +17,7 @@ Key Operations:
 Dependencies:
 - Populated Pinecone indexes are required.
 - Requires spaCy with `en_core_web_sm` for semantic chunking.
-- Correct index dimensions (1536 for ada-002, 3072 for 3-large) are critical.
+- Correct index dimensions  are critical.
 
 Future Improvements:
 - Add CLI arguments for selecting chunking strategies.
@@ -127,8 +127,10 @@ def load_environment(site: str):
         "PINECONE_INDEX_NAME",
         "OPENAI_API_KEY",
         "OPENAI_EMBEDDINGS_MODEL",
+        "OPENAI_EMBEDDINGS_DIMENSION",
         "PINECONE_INGEST_INDEX_NAME",
         "OPENAI_INGEST_EMBEDDINGS_MODEL",
+        "OPENAI_INGEST_EMBEDDINGS_DIMENSION",
     ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
     if missing_vars:
@@ -146,8 +148,10 @@ def get_pinecone_client():
     return Pinecone(api_key=api_key)
 
 
-def get_pinecone_index(pinecone_client, index_name):
-    """Get the Pinecone index object for the specified index name."""
+def get_pinecone_index(
+    pinecone_client, index_name, embedding_model, expected_dimension
+):
+    """Get the Pinecone index object for the specified index name and validate dimensions."""
     try:
         index = pinecone_client.Index(index_name)
         stats = index.describe_index_stats()
@@ -156,12 +160,12 @@ def get_pinecone_index(pinecone_client, index_name):
         )
         dimension = stats.get("dimension", "Unknown")
         print(f"Index '{index_name}' dimension: {dimension}")
-        expected_dimension = (
-            1536 if index_name == os.getenv("PINECONE_INDEX_NAME") else 3072
-        )
+        print(f"Expected dimension for model '{embedding_model}': {expected_dimension}")
+
         if dimension != expected_dimension:
-            print(
-                f"WARNING: Expected dimension {expected_dimension} for {index_name}, got {dimension}"
+            raise ValueError(
+                f"Dimension mismatch for index '{index_name}': expected dimension {expected_dimension} for model '{embedding_model}', but got {dimension}. "
+                f"Ensure that PINECONE_INDEX_NAME matches OPENAI_EMBEDDINGS_DIMENSION and PINECONE_INGEST_INDEX_NAME matches OPENAI_INGEST_EMBEDDINGS_DIMENSION in your environment configuration."
             )
         if stats["total_vector_count"] == 0:
             print(
@@ -324,7 +328,7 @@ def retrieve_documents(
     if query_embedding is None:
         return [], 0.0
 
-    # Query Pinecone
+    # Ensure the embedding dimension matches the index expectation
     try:
         results = index.query(
             vector=query_embedding, top_k=top_k * 2, include_metadata=True
@@ -409,16 +413,12 @@ def main():
     load_environment(args.site)
 
     # Define environment variables after loading
-    CURRENT_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "corpus-2025-02-15")
-    NEW_INDEX_NAME = os.getenv(
-        "PINECONE_INGEST_INDEX_NAME", "test-2025-05-17--3-large-3072"
-    )
-    CURRENT_EMBEDDING_MODEL = os.getenv(
-        "OPENAI_EMBEDDINGS_MODEL", "text-embedding-ada-002"
-    )
-    NEW_EMBEDDING_MODEL = os.getenv(
-        "OPENAI_INGEST_EMBEDDINGS_MODEL", "text-embedding-3-large"
-    )
+    CURRENT_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
+    NEW_INDEX_NAME = os.getenv("PINECONE_INGEST_INDEX_NAME")
+    CURRENT_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDINGS_MODEL")
+    NEW_EMBEDDING_MODEL = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+    CURRENT_DIMENSION = int(os.getenv("OPENAI_EMBEDDINGS_DIMENSION"))
+    NEW_DIMENSION = int(os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION"))
 
     # Initialize OpenAI client
     openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -427,8 +427,15 @@ def main():
     try:
         # Initialize Pinecone
         pinecone_client = get_pinecone_client()
-        current_index = get_pinecone_index(pinecone_client, CURRENT_INDEX_NAME)
-        new_index = get_pinecone_index(pinecone_client, NEW_INDEX_NAME)
+        current_index = get_pinecone_index(
+            pinecone_client,
+            CURRENT_INDEX_NAME,
+            CURRENT_EMBEDDING_MODEL,
+            CURRENT_DIMENSION,
+        )
+        new_index = get_pinecone_index(
+            pinecone_client, NEW_INDEX_NAME, NEW_EMBEDDING_MODEL, NEW_DIMENSION
+        )
     except Exception as e:
         print(f"ERROR initializing Pinecone: {e}")
         return
@@ -460,7 +467,7 @@ def main():
     for processed_queries, (query, judged_docs) in enumerate(eval_data.items(), 1):
         print(f"  Query {processed_queries}/{query_count}: '{query[:50]}...'")
 
-        # Evaluate Current System (text-embedding-ada-002)
+        # Evaluate Current System
         for strategy in CHUNKING_STRATEGIES:
             try:
                 docs, time_taken = retrieve_documents(
@@ -536,11 +543,7 @@ def main():
     print(f"Evaluated on {query_count} queries with K={K}")
 
     for system in ["current", "new"]:
-        system_name = (
-            "Current System (text-embedding-ada-002)"
-            if system == "current"
-            else "New System (text-embedding-3-large)"
-        )
+        system_name = "Current System" if system == "current" else "New System"
         print(f"\n{system_name}:")
         for strategy in CHUNKING_STRATEGIES:
             name = strategy["name"]
