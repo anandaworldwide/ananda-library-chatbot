@@ -292,7 +292,15 @@ def save_transcription(file_path, transcripts, youtube_id=None):
         logger.error(f"Database error: {e}")
         raise
 
-    logger.info(f"Transcription metadata updated for file {file_path}")
+    # Create a meaningful identifier for logging
+    if youtube_id:
+        file_identifier = f"YouTube video {youtube_id}"
+    elif file_path:
+        file_identifier = f"file {file_path}"
+    else:
+        file_identifier = f"transcription {file_hash[:8]}"
+
+    logger.info(f"Transcription metadata updated for {file_identifier}")
     logger.info(f"Transcription json: {json_filepath}")
 
 
