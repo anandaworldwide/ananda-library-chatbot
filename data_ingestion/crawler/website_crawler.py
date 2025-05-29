@@ -12,11 +12,13 @@
 #   --retry-failed: Retry URLs marked as 'permanent' failed in the database.
 #   --fresh-start: Delete the existing SQLite database and start from a clean slate.
 #   -c, --clear-vectors: Clear existing web content vectors for this site before crawling.
+#   --stop-after: Stop crawling after processing this many pages (useful for testing).
 #
 # Example usage:
 #   website_crawler.py --site ananda-public
 #   website_crawler.py --site ananda-public --retry-failed
 #   website_crawler.py --site ananda-public --clear-vectors
+#   website_crawler.py --site ananda-public --stop-after 5
 
 # Standard library imports
 import argparse
@@ -832,6 +834,7 @@ class WebsiteCrawler:
 
             chunk_metadata = {
                 "type": "text",
+                "url": url,
                 "source": url,
                 "title": page_title,
                 "library": self.domain,
@@ -957,6 +960,11 @@ def parse_arguments() -> argparse.Namespace:
         "--clear-vectors",
         action="store_true",
         help="Clear existing web content vectors for this site before crawling.",
+    )
+    parser.add_argument(
+        "--stop-after",
+        type=int,
+        help="Stop crawling after processing this many pages (useful for testing).",
     )
     return parser.parse_args()
 
@@ -1149,38 +1157,120 @@ def _handle_url_processing(url: str, crawler: WebsiteCrawler, browser, page) -> 
     return False
 
 
-def run_crawl_loop(
-    crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace
-):
-    """Run the main crawling loop."""
+def _should_stop_crawling(stop_after: int | None, pages_processed: int) -> bool:
+    """Check if crawling should stop due to page limit."""
+    if stop_after and pages_processed >= stop_after:
+        logging.info(f"Reached stop limit of {stop_after} pages. Stopping crawl.")
+        return True
+    return False
+
+
+def _process_crawl_iteration(
+    url: str,
+    crawler: WebsiteCrawler,
+    browser,
+    page,
+    pinecone_index,
+    index_name: str,
+) -> tuple[int, int, bool]:
+    """Process a single crawl iteration. Returns (pages_inc, restart_inc, should_continue)."""
+    restart_needed = _handle_url_processing(url, crawler, browser, page)
+    if restart_needed:
+        return 0, 0, False  # Signal restart needed
+
+    content, new_links, _ = crawler.crawl_page(browser, page, url)
+
+    if is_exiting():
+        logging.info(
+            "Exit requested after crawling page, stopping before processing/saving."
+        )
+        return 0, 0, True  # Signal exit
+
+    pages_inc, restart_inc = _process_page_content(
+        content, new_links, url, crawler, pinecone_index, index_name
+    )
+
+    crawler.commit_db_changes()
+
+    if is_exiting():
+        logging.info("Exit requested after saving checkpoint, stopping loop.")
+        return 0, 0, True  # Signal exit
+
+    return pages_inc, restart_inc, False  # Continue normally
+
+
+def _setup_browser(p) -> tuple:
+    """Setup and return browser and page."""
+    browser = p.firefox.launch(
+        headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
+    )
+    page = browser.new_page()
+    page.set_extra_http_headers({"User-Agent": USER_AGENT})
+    return browser, page
+
+
+def _initialize_crawl_loop(
+    args: argparse.Namespace, crawler: WebsiteCrawler
+) -> tuple[str, int, int, int, list, float]:
+    """Initialize crawl loop variables and return setup values."""
     index_name = os.getenv("PINECONE_INGEST_INDEX_NAME")
     if not index_name:
         logging.error(
             "PINECONE_INGEST_INDEX_NAME not found in environment during loop start."
         )
-        return
+        return None, 0, 0, 0, [], 0.0
 
     pages_processed = 0
     pages_since_restart = 0
     batch_results = []
     batch_start_time = time.time()
     PAGES_PER_RESTART = 50
+    stop_after = args.stop_after
+
+    if stop_after:
+        logging.info(f"Will stop crawling after processing {stop_after} pages")
 
     stats = crawler.get_queue_stats()
     logging.info(
         f"Initial queue stats: {stats['pending']} pending, {stats['visited']} visited, {stats['failed']} failed"
     )
 
+    return (
+        index_name,
+        pages_processed,
+        pages_since_restart,
+        PAGES_PER_RESTART,
+        batch_results,
+        batch_start_time,
+    )
+
+
+def run_crawl_loop(
+    crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace
+):
+    """Run the main crawling loop."""
+    setup_result = _initialize_crawl_loop(args, crawler)
+    if setup_result[0] is None:  # index_name is None, error occurred
+        return
+
+    (
+        index_name,
+        pages_processed,
+        pages_since_restart,
+        PAGES_PER_RESTART,
+        batch_results,
+        batch_start_time,
+    ) = setup_result
+    stop_after = args.stop_after
+
     with sync_playwright() as p:
-        browser = p.firefox.launch(
-            headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
-        )
-        page = browser.new_page()
-        page.set_extra_http_headers({"User-Agent": USER_AGENT})
-        should_continue_loop = True
+        browser, page = _setup_browser(p)
 
         try:
-            while should_continue_loop and not is_exiting():
+            while not is_exiting():
+                if _should_stop_crawling(stop_after, pages_processed):
+                    break
+
                 url = crawler.get_next_url_to_crawl()
                 if not url:
                     logging.info(
@@ -1204,36 +1294,20 @@ def run_crawl_loop(
                     pages_since_restart = 0
                     continue
 
-                restart_needed = _handle_url_processing(url, crawler, browser, page)
-                if restart_needed:
+                pages_inc, restart_inc, should_exit = _process_crawl_iteration(
+                    url, crawler, browser, page, pinecone_index, index_name
+                )
+
+                if should_exit:
+                    break
+
+                if restart_inc == 0 and pages_inc == 0:  # Restart needed
                     pages_since_restart = PAGES_PER_RESTART
-                    crawler.commit_db_changes()
                     continue
 
-                content, new_links, _ = crawler.crawl_page(browser, page, url)
-
-                is_success = content is not None
-                batch_results.append(is_success)
-
-                if is_exiting():
-                    logging.info(
-                        "Exit requested after crawling page, stopping before processing/saving."
-                    )
-                    break
-
-                pages_inc, restart_inc = _process_page_content(
-                    content, new_links, url, crawler, pinecone_index, index_name
-                )
                 pages_processed += pages_inc
                 pages_since_restart += restart_inc
-
-                crawler.commit_db_changes()
-
-                if is_exiting():
-                    logging.info(
-                        "Exit requested after saving checkpoint, stopping loop."
-                    )
-                    break
+                batch_results.append(pages_inc > 0)
 
             crawler.current_processing_url = None
 

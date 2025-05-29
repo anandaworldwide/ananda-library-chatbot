@@ -329,40 +329,42 @@ class SpacyTextSplitter:
         """
         Set chunk size and overlap based on word count of the content.
 
+        Now uses token-based sizing to better align with the 225-450 word target range.
+        Roughly 292-585 tokens corresponds to 225-450 words.
+
         Args:
             word_count (int): The estimated word count of the text
 
         Updates:
-            self.chunk_size and self.chunk_overlap based on content length
+            self.chunk_size and self.chunk_overlap based on content length (in tokens)
         """
         if word_count < 200:
             # Very short content: no chunking needed
-            self.chunk_size = 1000  # Large enough to include all
+            self.chunk_size = 800  # Large enough to include all (in tokens)
             self.chunk_overlap = 0
             self.logger.debug(
-                f"Very short content ({word_count} words): No chunking, size={self.chunk_size}"
+                f"Very short content ({word_count} words): No chunking, size={self.chunk_size} tokens"
             )
         elif word_count < 1000:
-            # Short content: Increase chunk size to reach target range
-            # Target: 225-450 words, so use larger token counts
-            self.chunk_size = 800  # Increased from 200 to get larger chunks
-            self.chunk_overlap = 100  # Increased from 50
+            # Short content: Target 225-450 words (roughly 292-585 tokens)
+            self.chunk_size = 300  # tokens
+            self.chunk_overlap = 60  # 20% overlap
             self.logger.debug(
-                f"Short content ({word_count} words): chunk_size=800, overlap=100"
+                f"Short content ({word_count} words): chunk_size=300 tokens, overlap=60 tokens"
             )
         elif word_count < 5000:
-            # Medium content: Larger chunks to reach target range
-            self.chunk_size = 1200  # Increased from 400 to get larger chunks
-            self.chunk_overlap = 200  # Increased from 100
+            # Medium content: Target 225-450 words (roughly 292-585 tokens)
+            self.chunk_size = 400  # tokens
+            self.chunk_overlap = 80  # 20% overlap
             self.logger.debug(
-                f"Medium content ({word_count} words): chunk_size=1200, overlap=200"
+                f"Medium content ({word_count} words): chunk_size=400 tokens, overlap=80 tokens"
             )
         else:
-            # Long content: Even larger chunks for target range
-            self.chunk_size = 1600  # Increased from 600 to get larger chunks
-            self.chunk_overlap = 300  # Increased from 150
+            # Long content: Target 225-450 words (roughly 292-585 tokens)
+            self.chunk_size = 500  # tokens
+            self.chunk_overlap = 100  # 20% overlap
             self.logger.debug(
-                f"Long content ({word_count} words): chunk_size=1600, overlap=300"
+                f"Long content ({word_count} words): chunk_size=500 tokens, overlap=100 tokens"
             )
 
     def _log_chunk_metrics(
@@ -638,40 +640,84 @@ class SpacyTextSplitter:
 
         return merged_chunks
 
-    def _split_by_words(self, text: str, doc: spacy.language.Doc) -> list[str]:
-        """Split text into word-based chunks."""
-        words = (
-            [token.text for token in doc if not token.is_space] if doc else text.split()
-        )
-        if not words:
+    def _split_by_tokens(self, text: str, doc: spacy.language.Doc) -> list[str]:
+        """Split text into token-based chunks using spaCy tokenization."""
+        if doc is None:
+            # Fallback to simple word splitting if no spaCy doc available
+            words = text.split()
+            if not words:
+                return []
+
+            chunks = []
+            current_chunk = []
+            current_token_count = 0
+
+            for word in words:
+                # Estimate 1 token per word for fallback
+                if current_token_count + 1 > self.chunk_size and current_chunk:
+                    chunks.append(" ".join(current_chunk))
+                    current_chunk = [word]
+                    current_token_count = 1
+                else:
+                    current_chunk.append(word)
+                    current_token_count += 1
+
+            # Add the last chunk
+            if current_chunk:
+                chunks.append(" ".join(current_chunk))
+
+            self.logger.debug(
+                f"Split text into {len(chunks)} word-based chunks (fallback mode)"
+            )
+            return chunks
+
+        # Use spaCy tokens for accurate token counting
+        tokens = [token for token in doc if not token.is_space]
+        if not tokens:
             return []
 
         chunks = []
-        current_chunk = []
-        current_size = 0
+        current_chunk_tokens = []
+        current_token_count = 0
 
-        for word in words:
-            # Calculate size with space (except for first word)
-            word_size = len(word) + (1 if current_chunk else 0)
-
-            # If adding this word would exceed chunk_size, start a new chunk
-            if current_size + word_size > self.chunk_size and current_chunk:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = [word]
-                current_size = len(word)
+        for token in tokens:
+            # If adding this token would exceed chunk_size, start a new chunk
+            if current_token_count + 1 > self.chunk_size and current_chunk_tokens:
+                # Join tokens with appropriate spacing
+                chunk_text = self._reconstruct_text_from_tokens(current_chunk_tokens)
+                chunks.append(chunk_text)
+                current_chunk_tokens = [token]
+                current_token_count = 1
             else:
-                current_chunk.append(word)
-                current_size += word_size
+                current_chunk_tokens.append(token)
+                current_token_count += 1
 
         # Add the last chunk
-        if current_chunk:
-            chunks.append(" ".join(current_chunk))
+        if current_chunk_tokens:
+            chunk_text = self._reconstruct_text_from_tokens(current_chunk_tokens)
+            chunks.append(chunk_text)
 
-        self.logger.debug(f"Split text into {len(chunks)} word-based chunks")
+        self.logger.debug(f"Split text into {len(chunks)} token-based chunks")
         return chunks
 
-    def _apply_word_overlap(self, chunks: list[str]) -> list[str]:
-        """Apply word-based overlap to chunks."""
+    def _reconstruct_text_from_tokens(self, tokens: list) -> str:
+        """Reconstruct text from spaCy tokens, preserving original spacing."""
+        if not tokens:
+            return ""
+
+        # Use spaCy's whitespace information to reconstruct text properly
+        result = []
+        for token in tokens:
+            result.append(token.text)
+            # Add space after token if the token has trailing whitespace
+            # Note: whitespace_ contains the whitespace that follows the token
+            if hasattr(token, "whitespace_") and token.whitespace_:
+                result.append(token.whitespace_)
+
+        return "".join(result)
+
+    def _apply_token_overlap(self, chunks: list[str]) -> list[str]:
+        """Apply token-based overlap to chunks."""
         if self.chunk_overlap <= 0 or len(chunks) <= 1:
             return chunks
 
@@ -681,91 +727,153 @@ class SpacyTextSplitter:
             prev_chunk = chunks[i - 1]
             current_chunk = chunks[i]
 
-            # Split into words for overlap calculation
-            prev_words = prev_chunk.split()
+            # For single-character separators like space, use token-based overlap
+            if self.separator and len(self.separator) == 1 and self.separator.isspace():
+                # Tokenize the previous chunk to get accurate token count
+                prev_doc = self.nlp(prev_chunk)
+                prev_tokens = [token for token in prev_doc if not token.is_space]
 
-            # Calculate overlap in words (approximate based on average word length)
-            avg_word_len = 5  # Approximate average word length including spaces
-            overlap_words = max(1, self.chunk_overlap // avg_word_len)
-            overlap_words = min(overlap_words, len(prev_words))
+                # Calculate overlap in tokens (use chunk_overlap directly as token count)
+                overlap_tokens = min(self.chunk_overlap, len(prev_tokens))
 
-            overlap_text = " ".join(prev_words[-overlap_words:])
+                if overlap_tokens > 0:
+                    overlap_token_objects = prev_tokens[-overlap_tokens:]
+                    overlap_text = self._reconstruct_text_from_tokens(
+                        overlap_token_objects
+                    )
 
-            # Add overlap to current chunk if it doesn't already start with it
-            if not current_chunk.startswith(overlap_text):
-                current_chunk = overlap_text + " " + current_chunk
-                self.logger.debug(
-                    f"Applied word-based overlap of {overlap_words} words between chunks"
-                )
+                    # Add overlap to current chunk if it doesn't already start with it
+                    if not current_chunk.startswith(overlap_text.strip()):
+                        current_chunk = overlap_text + " " + current_chunk
+                        self.logger.debug(
+                            f"Applied token-based overlap of {overlap_tokens} tokens between chunks"
+                        )
+            else:
+                # Use token-based overlap for other separators too
+                prev_doc = self.nlp(prev_chunk)
+                prev_tokens = [token for token in prev_doc if not token.is_space]
+
+                # Target 20-30% overlap of the previous chunk in tokens
+                target_overlap_tokens = max(
+                    1, int(len(prev_tokens) * 0.25)
+                )  # 25% overlap
+                target_overlap_tokens = min(target_overlap_tokens, len(prev_tokens))
+                target_overlap_tokens = min(
+                    target_overlap_tokens, self.chunk_overlap
+                )  # Respect max overlap setting
+
+                if target_overlap_tokens > 0:
+                    overlap_token_objects = prev_tokens[-target_overlap_tokens:]
+                    overlap_text = self._reconstruct_text_from_tokens(
+                        overlap_token_objects
+                    )
+
+                    # Add overlap to current chunk if it doesn't already start with it
+                    if not current_chunk.startswith(overlap_text.strip()):
+                        current_chunk = overlap_text + " " + current_chunk
+                        self.logger.debug(
+                            f"Applied token overlap of {target_overlap_tokens} tokens between chunks"
+                        )
 
             result.append(current_chunk)
 
         return result
 
-    def _split_by_sentences(
+    def _get_split_doc(self, split_text: str, doc: spacy.language.Doc):
+        """Get the spaCy doc for the split text, either from the original doc or by re-tokenizing."""
+        if doc:
+            # Find the corresponding span in the original doc
+            for sent in doc.sents:
+                if sent.text.strip() == split_text.strip():
+                    return sent
+
+        # Fallback: re-tokenize the split
+        split_doc = self.nlp(split_text)
+        self.logger.debug("Re-tokenized split for sentence-based splitting")
+        return split_doc
+
+    def _add_accumulated_chunk(
+        self, current_chunk_tokens: list, current_token_count: int, chunks: list[str]
+    ) -> tuple[list, int]:
+        """Add accumulated tokens as a chunk if they exist."""
+        if current_chunk_tokens:
+            chunk_text = self._reconstruct_text_from_tokens(current_chunk_tokens)
+            chunks.append(chunk_text)
+            self.logger.debug(f"Created chunk of {current_token_count} tokens")
+            return [], 0
+        return current_chunk_tokens, current_token_count
+
+    def _process_sentence(
+        self,
+        sent,
+        chunks: list[str],
+        current_chunk_tokens: list,
+        current_token_count: int,
+    ) -> tuple[list, int]:
+        """Process a single sentence and update chunk state."""
+        sent_text = sent.text.strip()
+        if not sent_text:
+            return current_chunk_tokens, current_token_count
+
+        # Count tokens in this sentence (excluding spaces)
+        sent_tokens = [token for token in sent if not token.is_space]
+        sent_token_count = len(sent_tokens)
+
+        # If a single sentence is longer than chunk_size, keep it as its own chunk
+        if sent_token_count > self.chunk_size:
+            # Add accumulated tokens as a chunk first
+            current_chunk_tokens, current_token_count = self._add_accumulated_chunk(
+                current_chunk_tokens, current_token_count, chunks
+            )
+            # Add the long sentence as its own chunk
+            chunks.append(sent_text)
+            self.logger.debug(
+                f"Added long sentence as chunk: {sent_token_count} tokens"
+            )
+            return current_chunk_tokens, current_token_count
+
+        # If adding this sentence would exceed chunk_size, start a new chunk
+        if current_token_count + sent_token_count > self.chunk_size:
+            current_chunk_tokens, current_token_count = self._add_accumulated_chunk(
+                current_chunk_tokens, current_token_count, chunks
+            )
+            return sent_tokens, sent_token_count
+
+        # Otherwise, add to current chunk
+        current_chunk_tokens.extend(sent_tokens)
+        current_token_count += sent_token_count
+        return current_chunk_tokens, current_token_count
+
+    def _split_by_sentences_with_token_limits(
         self, split_text: str, doc: spacy.language.Doc
     ) -> list[str]:
-        """Split text into sentence-based chunks when it exceeds chunk_size."""
+        """Split text into sentence-based chunks when it exceeds chunk_size, using token counts."""
         chunks = []
 
-        # Use pre-tokenized doc if possible, or re-tokenize this split
-        split_doc = (
-            next(
-                (d for d in doc.sents if d.text.strip() == split_text),
-                None,
-            )
-            if doc
-            else None
-        )
-        if not split_doc:
-            split_doc = self.nlp(split_text)
-            self.logger.debug("Re-tokenized split for sentence-based splitting")
+        # Get the document for processing
+        split_doc = self._get_split_doc(split_text, doc)
 
-        current_chunk = []
-        current_size = 0
+        current_chunk_tokens = []
+        current_token_count = 0
 
+        # Process each sentence
         for sent in split_doc.sents:
-            sent_text = sent.text.strip()
-            if not sent_text:
-                continue
+            current_chunk_tokens, current_token_count = self._process_sentence(
+                sent, chunks, current_chunk_tokens, current_token_count
+            )
 
-            # If a single sentence is longer than chunk_size, keep it as its own chunk
-            if len(sent_text) > self.chunk_size:
-                # If we have accumulated text, add it as a chunk first
-                if current_chunk:
-                    chunks.append(" ".join(current_chunk))
-                    current_chunk = []
-                    current_size = 0
-                # Add the long sentence as its own chunk
-                chunks.append(sent_text)
-                self.logger.debug(
-                    f"Added long sentence as chunk: {len(sent_text)} chars"
-                )
-            # If adding this sentence would exceed chunk_size, start a new chunk
-            elif (
-                current_size + len(sent_text) + (1 if current_chunk else 0)
-                > self.chunk_size
-            ):
-                chunks.append(" ".join(current_chunk))
-                self.logger.debug(f"Created chunk of size {current_size} chars")
-                current_chunk = [sent_text]
-                current_size = len(sent_text)
-            # Otherwise, add to current chunk
-            else:
-                current_chunk.append(sent_text)
-                current_size += len(sent_text) + (1 if current_chunk else 0)
-
-        # Add any remaining text in the current chunk
-        if current_chunk:
-            chunks.append(" ".join(current_chunk))
+        # Add any remaining tokens in the current chunk
+        if current_chunk_tokens:
+            chunk_text = self._reconstruct_text_from_tokens(current_chunk_tokens)
+            chunks.append(chunk_text)
             self.logger.debug(
-                f"Added final sentence chunk of size {current_size} chars"
+                f"Added final sentence chunk of {current_token_count} tokens"
             )
 
         return chunks
 
     def _process_initial_splits(self, text: str, doc: spacy.language.Doc) -> list[str]:
-        """Process initial text splits based on separator."""
+        """Process initial text splits based on separator, using token counts for decisions."""
         chunks = []
 
         # First split by separator - these are our primary chunk boundaries
@@ -783,20 +891,35 @@ class SpacyTextSplitter:
             if not split_text:
                 continue
 
-            # If the split is longer than chunk_size, break it down further with spaCy
-            if len(split_text) > self.chunk_size:
+            # Count tokens in this split to decide if further splitting is needed
+            split_token_count = 0
+            if doc:
+                # Find tokens that belong to this split
+                split_tokens = []
+                for token in doc:
+                    if not token.is_space and token.text in split_text:
+                        split_tokens.append(token)
+                split_token_count = len(split_tokens)
+            else:
+                # Fallback: estimate tokens as words
+                split_token_count = len(split_text.split())
+
+            # If the split has more tokens than chunk_size, break it down further with spaCy
+            if split_token_count > self.chunk_size:
                 try:
-                    sentence_chunks = self._split_by_sentences(split_text, doc)
+                    sentence_chunks = self._split_by_sentences_with_token_limits(
+                        split_text, doc
+                    )
                     chunks.extend(sentence_chunks)
                 except Exception as e:
                     error_msg = f"Error processing text with spaCy: {str(e)}"
                     self.logger.error(error_msg)
                     raise RuntimeError(error_msg) from e
             else:
-                # If the split is smaller than chunk_size, add it directly
+                # If the split has fewer tokens than chunk_size, add it directly
                 chunks.append(split_text)
                 self.logger.debug(
-                    f"Added small split as chunk: {len(split_text)} chars"
+                    f"Added small split as chunk: {split_token_count} tokens"
                 )
 
         return chunks
@@ -847,56 +970,6 @@ class SpacyTextSplitter:
             return forced_chunks
 
         return chunks
-
-    def _apply_character_overlap(self, chunks: list[str]) -> list[str]:
-        """Apply character-based overlap to chunks."""
-        if self.chunk_overlap <= 0 or len(chunks) <= 1:
-            return chunks
-
-        result = [chunks[0]]
-
-        for i in range(1, len(chunks)):
-            prev_chunk = chunks[i - 1]
-            current_chunk = chunks[i]
-
-            # For single-character separators like space, use word-based overlap
-            if self.separator and len(self.separator) == 1 and self.separator.isspace():
-                # Split into words for overlap calculation
-                prev_words = prev_chunk.split()
-
-                # Calculate overlap in words (approximate based on average word length)
-                avg_word_len = 5  # Approximate average word length including spaces
-                overlap_words = max(1, self.chunk_overlap // avg_word_len)
-                overlap_words = min(overlap_words, len(prev_words))
-
-                overlap_text = " ".join(prev_words[-overlap_words:])
-
-                # Add overlap to current chunk if it doesn't already start with it
-                if not current_chunk.startswith(overlap_text):
-                    current_chunk = overlap_text + " " + current_chunk
-                    self.logger.debug(
-                        f"Applied word-based overlap of {overlap_words} words between chunks"
-                    )
-            else:
-                # Use character-based overlap for other separators
-                # Calculate overlap based on word count for better accuracy
-                prev_words = prev_chunk.split()
-                # Target 20% overlap of the previous chunk
-                target_overlap_words = max(1, int(len(prev_words) * 0.20))
-                target_overlap_words = min(target_overlap_words, len(prev_words))
-
-                overlap_text = " ".join(prev_words[-target_overlap_words:])
-
-                # Add overlap to current chunk if it doesn't already start with it
-                if not current_chunk.startswith(overlap_text):
-                    current_chunk = overlap_text + " " + current_chunk
-                    self.logger.debug(
-                        f"Applied overlap of {target_overlap_words} words ({len(overlap_text)} chars) between chunks"
-                    )
-
-            result.append(current_chunk)
-
-        return result
 
     def split_text(self, text: str, document_id: str = None) -> list[str]:
         """
@@ -955,11 +1028,11 @@ class SpacyTextSplitter:
             if not text.strip():
                 return []
 
-            # Handle space separator specially - split into word-based chunks
+            # Handle space separator specially - split into token-based chunks
             if self.separator == " ":
-                chunks = self._split_by_words(text, doc)
-                chunks = self._apply_word_overlap(chunks)
-                self.logger.info(f"Split text into {len(chunks)} word-based chunks")
+                chunks = self._split_by_tokens(text, doc)
+                chunks = self._apply_token_overlap(chunks)
+                self.logger.info(f"Split text into {len(chunks)} token-based chunks")
                 self._log_chunk_metrics(chunks, word_count, document_id)
                 return chunks
 
@@ -976,7 +1049,7 @@ class SpacyTextSplitter:
 
             # STEP 2: Apply overlap logic to the final merged chunks
             try:
-                chunks = self._apply_character_overlap(chunks)
+                chunks = self._apply_token_overlap(chunks)
                 self.logger.info(f"Applied overlap to {len(chunks)} final chunks")
             except Exception as e:
                 error_msg = f"Error applying chunk overlap: {str(e)}"

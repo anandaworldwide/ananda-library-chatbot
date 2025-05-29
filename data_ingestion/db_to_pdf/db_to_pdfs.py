@@ -661,10 +661,13 @@ def main():
     max_retries = 5
     attempt = 0
 
-    # Configure logging
+    # Configure logging - set root to INFO, enable DEBUG only for this module if needed
     logging.basicConfig(
-        level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s"
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
     )
+    logger = logging.getLogger(__name__)
+    # Uncomment next line if you need debug logging for this script:
+    # logger.setLevel(logging.DEBUG)
 
     while attempt < max_retries:
         try:

@@ -29,13 +29,18 @@ from pyutil.env_utils import load_env
 
 
 def configure_logging(debug=False):
-    # Configure the root logger
+    # Configure the root logger to INFO level to avoid third-party debug spam
     logging.basicConfig(
-        level=logging.DEBUG if debug else logging.INFO,
+        level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    # Configure specific loggers
+    # Enable DEBUG only for this module if requested
+    logger = logging.getLogger(__name__)
+    if debug:
+        logger.setLevel(logging.DEBUG)
+
+    # Configure specific loggers to reduce noise from third-party libraries
     loggers_to_adjust = [
         "openai",
         "httpx",
@@ -46,11 +51,9 @@ def configure_logging(debug=False):
         "s3transfer",
     ]
     for logger_name in loggers_to_adjust:
-        logging.getLogger(logger_name).setLevel(
-            logging.INFO if debug else logging.WARNING
-        )
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
-    return logging.getLogger(__name__)
+    return logger
 
 
 # Configure logging (you can set debug=True here for more verbose output)
@@ -301,19 +304,20 @@ class TestAudioProcessing(unittest.TestCase):
         )
 
         # Simulate an error by patching the index.upsert method
-        with patch.object(
-            index, "upsert", side_effect=Exception("Simulated Pinecone error")
+        with (
+            patch.object(
+                index, "upsert", side_effect=Exception("Simulated Pinecone error")
+            ),
+            self.assertRaises(PineconeException) as context,
         ):
-            # Expect a PineconeException to be raised
-            with self.assertRaises(PineconeException) as context:
-                store_in_pinecone(
-                    index,
-                    chunks,
-                    embeddings,
-                    self.author,
-                    self.library,
-                    is_youtube_video=False,
-                )
+            store_in_pinecone(
+                index,
+                chunks,
+                embeddings,
+                self.author,
+                self.library,
+                is_youtube_video=False,
+            )
 
         # Check if the error message contains the expected content
         self.assertIn("Failed to upsert vectors", str(context.exception))

@@ -20,6 +20,7 @@ Run the script with the following options:
 --site: Site name for loading environment variables
 --library-name: Name of the library to process
 --keep-data: Flag to keep existing data in the index (default: false)
+--max-files: Maximum number of files to process (optional, useful for testing)
 """
 
 import argparse
@@ -43,16 +44,22 @@ from data_ingestion.utils.pinecone_utils import (
     get_pinecone_client,
     get_pinecone_ingest_index_name,
 )
-from data_ingestion.utils.progress_utils import is_exiting, setup_signal_handlers
+from data_ingestion.utils.progress_utils import (
+    ProgressConfig,
+    create_progress_bar,
+    is_exiting,
+    setup_signal_handlers,
+)
 from data_ingestion.utils.text_processing import clean_document_text
 from data_ingestion.utils.text_splitter_utils import Document, SpacyTextSplitter
 from pyutil.env_utils import load_env  # noqa: E402
 
-# Configure logging
+# Configure logging - set root to WARNING, enable DEBUG only for this module
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Enable DEBUG only for this script
 
 # Global variable for file path
 file_path = ""
@@ -202,12 +209,6 @@ class PyPDFLoader:
                     filtered_chars.append(char)
                 elif char_text.strip():
                     filtered_parts.append(f"'{char_text}' (filtered)")
-
-            # Log what was filtered for debugging
-            if filtered_parts and len(filtered_parts) > 5:
-                logger.debug(
-                    f"Filtered header/footer characters: {len(filtered_parts)} chars"
-                )
 
             # If we filtered too much, fall back to full text
             if len(filtered_chars) < len(chars) * 0.7:
@@ -399,18 +400,13 @@ class DirectoryLoader:
         return documents
 
 
-async def process_document(
-    raw_doc: Document,
-    pinecone_index: Index,
-    embeddings: OpenAIEmbeddings,
-    doc_index: int,
-    library_name: str,
-    text_splitter: SpacyTextSplitter,
-) -> None:
+def _extract_document_metadata(raw_doc: Document) -> tuple[str, str, str]:
     """
-    Processes a single document, splitting it into chunks using spaCy and adding it to the vector store.
+    Extract metadata from document with comprehensive field name checking.
+
+    Returns:
+        tuple: (source_url, title, author)
     """
-    # Extract metadata with comprehensive field name checking
     source_url = None
     title = "Untitled"
     author = "Unknown"
@@ -448,22 +444,227 @@ async def process_document(
         if raw_doc.metadata.get("source"):
             source_url = source_url or raw_doc.metadata.get("source")
 
+    return source_url, title, author
+
+
+def _calculate_page_references(
+    docs: list, page_boundaries: list, full_text: str
+) -> list:
+    """
+    Calculate page references for document chunks efficiently.
+
+    Args:
+        docs: List of document chunks
+        page_boundaries: List of page boundary information
+        full_text: Complete document text
+
+    Returns:
+        List of documents with page references calculated
+    """
+    valid_docs = []
+
+    # Create progress bar for page reference calculation
+    config = ProgressConfig(
+        description="Calculating page references",
+        unit="chunk",
+        total=len(docs),
+        show_progress=True,
+    )
+
+    progress_bar = create_progress_bar(config)
+
+    try:
+        for i, doc in enumerate(docs):
+            # Check for graceful shutdown
+            if is_exiting():
+                logger.info(
+                    "Graceful shutdown detected during page reference calculation."
+                )
+                break
+
+            if isinstance(doc.page_content, str) and doc.page_content.strip():
+                page_reference = None
+
+                if page_boundaries:
+                    # More efficient approach: estimate position based on chunk sequence
+                    estimated_position = (i / len(docs)) * len(full_text)
+
+                    # Find the page containing this estimated position
+                    for page_boundary in page_boundaries:
+                        if (
+                            page_boundary["start_offset"]
+                            <= estimated_position
+                            <= page_boundary["end_offset"]
+                        ):
+                            page_reference = str(page_boundary["page_number"])
+                            doc.metadata["page"] = page_reference
+                            break
+
+                    # If estimation didn't work, try a few nearby pages
+                    if not page_reference:
+                        for page_boundary in page_boundaries:
+                            # Check if chunk might span this page (with some tolerance)
+                            page_start = page_boundary["start_offset"]
+                            page_end = page_boundary["end_offset"]
+                            tolerance = len(full_text) * 0.02  # 2% tolerance
+
+                            if (
+                                estimated_position >= page_start - tolerance
+                                and estimated_position <= page_end + tolerance
+                            ):
+                                page_reference = str(page_boundary["page_number"])
+                                doc.metadata["page"] = page_reference
+                                break
+
+                valid_docs.append(doc)
+
+            progress_bar.update(1)
+
+    finally:
+        progress_bar.close()
+
+    return valid_docs
+
+
+async def _process_single_batch(
+    batch: list, start_idx: int, pinecone_index, embeddings, library_name: str
+) -> None:
+    """
+    Process a single batch of document chunks.
+
+    Args:
+        batch: List of document chunks in this batch
+        start_idx: Starting index for chunk numbering
+        pinecone_index: Pinecone index for storage
+        embeddings: OpenAI embeddings instance
+        library_name: Name of the library
+    """
+    # Create tasks for the batch
+    tasks = []
+    for j, doc in enumerate(batch):
+        # Check for shutdown before creating each task
+        if is_exiting():
+            logger.info("Graceful shutdown detected while preparing batch tasks.")
+            return
+
+        task = process_chunk(
+            doc, pinecone_index, embeddings, start_idx + j, library_name
+        )
+        tasks.append(task)
+
+    # Process batch with timeout
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=30.0,  # 30 second timeout per batch
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Batch processing timeout after 30 seconds")
+        # Cancel remaining tasks on timeout
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        # Check if we should exit due to shutdown signal
+        if is_exiting():
+            logger.info("Graceful shutdown detected during batch timeout.")
+            return
+        else:
+            # If not shutting down, continue with a warning
+            logger.warning("Continuing after batch timeout...")
+            return
+
+    # Check for exceptions
+    for result in results:
+        if isinstance(result, Exception):
+            print(f"Error processing chunk: {result}")
+            raise result
+
+
+async def _process_chunks_in_batches(
+    valid_docs: list,
+    pinecone_index,
+    embeddings,
+    library_name: str,
+    batch_size: int = 10,
+) -> None:
+    """
+    Process document chunks in batches with progress tracking.
+
+    Args:
+        valid_docs: List of validated document chunks
+        pinecone_index: Pinecone index for storage
+        embeddings: OpenAI embeddings instance
+        library_name: Name of the library
+        batch_size: Number of chunks to process per batch
+    """
+    # Calculate batch ranges
+    batch_ranges = [
+        (i, min(i + batch_size, len(valid_docs)))
+        for i in range(0, len(valid_docs), batch_size)
+    ]
+
+    # Create progress bar for batch processing
+    config = ProgressConfig(
+        description="Processing batches",
+        unit="batch",
+        total=len(batch_ranges),
+        show_progress=True,
+    )
+
+    progress_bar = create_progress_bar(config)
+
+    try:
+        for start_idx, end_idx in batch_ranges:
+            # Check for graceful shutdown before starting each batch
+            if is_exiting():
+                logger.info("Graceful shutdown detected during batch processing.")
+                break
+
+            batch = valid_docs[start_idx:end_idx]
+
+            # Process the single batch
+            await _process_single_batch(
+                batch, start_idx, pinecone_index, embeddings, library_name
+            )
+
+            progress_bar.update(1)
+
+    finally:
+        progress_bar.close()
+
+
+async def process_document(
+    raw_doc: Document,
+    pinecone_index: Index,
+    embeddings: OpenAIEmbeddings,
+    doc_index: int,
+    library_name: str,
+    text_splitter: SpacyTextSplitter,
+) -> None:
+    """
+    Processes a single document, splitting it into chunks using spaCy and adding it to the vector store.
+    """
+    # Extract and validate metadata
+    source_url, title, author = _extract_document_metadata(raw_doc)
+
     if not source_url:
         logger.error(
-            f"ERROR: No source URL found in metadata for document from file: {raw_doc.metadata.get('source', 'Unknown File')}, page: {raw_doc.metadata.get('page', 'Unknown Page')}"
+            f"ERROR: No source URL found in metadata for document from file: "
+            f"{raw_doc.metadata.get('source', 'Unknown File')}, "
+            f"page: {raw_doc.metadata.get('page', 'Unknown Page')}"
         )
         logger.error(f"Full metadata: {raw_doc.metadata}")
         logger.warning("Skipping this page/document due to missing source URL.")
         return
 
-    # Set extracted metadata for all pages
+    # Update document metadata
     raw_doc.metadata["source"] = source_url
     raw_doc.metadata["title"] = title
     raw_doc.metadata["author"] = author
 
-    # Only print debug information for the first page
+    # Log document information for first page only
     page_number = raw_doc.metadata.get("page", 0)
-    if page_number == 0:  # This condition will be met for the first page of each PDF
+    if page_number == 0:
         logger.info(f"Processing document with source URL: {source_url}")
         logger.info(f"Document title: {title}")
         logger.info(f"Document author: {author}")
@@ -475,65 +676,15 @@ async def process_document(
     logger.info(f"Splitting complete document {doc_filename} into chunks...")
     docs = text_splitter.split_documents([raw_doc])
 
-    # Filter out invalid documents and calculate their positions efficiently
-    valid_docs = []
+    # Calculate page references for chunks
     page_boundaries = raw_doc.metadata.get("page_boundaries", [])
     full_text = raw_doc.page_content
 
-    # Debug logging
     logger.info(
-        f"DEBUG: Processing {len(docs)} chunks, page_boundaries available: {len(page_boundaries) > 0}"
+        f"Processing {len(docs)} chunks, page_boundaries available: {len(page_boundaries) > 0}"
     )
 
-    # Process chunks with TQDM progress bar
-    logger.info(f"Calculating page references for {len(docs)} chunks...")
-
-    for i, doc in enumerate(
-        tqdm(docs, desc="Calculating page references", unit="chunk")
-    ):
-        # Check for graceful shutdown
-        if is_exiting():
-            logger.info(
-                "Graceful shutdown detected during chunk processing. Stopping chunk processing..."
-            )
-            return  # Return from this function to allow higher-level checkpoint saving
-
-        if isinstance(doc.page_content, str) and doc.page_content.strip():
-            page_reference = None
-
-            if page_boundaries:
-                # More efficient approach: estimate position based on chunk sequence
-                # This avoids the expensive text search for each chunk
-                estimated_position = (i / len(docs)) * len(full_text)
-
-                # Find the page containing this estimated position
-                for page_boundary in page_boundaries:
-                    if (
-                        page_boundary["start_offset"]
-                        <= estimated_position
-                        <= page_boundary["end_offset"]
-                    ):
-                        page_reference = str(page_boundary["page_number"])
-                        doc.metadata["page"] = page_reference
-                        break
-
-                # If estimation didn't work, try a few nearby pages
-                if not page_reference:
-                    for page_boundary in page_boundaries:
-                        # Check if chunk might span this page (with some tolerance)
-                        page_start = page_boundary["start_offset"]
-                        page_end = page_boundary["end_offset"]
-                        tolerance = len(full_text) * 0.02  # 2% tolerance
-
-                        if (
-                            estimated_position >= page_start - tolerance
-                            and estimated_position <= page_end + tolerance
-                        ):
-                            page_reference = str(page_boundary["page_number"])
-                            doc.metadata["page"] = page_reference
-                            break
-
-            valid_docs.append(doc)
+    valid_docs = _calculate_page_references(docs, page_boundaries, full_text)
 
     if valid_docs:
         logger.info(f"Document {doc_filename} split into {len(valid_docs)} chunks")
@@ -543,73 +694,10 @@ async def process_document(
             f"DEBUG: {with_page_refs}/{len(valid_docs)} chunks got page references"
         )
 
-    # Process in smaller batches to avoid API limits
-    batch_size = 10
-    total_batches = (len(valid_docs) + batch_size - 1) // batch_size
-    logger.info(f"Processing {len(valid_docs)} chunks in {total_batches} batches...")
-
-    # Use TQDM for batch processing progress
-    batch_ranges = [
-        (i, min(i + batch_size, len(valid_docs)))
-        for i in range(0, len(valid_docs), batch_size)
-    ]
-
-    for start_idx, end_idx in tqdm(
-        batch_ranges, desc="Processing batches", unit="batch"
-    ):
-        # Check for graceful shutdown before starting each batch
-        if is_exiting():
-            logger.info(
-                "Graceful shutdown detected during batch processing. Stopping..."
-            )
-            return
-
-        batch = valid_docs[start_idx:end_idx]
-
-        # For each chunk in the batch, process it
-        tasks = []
-        for j, doc in enumerate(batch):
-            # Check for shutdown before creating each task
-            if is_exiting():
-                logger.info(
-                    "Graceful shutdown detected while preparing batch tasks. Stopping..."
-                )
-                return
-
-            task = process_chunk(
-                doc, pinecone_index, embeddings, start_idx + j, library_name
-            )
-            tasks.append(task)
-
-        # Wait for all tasks to complete with timeout to allow more responsive shutdown
-        try:
-            # Use wait_for with shorter timeout to make shutdown more responsive
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=30.0,  # 30 second timeout per batch
-            )
-        except asyncio.TimeoutError:
-            logger.warning("Batch processing timeout after 30 seconds")
-            # Cancel remaining tasks on timeout
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            # Check if we should exit due to shutdown signal
-            if is_exiting():
-                logger.info(
-                    "Graceful shutdown detected during batch timeout. Stopping..."
-                )
-                return
-            else:
-                # If not shutting down, continue with a warning
-                logger.warning("Continuing with next batch after timeout...")
-                continue
-
-        # Check for exceptions
-        for result in results:
-            if isinstance(result, Exception):
-                print(f"Error processing chunk: {result}")
-                raise result
+        # Process chunks in batches
+        await _process_chunks_in_batches(
+            valid_docs, pinecone_index, embeddings, library_name
+        )
 
 
 async def process_chunk(
@@ -708,20 +796,19 @@ async def process_chunk(
         raise
 
 
-async def run(keep_data: bool, library_name: str) -> None:
+def _initialize_pinecone_services(library_name: str, keep_data: bool) -> tuple:
     """
-    Main function to run the document ingestion process.
-    This function orchestrates the entire ingestion workflow.
-    """
-    global file_path  # file_path is set in main()
-    logger.info(f"Processing documents from directory: {file_path}")
+    Initialize Pinecone client and index, handling data clearing if needed.
 
+    Returns:
+        tuple: (pinecone_client, pinecone_index)
+    """
     # Initialize Pinecone
     try:
         pinecone = get_pinecone_client()
-    except ValueError as e:  # More specific exception
+    except ValueError as e:
         logger.error(f"Failed to initialize Pinecone: {e}")
-        sys.exit(1)  # Exit if Pinecone setup fails
+        sys.exit(1)
 
     # Get or create index
     index_name = get_pinecone_ingest_index_name()
@@ -743,6 +830,16 @@ async def run(keep_data: bool, library_name: str) -> None:
             "keep_data is True. Proceeding with adding/updating vectors, existing data will be preserved."
         )
 
+    return pinecone, pinecone_index
+
+
+def _initialize_processing_components() -> tuple:
+    """
+    Initialize text splitter and OpenAI embeddings.
+
+    Returns:
+        tuple: (text_splitter, embeddings)
+    """
     # Initialize text splitter
     text_splitter = SpacyTextSplitter()
 
@@ -758,11 +855,20 @@ async def run(keep_data: bool, library_name: str) -> None:
         logger.error(f"Error initializing OpenAI Embeddings: {e}")
         sys.exit(1)
 
-    # Get all PDF file paths recursively
+    return text_splitter, embeddings
+
+
+def _discover_pdf_files() -> list[str]:
+    """
+    Discover all PDF files in the target directory recursively.
+
+    Returns:
+        list: Sorted list of PDF file paths
+    """
+    global file_path
+
     pdf_file_paths = []
-    for root, _, files_in_dir in os.walk(
-        file_path
-    ):  # Renamed 'files' to 'files_in_dir'
+    for root, _, files_in_dir in os.walk(file_path):
         for file_name in files_in_dir:
             if file_name.lower().endswith(".pdf"):
                 pdf_file_paths.append(os.path.join(root, file_name))
@@ -770,12 +876,222 @@ async def run(keep_data: bool, library_name: str) -> None:
 
     if not pdf_file_paths:
         logger.info(f"No PDF files found in {file_path}. Ingestion complete.")
-        return
+        return []
 
     logger.info(f"Found {len(pdf_file_paths)} PDF files to process.")
+    return pdf_file_paths
 
-    # Get checkpoint information
-    processed_files_count = 0
+
+def _assemble_full_document(pages_from_pdf: list) -> Document | None:
+    """
+    Assemble pages into a single document with page boundaries tracking.
+
+    Args:
+        pages_from_pdf: List of page documents from PDF loader
+
+    Returns:
+        Document: Assembled document with page boundaries, or None if no content
+    """
+    if not pages_from_pdf:
+        return None
+
+    # Extract metadata from first page (should be consistent across all pages)
+    first_page = pages_from_pdf[0]
+
+    # Concatenate all page content and track page boundaries
+    full_text_parts = []
+    page_boundaries = []  # Track where each page starts/ends in concatenated text
+    current_offset = 0
+
+    for page_index, page_doc in enumerate(pages_from_pdf):
+        if page_doc.page_content and page_doc.page_content.strip():
+            page_text = page_doc.page_content.strip()
+
+            # Add intelligent spacing between pages
+            if page_index > 0:
+                # Get the last few characters of the previous page
+                previous_text = full_text_parts[-1] if full_text_parts else ""
+
+                # Determine appropriate separator based on text flow
+                page_separator = _determine_page_separator(previous_text, page_text)
+                full_text_parts.append(page_separator)
+                current_offset += len(page_separator)
+
+            # Track this page's boundaries in the concatenated text
+            start_offset = current_offset
+            full_text_parts.append(page_text)
+            current_offset += len(page_text)
+            end_offset = current_offset
+
+            # Use actual PDF page number (not sequential index)
+            actual_pdf_page_number = page_doc.metadata.get("page", page_index) + 1
+            page_boundaries.append(
+                {
+                    "page_number": actual_pdf_page_number,
+                    "start_offset": start_offset,
+                    "end_offset": end_offset,
+                }
+            )
+
+    if not full_text_parts:
+        return None
+
+    # Create a single document with all content (no page markers)
+    full_document = Document(
+        page_content=clean_document_text("".join(full_text_parts)),
+        metadata={
+            **first_page.metadata.copy(),
+            "page_boundaries": page_boundaries,
+            "total_pages": len(pages_from_pdf),
+        },
+    )
+
+    return full_document
+
+
+async def _process_single_pdf(
+    pdf_path: str,
+    file_index: int,
+    total_files: int,
+    pinecone_index,
+    embeddings,
+    library_name: str,
+    text_splitter,
+    save_checkpoint_func,
+) -> bool:
+    """
+    Process a single PDF file and return success status.
+
+    Args:
+        pdf_path: Path to the PDF file
+        file_index: Current file index (0-based)
+        total_files: Total number of files
+        pinecone_index: Pinecone index for storage
+        embeddings: OpenAI embeddings instance
+        library_name: Name of the library
+        text_splitter: Text splitter instance
+        save_checkpoint_func: Function to save progress
+
+    Returns:
+        bool: True if file was successfully processed, False if skipped
+    """
+    logger.info(f"Processing PDF file {file_index + 1} of {total_files}: {pdf_path}")
+
+    try:
+        pdf_loader = PyPDFLoader(pdf_path)
+        pages_from_pdf = pdf_loader.load()
+
+        if not pages_from_pdf:
+            logger.warning(f"No pages or text extracted from {pdf_path}. Skipping.")
+            save_checkpoint_func(file_index + 1)
+            return False
+
+        logger.info(f"Loaded {len(pages_from_pdf)} pages from {pdf_path}.")
+
+        # Assemble pages into full document
+        full_document = _assemble_full_document(pages_from_pdf)
+
+        if not full_document:
+            logger.warning(
+                f"No text content found in any pages of {pdf_path}. Skipping."
+            )
+            save_checkpoint_func(file_index + 1)
+            return False
+
+        # Process the complete document
+        await process_document(
+            full_document,
+            pinecone_index,
+            embeddings,
+            0,
+            library_name,
+            text_splitter,
+        )
+
+        # Check for graceful shutdown after processing each document
+        if is_exiting():
+            logger.info(
+                f"Graceful shutdown detected after processing {pdf_path}. Saving progress and exiting."
+            )
+            save_checkpoint_func(file_index + 1)
+            logger.info(
+                f"Progress saved. Next run will start from file index {file_index + 1}."
+            )
+            sys.exit(0)
+
+        # Mark file as successfully processed
+        save_checkpoint_func(file_index + 1)
+
+        # Add summary for this PDF
+        pdf_filename = os.path.basename(pdf_path)
+        logger.info(
+            f"✓ Completed {pdf_filename} - processed {len(pages_from_pdf)} pages as single document"
+        )
+        logger.info(
+            f"Successfully processed PDF file {file_index + 1} of {total_files} ({((file_index + 1) / total_files * 100):.1f}% done in scan)"
+        )
+
+        return True
+
+    except Exception as file_processing_error:
+        logger.error(
+            f"Failed to process PDF file {pdf_path}: {file_processing_error}",
+            exc_info=True,
+        )
+        error_message = str(file_processing_error)
+        if "InsufficientQuotaError" in error_message or "429" in error_message:
+            logger.error(
+                "OpenAI API quota exceeded during file processing. Saving progress and exiting."
+            )
+            save_checkpoint_func(file_index)
+            sys.exit(1)
+
+        logger.warning(
+            f"Skipping file {pdf_path} due to error. Will attempt to continue with next file."
+        )
+        save_checkpoint_func(file_index + 1)
+        return False
+
+
+def _print_final_statistics(
+    total_files: int, files_processed: int, library_name: str, text_splitter
+) -> None:
+    """Print final ingestion statistics and suggestions."""
+    logger.info(
+        f"Ingestion run complete. Scanned {total_files} files. "
+        f"Actually processed content from {files_processed} files in this session."
+    )
+
+    # Print chunking statistics
+    print()
+    text_splitter.metrics.print_summary()
+
+    # Add suggestion for detailed chunk analysis
+    print()
+    print("💡 To analyze chunk quality and see details about small chunks, run:")
+    print(
+        f"   python bin/analyze_small_chunks.py --site {os.environ.get('SITE', 'your-site')} --library '{library_name}' --small-threshold 100 --show-content"
+    )
+
+
+async def run(keep_data: bool, library_name: str, max_files: int | None) -> None:
+    """
+    Main function to run the document ingestion process.
+    This function orchestrates the entire ingestion workflow.
+    """
+    global file_path  # file_path is set in main()
+    logger.info(f"Processing documents from directory: {file_path}")
+
+    # Initialize services and components
+    pinecone, pinecone_index = _initialize_pinecone_services(library_name, keep_data)
+    text_splitter, embeddings = _initialize_processing_components()
+
+    # Discover PDF files to process
+    pdf_file_paths = _discover_pdf_files()
+    if not pdf_file_paths:
+        return
+
+    # Set up checkpoint management
     processed_files_count, current_folder_signature, save_checkpoint_func = (
         pdf_checkpoint_integration(
             checkpoint_dir="./media/pdf-docs",
@@ -788,14 +1104,14 @@ async def run(keep_data: bool, library_name: str) -> None:
     # Set up signal handler for graceful shutdown
     setup_signal_handlers()
 
-    # Process PDF files
+    # Process PDF files with progress tracking
     files_actually_processed_in_this_run = 0
     for i in range(processed_files_count, len(pdf_file_paths)):
         if is_exiting():
             logger.info(
                 "Graceful shutdown detected: saving progress before exiting loop."
             )
-            save_checkpoint_func(i)  # Save current file index 'i' (next to process)
+            save_checkpoint_func(i)
             if i == 0:
                 logger.info(
                     "Exiting before processing any files. Next run will start from the beginning."
@@ -807,154 +1123,35 @@ async def run(keep_data: bool, library_name: str) -> None:
             sys.exit(0)
 
         current_pdf_path = pdf_file_paths[i]
-        logger.info(
-            f"Processing PDF file {i + 1} of {len(pdf_file_paths)}: {current_pdf_path}"
+
+        # Process single PDF file
+        success = await _process_single_pdf(
+            current_pdf_path,
+            i,
+            len(pdf_file_paths),
+            pinecone_index,
+            embeddings,
+            library_name,
+            text_splitter,
+            save_checkpoint_func,
         )
 
-        try:
-            pdf_loader = PyPDFLoader(current_pdf_path)
-            pages_from_pdf = (
-                pdf_loader.load()
-            )  # This now handles basic PDF errors and returns list
-
-            if not pages_from_pdf:
-                logger.warning(
-                    f"No pages or text extracted from {current_pdf_path}. Skipping."
-                )
-                # Even if skipped, we mark it as "processed" in terms of sequence for checkpoint
-                save_checkpoint_func(i + 1)
-                continue
-
-            logger.info(f"Loaded {len(pages_from_pdf)} pages from {current_pdf_path}.")
-
-            # Process entire PDF as one document instead of page-by-page
-            # This improves chunking quality by preserving context across page boundaries
-            if pages_from_pdf:
-                # Extract metadata from first page (should be consistent across all pages)
-                first_page = pages_from_pdf[0]
-
-                # Concatenate all page content and track page boundaries
-                full_text_parts = []
-                page_boundaries = []  # Track where each page starts/ends in concatenated text
-                current_offset = 0
-
-                for page_index, page_doc in enumerate(pages_from_pdf):
-                    if page_doc.page_content and page_doc.page_content.strip():
-                        page_text = page_doc.page_content.strip()
-
-                        # Add intelligent spacing between pages
-                        if page_index > 0:
-                            # Get the last few characters of the previous page
-                            previous_text = (
-                                full_text_parts[-1] if full_text_parts else ""
-                            )
-
-                            # Determine appropriate separator based on text flow
-                            page_separator = _determine_page_separator(
-                                previous_text, page_text
-                            )
-                            full_text_parts.append(page_separator)
-                            current_offset += len(page_separator)
-
-                        # Track this page's boundaries in the concatenated text
-                        start_offset = current_offset
-                        full_text_parts.append(page_text)
-                        current_offset += len(page_text)
-                        end_offset = current_offset
-
-                        # Use actual PDF page number (not sequential index)
-                        actual_pdf_page_number = (
-                            page_doc.metadata.get("page", page_index) + 1
-                        )
-                        page_boundaries.append(
-                            {
-                                "page_number": actual_pdf_page_number,
-                                "start_offset": start_offset,
-                                "end_offset": end_offset,
-                            }
-                        )
-
-                if not full_text_parts:
-                    logger.warning(
-                        f"No text content found in any pages of {current_pdf_path}. Skipping."
-                    )
-                    save_checkpoint_func(i + 1)
-                    continue
-
-                # Create a single document with all content (no page markers)
-                full_document = Document(
-                    page_content=clean_document_text("".join(full_text_parts)),
-                    metadata={
-                        **first_page.metadata.copy(),
-                        "page_boundaries": page_boundaries,
-                        "total_pages": len(pages_from_pdf),
-                    },
-                )
-
-                # Process the complete document (this will handle chunking better)
-                await process_document(
-                    full_document,
-                    pinecone_index,
-                    embeddings,
-                    0,
-                    library_name,
-                    text_splitter,
-                )
-
-                # Check for graceful shutdown after processing each document
-                if is_exiting():
-                    logger.info(
-                        f"Graceful shutdown detected after processing {current_pdf_path}. Saving progress and exiting."
-                    )
-                    save_checkpoint_func(
-                        i + 1
-                    )  # Mark this file as done since we just completed it
-                    logger.info(
-                        f"Progress saved. Next run will start from file index {i + 1}."
-                    )
-                    sys.exit(0)
-
-            # All pages of the current PDF processed successfully
+        if success:
             files_actually_processed_in_this_run += 1
-            save_checkpoint_func(i + 1)  # Mark this file as done
 
-            # Add summary for this PDF
-            pdf_filename = os.path.basename(current_pdf_path)
+        if max_files and files_actually_processed_in_this_run >= max_files:
             logger.info(
-                f"✓ Completed {pdf_filename} - processed {len(pages_from_pdf)} pages as single document"
+                f"Reached max_files limit. Stopping after {max_files} files processed."
             )
-            logger.info(
-                f"Successfully processed PDF file {i + 1} of {len(pdf_file_paths)} ({((i + 1) / len(pdf_file_paths) * 100):.1f}% done in scan)"
-            )
+            break
 
-        except Exception as file_processing_error:
-            logger.error(
-                f"Failed to process PDF file {current_pdf_path}: {file_processing_error}",
-                exc_info=True,
-            )
-            error_message = str(file_processing_error)
-            if "InsufficientQuotaError" in error_message or "429" in error_message:
-                logger.error(
-                    "OpenAI API quota exceeded during file processing. Saving progress and exiting."
-                )
-                save_checkpoint_func(i)
-                sys.exit(1)
-
-            logger.warning(
-                f"Skipping file {current_pdf_path} due to error. Will attempt to continue with next file."
-            )
-            # Mark this problematic file as "processed" (i.e., attempted and failed, so skipped)
-            # to avoid retrying it indefinitely on subsequent runs if the error is persistent for this file.
-            save_checkpoint_func(i + 1)
-            continue  # Continue to the next file
-
-    logger.info(
-        f"Ingestion run complete. Scanned {len(pdf_file_paths)} files. Actually processed content from {files_actually_processed_in_this_run} files in this session."
+    # Print final statistics and suggestions
+    _print_final_statistics(
+        len(pdf_file_paths),
+        files_actually_processed_in_this_run,
+        library_name,
+        text_splitter,
     )
-
-    # Print chunking statistics
-    print()
-    text_splitter.metrics.print_summary()
 
 
 def main():
@@ -979,6 +1176,11 @@ def main():
         action="store_true",
         help="Flag to keep existing data in the index",
     )
+    parser.add_argument(
+        "--max-files",
+        type=int,
+        help="Maximum number of files to process (useful for testing)",
+    )
 
     args = parser.parse_args()
 
@@ -992,7 +1194,7 @@ def main():
         sys.exit(1)
 
     # Run the ingestion process
-    asyncio.run(run(args.keep_data, args.library_name))
+    asyncio.run(run(args.keep_data, args.library_name, args.max_files))
 
 
 if __name__ == "__main__":

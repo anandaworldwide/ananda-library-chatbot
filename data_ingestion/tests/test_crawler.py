@@ -442,6 +442,9 @@ class TestDaemonBehavior(unittest.TestCase):
             # Mock args for run_crawl_loop
             mock_args = MagicMock()
             mock_args.daemon = True  # Ensure daemon mode is on
+            mock_args.stop_after = (
+                None  # Set stop_after to None to avoid comparison error
+            )
 
             # Mock is_exiting from shared utilities to be False for a few iterations
             with patch("crawler.website_crawler.is_exiting") as mock_is_exiting:

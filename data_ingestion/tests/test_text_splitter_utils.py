@@ -223,8 +223,8 @@ def test_dynamic_chunk_size_very_short_text():
     text = "Short text. " * 50  # Approx 100 words
     chunks = splitter.split_text(text)
     assert len(chunks) == 1, f"Expected 1 chunk for very short text, got {len(chunks)}"
-    assert splitter.chunk_size == 1000, (
-        f"Expected chunk_size=1000 for very short text, got {splitter.chunk_size}"
+    assert splitter.chunk_size == 800, (
+        f"Expected chunk_size=800 for very short text, got {splitter.chunk_size}"
     )
     assert splitter.chunk_overlap == 0, (
         f"Expected overlap=0 for very short text, got {splitter.chunk_overlap}"
@@ -236,11 +236,11 @@ def test_dynamic_chunk_size_short_text():
     # Between 200 and 1000 words
     text = "Short text. " * 300  # Approx 600 words
     splitter.split_text(text)
-    assert splitter.chunk_size == 800, (
-        f"Expected chunk_size=800 for short text, got {splitter.chunk_size}"
+    assert splitter.chunk_size == 300, (
+        f"Expected chunk_size=300 for short text, got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 100, (
-        f"Expected overlap=100 for short text, got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 60, (
+        f"Expected overlap=60 for short text, got {splitter.chunk_overlap}"
     )
 
 
@@ -249,11 +249,11 @@ def test_dynamic_chunk_size_medium_text():
     # Between 1000 and 5000 words
     text = "Medium text. " * 1500  # Approx 3000 words
     splitter.split_text(text)
-    assert splitter.chunk_size == 1200, (
-        f"Expected chunk_size=1200 for medium text, got {splitter.chunk_size}"
+    assert splitter.chunk_size == 400, (
+        f"Expected chunk_size=400 for medium text, got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 200, (
-        f"Expected overlap=200 for medium text, got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 80, (
+        f"Expected overlap=80 for medium text, got {splitter.chunk_overlap}"
     )
 
 
@@ -262,11 +262,11 @@ def test_dynamic_chunk_size_long_text():
     # Over 5000 words
     text = "Long text. " * 3000  # Approx 6000 words
     splitter.split_text(text)
-    assert splitter.chunk_size == 1600, (
-        f"Expected chunk_size=1600 for long text, got {splitter.chunk_size}"
+    assert splitter.chunk_size == 500, (
+        f"Expected chunk_size=500 for long text, got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 300, (
-        f"Expected overlap=300 for long text, got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 100, (
+        f"Expected overlap=100 for long text, got {splitter.chunk_overlap}"
     )
 
 
@@ -342,9 +342,9 @@ def test_twenty_percent_overlap_calculation():
                     actual_overlap_words = j
 
             # The actual overlap should be close to the expected 20%
-            # Allow some tolerance since we're dealing with word boundaries
-            min_expected = max(1, expected_overlap_words - 2)  # Allow 2 words tolerance
-            max_expected = expected_overlap_words + 2
+            # Allow some tolerance since we're dealing with word boundaries and token-based splitting
+            min_expected = max(1, expected_overlap_words - 5)  # Allow 5 words tolerance
+            max_expected = expected_overlap_words + 5
 
             assert min_expected <= actual_overlap_words <= max_expected, (
                 f"Chunk {i}: Expected overlap ~{expected_overlap_words} words (20% of {len(prev_words)}), "

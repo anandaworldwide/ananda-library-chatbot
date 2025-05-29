@@ -8,12 +8,14 @@ import logging
 
 from utils.text_splitter_utils import Document, SpacyTextSplitter
 
-# Configure logging to see all the detailed output
+# Configure logging - set root to INFO, enable DEBUG only for this module
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Enable DEBUG only for this script
 
 
 def test_chunking_logging_debug():

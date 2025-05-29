@@ -75,22 +75,69 @@ this chunking strategy across all data ingestion methods.
 - Verified document ID tracking for metrics and proper chunk quality measurement
 - **UPDATED**: Replaced custom chunk ID generation with central `generate_vector_id()` utility from `pinecone_utils.py`
 - **STANDARDIZED**: Chunk IDs now follow the 7-part format:
-  `library||source_location||content_type||title||source_id||content_hash||chunk_index`
+  `content_type||library||source_location||title||source_id||content_hash||chunk_index`
 - **IMPROVED**: Consistent vector ID format across all ingestion methods for better database operations
 
-## SQL Database Ingestion
+## SQL Database Ingestion ✅
 
-- [ ] Update `sql_to_vector_db` scripts to use the new chunking strategy
+- [x] Update `sql_to_vector_db` scripts to use the new chunking strategy
 - [x] Ensure metadata is preserved correctly with the new chunking approach
 
-**Note**: Utilize the refined chunking thresholds and logging metrics for optimization.
+**Implementation Details**:
+
+- Updated `ingest_db_text.py` to use `SpacyTextSplitter()` with dynamic chunk sizing
+- Integrated comprehensive metrics tracking and reporting
+- Applied word count-based chunk sizing (225-450 word target range)
+- Preserved all metadata fields during chunking process
+- Added chunking statistics summary at end of ingestion sessions
+- Verified compatibility with existing checkpoint and progress tracking systems
+
+**Note**: Successfully utilizing the refined chunking thresholds and logging metrics for optimization.
+
+## Get back on track with original strategy
+
+- [x] **Switch to Token-Based Splitting**: Update \_split_by_words and_split_by_sentences to accumulate token counts
+      (using the pre-tokenized SpaCy doc) instead of character lengths. For example, track the number of tokens per
+      chunk and split when it exceeds self.chunk_size.
+
+- [x] **Adjust Chunk Sizes**
+
+  : Scale back the `chunk_size` values to match the 225-450 word range—roughly 292-585 tokens. Suggested starting
+  points:
+
+  - <1000 words: chunk_size=300 tokens
+  - 1000-5000 words: chunk_size=400 tokens
+  - > 5000 words: chunk_size=500 tokens
+
+- [x] **Keep Overlap Proportional**: Set chunk_overlap to 20-30% of chunk_size (e.g., 60-150 tokens) to maintain
+      context.
+
+Once these adjustments are made, the implementation should produce chunks that align with the planned strategy,
+leveraging SpaCy's tokenization for precision and staying within the target word range.
 
 ## Integration and Testing
 
-- [ ] Create test suite to verify chunk quality across all ingestion methods
-- [ ] Benchmark ingestion performance before and after changes
+- [x] Create test suite to verify chunk quality across all ingestion methods
+  - [x] Create integration tests that run actual ingestion scripts and verify chunk quality
+  - [x] Test consistency verification across all ingestion methods (PDF, SQL, crawler, audio/video)
+  - [x] Verify target range compliance testing (225-450 words) for all methods
+  - [x] Test metadata preservation verification during chunking across all pipelines
+- [ ] ~~Benchmark ingestion performance before and after changes~~ (Not needed)
 - [ ] Test retrieval quality with new chunks vs old chunks
 - [ ] Document any special handling required for particular content types
+
+Test Data for integration tests spans four sites.
+
+- Ananda (sql to vector content, audio Transcriptions, video transcriptions)
+- Ananda public (Web crawl content, books PDFs)
+- Crystal clarity (Books PDFs)
+- Jairam (PDFs)
+
+It should be sufficient to put together one suite of content that spans the different types listed in parentheses.
+
+Automating it is challenging since there are 4 different scripts that operate differently based on the types. Perhaps
+there is a manual step that is where the developer runs the ingestion of the different data manually to get it into a
+test Pinecone database, and then integration tests can check for consistency etc.
 
 **Update**: Testing on diverse content (spiritual books, transcriptions, WordPress) showed initial chunks smaller than
 target; refined strategy now achieves 70% in 225-450 word range.
