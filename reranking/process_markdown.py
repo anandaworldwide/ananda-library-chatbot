@@ -4,9 +4,13 @@ Document Relevance Label Processor
 
 This script processes completed markdown files by:
 1. Finding files marked as done in the markdown directory
-2. Parsing the relevance scores
+2. Parsing the relevance scores (0-3) or "ignore" markers
 3. Creating evaluation and fine-tuning datasets
 4. Moving processed files to the done directory
+
+Relevance Scoring:
+- 0-3: Numeric relevance scores (0=not relevant, 3=highly relevant)
+- "ignore": Documents marked as ignored (case-insensitive) are excluded from datasets
 
 Example usage:
     # Process completed markdown files for the ananda site
@@ -25,6 +29,7 @@ The script expects markdown files in reranking/markdown_files/{site_id}/ and wil
 - Create evaluation dataset: reranking/evaluation_dataset_{site_id}.jsonl
 - Create fine-tuning dataset: reranking/fine_tuning_dataset_{site_id}.jsonl
 - Move processed files to reranking/markdown_files/{site_id}/done/
+- Exclude documents marked as "ignore" from both datasets
 """
 
 import argparse
@@ -39,6 +44,9 @@ DONE_PATTERN = r"Done\? \(y/yes\): *(y|yes)\s"
 QUERY_PATTERN = r"# Query: (.*?)\n"
 JUDGE_PATTERN = r"Judge: *(.*?)\n"
 DEFAULT_RETRIEVAL_COUNT = 20
+
+# Updated score pattern to accept both numeric scores and "ignore" (case-insensitive)
+SCORE_PATTERN = r"Document (\d+).*?\*Scoring:.*?\*\*Relevance Score\*\* \\?\[Enter 0-3\\?\]:\s*(\d|(?i)ignore)"
 
 
 class MarkdownProcessor:
@@ -199,7 +207,9 @@ class MarkdownProcessor:
             doc_idx = int(doc_idx_str)
 
             if doc_idx not in scores:
-                print(f"Warning: Document {doc_idx} has no score")
+                print(
+                    f"Info: Document {doc_idx} skipped (no score or marked as ignored)"
+                )
                 continue
 
             score = scores[doc_idx]
@@ -236,28 +246,44 @@ class MarkdownProcessor:
             doc_sections = re.findall(doc_pattern, content, re.DOTALL)
 
             # Extract scores - handle escaped brackets and flexible whitespace
-            score_pattern = r"Document (\d+).*?\*Scoring:.*?\*\*Relevance Score\*\* \\?\[Enter 0-3\\?\]:\s*(\d)"
+            score_pattern = SCORE_PATTERN
             score_matches = re.findall(score_pattern, content, re.DOTALL)
 
             if self.debug_mode:
                 print(f"Found {len(doc_sections)} document sections")
                 print(f"Found {len(score_matches)} score matches")
 
-            # Convert scores to dictionary
-            scores = {int(doc_idx): int(score) for doc_idx, score in score_matches}
+            # Convert scores to dictionary, separating numeric scores from ignored documents
+            scores = {}
+            ignored_docs = set()
 
-            # Check if all documents have scores
+            for doc_idx, score_value in score_matches:
+                doc_idx = int(doc_idx)
+                # Handle "ignore" case-insensitively
+                if score_value.lower() == "ignore":
+                    ignored_docs.add(doc_idx)
+                    if self.debug_mode:
+                        print(f"Document {doc_idx} marked as ignored")
+                else:
+                    scores[doc_idx] = int(score_value)
+
+            # Check if all documents have been addressed (either scored or ignored)
             total_docs = len(doc_sections)
-            answered_docs = len(scores)
+            addressed_docs = len(scores) + len(ignored_docs)
 
-            if answered_docs < total_docs:
+            if addressed_docs < total_docs:
                 print(
-                    f"Warning: Only {answered_docs}/{total_docs} documents have scores in {os.path.basename(filepath)}"
+                    f"Warning: Only {addressed_docs}/{total_docs} documents have been addressed in {os.path.basename(filepath)}"
+                    f" ({len(scores)} scored, {len(ignored_docs)} ignored)"
                 )
                 if not self.args.force:
                     user_input = input("Process this file anyway? (y/n): ").lower()
                     if user_input != "y":
                         return None, None, []
+            elif self.debug_mode:
+                print(
+                    f"All {total_docs} documents addressed: {len(scores)} scored, {len(ignored_docs)} ignored"
+                )
 
             labeled_docs = self._process_document_sections(doc_sections, scores)
             return query, judge, labeled_docs
