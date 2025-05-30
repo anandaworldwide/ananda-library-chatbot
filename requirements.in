@@ -40,3 +40,4 @@ tenacity==8.2.2
 tqdm==4.66.4
 urllib3==2.2.2
 yt-dlp==2024.7.9
+psutil

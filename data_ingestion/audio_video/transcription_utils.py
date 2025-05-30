@@ -164,7 +164,7 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
     Retrieve transcription for a given file or YouTube video.
 
     This function loads the saved transcription from the corresponding gzipped JSON file,
-    if it exists.
+    if it exists. Includes robust error handling for corrupted cache files.
 
     For Youtube videos, file_path is None
     """
@@ -208,8 +208,39 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
         # Ensure we're using the full path to the JSON file
         full_json_path = os.path.join(TRANSCRIPTIONS_DIR, json_file)
         if os.path.exists(full_json_path):
-            with gzip.open(full_json_path, "rt", encoding="utf-8") as f:
-                return json.load(f)
+            try:
+                with gzip.open(full_json_path, "rt", encoding="utf-8") as f:
+                    return json.load(f)
+            except (gzip.BadGzipFile, OSError, json.JSONDecodeError) as e:
+                # Handle corrupted cache files
+                file_identifier = (
+                    youtube_id or os.path.basename(file_path)
+                    if file_path
+                    else "unknown file"
+                )
+                logger.error(
+                    f"Corrupted transcription cache detected for {file_identifier}: {str(e)}"
+                )
+                logger.info(f"Removing corrupted cache file: {full_json_path}")
+
+                try:
+                    os.remove(full_json_path)
+                    # Also remove from database
+                    conn = sqlite3.connect(TRANSCRIPTIONS_DB_PATH)
+                    c = conn.cursor()
+                    c.execute(
+                        "DELETE FROM transcriptions WHERE file_hash = ?", (file_hash,)
+                    )
+                    conn.commit()
+                    conn.close()
+                    logger.info(
+                        f"Successfully cleaned up corrupted cache for {file_identifier}"
+                    )
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to clean up corrupted cache: {cleanup_error}")
+
+                # Return None to trigger fresh transcription
+                return None
         else:
             logger.warning(f"JSON file not found at {full_json_path}")
     return None

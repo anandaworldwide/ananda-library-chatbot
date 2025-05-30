@@ -84,6 +84,46 @@ relative to workspace root.
 **Bug Fix**: Resolved issue where metrics were only recorded for documents processed through the "without overlap" code
 path by extracting metrics recording to a helper method called from all return paths.
 
+## RAG System Evaluation Results - Current vs New Corpus Performance
+
+**Evaluation Framework**: Successfully implemented comprehensive RAG evaluation system comparing chunking strategies:
+
+- **Dataset**: 18 queries from human-judged evaluation dataset
+- **Metrics**: Precision@5 and NDCG@5 with 0.85 similarity threshold for chunk matching
+- **Systems**: Current corpus vs new corpus (still building)
+- **Strategies**: 5 chunking approaches from fixed-size to spaCy-based
+
+**Key Performance Findings** (Current System):
+
+- **spaCy Semantic Chunking Wins**: Both sentence-based and paragraph-based achieve identical top performance
+  - Precision@5: 44.4% (2.3x better than fixed-size)
+  - NDCG@5: 0.725 (70% better than fixed-size)
+  - Retrieval time: ~0.45-0.52 seconds
+- **Fixed-Size Chunking Limitations**:
+  - Current (256 tokens): 18.9% precision, 0.426 NDCG
+  - Optimized (400 tokens): 21.1% precision, 0.453 NDCG
+- **Dynamic Chunking Potential**: 27.8% precision, 0.567 NDCG but 2.6s retrieval time
+
+**Technical Validation**:
+
+- New system infrastructure working correctly (fast retrieval times)
+- Zero results expected due to incomplete corpus
+- Evaluation framework ready for post-ingestion comparison
+
+**Strategic Implications**:
+
+1. **Semantic chunking approach validated** - 2.3x performance improvement over fixed-size
+2. **Sentence vs paragraph chunking equivalent** on current dataset
+3. **Dynamic chunking needs optimization** - high latency for modest gains
+4. **Infrastructure ready** for new corpus evaluation
+
+**Next Steps**:
+
+- Complete new corpus ingestion
+- Re-run evaluation for direct performance comparison
+- Optimize dynamic chunking parameters
+- Consider A/B testing top-performing strategies in production
+
 ## Documentation Updates Completed
 
 Updated all relevant documentation files to reflect the completed spaCy chunking optimization work:
@@ -531,3 +571,42 @@ datasets while still marking the file as complete.
 - Added ignore option to main instructions with clear explanation
 - Updated individual document scoring prompts to include "ignore=Skip" and "[Enter 0-3 or ignore]"
 - Maintains consistency between generation and processing scripts
+
+## New Utilities Added
+
+### retry_utils.py
+
+- Created `data_ingestion/utils/retry_utils.py` for network resilience
+- Contains async and sync retry functions with exponential backoff
+- Predefined configurations: `EMBEDDING_RETRY_CONFIG`, `PINECONE_RETRY_CONFIG`, `NETWORK_RETRY_CONFIG`
+- Fatal error detection for non-retryable errors (quota exceeded, authentication failed, etc.)
+- Used in PDF ingestion to handle Pinecone and OpenAI API connectivity issues
+- Reusable across other data ingestion scripts (audio_video, crawler, etc.)
+- **Comprehensive test coverage**: 23 tests covering async/sync retry logic, exponential backoff, fatal error detection,
+  timeout handling, and configuration validation
+
+## SQL to Vector Database Ingestion Script Logging
+
+**Status**: Successfully converted `data_ingestion/sql_to_vector_db/ingest_db_text.py` from print statements to proper
+logging.
+
+**Logging Configuration**:
+
+- Root logging level set to WARNING to reduce noise from third-party libraries
+- Script-specific logger set to DEBUG level for detailed output
+- Timestamp format: `"%(asctime)s - %(name)s - %(levelname)s - %(message)s"`
+- Pattern follows same approach as `pdf_to_vector_db.py` and other ingestion scripts
+
+**Changes Made**:
+
+- Added `import logging` and logging configuration after imports
+- Replaced all `print()` statements with appropriate `logger.info()`, `logger.warning()`, `logger.error()` calls
+- Preserved commented print statements for future reference
+- Maintained all existing functionality while adding timestamps to all output
+
+**Benefits**:
+
+- Timestamps on all log messages for better debugging and monitoring
+- Consistent logging levels across all ingestion scripts
+- Quieter operation by suppressing third-party library debug messages
+- Better error classification with warning/error level logging

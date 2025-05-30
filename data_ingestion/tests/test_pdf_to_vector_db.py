@@ -57,11 +57,10 @@ def test_load_env_existing_file():
 
 def test_load_env_missing_file():
     """Test error when environment file is missing"""
-    with patch("os.path.exists", return_value=False):
-        with pytest.raises(FileNotFoundError):
-            from pyutil.env_utils import load_env
+    with patch("os.path.exists", return_value=False), pytest.raises(FileNotFoundError):
+        from pyutil.env_utils import load_env
 
-            load_env("test-site")
+        load_env("test-site")
 
 
 @pytest.mark.asyncio
@@ -206,9 +205,7 @@ async def test_process_chunk(mock_env):
         )
 
         # Verify correct ID generation and metadata
-        expected_id = (
-            f"text||test-library||Test_Document||{expected_document_hash}||chunk1"
-        )
+        expected_id = f"text||test-library||pdf||Test Document||Test Author||{expected_document_hash}||0"
 
         expected_metadata = {
             "id": expected_id,

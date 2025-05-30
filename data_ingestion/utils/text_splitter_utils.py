@@ -197,17 +197,17 @@ class ChunkingMetrics:
 
         if self.edge_cases:
             print(f"\nEdge cases detected: {len(self.edge_cases)}")
-            for case in self.edge_cases[:5]:  # Show first 5 edge cases
+            for case in self.edge_cases[:200]:  # Show first 200 edge cases
                 print(f"  {case}")
-            if len(self.edge_cases) > 5:
-                print(f"  ... and {len(self.edge_cases) - 5} more edge cases")
+            if len(self.edge_cases) > 200:
+                print(f"  ... and {len(self.edge_cases) - 200} more edge cases")
 
         if self.anomalies:
             print(f"\nAnomalies detected: {len(self.anomalies)}")
-            for anomaly in self.anomalies[:5]:  # Show first 5 anomalies
+            for anomaly in self.anomalies[:200]:  # Show first 200 anomalies
                 print(f"  {anomaly}")
-            if len(self.anomalies) > 5:
-                print(f"  ... and {len(self.anomalies) - 5} more anomalies")
+            if len(self.anomalies) > 200:
+                print(f"  ... and {len(self.anomalies) - 200} more anomalies")
 
 
 class SpacyTextSplitter:
@@ -244,11 +244,27 @@ class SpacyTextSplitter:
             try:
                 self.logger.debug(f"Loading spaCy model {self.pipeline}")
                 self.nlp = spacy.load(self.pipeline)
+
+                # Increase max_length to handle very large documents
+                # Default is 1,000,000 chars. Setting to 2,000,000 to handle large PDFs
+                # This requires roughly 2GB of temporary memory during processing
+                self.nlp.max_length = 2_000_000
+                self.logger.debug(
+                    f"Set spaCy max_length to {self.nlp.max_length:,} characters"
+                )
+
             except OSError:
                 try:
                     self.logger.info(f"Downloading spaCy model {self.pipeline}...")
                     spacy.cli.download(self.pipeline)
                     self.nlp = spacy.load(self.pipeline)
+
+                    # Increase max_length for downloaded model too
+                    self.nlp.max_length = 2_000_000
+                    self.logger.debug(
+                        f"Set spaCy max_length to {self.nlp.max_length:,} characters"
+                    )
+
                     self.logger.info(
                         f"Successfully downloaded and loaded {self.pipeline}"
                     )

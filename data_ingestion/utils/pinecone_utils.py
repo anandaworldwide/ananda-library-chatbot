@@ -327,11 +327,15 @@ def clear_library_vectors(
 
     # Ask for confirmation unless disabled
     if ask_confirmation:
-        confirm = input(
-            f"Delete ALL {len(vector_ids)} vectors for library '{library_name}'? This cannot be undone. (y/N): "
-        )
-        if confirm.lower() != "y":
-            print("Deletion aborted by user.")
+        try:
+            confirm = input(
+                f"Delete ALL {len(vector_ids)} vectors for library '{library_name}'? This cannot be undone. (y/N): "
+            )
+            if confirm.lower() != "y":
+                print("Deletion aborted by user.")
+                return False
+        except KeyboardInterrupt:
+            print("\nDeletion aborted by user (Ctrl+C).")
             return False
 
     # Delete in batches

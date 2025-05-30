@@ -45,13 +45,78 @@ def create_embeddings(chunks, client):
 
     Rate Limits: Determined by OpenAI API quotas
     """
-    texts = [chunk["text"] for chunk in chunks]
-    logging.debug("create_embeddings")
+    # Extract and validate text chunks
+    texts = []
+    valid_chunk_indices = []
+
+    for i, chunk in enumerate(chunks):
+        if not isinstance(chunk, dict):
+            logger.warning(f"Chunk {i} is not a dictionary, skipping: {type(chunk)}")
+            continue
+
+        if "text" not in chunk:
+            logger.warning(f"Chunk {i} missing 'text' field, skipping")
+            continue
+
+        text = chunk["text"]
+
+        # Validate text content
+        if not isinstance(text, str):
+            logger.warning(f"Chunk {i} text is not a string, skipping: {type(text)}")
+            continue
+
+        # Check for empty or whitespace-only text
+        if not text or not text.strip():
+            logger.warning(f"Chunk {i} has empty or whitespace-only text, skipping")
+            continue
+
+        # Check for extremely long text that might cause API issues
+        if len(text) > 8000:  # OpenAI embeddings have token limits
+            logger.warning(
+                f"Chunk {i} text is very long ({len(text)} chars), truncating"
+            )
+            text = text[:8000]
+
+        texts.append(text)
+        valid_chunk_indices.append(i)
+
+    if not texts:
+        raise ValueError("No valid text chunks found for embedding creation")
+
+    logger.debug(
+        f"create_embeddings: Processing {len(texts)} valid text chunks out of {len(chunks)} total"
+    )
+
     model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
     if not model_name:
         raise ValueError("OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set")
-    response = client.embeddings.create(input=texts, model=model_name)
-    return [embedding.embedding for embedding in response.data]
+
+    try:
+        response = client.embeddings.create(input=texts, model=model_name)
+        embeddings = [embedding.embedding for embedding in response.data]
+
+        # Verify we got the expected number of embeddings
+        if len(embeddings) != len(texts):
+            logger.error(f"Expected {len(texts)} embeddings, got {len(embeddings)}")
+            raise ValueError(
+                f"Embedding count mismatch: expected {len(texts)}, got {len(embeddings)}"
+            )
+
+        logger.debug(f"Successfully created {len(embeddings)} embeddings")
+        return embeddings
+
+    except Exception as e:
+        logger.error(f"OpenAI embeddings API error: {str(e)}")
+        logger.error(f"Model: {model_name}")
+        logger.error(f"Number of texts: {len(texts)}")
+        logger.error(
+            f"Text lengths: {[len(t) for t in texts[:5]]}"
+        )  # Log first 5 text lengths
+        if texts:
+            logger.error(
+                f"First text sample: {repr(texts[0][:100])}"
+            )  # Log first 100 chars of first text
+        raise
 
 
 def load_pinecone(index_name=None):

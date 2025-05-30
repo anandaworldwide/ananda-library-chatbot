@@ -421,6 +421,21 @@ class TestClearLibraryVectors:
         captured = capsys.readouterr()
         assert "Error deleting vectors" in captured.out
 
+    def test_clear_vectors_keyboard_interrupt(self, capsys):
+        """Test KeyboardInterrupt (Ctrl+C) handling during confirmation prompt."""
+        mock_index = Mock()
+        mock_index.list.return_value = iter([["vec1", "vec2"]])
+
+        # Mock input to raise KeyboardInterrupt (simulating Ctrl+C)
+        with patch("builtins.input", side_effect=KeyboardInterrupt()):
+            result = clear_library_vectors(
+                mock_index, "test-library", ask_confirmation=True
+            )
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "Deletion aborted by user (Ctrl+C)." in captured.out
+
 
 class TestClearLibraryVectorsAsync:
     """Test asynchronous vector clearing operations."""

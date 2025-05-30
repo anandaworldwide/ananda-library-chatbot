@@ -32,6 +32,8 @@ import re
 import sys
 
 import pdfplumber
+import psutil
+import tiktoken
 from pinecone import Index
 from tqdm import tqdm
 
@@ -50,6 +52,11 @@ from data_ingestion.utils.progress_utils import (
     is_exiting,
     setup_signal_handlers,
 )
+from data_ingestion.utils.retry_utils import (
+    EMBEDDING_RETRY_CONFIG,
+    PINECONE_RETRY_CONFIG,
+    retry_with_backoff,
+)
 from data_ingestion.utils.text_processing import clean_document_text
 from data_ingestion.utils.text_splitter_utils import Document, SpacyTextSplitter
 from pyutil.env_utils import load_env  # noqa: E402
@@ -63,6 +70,41 @@ logger.setLevel(logging.DEBUG)  # Enable DEBUG only for this script
 
 # Global variable for file path
 file_path = ""
+
+
+def _count_tokens(text: str, model: str = "text-embedding-ada-002") -> int:
+    """
+    Count the number of tokens in a text string using tiktoken.
+
+    Args:
+        text: The text to count tokens for
+        model: The OpenAI model to use for token counting
+
+    Returns:
+        Number of tokens in the text
+    """
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+        return len(encoding.encode(text))
+    except KeyError:
+        # Fallback to cl100k_base encoding if model not found
+        encoding = tiktoken.get_encoding("cl100k_base")
+        return len(encoding.encode(text))
+
+
+def _validate_chunk_token_limit(text: str, max_tokens: int = 8192) -> tuple[bool, int]:
+    """
+    Validate that a chunk doesn't exceed the token limit for OpenAI embeddings.
+
+    Args:
+        text: The text chunk to validate
+        max_tokens: Maximum tokens allowed (default 8192 for text-embedding-ada-002)
+
+    Returns:
+        Tuple of (is_valid, token_count)
+    """
+    token_count = _count_tokens(text)
+    return token_count <= max_tokens, token_count
 
 
 def _determine_page_separator(previous_text: str, current_text: str) -> str:
@@ -528,9 +570,9 @@ def _calculate_page_references(
 
 async def _process_single_batch(
     batch: list, start_idx: int, pinecone_index, embeddings, library_name: str
-) -> None:
+) -> int:
     """
-    Process a single batch of document chunks.
+    Process a single batch of document chunks with improved error handling.
 
     Args:
         batch: List of document chunks in this batch
@@ -538,6 +580,9 @@ async def _process_single_batch(
         pinecone_index: Pinecone index for storage
         embeddings: OpenAI embeddings instance
         library_name: Name of the library
+
+    Returns:
+        int: Total number of failed chunks in this batch
     """
     # Create tasks for the batch
     tasks = []
@@ -545,21 +590,21 @@ async def _process_single_batch(
         # Check for shutdown before creating each task
         if is_exiting():
             logger.info("Graceful shutdown detected while preparing batch tasks.")
-            return
+            return 0
 
         task = process_chunk(
             doc, pinecone_index, embeddings, start_idx + j, library_name
         )
         tasks.append(task)
 
-    # Process batch with timeout
+    # Process batch with longer timeout and better error handling
     try:
         results = await asyncio.wait_for(
             asyncio.gather(*tasks, return_exceptions=True),
-            timeout=30.0,  # 30 second timeout per batch
+            timeout=120.0,  # Increased timeout to 2 minutes per batch
         )
     except asyncio.TimeoutError:
-        logger.warning("Batch processing timeout after 30 seconds")
+        logger.warning("Batch processing timeout after 2 minutes")
         # Cancel remaining tasks on timeout
         for task in tasks:
             if not task.done():
@@ -567,17 +612,28 @@ async def _process_single_batch(
         # Check if we should exit due to shutdown signal
         if is_exiting():
             logger.info("Graceful shutdown detected during batch timeout.")
-            return
+            return 0
         else:
             # If not shutting down, continue with a warning
             logger.warning("Continuing after batch timeout...")
-            return
+            return 0
 
-    # Check for exceptions
-    for result in results:
+    # Check for exceptions and handle them
+    failed_chunks = []
+    for i, result in enumerate(results):
         if isinstance(result, Exception):
-            print(f"Error processing chunk: {result}")
-            raise result
+            chunk_idx = start_idx + i
+            failed_chunks.append(chunk_idx)
+            logger.error(f"Error processing chunk {chunk_idx}: {result}")
+
+    if failed_chunks:
+        logger.warning(
+            f"Failed to process {len(failed_chunks)} chunks in batch: {failed_chunks}"
+        )
+        # For network connectivity issues, we'll continue rather than failing the entire batch
+        # This allows processing to continue even if some chunks fail due to temporary issues
+
+    return len(failed_chunks)
 
 
 async def _process_chunks_in_batches(
@@ -585,17 +641,20 @@ async def _process_chunks_in_batches(
     pinecone_index,
     embeddings,
     library_name: str,
-    batch_size: int = 10,
-) -> None:
+    batch_size: int = 5,  # Reduced batch size for better stability
+) -> int:
     """
-    Process document chunks in batches with progress tracking.
+    Process document chunks in batches with progress tracking and rate limiting.
 
     Args:
         valid_docs: List of validated document chunks
         pinecone_index: Pinecone index for storage
         embeddings: OpenAI embeddings instance
         library_name: Name of the library
-        batch_size: Number of chunks to process per batch
+        batch_size: Number of chunks to process per batch (reduced from 10 to 5)
+
+    Returns:
+        int: Total number of failed chunks across all batches
     """
     # Calculate batch ranges
     batch_ranges = [
@@ -612,9 +671,10 @@ async def _process_chunks_in_batches(
     )
 
     progress_bar = create_progress_bar(config)
+    total_failed_chunks = 0
 
     try:
-        for start_idx, end_idx in batch_ranges:
+        for batch_num, (start_idx, end_idx) in enumerate(batch_ranges):
             # Check for graceful shutdown before starting each batch
             if is_exiting():
                 logger.info("Graceful shutdown detected during batch processing.")
@@ -622,15 +682,130 @@ async def _process_chunks_in_batches(
 
             batch = valid_docs[start_idx:end_idx]
 
-            # Process the single batch
-            await _process_single_batch(
+            # Process the single batch and get failed count
+            failed_count = await _process_single_batch(
                 batch, start_idx, pinecone_index, embeddings, library_name
             )
+            total_failed_chunks += failed_count
+
+            # Add a small delay between batches to prevent overwhelming APIs
+            if batch_num < len(batch_ranges) - 1:  # Don't delay after the last batch
+                await asyncio.sleep(1.0)  # 1 second delay between batches
 
             progress_bar.update(1)
 
     finally:
         progress_bar.close()
+
+    return total_failed_chunks
+
+
+def _split_oversized_chunk(text: str, max_tokens: int = 8192) -> list[str]:
+    """
+    Split an oversized chunk into smaller sub-chunks that fit within token limits.
+
+    Args:
+        text: The oversized text chunk
+        max_tokens: Maximum tokens per sub-chunk (default 8192)
+
+    Returns:
+        List of text sub-chunks, each within token limits
+    """
+    # Target 75% of max tokens to provide buffer
+    target_tokens = int(max_tokens * 0.75)
+
+    # First try splitting by paragraphs
+    paragraphs = text.split("\n\n")
+    if len(paragraphs) > 1:
+        sub_chunks = []
+        current_chunk = ""
+
+        for paragraph in paragraphs:
+            # Check if adding this paragraph would exceed the limit
+            test_chunk = current_chunk + ("\n\n" if current_chunk else "") + paragraph
+            token_count = _count_tokens(test_chunk)
+
+            if token_count <= target_tokens:
+                current_chunk = test_chunk
+            else:
+                # Save current chunk if it has content
+                if current_chunk:
+                    sub_chunks.append(current_chunk)
+
+                # Check if the paragraph itself is too large
+                paragraph_tokens = _count_tokens(paragraph)
+                if paragraph_tokens > target_tokens:
+                    # Split the paragraph by sentences
+                    sentences = paragraph.split(". ")
+                    temp_chunk = ""
+
+                    for i, sentence in enumerate(sentences):
+                        if i < len(sentences) - 1:
+                            sentence += ". "  # Re-add the period and space
+
+                        test_sentence_chunk = temp_chunk + sentence
+                        sentence_tokens = _count_tokens(test_sentence_chunk)
+
+                        if sentence_tokens <= target_tokens:
+                            temp_chunk = test_sentence_chunk
+                        else:
+                            if temp_chunk:
+                                sub_chunks.append(temp_chunk)
+                            temp_chunk = sentence
+
+                    current_chunk = temp_chunk if temp_chunk else ""
+                else:
+                    current_chunk = paragraph
+
+        # Add any remaining content
+        if current_chunk:
+            sub_chunks.append(current_chunk)
+
+        return sub_chunks
+
+    # If no paragraphs, try splitting by sentences
+    sentences = text.split(". ")
+    if len(sentences) > 1:
+        sub_chunks = []
+        current_chunk = ""
+
+        for i, sentence in enumerate(sentences):
+            if i < len(sentences) - 1:
+                sentence += ". "  # Re-add the period and space
+
+            test_chunk = current_chunk + sentence
+            token_count = _count_tokens(test_chunk)
+
+            if token_count <= target_tokens:
+                current_chunk = test_chunk
+            else:
+                if current_chunk:
+                    sub_chunks.append(current_chunk)
+                current_chunk = sentence
+
+        if current_chunk:
+            sub_chunks.append(current_chunk)
+
+        return sub_chunks
+
+    # Last resort: split by character count
+    # Estimate characters per token (roughly 4 characters per token)
+    chars_per_token = 4
+    max_chars = target_tokens * chars_per_token
+
+    sub_chunks = []
+    for i in range(0, len(text), max_chars):
+        chunk = text[i : i + max_chars]
+        # Try to break at word boundaries
+        if i + max_chars < len(text) and not text[i + max_chars].isspace():
+            # Find last space within the chunk
+            last_space = chunk.rfind(" ")
+            if last_space > max_chars * 0.8:  # Only use if we don't lose too much
+                chunk = chunk[:last_space]
+
+        sub_chunks.append(chunk)
+
+    return sub_chunks
 
 
 async def process_document(
@@ -640,9 +815,12 @@ async def process_document(
     doc_index: int,
     library_name: str,
     text_splitter: SpacyTextSplitter,
-) -> None:
+) -> tuple[bool, int, int]:
     """
     Processes a single document, splitting it into chunks using spaCy and adding it to the vector store.
+
+    Returns:
+        tuple[bool, int, int]: (success, total_chunks, failed_chunks)
     """
     # Extract and validate metadata
     source_url, title, author = _extract_document_metadata(raw_doc)
@@ -655,7 +833,7 @@ async def process_document(
         )
         logger.error(f"Full metadata: {raw_doc.metadata}")
         logger.warning("Skipping this page/document due to missing source URL.")
-        return
+        return False, 0, 0
 
     # Update document metadata
     raw_doc.metadata["source"] = source_url
@@ -695,26 +873,105 @@ async def process_document(
         )
 
         # Process chunks in batches
-        await _process_chunks_in_batches(
+        failed_chunks = await _process_chunks_in_batches(
             valid_docs, pinecone_index, embeddings, library_name
         )
 
+        total_chunks = len(valid_docs)
+        success = failed_chunks == 0
 
-async def process_chunk(
+        if failed_chunks > 0:
+            logger.warning(
+                f"Document processing completed with {failed_chunks}/{total_chunks} chunks failed"
+            )
+        else:
+            logger.info(
+                f"Document processing completed successfully: {total_chunks} chunks processed"
+            )
+
+        return success, total_chunks, failed_chunks
+
+    return False, 0, 0
+
+
+async def _process_oversized_chunk(
     doc: Document,
     pinecone_index: Index,
     embeddings: OpenAIEmbeddings,
     chunk_index: int,
     library_name: str,
-) -> None:
-    """Process and store a single document chunk."""
-    # Check for shutdown at the start of processing each chunk
-    if is_exiting():
-        logger.info(
-            f"Graceful shutdown detected before processing chunk {chunk_index}. Skipping..."
-        )
-        return
+) -> int:
+    """
+    Process an oversized chunk by splitting it into smaller sub-chunks.
 
+    Returns:
+        Number of sub-chunks that failed to process
+    """
+    logger.info(
+        f"Attempting to split oversized chunk {chunk_index} into smaller sub-chunks..."
+    )
+
+    # Split the oversized chunk
+    sub_chunks_text = _split_oversized_chunk(doc.page_content)
+
+    if not sub_chunks_text:
+        logger.error(f"Failed to split oversized chunk {chunk_index}")
+        return 1
+
+    logger.info(f"Split chunk {chunk_index} into {len(sub_chunks_text)} sub-chunks")
+
+    failed_sub_chunks = 0
+
+    for i, sub_chunk_text in enumerate(sub_chunks_text):
+        # Validate the sub-chunk
+        is_valid, token_count = _validate_chunk_token_limit(sub_chunk_text)
+        if not is_valid:
+            logger.error(
+                f"Sub-chunk {chunk_index}.{i} still exceeds token limit: {token_count} tokens"
+            )
+            failed_sub_chunks += 1
+            continue
+
+        # Create a new document for the sub-chunk
+        sub_chunk_doc = Document(
+            page_content=sub_chunk_text, metadata=doc.metadata.copy()
+        )
+
+        # Use a modified chunk index to indicate this is a sub-chunk
+        sub_chunk_index = f"{chunk_index}.{i}"
+
+        try:
+            # Process the sub-chunk using the regular processing logic
+            await _process_valid_chunk(
+                sub_chunk_doc, pinecone_index, embeddings, sub_chunk_index, library_name
+            )
+            logger.debug(
+                f"Successfully processed sub-chunk {sub_chunk_index} ({token_count} tokens)"
+            )
+        except Exception as e:
+            logger.error(f"Failed to process sub-chunk {sub_chunk_index}: {e}")
+            failed_sub_chunks += 1
+
+    if failed_sub_chunks == 0:
+        logger.info(
+            f"Successfully processed all {len(sub_chunks_text)} sub-chunks for original chunk {chunk_index}"
+        )
+    else:
+        logger.warning(
+            f"Failed to process {failed_sub_chunks}/{len(sub_chunks_text)} sub-chunks for original chunk {chunk_index}"
+        )
+
+    return failed_sub_chunks
+
+
+async def _process_valid_chunk(
+    doc: Document,
+    pinecone_index: Index,
+    embeddings: OpenAIEmbeddings,
+    chunk_index: str | int,
+    library_name: str,
+) -> None:
+    """Process a validated chunk (token count already confirmed to be within limits)."""
     # Extract metadata
     title = doc.metadata.get("title", "Unknown")
     author = doc.metadata.get("author", "Unknown")
@@ -731,6 +988,93 @@ async def process_chunk(
         author=author,
     )
 
+    # Minimize metadata
+    minimal_metadata = {
+        "id": id,
+        "library": library_name,
+        "type": "text",
+        "author": doc.metadata.get("author", "Unknown"),
+        "source": doc.metadata.get("source"),
+        "title": doc.metadata.get("title"),
+        "text": doc.page_content,
+    }
+
+    # Add page reference if it was calculated during processing
+    page_reference = doc.metadata.get("page")
+    if page_reference:
+        minimal_metadata["page"] = page_reference
+
+    # Generate embedding with retry logic
+    async def embedding_operation():
+        return await asyncio.wait_for(
+            asyncio.to_thread(embeddings.embed_query, doc.page_content),
+            timeout=30.0,  # Increased timeout for embedding
+        )
+
+    try:
+        vector = await retry_with_backoff(
+            embedding_operation,
+            operation_name=f"OpenAI embedding for chunk {chunk_index}",
+            **EMBEDDING_RETRY_CONFIG,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"Embedding timeout for chunk {chunk_index} after retries, skipping..."
+        )
+        raise
+    except Exception as e:
+        logger.error(f"Embedding failed for chunk {chunk_index} after retries: {e}")
+        raise
+
+    # Check for shutdown before Pinecone upsert
+    if is_exiting():
+        logger.info(
+            f"Graceful shutdown detected before upserting chunk {chunk_index}. Skipping..."
+        )
+        return
+
+    # Upsert to Pinecone with retry logic
+    async def pinecone_operation():
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                pinecone_index.upsert, vectors=[(id, vector, minimal_metadata)]
+            ),
+            timeout=20.0,  # Increased timeout for upsert
+        )
+
+    try:
+        await retry_with_backoff(
+            pinecone_operation,
+            operation_name=f"Pinecone upsert for chunk {chunk_index}",
+            **PINECONE_RETRY_CONFIG,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"Pinecone upsert timeout for chunk {chunk_index} after retries, skipping..."
+        )
+        raise
+    except Exception as e:
+        logger.error(
+            f"Pinecone upsert failed for chunk {chunk_index} after retries: {e}"
+        )
+        raise
+
+
+async def process_chunk(
+    doc: Document,
+    pinecone_index: Index,
+    embeddings: OpenAIEmbeddings,
+    chunk_index: int,
+    library_name: str,
+) -> None:
+    """Process and store a single document chunk with retry logic for network issues."""
+    # Check for shutdown at the start of processing each chunk
+    if is_exiting():
+        logger.info(
+            f"Graceful shutdown detected before processing chunk {chunk_index}. Skipping..."
+        )
+        return
+
     try:
         # Check for shutdown before expensive embedding operation
         if is_exiting():
@@ -739,52 +1083,35 @@ async def process_chunk(
             )
             return
 
-        # Minimize metadata
-        minimal_metadata = {
-            "id": id,
-            "library": library_name,
-            "type": "text",
-            "author": doc.metadata.get("author", "Unknown"),
-            "source": doc.metadata.get("source"),
-            "title": doc.metadata.get("title"),
-            "text": doc.page_content,
-        }
-
-        # Add page reference if it was calculated during processing
-        page_reference = doc.metadata.get("page")
-        if page_reference:
-            minimal_metadata["page"] = page_reference
-
-        # Generate embedding with timeout to make it more responsive
-        try:
-            vector = await asyncio.wait_for(
-                asyncio.to_thread(embeddings.embed_query, doc.page_content),
-                timeout=15.0,  # 15 second timeout for embedding
-            )
-        except asyncio.TimeoutError:
-            logger.warning(f"Embedding timeout for chunk {chunk_index}, skipping...")
-            return
-
-        # Check for shutdown before Pinecone upsert
-        if is_exiting():
-            logger.info(
-                f"Graceful shutdown detected before upserting chunk {chunk_index}. Skipping..."
-            )
-            return
-
-        # Upsert to Pinecone with timeout
-        try:
-            await asyncio.wait_for(
-                asyncio.to_thread(
-                    pinecone_index.upsert, vectors=[(id, vector, minimal_metadata)]
-                ),
-                timeout=10.0,  # 10 second timeout for upsert
-            )
-        except asyncio.TimeoutError:
+        # Validate chunk token count before processing
+        is_valid, token_count = _validate_chunk_token_limit(doc.page_content)
+        if not is_valid:
             logger.warning(
-                f"Pinecone upsert timeout for chunk {chunk_index}, skipping..."
+                f"Chunk {chunk_index} exceeds token limit: {token_count} tokens (max 8192). Attempting to split..."
             )
+
+            # Try to process as oversized chunk (split into sub-chunks)
+            failed_sub_chunks = await _process_oversized_chunk(
+                doc, pinecone_index, embeddings, chunk_index, library_name
+            )
+
+            if failed_sub_chunks > 0:
+                error_msg = f"Chunk {chunk_index} split processing failed: {failed_sub_chunks} sub-chunks failed. Original chunk: {token_count} tokens, {len(doc.page_content)} chars, {len(doc.page_content.split())} words"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Successfully processed all sub-chunks
             return
+
+        # Log token count for successful validation
+        logger.debug(
+            f"Chunk {chunk_index} token validation passed: {token_count} tokens"
+        )
+
+        # Process the chunk normally (within token limits)
+        await _process_valid_chunk(
+            doc, pinecone_index, embeddings, chunk_index, library_name
+        )
 
     except Exception as e:
         # Check if error is due to shutdown
@@ -826,7 +1153,10 @@ def _initialize_pinecone_services(library_name: str, keep_data: bool) -> tuple:
     # Clear existing data if needed
     if not keep_data:
         logger.info(f"Clearing existing vectors for library '{library_name}'.")
-        clear_library_vectors(pinecone_index, library_name)
+        deletion_successful = clear_library_vectors(pinecone_index, library_name)
+        if not deletion_successful:
+            logger.info("Vector deletion was aborted by user. Exiting script.")
+            sys.exit(0)
     else:
         logger.info(
             "keep_data is True. Proceeding with adding/updating vectors, existing data will be preserved."
@@ -960,7 +1290,7 @@ async def _process_single_pdf(
     library_name: str,
     text_splitter,
     save_checkpoint_func,
-) -> bool:
+) -> tuple[bool, str | None]:
     """
     Process a single PDF file and return success status.
 
@@ -975,7 +1305,7 @@ async def _process_single_pdf(
         save_checkpoint_func: Function to save progress
 
     Returns:
-        bool: True if file was successfully processed, False if skipped
+        tuple[bool, str | None]: (True if file was successfully processed, failure reason if failed)
     """
     logger.info(f"Processing PDF file {file_index + 1} of {total_files}: {pdf_path}")
 
@@ -986,7 +1316,7 @@ async def _process_single_pdf(
         if not pages_from_pdf:
             logger.warning(f"No pages or text extracted from {pdf_path}. Skipping.")
             save_checkpoint_func(file_index + 1)
-            return False
+            return False, "No pages or text extracted from PDF"
 
         logger.info(f"Loaded {len(pages_from_pdf)} pages from {pdf_path}.")
 
@@ -998,10 +1328,10 @@ async def _process_single_pdf(
                 f"No text content found in any pages of {pdf_path}. Skipping."
             )
             save_checkpoint_func(file_index + 1)
-            return False
+            return False, "No text content found in any pages"
 
         # Process the complete document
-        await process_document(
+        success, total_chunks, failed_chunks = await process_document(
             full_document,
             pinecone_index,
             embeddings,
@@ -1009,6 +1339,16 @@ async def _process_single_pdf(
             library_name,
             text_splitter,
         )
+
+        if not success:
+            logger.warning(
+                f"Failed to process document {pdf_path}. Total chunks: {total_chunks}, Failed chunks: {failed_chunks}"
+            )
+            save_checkpoint_func(file_index + 1)
+            return (
+                False,
+                f"Failed to process document. Total chunks: {total_chunks}, Failed chunks: {failed_chunks}",
+            )
 
         # Check for graceful shutdown after processing each document
         if is_exiting():
@@ -1033,7 +1373,7 @@ async def _process_single_pdf(
             f"Successfully processed PDF file {file_index + 1} of {total_files} ({((file_index + 1) / total_files * 100):.1f}% done in scan)"
         )
 
-        return True
+        return True, None
 
     except Exception as file_processing_error:
         logger.error(
@@ -1041,22 +1381,84 @@ async def _process_single_pdf(
             exc_info=True,
         )
         error_message = str(file_processing_error)
+
+        # Determine specific failure reason for better reporting
+        failure_reason = "Unknown error"
         if "InsufficientQuotaError" in error_message or "429" in error_message:
+            failure_reason = "OpenAI API quota exceeded"
             logger.error(
                 "OpenAI API quota exceeded during file processing. Saving progress and exiting."
             )
             save_checkpoint_func(file_index)
             sys.exit(1)
+        elif "exceeds token limit" in error_message:
+            # Extract token count from error message if available
+            token_match = re.search(r"(\d+) tokens \(max 8192\)", error_message)
+            if token_match:
+                token_count = int(token_match.group(1))
+                failure_reason = (
+                    f"Chunk too large: {token_count:,} tokens (OpenAI limit: 8192)"
+                )
+            else:
+                failure_reason = "Chunk too large: exceeds OpenAI 8192 token limit"
+        elif (
+            "Failed to connect" in error_message
+            or "Remote end closed connection" in error_message
+        ):
+            failure_reason = (
+                "Network connectivity issue (Pinecone/OpenAI API connection failed)"
+            )
+        elif (
+            "embedding timeout" in error_message.lower()
+            or "embedding failed" in error_message.lower()
+        ):
+            failure_reason = "OpenAI embedding service timeout/failure"
+        elif (
+            "pinecone upsert timeout" in error_message.lower()
+            or "pinecone upsert failed" in error_message.lower()
+        ):
+            failure_reason = "Pinecone upsert service timeout/failure"
+        elif "Text of length" in error_message and "exceeds maximum" in error_message:
+            # Extract the text length from the error message
+            match = re.search(
+                r"Text of length (\d+) exceeds maximum of (\d+)", error_message
+            )
+            if match:
+                text_length = int(match.group(1))
+                max_length = int(match.group(2))
+                failure_reason = (
+                    f"Document too large: {text_length:,} chars (max: {max_length:,})"
+                )
+            else:
+                failure_reason = "Document too large for spaCy processing"
+        elif "memory" in error_message.lower() or "Memory" in error_message:
+            failure_reason = "Memory allocation error (document too large)"
+        elif "pdfplumber" in error_message or "PDF" in error_message:
+            failure_reason = "PDF parsing error"
+        elif "embedding" in error_message.lower():
+            failure_reason = "OpenAI embedding generation error"
+        elif "pinecone" in error_message.lower():
+            failure_reason = "Pinecone vector storage error"
+        else:
+            # Truncate very long error messages
+            if len(error_message) > 200:
+                failure_reason = error_message[:200] + "..."
+            else:
+                failure_reason = error_message
 
         logger.warning(
             f"Skipping file {pdf_path} due to error. Will attempt to continue with next file."
         )
         save_checkpoint_func(file_index + 1)
-        return False
+        return False, failure_reason
 
 
 def _print_final_statistics(
-    total_files: int, files_processed: int, library_name: str, text_splitter
+    total_files: int,
+    files_processed: int,
+    library_name: str,
+    text_splitter,
+    failed_files: list,
 ) -> None:
     """Print final ingestion statistics and suggestions."""
     logger.info(
@@ -1064,9 +1466,121 @@ def _print_final_statistics(
         f"Actually processed content from {files_processed} files in this session."
     )
 
+    # Print final memory usage
+    final_memory = psutil.virtual_memory()
+    final_available_gb = final_memory.available / (1024**3)
+    print()
+    print(
+        f"📊 Final memory usage: {final_memory.percent:.1f}% used, {final_available_gb:.1f} GB available"
+    )
+
     # Print chunking statistics
     print()
     text_splitter.metrics.print_summary()
+
+    # Print failed files and reasons
+    if failed_files:
+        print()
+        print("=" * 60)
+        print(f"FAILED FILES REPORT ({len(failed_files)} failures)")
+        print("=" * 60)
+
+        # Group failures by reason for better organization
+        failures_by_reason = {}
+        for failed_file in failed_files:
+            reason = failed_file["reason"]
+            if reason not in failures_by_reason:
+                failures_by_reason[reason] = []
+            failures_by_reason[reason].append(failed_file)
+
+        for reason, files in failures_by_reason.items():
+            print(f"\n{reason} ({len(files)} files):")
+            for failed_file in files:
+                pdf_filename = os.path.basename(failed_file["file_path"])
+                print(f"  • {pdf_filename}")
+                print(f"    Full path: {failed_file['file_path']}")
+                print(f"    File index: {failed_file['file_index']}")
+
+        print()
+        print("RETRY RECOMMENDATIONS:")
+        print("-" * 40)
+
+        # Provide specific recommendations based on failure types
+        for reason in failures_by_reason:
+            if "too large" in reason.lower():
+                print(
+                    f"• {reason}: Consider splitting large PDFs or increasing system memory"
+                )
+                print(
+                    "  Memory check: Your system has enough RAM, but spaCy processing requires ~2GB per 100k chars"
+                )
+            elif "chunk too large" in reason.lower() or "token limit" in reason.lower():
+                print(f"• {reason}: Chunks exceed OpenAI embedding model limits")
+                print(
+                    "  - The spaCy text splitter created chunks too large for OpenAI embeddings"
+                )
+                print(
+                    "  - This typically indicates the text splitter needs tuning for this content type"
+                )
+                print(
+                    "  - Consider reducing chunk_size in SpacyTextSplitter configuration"
+                )
+                print(
+                    "  - Large text blocks without paragraph breaks may cause oversized chunks"
+                )
+                print(
+                    "  - Solution: Implement automatic chunk splitting for oversized chunks"
+                )
+            elif "memory allocation" in reason.lower():
+                print(
+                    f"• {reason}: Close other applications to free up memory or process smaller batches"
+                )
+            elif "network connectivity" in reason.lower():
+                print(f"• {reason}: Network issues with Pinecone/OpenAI APIs")
+                print("  - Check internet connection stability")
+                print("  - Verify API keys are valid and not rate-limited")
+                print("  - Consider running during off-peak hours")
+                print("  - Script now includes retry logic for transient failures")
+            elif (
+                "embedding.*timeout" in reason.lower()
+                or "embedding.*failure" in reason.lower()
+            ):
+                print(f"• {reason}: OpenAI embedding service issues")
+                print("  - Check OpenAI API status and rate limits")
+                print(
+                    "  - Consider smaller batch sizes or longer delays between requests"
+                )
+            elif (
+                "pinecone.*timeout" in reason.lower()
+                or "pinecone.*failure" in reason.lower()
+            ):
+                print(f"• {reason}: Pinecone service issues")
+                print("  - Check Pinecone dashboard for service status")
+                print("  - Verify index name and region configuration")
+                print("  - Consider reducing concurrent requests")
+            elif "pdf parsing" in reason.lower():
+                print(f"• {reason}: PDFs may be corrupted or use unsupported formats")
+            elif "quota exceeded" in reason.lower():
+                print(f"• {reason}: Wait for OpenAI API quota to reset or upgrade plan")
+            elif "no pages" in reason.lower() or "no text content" in reason.lower():
+                print(
+                    f"• {reason}: PDFs may be image-only (scanned documents) or corrupted"
+                )
+            else:
+                print(f"• {reason}: Review logs for detailed error information")
+
+        print()
+        print(
+            "To retry only failed files, you can manually process them by file index:"
+        )
+        print(
+            "  python pdf_to_vector_db.py --file-path /path/to/pdfs --site your-site --library-name 'your-lib' --start-index N"
+        )
+        print("  (Note: --start-index flag would need to be implemented)")
+
+    else:
+        print()
+        print("✅ All files processed successfully! No failures to report.")
 
     # Add suggestion for detailed chunk analysis
     print()
@@ -1083,6 +1597,31 @@ async def run(keep_data: bool, library_name: str, max_files: int | None) -> None
     """
     global file_path  # file_path is set in main()
     logger.info(f"Processing documents from directory: {file_path}")
+
+    # Check system memory before starting
+    memory = psutil.virtual_memory()
+    memory_gb = memory.total / (1024**3)
+    available_gb = memory.available / (1024**3)
+    memory_percent = memory.percent
+
+    logger.info(
+        f"System memory: {memory_gb:.1f} GB total, {available_gb:.1f} GB available ({memory_percent:.1f}% used)"
+    )
+
+    if available_gb < 4.0:
+        logger.warning(
+            f"⚠️  Low available memory ({available_gb:.1f} GB). "
+            "Large documents may cause memory errors. Consider closing other applications."
+        )
+    elif available_gb < 8.0:
+        logger.info(
+            f"ℹ️  Available memory ({available_gb:.1f} GB) should handle most documents. "
+            "Very large documents (>500k chars) may require more memory."
+        )
+    else:
+        logger.info(
+            f"✅ Sufficient memory ({available_gb:.1f} GB) for processing large documents."
+        )
 
     # Initialize services and components
     pinecone, pinecone_index = _initialize_pinecone_services(library_name, keep_data)
@@ -1106,6 +1645,9 @@ async def run(keep_data: bool, library_name: str, max_files: int | None) -> None
     # Set up signal handler for graceful shutdown
     setup_signal_handlers()
 
+    # Track failures for reporting
+    failed_files = []
+
     # Process PDF files with progress tracking
     files_actually_processed_in_this_run = 0
     for i in range(processed_files_count, len(pdf_file_paths)):
@@ -1126,8 +1668,16 @@ async def run(keep_data: bool, library_name: str, max_files: int | None) -> None
 
         current_pdf_path = pdf_file_paths[i]
 
+        # Check memory before processing each file
+        current_memory = psutil.virtual_memory()
+        if current_memory.percent > 85:
+            logger.warning(
+                f"⚠️  High memory usage ({current_memory.percent:.1f}%) before processing {os.path.basename(current_pdf_path)}. "
+                "Consider restarting the script if memory errors occur."
+            )
+
         # Process single PDF file
-        success = await _process_single_pdf(
+        success, failure_reason = await _process_single_pdf(
             current_pdf_path,
             i,
             len(pdf_file_paths),
@@ -1140,6 +1690,15 @@ async def run(keep_data: bool, library_name: str, max_files: int | None) -> None
 
         if success:
             files_actually_processed_in_this_run += 1
+        else:
+            # Track failure for reporting
+            failed_files.append(
+                {
+                    "file_path": current_pdf_path,
+                    "file_index": i,
+                    "reason": failure_reason,
+                }
+            )
 
         if max_files and files_actually_processed_in_this_run >= max_files:
             logger.info(
@@ -1153,6 +1712,7 @@ async def run(keep_data: bool, library_name: str, max_files: int | None) -> None
         files_actually_processed_in_this_run,
         library_name,
         text_splitter,
+        failed_files,
     )
 
 

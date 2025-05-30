@@ -2418,3 +2418,430 @@ except (ImportError, LookupError, OSError) as e:  # Specific exceptions
 
 **Rationale**: Bare except clauses catch system-exiting exceptions like `KeyboardInterrupt` and `SystemExit`, which
 usually shouldn't be caught. Specific exception handling is more precise and safer.
+
+## Mistake: spaCy Text Length Limit Causing Processing Failures
+
+**Problem**: Large PDF documents (>1,000,000 characters) were failing with spaCy's text length limit error, causing
+ingestion to skip these files without proper error reporting or retry guidance.
+
+**Wrong**: Using default spaCy max_length limit (1,000,000 characters) without error handling:
+
+```python
+# In text_splitter_utils.py _ensure_nlp method
+self.nlp = spacy.load(self.pipeline)
+# No max_length adjustment - defaults to 1,000,000 chars
+
+# In pdf_to_vector_db.py - poor error reporting
+except Exception as file_processing_error:
+    logger.warning(f"Skipping file {pdf_path} due to error. Will attempt to continue with next file.")
+    return False  # No failure tracking or reporting
+```
+
+**Correct**: Increase spaCy max_length limit and implement comprehensive failure tracking:
+
+```python
+# In text_splitter_utils.py _ensure_nlp method
+self.nlp = spacy.load(self.pipeline)
+# Increase max_length to handle very large documents
+# Default is 1,000,000 chars. Setting to 2,000,000 to handle large PDFs
+# This requires roughly 2GB of temporary memory during processing
+self.nlp.max_length = 2_000_000
+self.logger.debug(f"Set spaCy max_length to {self.nlp.max_length:,} characters")
+
+# In pdf_to_vector_db.py - comprehensive failure tracking
+failed_files = []  # Track failures for reporting
+
+success, failure_reason = await _process_single_pdf(...)
+if not success:
+    failed_files.append({
+        'file_path': current_pdf_path,
+        'file_index': i,
+        'reason': failure_reason
+    })
+
+# Detailed error categorization
+if "Text of length" in error_message and "exceeds maximum" in error_message:
+    match = re.search(r"Text of length (\d+) exceeds maximum of (\d+)", error_message)
+    if match:
+        text_length = int(match.group(1))
+        max_length = int(match.group(2))
+        failure_reason = f"Document too large: {text_length:,} chars (max: {max_length:,})"
+```
+
+**Additional Improvements**:
+
+- Added memory monitoring with psutil to track system memory usage
+- Comprehensive failure reporting with categorized error types and retry recommendations
+- Memory pressure warnings when processing large documents
+- Specific guidance for different failure types (memory, PDF parsing, API quotas, etc.)
+
+**Detection**: Large PDFs failing with "Text of length X exceeds maximum of 1000000" error. Monitor memory usage during
+processing to ensure adequate resources.
+
+## Mistake: Insufficient Network Resilience in PDF Ingestion
+
+**Problem**: PDF ingestion was failing mid-process with "Failed to connect; did you specify the correct index name?" and
+"Remote end closed connection without response" errors. This occurred after processing successfully for a while (e.g.,
+63% through batches), indicating network connectivity issues rather than configuration problems.
+
+**Symptoms**:
+
+- Script processes successfully for many chunks/batches
+- Sudden cascade of connection failures in the same batch
+- Multiple timeout errors for both OpenAI embeddings and Pinecone upserts
+- "Remote end closed connection without response" low-level network errors
+
+**Wrong**: No retry logic or resilience for network issues:
+
+```python
+# Original code - single attempt with basic timeout
+try:
+    vector = await asyncio.wait_for(
+        asyncio.to_thread(embeddings.embed_query, doc.page_content),
+        timeout=15.0,  # Single attempt, short timeout
+    )
+except asyncio.TimeoutError:
+    logger.warning(f"Embedding timeout for chunk {chunk_index}, skipping...")
+    return
+
+# Similar single-attempt pattern for Pinecone upserts
+```
+
+**Correct**: Implement retry logic with exponential backoff for both OpenAI and Pinecone operations:
+
+```python
+async def retry_with_backoff(
+    operation_func,
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+    backoff_factor: float = 2.0,
+    operation_name: str = "operation",
+) -> any:
+    """Retry an async operation with exponential backoff."""
+    # Implementation with fatal error detection and progressive delays
+
+# Usage in process_chunk:
+async def embedding_operation():
+    return await asyncio.wait_for(
+        asyncio.to_thread(embeddings.embed_query, doc.page_content),
+        timeout=30.0,  # Increased timeout
+    )
+
+vector = await retry_with_backoff(
+    embedding_operation,
+    max_retries=3,
+    base_delay=2.0,
+    operation_name=f"OpenAI embedding for chunk {chunk_index}"
+)
+```
+
+**Additional Improvements**:
+
+- Reduced batch size from 10 to 5 chunks to reduce API load
+- Added 1-second delays between batches for rate limiting
+- Increased timeouts (30s for embeddings, 20s for Pinecone, 2min for batches)
+- Better error categorization for network vs configuration issues
+- Continue processing other chunks when individual chunks fail due to network issues
+
+**Root Cause**: Network instability, API rate limiting, or connection pool exhaustion when processing large documents
+with many concurrent requests.
+
+## Mistake: Inadequate Error Handling for Corrupted Transcription Cache
+
+**Problem**: The `get_saved_transcription()` function in `transcription_utils.py` did not handle corrupted gzipped JSON
+files gracefully, causing CRC check failures that crashed the processing pipeline.
+
+**Wrong**: No error handling for file corruption:
+
+```python
+# In get_saved_transcription function
+with gzip.open(full_json_path, "rt", encoding="utf-8") as f:
+    return json.load(f)
+```
+
+**Error Result**: `CRC check failed 0x3622593e != 0x31ca9756` - system crash on corrupted cache files.
+
+**Correct**: Comprehensive error handling with automatic cleanup:
+
+```python
+try:
+    with gzip.open(full_json_path, "rt", encoding="utf-8") as f:
+        return json.load(f)
+except (gzip.BadGzipFile, OSError, json.JSONDecodeError) as e:
+    # Handle corrupted cache files
+    file_identifier = youtube_id or os.path.basename(file_path) if file_path else "unknown file"
+    logger.error(f"Corrupted transcription cache detected for {file_identifier}: {str(e)}")
+    logger.info(f"Removing corrupted cache file: {full_json_path}")
+
+    try:
+        os.remove(full_json_path)
+        # Also remove from database
+        conn = sqlite3.connect(TRANSCRIPTIONS_DB_PATH)
+        c = conn.cursor()
+        c.execute("DELETE FROM transcriptions WHERE file_hash = ?", (file_hash,))
+        conn.commit()
+        conn.close()
+        logger.info(f"Successfully cleaned up corrupted cache for {file_identifier}")
+    except Exception as cleanup_error:
+        logger.error(f"Failed to clean up corrupted cache: {cleanup_error}")
+
+    # Return None to trigger fresh transcription
+    return None
+```
+
+**Root Causes of Corruption**:
+
+- Process interruption during file writing (Ctrl+C, system crash)
+- Disk I/O errors or filesystem corruption
+- Race conditions in parallel processing
+- Hardware issues (bad sectors, failing storage)
+
+**Recovery Strategy**: Detect corruption, clean up corrupted files from both filesystem and database, allow system to
+regenerate fresh transcription automatically.
+
+## Mistake: Invalid Input Parameter in OpenAI Embeddings API
+
+**Problem**: The `create_embeddings()` function in `data_ingestion/audio_video/pinecone_utils.py` was passing invalid or
+malformed text chunks to the OpenAI embeddings API, causing `'$.input' is invalid` errors.
+
+**Wrong**: No input validation before calling OpenAI API:
+
+```python
+def create_embeddings(chunks, client):
+    texts = [chunk["text"] for chunk in chunks]  # No validation
+    model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+    response = client.embeddings.create(input=texts, model=model_name)
+    return [embedding.embedding for embedding in response.data]
+```
+
+**Error Result**: `Error code: 400 - {'error': {'message': "'$.input' is invalid"}}` - API rejects malformed input.
+
+**Correct**: Comprehensive input validation and error handling:
+
+```python
+def create_embeddings(chunks, client):
+    texts = []
+    valid_chunk_indices = []
+
+    for i, chunk in enumerate(chunks):
+        if not isinstance(chunk, dict):
+            logger.warning(f"Chunk {i} is not a dictionary, skipping: {type(chunk)}")
+            continue
+
+        if "text" not in chunk:
+            logger.warning(f"Chunk {i} missing 'text' field, skipping")
+            continue
+
+        text = chunk["text"]
+
+        # Validate text content
+        if not isinstance(text, str):
+            logger.warning(f"Chunk {i} text is not a string, skipping: {type(text)}")
+            continue
+
+        # Check for empty or whitespace-only text
+        if not text or not text.strip():
+            logger.warning(f"Chunk {i} has empty or whitespace-only text, skipping")
+            continue
+
+        # Check for extremely long text that might cause API issues
+        if len(text) > 8000:  # OpenAI embeddings have token limits
+            logger.warning(f"Chunk {i} text is very long ({len(text)} chars), truncating")
+            text = text[:8000]
+
+        texts.append(text)
+        valid_chunk_indices.append(i)
+
+    if not texts:
+        raise ValueError("No valid text chunks found for embedding creation")
+
+    try:
+        response = client.embeddings.create(input=texts, model=model_name)
+        embeddings = [embedding.embedding for embedding in response.data]
+        # Additional validation and error logging
+        return embeddings
+    except Exception as e:
+        logger.error(f"OpenAI embeddings API error: {str(e)}")
+        # Detailed debugging information
+        raise
+```
+
+**Root Causes of Invalid Input**:
+
+- Empty or None text chunks from failed transcription processing
+- Non-string data types being passed as text
+- Malformed chunk dictionaries missing required fields
+- Extremely long text exceeding API token limits
+- Whitespace-only or empty string chunks
+
+**Prevention Strategy**: Always validate chunk structure and text content before API calls, filter out invalid chunks,
+provide detailed error logging for debugging.
+
+### Mistake: Error Reporting Bug in PDF Ingestion Script
+
+**Problem**: The PDF ingestion script was incorrectly reporting "✅ All files processed successfully! No failures to
+report." even when chunks failed during processing due to token limit errors.
+
+**Root Causes**:
+
+1. **Missing Error Propagation**: The `process_document` function didn't return failure status to indicate when chunks
+   failed during processing
+2. **Batch Processing Failures Ignored**: Errors in `_process_single_batch` were logged but didn't cause the file to be
+   marked as failed
+3. **No Token Validation**: Chunks exceeding OpenAI's 8192 token limit were sent to the embedding API, causing failures
+   that weren't properly categorized
+
+**Wrong**: Functions that don't propagate failure information:
+
+```python
+async def process_document(...) -> None:
+    # Process chunks but don't return success/failure status
+    await _process_chunks_in_batches(...)
+    # No way to know if chunks failed
+
+async def _process_chunks_in_batches(...) -> None:
+    # Process batches but don't track failures
+    await _process_single_batch(...)
+    # Failures are logged but not returned
+
+async def _process_single_batch(...) -> None:
+    # Log failures but don't return count
+    logger.warning(f"Failed to process {len(failed_chunks)} chunks")
+    # No return value to indicate failures
+```
+
+**Correct**: Functions that properly track and propagate failures:
+
+```python
+async def process_document(...) -> tuple[bool, int, int]:
+    """Returns (success, total_chunks, failed_chunks)"""
+    failed_chunks = await _process_chunks_in_batches(...)
+    total_chunks = len(valid_docs)
+    success = failed_chunks == 0
+    return success, total_chunks, failed_chunks
+
+async def _process_chunks_in_batches(...) -> int:
+    """Returns total number of failed chunks"""
+    total_failed_chunks = 0
+    for batch in batches:
+        failed_count = await _process_single_batch(...)
+        total_failed_chunks += failed_count
+    return total_failed_chunks
+
+async def _process_single_batch(...) -> int:
+    """Returns number of failed chunks in this batch"""
+    failed_chunks = []
+    for result in results:
+        if isinstance(result, Exception):
+            failed_chunks.append(chunk_idx)
+    return len(failed_chunks)
+```
+
+**Additional Fix**: Added token validation before embedding:
+
+```python
+def _validate_chunk_token_limit(text: str, max_tokens: int = 8192) -> tuple[bool, int]:
+    """Validate chunk doesn't exceed OpenAI token limits"""
+    token_count = _count_tokens(text)
+    return token_count <= max_tokens, token_count
+
+# In process_chunk:
+is_valid, token_count = _validate_chunk_token_limit(doc.page_content)
+if not is_valid:
+    error_msg = f"Chunk {chunk_index} exceeds token limit: {token_count} tokens (max 8192)"
+    raise ValueError(error_msg)
+```
+
+**Detection**: Error logs showed chunk failures but final summary reported success. Always ensure error handling
+propagates failure status through the entire call chain.
+
+## Mistake: Inconsistent Chunking Strategy Across Ingestion Scripts
+
+**Problem**: Different ingestion scripts were using different text splitting approaches despite the project
+documentation claiming all scripts use spaCy chunking. Analysis of vector database word counts revealed:
+
+- PDF script: Using `SpacyTextSplitter(chunk_size=600, chunk_overlap=120)` → 83.7 avg words/chunk
+- SQL script: Using `TokenTextSplitter(chunk_size=256, chunk_overlap=50)` → 167.8 avg words/chunk
+- Web crawler: Using custom word-based chunking → Variable word counts
+
+**Wrong**: SQL script using outdated token-based chunking:
+
+```python
+# data_ingestion/sql_to_vector_db/ingest_db_text.py
+text_splitter = TokenTextSplitter.from_tiktoken_encoder(
+    encoding_name="cl100k_base", chunk_size=256, chunk_overlap=50
+)
+```
+
+**Correct**: All ingestion scripts should use the shared spaCy-based chunking strategy:
+
+```python
+# Import shared utility
+from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+# Use consistent configuration across all scripts
+text_splitter = SpacyTextSplitter(
+    chunk_size=600,
+    chunk_overlap=120,  # 20% overlap
+    separator="\n\n",
+    pipeline="en_core_web_sm",
+)
+```
+
+**Impact**: Inconsistent chunking affects RAG quality and retrieval consistency. Documents from different sources have
+wildly different chunk characteristics, leading to uneven search quality.
+
+**Detection Method**: Analyze word counts per chunk using `data_ingestion/bin/analyze_text_field_words.py` to identify
+chunking inconsistencies across libraries/sources.
+
+### Mistake: Duplicate import statements causing linter errors
+
+**Wrong**:
+
+```python
+import re  # At top of file
+# ... later in code
+import re  # Duplicate local import
+```
+
+**Correct**:
+
+```python
+import re  # Only at top of file - no local imports needed for already imported modules
+```
+
+### Mistake: Failing chunks due to OpenAI token limits without graceful handling
+
+**Wrong**:
+
+```python
+# Validate chunk token count before processing
+is_valid, token_count = _validate_chunk_token_limit(doc.page_content)
+if not is_valid:
+    error_msg = f"Chunk {chunk_index} exceeds token limit: {token_count} tokens (max 8192)"
+    logger.error(error_msg)
+    raise ValueError(error_msg)  # Just fails the chunk
+```
+
+**Correct**:
+
+```python
+# Validate chunk token count before processing
+is_valid, token_count = _validate_chunk_token_limit(doc.page_content)
+if not is_valid:
+    logger.warning(f"Chunk {chunk_index} exceeds token limit: {token_count} tokens (max 8192). Attempting to split...")
+
+    # Try to process as oversized chunk (split into sub-chunks)
+    failed_sub_chunks = await _process_oversized_chunk(
+        doc, pinecone_index, embeddings, chunk_index, library_name
+    )
+
+    if failed_sub_chunks > 0:
+        error_msg = f"Chunk {chunk_index} split processing failed: {failed_sub_chunks} sub-chunks failed"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    # Successfully processed all sub-chunks
+    return
+```
