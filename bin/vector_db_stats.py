@@ -45,6 +45,9 @@ def get_pinecone_stats(id_prefix=None):
 
     stats = {"author": Counter(), "library": Counter(), "type": Counter()}
 
+    # Track unique documents per library
+    library_documents = {}  # library_name -> set of document identifiers
+
     # Get index info
     index_stats = index.describe_index_stats()
     dimension = index_stats.dimension
@@ -99,6 +102,17 @@ def get_pinecone_stats(id_prefix=None):
                         if field in metadata:
                             stats[field][metadata[field]] += 1
 
+                    # Track unique documents for libraries
+                    library = metadata.get("library")
+                    if library:
+                        if library not in library_documents:
+                            library_documents[library] = set()
+
+                        # Extract unique document identifier
+                        doc_id = extract_document_identifier(match.id, metadata)
+                        if doc_id:
+                            library_documents[library].add(doc_id)
+
             total_processed += len(query_result.matches)
             pbar.update(len(query_result.matches))
 
@@ -106,26 +120,89 @@ def get_pinecone_stats(id_prefix=None):
             if len(query_result.matches) < batch_size:
                 break
 
-        except Exception as e:
+        except (ConnectionError, TimeoutError, ValueError) as e:
             print(f"\nError in batch starting at {total_processed}: {e}")
             break
 
     pbar.close()
     print(f"\nProcessed metadata for {total_processed:,} vectors.")
-    return stats
+
+    # Convert library documents to counts
+    library_doc_counts = {lib: len(docs) for lib, docs in library_documents.items()}
+
+    return stats, library_doc_counts
 
 
-def print_stats(stats):
+def extract_document_identifier(vector_id, metadata):
+    """
+    Extract a unique document identifier from vector ID or metadata.
+
+    Vector ID format appears to be: {type}||{library}||{source}||{title}||{author}||{doc_hash}||{chunk_index}
+
+    Args:
+        vector_id: The vector ID string
+        metadata: Vector metadata dict
+
+    Returns:
+        str: Unique document identifier
+    """
+    try:
+        # Try to extract from vector ID first (most reliable)
+        if "||" in vector_id:
+            parts = vector_id.split("||")
+            if len(parts) >= 6:
+                # Use everything except the last part (chunk index)
+                # Format: {type}||{library}||{source}||{title}||{author}||{doc_hash}
+                doc_id = "||".join(parts[:-1])
+                return doc_id
+
+        # Fallback: try to construct from metadata
+        if metadata:
+            # Try to use file_hash if available (document-level hash)
+            if "file_hash" in metadata:
+                library = metadata.get("library", "unknown")
+                return f"{library}||{metadata['file_hash']}"
+
+            # Another fallback: use source + title combination
+            source = metadata.get("source", "")
+            title = metadata.get("title", "")
+            if source or title:
+                library = metadata.get("library", "unknown")
+                return f"{library}||{source}||{title}"
+
+        # Last resort: return the vector ID without chunk index if we can parse it
+        if "_chunk_" in vector_id:
+            return vector_id.split("_chunk_")[0]
+
+        return None
+
+    except (AttributeError, IndexError, KeyError):
+        # Silently ignore parsing errors for document identification
+        return None
+
+
+def print_stats(stats, library_doc_counts):
     """
     Prints formatted statistics for each metadata category.
 
     Args:
         stats: Dictionary containing Counters for each metadata field
+        library_doc_counts: Dictionary of library -> unique document count
     """
     for category, counter in stats.items():
         print(f"\n{category.upper()} STATS:")
-        for item, count in counter.most_common():
-            print(f"  {item}: {count:,}")
+
+        if category == "library":
+            # Special handling for libraries - show both chunks and documents
+            print(f"{'Library':<20} {'Chunks':<10} {'Documents':<10}")
+            print("-" * 42)
+            for library, chunk_count in counter.most_common():
+                doc_count = library_doc_counts.get(library, 0)
+                print(f"{library:<20} {chunk_count:<10,} {doc_count:<10,}")
+        else:
+            # For author and type, just show chunk counts
+            for item, count in counter.most_common():
+                print(f"  {item}: {count:,}")
 
 
 if __name__ == "__main__":
@@ -140,8 +217,8 @@ if __name__ == "__main__":
     load_env(args.site)
 
     start_time = time.time()
-    stats = get_pinecone_stats(args.prefix)
+    stats, library_doc_counts = get_pinecone_stats(args.prefix)
     end_time = time.time()
 
     print(f"\nCompleted in {end_time - start_time:.1f} seconds")
-    print_stats(stats)
+    print_stats(stats, library_doc_counts)
