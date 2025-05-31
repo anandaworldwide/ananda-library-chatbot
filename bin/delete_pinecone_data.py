@@ -4,13 +4,13 @@
 Delete Pinecone Data Script
 
 This script deletes Pinecone records based on either:
-1. Media type (audio, text, youtube_video) with optional library and title filters
+1. Media type (audio, text, video) with optional library and title filters
 2. Source name with optional subsource filter
 3. Custom prefix
 
 Usage:
 1. Delete by media type:
-   python delete_pinecone_data.py --site <site> --file-type <audio|text|youtube_video> [--library <library>] [--title <title>]
+   python delete_pinecone_data.py --site <site> --file-type <audio|text|video> [--library <library>] [--title <title>]
 
 2. Delete by source:
    python delete_pinecone_data.py --site <site> --source <source_name> [--subsource <subsource>]
@@ -21,6 +21,9 @@ Usage:
 Examples:
 - Delete all audio records:
   python delete_pinecone_data.py --site ananda --file-type audio
+
+- Delete all video records:
+  python delete_pinecone_data.py --site ananda --file-type video
 
 - Delete all records from a specific source:
   python delete_pinecone_data.py --site ananda --source "Ananda.org"
@@ -109,8 +112,8 @@ if __name__ == "__main__":
     group.add_argument(
         "--file-type",
         type=str,
-        choices=["audio", "text", "youtube_video"],
-        help="Type of the media (audio, text, or youtube_video)",
+        choices=["audio", "text", "video"],
+        help="Type of the media (audio, text, or video)",
     )
     group.add_argument(
         "--source",
@@ -139,7 +142,7 @@ if __name__ == "__main__":
         "--type",
         type=str,
         default="text",
-        choices=["audio", "text", "youtube_video"],
+        choices=["audio", "text", "video"],
         help="Type of media to delete when using --source (default: text)",
     )
 
