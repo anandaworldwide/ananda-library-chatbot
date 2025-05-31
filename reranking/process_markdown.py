@@ -46,7 +46,7 @@ JUDGE_PATTERN = r"Judge: *(.*?)\n"
 DEFAULT_RETRIEVAL_COUNT = 20
 
 # Updated score pattern to accept both numeric scores and "ignore" (case-insensitive)
-SCORE_PATTERN = r"Document (\d+).*?\*Scoring:.*?\*\*Relevance Score\*\* \\?\[Enter 0-3\\?\]:\s*(\d|(?i)ignore)"
+SCORE_PATTERN = r"Document (\d+).*?\*Scoring:.*?\*\*Relevance Score\*\* \\?\[Enter 0-3\\?\]:\s*(\d|ignore)"
 
 
 class MarkdownProcessor:
@@ -234,24 +234,81 @@ class MarkdownProcessor:
     ) -> tuple[str | None, str | None, list[dict[str, Any]]]:
         """Parse a labeled markdown file to extract query, judge, and document scores."""
         try:
-            with open(filepath) as f:
+            with open(filepath, encoding="utf-8") as f:
                 content = f.read()
+
+            # Normalize line endings and clean up potential Word conversion artifacts
+            content = content.replace("\r\n", "\n").replace("\r", "\n")
+            # Remove potential zero-width spaces or other invisible characters
+            content = re.sub(r"[\u200b-\u200d\ufeff]", "", content)
 
             query, judge = self._extract_query_and_judge(content, filepath)
             if not query or not judge:
                 return None, None, []
 
-            # Find all document sections - more flexible with whitespace
+            # Find all document sections - more flexible with whitespace and formatting
             doc_pattern = r"### Document (\d+)\s*\n+(.*?)(?=\s*\*Scoring:)"
             doc_sections = re.findall(doc_pattern, content, re.DOTALL)
 
+            # If no documents found with first pattern, try alternative patterns
+            if not doc_sections:
+                # Try with markdown headers that might have different formatting
+                alt_patterns = [
+                    r"###\s*Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
+                    r"##\s*Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
+                    r"Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
+                ]
+                for pattern in alt_patterns:
+                    doc_sections = re.findall(pattern, content, re.DOTALL)
+                    if doc_sections:
+                        if self.debug_mode:
+                            print(
+                                f"Found documents using alternative pattern: {pattern}"
+                            )
+                        break
+
             # Extract scores - handle escaped brackets and flexible whitespace
             score_pattern = SCORE_PATTERN
-            score_matches = re.findall(score_pattern, content, re.DOTALL)
+            score_matches = re.findall(
+                score_pattern, content, re.DOTALL | re.IGNORECASE
+            )
+
+            # If no scores found, try alternative score patterns
+            if not score_matches:
+                alt_score_patterns = [
+                    r"Document (\d+).*?[Ss]coring:.*?[Rr]elevance [Ss]core.*?:\s*(\d|ignore)",
+                    r"Document (\d+).*?[Ss]core.*?:\s*(\d|ignore)",
+                    r"Document (\d+).*?\[Enter 0-3\]:\s*(\d|ignore)",
+                ]
+                for pattern in alt_score_patterns:
+                    score_matches = re.findall(
+                        pattern, content, re.DOTALL | re.IGNORECASE
+                    )
+                    if score_matches:
+                        if self.debug_mode:
+                            print(f"Found scores using alternative pattern: {pattern}")
+                        break
 
             if self.debug_mode:
                 print(f"Found {len(doc_sections)} document sections")
                 print(f"Found {len(score_matches)} score matches")
+
+            # Provide helpful debugging if sections or scores are missing
+            if not doc_sections:
+                print(
+                    f"Warning: No document sections found in {os.path.basename(filepath)}"
+                )
+                print("Expected format: '### Document 1' followed by content")
+                return None, None, []
+
+            if not score_matches:
+                print(
+                    f"Warning: No relevance scores found in {os.path.basename(filepath)}"
+                )
+                print(
+                    "Expected format: '**Relevance Score** [Enter 0-3]: 2' or similar"
+                )
+                return None, None, []
 
             # Convert scores to dictionary, separating numeric scores from ignored documents
             scores = {}
@@ -288,8 +345,21 @@ class MarkdownProcessor:
             labeled_docs = self._process_document_sections(doc_sections, scores)
             return query, judge, labeled_docs
 
+        except re.error as e:
+            print(f"Regex error parsing file {filepath}: {e}")
+            print("This may be due to special characters in the markdown content.")
+            print("Try re-saving the file or check for invisible characters.")
+            return None, None, []
+        except UnicodeDecodeError as e:
+            print(f"Unicode encoding error reading file {filepath}: {e}")
+            print("Try saving the file with UTF-8 encoding.")
+            return None, None, []
         except Exception as e:
-            print(f"Error parsing file {filepath}: {e}")
+            print(f"Unexpected error parsing file {filepath}: {e}")
+            if self.debug_mode:
+                import traceback
+
+                traceback.print_exc()
             return None, None, []
 
     def _try_convert_numeric(self, value: str) -> Any:
