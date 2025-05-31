@@ -351,6 +351,13 @@ def retrieve_documents(
         results = index.query(
             vector=query_embedding, top_k=top_k * 2, include_metadata=True
         )
+        print(
+            f"Querying with model: {embedding_model}, Top-K matches: {len(results['matches'])}"
+        )
+        for i, match in enumerate(results["matches"][:3]):  # Log top 3 for debugging
+            print(
+                f"Match {i + 1}: Score={match['score']:.4f}, Metadata={match['metadata']}"
+            )
     except Exception as e:
         print(f"ERROR querying Pinecone: {e}")
         return [], 0.0
@@ -534,9 +541,9 @@ def print_comparison_table(metrics, times, chunking_strategies):
     """Print comparison table for all strategies and systems."""
     print("\n--- Comparison Table ---")
     print(
-        f"{'Strategy':<30} {'System':<15} {'Precision@K':<12} {'NDCG@K':<10} {'Time (s)':<10}"
+        f"{'Strategy':<60} {'System':<10} {'Precision@K':<12} {'NDCG@K':<10} {'Time (s)':<10}"
     )
-    print("-" * 80)
+    print("-" * 105)  # Adjusted width
     for strategy in chunking_strategies:
         name = strategy["name"]
         for system in ["current", "new"]:
@@ -553,7 +560,7 @@ def print_comparison_table(metrics, times, chunking_strategies):
             )
             avg_time = np.mean(times[system][name]) if times[system][name] else 0.0
             print(
-                f"{strategy['description']:<30} {system_label:<15} {avg_precision:.4f}      {avg_ndcg:.4f}    {avg_time:.4f}"
+                f"{strategy['description']:<60} {system_label:<10} {avg_precision:<12.4f} {avg_ndcg:<10.4f} {avg_time:<10.4f}"
             )
 
 
