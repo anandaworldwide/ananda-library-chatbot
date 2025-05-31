@@ -805,7 +805,16 @@ def process_and_upsert_batch(
         try:
             # 1. Split content into manageable chunks
             # Using Langchain's Document structure helps maintain consistency, though only page_content is strictly needed here
-            langchain_doc = Document(page_content=post_data["content"])
+            # Add metadata so SpacyTextSplitter can generate proper document IDs for metrics
+            document_metadata = {
+                "id": f"wp_{post_id}",  # WordPress post ID
+                "title": post_data["title"],
+                "source": post_data["permalink"],
+                "wp_id": post_id,
+            }
+            langchain_doc = Document(
+                page_content=post_data["content"], metadata=document_metadata
+            )
             # Split the document using the provided text splitter
             docs = text_splitter.split_documents([langchain_doc])
             total_chunks_in_batch += len(docs)

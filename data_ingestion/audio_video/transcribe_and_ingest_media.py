@@ -17,6 +17,7 @@ Key Features:
 - Rate limiting protection
 - Progress bars and detailed logging
 - Graceful shutdown handling
+- Support for parallel instances via separate queues
 
 Command Line Options:
   -s, --site SITE              Site ID for environment variables (required)
@@ -24,13 +25,15 @@ Command Line Options:
   -c, --clear-vectors          Clear existing vectors before processing
   -D, --dryrun                 Perform a dry run without sending data to Pinecone or S3
   -o, --override-conflicts     Continue processing even if filename conflicts are found
-  -r, --refresh-metadata-only  Only refresh metadata without creating embeddings or uploading to Pinecone
   -d, --debug                  Enable debug logging
+  -q, --queue NAME             Specify an alternative queue name for parallel processing
 
 Usage Examples:
   python transcribe_and_ingest_media.py -s ananda
   python transcribe_and_ingest_media.py -s ananda -f -d
-  python transcribe_and_ingest_media.py -s ananda -D -r
+  python transcribe_and_ingest_media.py -s ananda -D
+  python transcribe_and_ingest_media.py -s ananda -q queue-bhaktan
+  python transcribe_and_ingest_media.py -s ananda -q queue-treasures
 """
 
 import argparse
@@ -193,50 +196,22 @@ def verify_and_update_transcription_metadata(
     return transcription_data
 
 
-def process_file(
-    file_path,
-    pinecone_index,
-    client,
-    force,
-    dryrun,
-    default_author,
-    library_name,
-    is_youtube_video=False,
-    youtube_data=None,
-    s3_key=None,
-    refresh_metadata_only=False,
+def _validate_and_setup_processing(
+    file_path, is_youtube_video, youtube_data, default_author, library_name
 ):
     """
-    Core processing pipeline for a single media file or YouTube video.
-
-    Flow:
-    1. Check for existing transcription in cache
-    2. If needed, generate new transcription
-    3. If not refresh_metadata_only:
-       a. Chunk the transcription into segments
-       b. Create embeddings for chunks
-       c. Store in Pinecone with metadata
-    4. Upload original to S3 (non-YouTube only)
-
-    Returns a report dictionary with processing statistics and any errors
+    Validates parameters and sets up basic processing variables.
+    Returns tuple of (file_name, youtube_id, local_report) or (None, None, error_report) on error.
     """
-    logger.debug(
-        f"process_file called with params: file_path={file_path}, index={pinecone_index}, "
-        + f"client={client}, force={force}, dryrun={dryrun}, default_author={default_author}, "
-        + f"library_name={library_name}, is_youtube_video={is_youtube_video}, youtube_data={youtube_data}, "
-        + f"s3_key={s3_key}, refresh_metadata_only={refresh_metadata_only}"
-    )
-
-    # Track processing statistics and errors for this file
     local_report = {
-        "processed": 0,  # Successfully transcribed files
-        "skipped": 0,  # Files with existing transcriptions
-        "errors": 0,  # Failed processing attempts
+        "processed": 0,
+        "skipped": 0,
+        "errors": 0,
         "error_details": [],
         "warnings": [],
-        "fully_indexed": 0,  # Files that completed the full pipeline
-        "chunk_lengths": [],  # Track chunk sizes for quality metrics
-        "private_videos": 0,  # New counter
+        "fully_indexed": 0,
+        "chunk_lengths": [],
+        "private_videos": 0,
     }
 
     if is_youtube_video and youtube_data.get("error") == "private_video":
@@ -244,17 +219,110 @@ def process_file(
         local_report["error_details"].append(
             f"Private video (inaccessible): {youtube_data['url']}"
         )
-        return local_report
+        return None, None, local_report
 
     if is_youtube_video:
         youtube_id = youtube_data["youtube_id"]
         file_name = f"YouTube_{youtube_id}"
-        # Only need audio path if we're going to transcribe
-        if not refresh_metadata_only:
-            file_path = youtube_data.get("audio_path")
+        file_path = youtube_data.get("audio_path")
     else:
         youtube_id = None
         file_name = os.path.basename(file_path) if file_path else "Unknown_File"
+
+    return file_name, youtube_id, local_report
+
+
+def _perform_transcription(
+    file_path, file_name, is_youtube_video, youtube_id, force, youtube_data
+):
+    """
+    Performs the actual transcription with comprehensive error handling.
+    Returns tuple of (transcription, local_report).
+    """
+    local_report = {
+        "processed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "error_details": [],
+        "warnings": [],
+        "fully_indexed": 0,
+        "chunk_lengths": [],
+        "private_videos": 0,
+    }
+
+    logger.info(
+        f"\nTranscribing {'YouTube video' if is_youtube_video else 'audio'} for {file_name}"
+    )
+
+    try:
+        transcription = transcribe_media(file_path, force, is_youtube_video, youtube_id)
+        if transcription:
+            local_report["processed"] += 1
+            # Cache YouTube transcriptions for future use
+            if is_youtube_video:
+                save_youtube_transcription(youtube_data, file_path, transcription)
+            return transcription, local_report
+        else:
+            error_msg = f"Error transcribing {'YouTube video' if is_youtube_video else 'file'} {file_name}: No transcripts generated"
+            logger.error(error_msg)
+            local_report["errors"] += 1
+            local_report["error_details"].append(error_msg)
+            return None, local_report
+    except RetryError as e:
+        error_msg = f"Failed to transcribe {file_name} after multiple retries: {str(e)}"
+        logger.error(error_msg)
+        local_report["errors"] += 1
+        local_report["error_details"].append(error_msg)
+        return None, local_report
+    except RateLimitError:
+        error_msg = (
+            f"Rate limit exceeded while transcribing {file_name}. Terminating process."
+        )
+        logger.error(error_msg)
+        local_report["errors"] += 1
+        local_report["error_details"].append(error_msg)
+        return None, local_report
+    except UnsupportedAudioFormatError as e:
+        error_msg = f"{str(e)}. Stopping processing for file {file_name}."
+        logger.error(error_msg)
+        local_report["errors"] += 1
+        local_report["error_details"].append(error_msg)
+        return None, local_report
+    except Exception as e:
+        error_msg = f"Error transcribing {'YouTube video' if is_youtube_video else 'file'} {file_name}: {str(e)}"
+        logger.error(error_msg)
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {str(e)}")
+        logger.exception("Full traceback:")
+        local_report["errors"] += 1
+        local_report["error_details"].append(error_msg)
+        return None, local_report
+
+
+def _handle_transcription(
+    file_path,
+    file_name,
+    is_youtube_video,
+    youtube_id,
+    force,
+    default_author,
+    library_name,
+    youtube_data,
+):
+    """
+    Handles transcription logic - checking cache and transcribing if needed.
+    Returns tuple of (transcription, local_report).
+    """
+    local_report = {
+        "processed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "error_details": [],
+        "warnings": [],
+        "fully_indexed": 0,
+        "chunk_lengths": [],
+        "private_videos": 0,
+    }
 
     # Check cache first to avoid redundant processing
     try:
@@ -268,7 +336,7 @@ def process_file(
         logger.error(error_msg)
         local_report["errors"] += 1
         local_report["error_details"].append(error_msg)
-        return local_report
+        return None, local_report
 
     if existing_transcription and not force:
         # Verify and update metadata in existing transcription
@@ -285,12 +353,13 @@ def process_file(
             logger.debug(
                 f"Using existing transcription with updated metadata for {file_name}"
             )
+            return transcription, local_report
         except Exception as e:
             error_msg = f"Error updating metadata for {file_name}: {str(e)}"
             logger.error(error_msg)
             local_report["errors"] += 1
             local_report["error_details"].append(error_msg)
-            return local_report
+            return None, local_report
     else:
         # Validate we have audio file if we need to transcribe
         if not file_path:
@@ -298,58 +367,41 @@ def process_file(
             logger.error(error_msg)
             local_report["errors"] += 1
             local_report["error_details"].append(error_msg)
-            return local_report
+            return None, local_report
 
-        logger.info(
-            f"\nTranscribing {'YouTube video' if is_youtube_video else 'audio'} for {file_name}"
+        # Perform transcription
+        return _perform_transcription(
+            file_path, file_name, is_youtube_video, youtube_id, force, youtube_data
         )
-        # Core transcription logic with comprehensive error handling
-        try:
-            transcription = transcribe_media(
-                file_path, force, is_youtube_video, youtube_id
-            )
-            if transcription:
-                local_report["processed"] += 1
-                # Cache YouTube transcriptions for future use
-                if is_youtube_video:
-                    save_youtube_transcription(youtube_data, file_path, transcription)
-            else:
-                error_msg = f"Error transcribing {'YouTube video' if is_youtube_video else 'file'} {file_name}: No transcripts generated"
-                logger.error(error_msg)
-                local_report["errors"] += 1
-                local_report["error_details"].append(error_msg)
-                return local_report
-        except RetryError as e:
-            # Failed after multiple retry attempts - likely a persistent issue
-            error_msg = (
-                f"Failed to transcribe {file_name} after multiple retries: {str(e)}"
-            )
-            logger.error(error_msg)
-            local_report["errors"] += 1
-            local_report["error_details"].append(error_msg)
-            return local_report
-        except RateLimitError:
-            # API rate limit hit - need to stop processing to avoid penalties
-            error_msg = f"Rate limit exceeded while transcribing {file_name}. Terminating process."
-            logger.error(error_msg)
-            local_report["errors"] += 1
-            local_report["error_details"].append(error_msg)
-            return local_report
-        except UnsupportedAudioFormatError as e:
-            error_msg = f"{str(e)}. Stopping processing for file {file_name}."
-            logger.error(error_msg)
-            local_report["errors"] += 1
-            local_report["error_details"].append(error_msg)
-            return local_report
-        except Exception as e:
-            error_msg = f"Error transcribing {'YouTube video' if is_youtube_video else 'file'} {file_name}: {str(e)}"
-            logger.error(error_msg)
-            logger.error(f"Error type: {type(e).__name__}")
-            logger.error(f"Error details: {str(e)}")
-            logger.exception("Full traceback:")
-            local_report["errors"] += 1
-            local_report["error_details"].append(error_msg)
-            return local_report
+
+
+def _process_and_store_transcription(
+    transcription,
+    file_name,
+    file_path,
+    pinecone_index,
+    client,
+    dryrun,
+    is_youtube_video,
+    youtube_data,
+    default_author,
+    library_name,
+    s3_key,
+):
+    """
+    Processes transcription into chunks and stores in Pinecone.
+    Returns local_report with processing results.
+    """
+    local_report = {
+        "processed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "error_details": [],
+        "warnings": [],
+        "fully_indexed": 0,
+        "chunk_lengths": [],
+        "private_videos": 0,
+    }
 
     try:
         if dryrun:
@@ -369,7 +421,8 @@ def process_file(
             return local_report
 
         local_report["chunk_lengths"].extend([len(chunk["words"]) for chunk in chunks])
-        if not dryrun and not refresh_metadata_only:
+
+        if not dryrun:
             try:
                 embeddings = create_embeddings(chunks, client)
                 logger.debug(f"{len(embeddings)} embeddings created for {file_name}")
@@ -410,44 +463,139 @@ def process_file(
                 local_report["errors"] += 1
                 local_report["error_details"].append(error_msg)
                 return local_report
-        elif refresh_metadata_only:
-            logger.info(
-                f"Skipping embedding creation and Pinecone upsert for {file_name} (--refresh-metadata-only mode)"
-            )
-
-        # After successful processing, upload to S3 only if it's not a YouTube video and not a dry run or refresh-metadata-only mode
-        if (
-            not dryrun
-            and not refresh_metadata_only
-            and not is_youtube_video
-            and file_path
-        ):
-            try:
-                if not s3_key:
-                    # Fallback to a default S3 key if not provided
-                    s3_key = f"public/audio/default/{os.path.basename(file_path)}"
-
-                upload_to_s3(file_path, s3_key)
-            except S3UploadError as e:
-                error_msg = f"Error uploading {file_name} to S3: {str(e)}"
-                logger.error(error_msg)
-                local_report["errors"] += 1
-                local_report["error_details"].append(error_msg)
-                return local_report
-        elif not dryrun and not is_youtube_video and file_path:
-            logger.info(
-                f"Skipping S3 upload for {file_name} (--refresh-metadata-only mode)"
-            )
 
         local_report["fully_indexed"] += 1
+        return local_report
 
     except Exception as e:
         error_msg = f"Error processing {'YouTube video' if is_youtube_video else 'file'} {file_name}: {str(e)}"
         logger.error(error_msg, exc_info=True)
         local_report["errors"] += 1
         local_report["error_details"].append(error_msg)
+        return local_report
+
+
+def _handle_s3_upload(file_path, file_name, s3_key, dryrun, is_youtube_video):
+    """
+    Handles S3 upload for non-YouTube files.
+    Returns local_report with upload results.
+    """
+    local_report = {
+        "processed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "error_details": [],
+        "warnings": [],
+        "fully_indexed": 0,
+        "chunk_lengths": [],
+        "private_videos": 0,
+    }
+
+    # After successful processing, upload to S3 only if it's not a YouTube video and not a dry run
+    if not dryrun and not is_youtube_video and file_path:
+        try:
+            if not s3_key:
+                # Fallback to a default S3 key if not provided
+                s3_key = f"public/audio/default/{os.path.basename(file_path)}"
+
+            upload_to_s3(file_path, s3_key)
+        except S3UploadError as e:
+            error_msg = f"Error uploading {file_name} to S3: {str(e)}"
+            logger.error(error_msg)
+            local_report["errors"] += 1
+            local_report["error_details"].append(error_msg)
+            return local_report
 
     return local_report
+
+
+def process_file(
+    file_path,
+    pinecone_index,
+    client,
+    force,
+    dryrun,
+    default_author,
+    library_name,
+    is_youtube_video=False,
+    youtube_data=None,
+    s3_key=None,
+):
+    """
+    Core processing pipeline for a single media file or YouTube video.
+
+    Flow:
+    1. Check for existing transcription in cache
+    2. If needed, generate new transcription
+    3. Chunk the transcription into segments
+    4. Create embeddings for chunks
+    5. Store in Pinecone with metadata
+    6. Upload original to S3 (non-YouTube only)
+
+    Returns a report dictionary with processing statistics and any errors
+    """
+    logger.debug(
+        f"process_file called with params: file_path={file_path}, index={pinecone_index}, "
+        + f"client={client}, force={force}, dryrun={dryrun}, default_author={default_author}, "
+        + f"library_name={library_name}, is_youtube_video={is_youtube_video}, youtube_data={youtube_data}, "
+        + f"s3_key={s3_key}"
+    )
+
+    # Step 1: Validate and setup processing
+    file_name, youtube_id, setup_report = _validate_and_setup_processing(
+        file_path,
+        is_youtube_video,
+        youtube_data,
+        default_author,
+        library_name,
+    )
+
+    if file_name is None:  # Error in setup
+        return setup_report
+
+    # Step 2: Handle transcription (check cache or transcribe)
+    transcription, transcription_report = _handle_transcription(
+        file_path,
+        file_name,
+        is_youtube_video,
+        youtube_id,
+        force,
+        default_author,
+        library_name,
+        youtube_data,
+    )
+
+    if transcription is None:  # Error in transcription
+        return transcription_report
+
+    # Step 3: Process transcription and store in Pinecone
+    processing_report = _process_and_store_transcription(
+        transcription,
+        file_name,
+        file_path,
+        pinecone_index,
+        client,
+        dryrun,
+        is_youtube_video,
+        youtube_data,
+        default_author,
+        library_name,
+        s3_key,
+    )
+
+    if processing_report["errors"] > 0:
+        return processing_report
+
+    # Step 4: Handle S3 upload
+    upload_report = _handle_s3_upload(
+        file_path, file_name, s3_key, dryrun, is_youtube_video
+    )
+
+    # Merge all reports
+    final_report = merge_reports(
+        [setup_report, transcription_report, processing_report, upload_report]
+    )
+    return final_report
 
 
 def worker(task_queue, result_queue, args, stop_event):
@@ -516,16 +664,14 @@ def process_item(item, args, client, index):
         is_youtube_video = False
         youtube_data = None
     elif item["type"] == "youtube_video":
-        youtube_data, youtube_id = preprocess_youtube_video(
-            item["data"]["url"], logger, args.refresh_metadata_only
-        )
+        youtube_data, youtube_id = preprocess_youtube_video(item["data"]["url"], logger)
         if not youtube_data:
             logger.error(f"Failed to process YouTube video: {item['data']['url']}")
             error_report["error_details"].append(
                 f"Failed to process YouTube video: {item['data']['url']}"
             )
             return item["id"], error_report
-        # This may be None if transcript was cached or in refresh-metadata-only mode
+        # This may be None if transcript was cached
         file_to_process = youtube_data.get("audio_path")
         is_youtube_video = True
     else:
@@ -551,7 +697,6 @@ def process_item(item, args, client, index):
         is_youtube_video=is_youtube_video,
         youtube_data=youtube_data,
         s3_key=s3_key,
-        refresh_metadata_only=args.refresh_metadata_only,
     )
     end_time = time.time()
     processing_time = end_time - start_time
@@ -576,7 +721,7 @@ def initialize_environment(args):
     return logger
 
 
-def preprocess_youtube_video(url, logger, refresh_metadata_only=False):
+def preprocess_youtube_video(url, logger):
     """
     Prepares YouTube video for processing by:
     1. Extracting video ID
@@ -600,13 +745,6 @@ def preprocess_youtube_video(url, logger, refresh_metadata_only=False):
         if existing_transcription:
             logger.debug(
                 "preprocess_youtube_video: Using existing transcription for YouTube video"
-            )
-            return existing_youtube_data, youtube_id
-        elif refresh_metadata_only and "media_metadata" in existing_youtube_data:
-            # In refresh-metadata-only mode, if we have the metadata but no transcription,
-            # we can still use the existing data for metadata updates
-            logger.debug(
-                "preprocess_youtube_video: Using existing metadata for YouTube video in refresh-metadata-only mode"
             )
             return existing_youtube_data, youtube_id
 
@@ -727,6 +865,10 @@ def merge_reports(reports):
     """
     Combines multiple processing reports into a single aggregate report.
     Accumulates counts and concatenates error/warning lists.
+
+    Fixed: Files that get fully_indexed should be counted as 'processed'
+    regardless of whether they were initially marked as 'skipped' due to
+    using cached transcriptions.
     """
     combined_report = {
         "processed": 0,
@@ -750,6 +892,14 @@ def merge_reports(reports):
         combined_report["error_details"].extend(report.get("error_details", []))
         combined_report["warnings"].extend(report.get("warnings", []))
         combined_report["chunk_lengths"].extend(report.get("chunk_lengths", []))
+
+    # Fix counting logic: if files were fully indexed, they should be counted as processed, not skipped
+    if combined_report["fully_indexed"] > 0:
+        # Files that were fully indexed should be counted as processed
+        combined_report["processed"] = combined_report["fully_indexed"]
+        # If files were processed, they shouldn't be counted as skipped
+        combined_report["skipped"] = 0
+
     return combined_report
 
 
@@ -777,15 +927,8 @@ def graceful_shutdown(pool, queue, items_to_process, overall_report, _signum, _f
     sys.exit(0)
 
 
-def main():
-    """
-    Main execution flow:
-    1. Parse arguments and initialize environment
-    2. Set up worker pool and queues
-    3. Process items in parallel with progress tracking
-    4. Handle graceful shutdown on interrupts
-    5. Generate final processing report
-    """
+def _parse_arguments():
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Audio and video transcription and indexing script"
     )
@@ -814,30 +957,23 @@ def main():
         help="Continue processing even if filename conflicts are found",
     )
     parser.add_argument(
-        "-r",
-        "--refresh-metadata-only",
-        action="store_true",
-        help="Only refresh metadata without creating embeddings or uploading to Pinecone",
-    )
-    parser.add_argument(
         "-d", "--debug", action="store_true", help="Enable debug logging"
     )
     parser.add_argument(
         "-s", "--site", required=True, help="Site ID for environment variables"
     )
-    args = parser.parse_args()
-
-    initialize_environment(args)
-    ingest_queue = IngestQueue()
-
-    logger.info(
-        f"Target pinecone collection: {os.environ.get('PINECONE_INGEST_INDEX_NAME')}"
+    parser.add_argument(
+        "-q",
+        "--queue",
+        metavar="NAME",
+        default=None,
+        help="Specify an alternative queue name for parallel processing",
     )
-    user_input = input("Is it OK to proceed? (Yes/no): ")
-    if user_input.lower() in ["no", "n"]:
-        logger.info("Operation aborted by the user.")
-        sys.exit(0)
+    return parser.parse_args()
 
+
+def _setup_vector_clearing(args, ingest_queue):
+    """Handle vector clearing if requested."""
     if args.clear_vectors:
         try:
             index = load_pinecone()
@@ -862,16 +998,69 @@ def main():
                 logger.error("Exiting due to error in clearing vectors.")
                 sys.exit(1)
 
-    overall_report = {
-        "processed": 0,
-        "skipped": 0,
-        "errors": 0,
-        "error_details": [],
-        "warnings": [],
-        "fully_indexed": 0,
-        "chunk_lengths": [],
-    }
 
+def _process_items_with_progress(
+    task_queue,
+    result_queue,
+    items_to_process,
+    overall_report,
+    ingest_queue,
+    num_processes,
+):
+    """Process items with progress tracking."""
+    total_items = 0  # Track the total number of items
+    items_processed = 0
+
+    # Pre-fill task queue to match worker count for optimal startup
+    for _ in range(num_processes):
+        item = ingest_queue.get_next_item()
+        if not item:
+            break
+        task_queue.put(item)
+        items_to_process.append(item)
+        total_items += 1
+
+    # Main processing loop with progress tracking
+    with tqdm(total=total_items, desc="Processing items") as pbar:
+        while items_processed < total_items:
+            try:
+                # 5 minute timeout for result processing
+                item_id, report = result_queue.get(timeout=300)
+
+                # Update item status and tracking
+                if item_id is not None:
+                    ingest_queue.update_item_status(
+                        item_id,
+                        "completed" if report["errors"] == 0 else "error",
+                    )
+                    # Remove completed item from active tracking
+                    items_to_process[:] = [
+                        item for item in items_to_process if item["id"] != item_id
+                    ]
+
+                # Aggregate results and update progress
+                overall_report = merge_reports([overall_report, report])
+                items_processed += 1
+                pbar.update(1)
+
+                # Keep task queue filled by adding new items as others complete
+                item = ingest_queue.get_next_item()
+                if item:
+                    task_queue.put(item)
+                    items_to_process.append(item)
+                    total_items += 1
+
+            except Empty:
+                # Log timeout but continue - workers may still be processing
+                logger.info(
+                    "Main loop: Timeout while waiting for results. Continuing..."
+                )
+
+    return overall_report
+
+
+def _run_worker_pool_processing(args, overall_report):
+    """Run the main worker pool processing loop."""
     # Initialize multiprocessing resources
     task_queue = Queue()
     result_queue = Queue()
@@ -908,60 +1097,63 @@ def main():
         signal.signal(signal.SIGINT, graceful_shutdown)
         signal.signal(signal.SIGTERM, graceful_shutdown)
 
-        total_items = 0  # Track the total number of items
-        items_processed = 0
+        ingest_queue = (
+            IngestQueue(queue_dir=args.queue) if args.queue else IngestQueue()
+        )
 
         try:
-            # Pre-fill task queue to match worker count for optimal startup
-            for _ in range(num_processes):
-                item = ingest_queue.get_next_item()
-                if not item:
-                    break
-                task_queue.put(item)
-                items_to_process.append(item)
-                total_items += 1
-
-            # Main processing loop with progress tracking
-            with tqdm(total=total_items, desc="Processing items") as pbar:
-                while items_processed < total_items:
-                    try:
-                        # 5 minute timeout for result processing
-                        item_id, report = result_queue.get(timeout=300)
-
-                        # Update item status and tracking
-                        if item_id is not None:
-                            ingest_queue.update_item_status(
-                                item_id,
-                                "completed" if report["errors"] == 0 else "error",
-                            )
-                            # Remove completed item from active tracking
-                            items_to_process = [
-                                item
-                                for item in items_to_process
-                                if item["id"] != item_id
-                            ]
-
-                        # Aggregate results and update progress
-                        overall_report = merge_reports([overall_report, report])
-                        items_processed += 1
-                        pbar.update(1)
-
-                        # Keep task queue filled by adding new items as others complete
-                        item = ingest_queue.get_next_item()
-                        if item:
-                            task_queue.put(item)
-                            items_to_process.append(item)
-                            total_items += 1
-
-                    except Empty:
-                        # Log timeout but continue - workers may still be processing
-                        logger.info(
-                            "Main loop: Timeout while waiting for results. Continuing..."
-                        )
-
+            overall_report = _process_items_with_progress(
+                task_queue,
+                result_queue,
+                items_to_process,
+                overall_report,
+                ingest_queue,
+                num_processes,
+            )
         except Exception as e:
             logger.error(f"Error processing items: {str(e)}")
             logger.exception("Full traceback:")
+
+    return overall_report
+
+
+def main():
+    """
+    Main execution flow:
+    1. Parse arguments and initialize environment
+    2. Set up worker pool and queues
+    3. Process items in parallel with progress tracking
+    4. Handle graceful shutdown on interrupts
+    5. Generate final processing report
+    """
+    args = _parse_arguments()
+    initialize_environment(args)
+    ingest_queue = IngestQueue(queue_dir=args.queue) if args.queue else IngestQueue()
+
+    if args.queue:
+        logger.info(f"Using queue: {args.queue}")
+
+    logger.info(
+        f"Target pinecone collection: {os.environ.get('PINECONE_INGEST_INDEX_NAME')}"
+    )
+    user_input = input("Is it OK to proceed? (Yes/no): ")
+    if user_input.lower() in ["no", "n"]:
+        logger.info("Operation aborted by the user.")
+        sys.exit(0)
+
+    _setup_vector_clearing(args, ingest_queue)
+
+    overall_report = {
+        "processed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "error_details": [],
+        "warnings": [],
+        "fully_indexed": 0,
+        "chunk_lengths": [],
+    }
+
+    overall_report = _run_worker_pool_processing(args, overall_report)
 
     print("\nOverall Processing Report:")
     print_report(overall_report)

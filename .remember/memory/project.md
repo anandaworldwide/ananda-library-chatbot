@@ -4,6 +4,66 @@
 
 See @crawler-TODO.md
 
+## Parallel Queue Support for Audio/Video Processing - COMPLETED
+
+**Status**: Successfully implemented parallel queue support for audio/video media processing, enabling simultaneous
+processing of multiple libraries.
+
+**Implementation Details**:
+
+- **Files Modified**: `data_ingestion/audio_video/transcribe_and_ingest_media.py`
+- **Changes Made**:
+  - Added `--queue/-q` parameter to argument parser
+  - Updated queue initialization to use custom queue directories:
+    `IngestQueue(queue_dir=args.queue) if args.queue else IngestQueue()`
+  - Added logging to indicate which queue is being used
+  - Updated docstring with usage examples for parallel processing
+
+**Queue Infrastructure** (Already Existed):
+
+- **manage_queue.py**: Already had full parallel queue support via `--queue` parameter
+- **IngestQueue class**: File-based queue system with POSIX locks for concurrent access
+- **Queue isolation**: Each queue uses separate directory with independent JSON files
+- **Status tracking**: Maintains item lifecycle independently per queue
+
+**Shared Resources** (Beneficial for performance):
+
+- **Transcription Cache**: Shared across all instances to avoid duplicate OpenAI API calls
+  - `data_ingestion/media/transcriptions.db` (SQLite database)
+  - `data_ingestion/media/transcriptions/` (gzipped JSON files)
+  - `data_ingestion/media/youtube_data_map.json`
+- **Processing Time Estimates**: Shared performance metrics in
+  `data_ingestion/audio_video/data/processing_time_estimates.json`
+
+**Usage Examples**:
+
+```bash
+# Process different libraries in parallel
+python transcribe_and_ingest_media.py -s ananda -q queue-bhaktan
+python transcribe_and_ingest_media.py -s ananda -q queue-treasures
+python transcribe_and_ingest_media.py -s ananda -q queue-video
+
+# Add content to specific queues
+python manage_queue.py -s ananda -q queue-bhaktan -D /path/to/bhaktan/audio -A "Author" -L "Bhaktan"
+python manage_queue.py -s ananda -q queue-treasures -D /path/to/treasures/audio -A "Author" -L "Treasures"
+python manage_queue.py -s ananda -q queue-video -v "https://youtube.com/watch?v=..." -A "Author" -L "VideoLib"
+```
+
+**Benefits**:
+
+- **Parallel Processing**: Multiple libraries can be ingested simultaneously
+- **Resource Efficiency**: Shared transcription cache prevents duplicate work
+- **Queue Isolation**: Independent progress tracking and error handling per library
+- **Scalability**: Can run as many parallel instances as system resources allow
+- **Fault Tolerance**: Failure in one queue doesn't affect others
+
+**Technical Implementation**:
+
+- **Queue Directories**: `queue-bhaktan/`, `queue-treasures/`, `queue-video/`, etc.
+- **Concurrent Safety**: POSIX file locking handles concurrent access to shared resources
+- **Memory Management**: Each instance maintains separate OpenAI and Pinecone connections
+- **Progress Tracking**: Independent progress bars and reporting per queue
+
 ## Comprehensive Cursor Rules System
 
 **Status**: Complete comprehensive Cursor rules generated for the entire Ananda Library Chatbot project.
@@ -84,45 +144,75 @@ relative to workspace root.
 **Bug Fix**: Resolved issue where metrics were only recorded for documents processed through the "without overlap" code
 path by extracting metrics recording to a helper method called from all return paths.
 
-## RAG System Evaluation Results - Current vs New Corpus Performance
+## Uncompressed 3072D vs 1536D RAG Evaluation Results - CRITICAL FINDINGS
 
-**Evaluation Framework**: Successfully implemented comprehensive RAG evaluation system comparing chunking strategies:
+**Status**: COMPLETED - Catastrophic performance degradation discovered in New System
 
-- **Dataset**: 18 queries from human-judged evaluation dataset
-- **Metrics**: Precision@5 and NDCG@5 with 0.85 similarity threshold for chunk matching
-- **Systems**: Current corpus vs new corpus (still building)
-- **Strategies**: 5 chunking approaches from fixed-size to spaCy-based
+**Evaluation Results** (18 queries, K=5):
 
-**Key Performance Findings** (Current System):
+### Current System (1536D text-embedding-ada-002) - PRODUCTION READY
 
-- **spaCy Semantic Chunking Wins**: Both sentence-based and paragraph-based achieve identical top performance
-  - Precision@5: 44.4% (2.3x better than fixed-size)
-  - NDCG@5: 0.725 (70% better than fixed-size)
-  - Retrieval time: ~0.45-0.52 seconds
-- **Fixed-Size Chunking Limitations**:
-  - Current (256 tokens): 18.9% precision, 0.426 NDCG
-  - Optimized (400 tokens): 21.1% precision, 0.453 NDCG
-- **Dynamic Chunking Potential**: 27.8% precision, 0.567 NDCG but 2.6s retrieval time
+- **spaCy sentence/paragraph**: Precision@5: 71.11%, NDCG@5: 86.34%, Time: 0.36-0.49s
+- **Fixed-size chunking**: Precision@5: 66.67%, NDCG@5: 83.18%, Time: 0.34-0.37s
+- **Dynamic chunking**: Precision@5: 70.00%, NDCG@5: 86.10%, Time: 2.70s
 
-**Technical Validation**:
+### New System (3072D text-embedding-3-large) - PRODUCTION FAILURE
 
-- New system infrastructure working correctly (fast retrieval times)
-- Zero results expected due to incomplete corpus
-- Evaluation framework ready for post-ingestion comparison
+- **Best strategy (dynamic)**: Precision@5: 11.11%, NDCG@5: 29.32%, Time: 2.26s
+- **spaCy strategies**: Precision@5: 8.89-10.00%, NDCG@5: 23.57-27.62%
+- **Fixed-size strategies**: Precision@5: 7.78%, NDCG@5: 19.13-19.64%
 
-**Strategic Implications**:
+### Critical Analysis
 
-1. **Semantic chunking approach validated** - 2.3x performance improvement over fixed-size
-2. **Sentence vs paragraph chunking equivalent** on current dataset
-3. **Dynamic chunking needs optimization** - high latency for modest gains
-4. **Infrastructure ready** for new corpus evaluation
+**Performance Degradation**: 84-90% worse performance across all metrics and strategies **Quality Crisis**: NDCG scores
+below 0.30 indicate fundamentally broken retrieval ranking **Speed Issues**: 6x slower for dynamic chunking, minimal
+improvement for other strategies
 
-**Next Steps**:
+### Strategic Decision: DO NOT DEPLOY NEW SYSTEM
 
-- Complete new corpus ingestion
-- Re-run evaluation for direct performance comparison
-- Optimize dynamic chunking parameters
-- Consider A/B testing top-performing strategies in production
+**Root Causes Identified**:
+
+1. **Dimensionality Issues**: 3072D embeddings likely suffering from curse of dimensionality
+2. **Similarity Distribution Mismatch**: Different threshold requirements (confirmed by distribution analysis)
+3. **Model Architecture**: text-embedding-3-large not optimal for spiritual/philosophical content
+
+### Immediate Priority Experiments
+
+**Experiment 1.2: PCA Dimensionality Reduction** (URGENT)
+
+- Reduce 3072D→1536D using PCA
+- Expected: Significant improvement based on 100% variance explained
+- Implementation: Modify evaluation script to apply PCA before similarity search
+
+**Experiment 3.1: Similarity Threshold Tuning** (HIGH)
+
+- Test thresholds 0.2-0.8 in 0.1 increments
+- New System's lower similarity scores may require different matching criteria
+
+**Experiment 1.3: Alternative Models** (MEDIUM)
+
+- Test text-embedding-3-small as middle ground
+- May provide better performance without Current System limitations
+
+### Technical Findings from Sample Chunks
+
+**Current System Strengths**:
+
+- High relevance scores (0.86+ similarity)
+- Multiple relevant chunks per query (Relevance=3.0)
+- Consistent performance across all chunking strategies
+
+**New System Issues**:
+
+- Low relevance scores (0.34-0.67 similarity)
+- Few relevant chunks (mostly Relevance=0.0)
+- Poor semantic understanding evidenced by chunk content quality
+
+### Business Impact
+
+**Cost of Deployment**: Deploying New System would result in 84-90% degradation in user experience **Recommended
+Action**: Continue with Current System while implementing priority experiments **Timeline**: PCA experiment should be
+completed within 1-2 days to determine viability
 
 ## Documentation Updates Completed
 
@@ -610,3 +700,79 @@ logging.
 - Consistent logging levels across all ingestion scripts
 - Quieter operation by suppressing third-party library debug messages
 - Better error classification with warning/error level logging
+
+## Testing and Development Preferences
+
+**Test-Driven Development (TDD)**: The user requires TDD approach for all development work:
+
+- Write tests first before implementing functionality
+- Red-Green-Refactor cycle: failing test → make it pass → improve code
+- Tests should guide design and implementation decisions
+- Never write code without corresponding tests
+
+**Test File Organization**: User prefers adding new tests to existing test files rather than creating new files:
+
+- Look for existing test files that logically relate to the new functionality
+- Add new test cases, test classes, or test methods to appropriate existing files
+- Only create new test files when no existing file is a logical fit
+- Keep test organization coherent and discoverable within existing structure
+- Consider test file scope and maintain clean separation of concerns
+
+## User Preferences
+
+- Prefers TypeScript over JavaScript
+- Uses Next.js 14 with App Router
+- Follows existing project structure and naming conventions
+- Prioritizes experiments that don't require re-ingesting content (costly/time-consuming)
+
+## Current Focus: RAG Performance Investigation
+
+### Problem Statement
+
+- Current System (text-embedding-ada-002, 1536D) performs well with paragraph-based chunking
+- New System (text-embedding-3-large, 3072D) performs poorly with various chunking strategies
+- Need to identify root cause and optimize New System performance
+
+### Completed Experiments
+
+#### Experiment 1.1: Embedding Distribution Analysis ✅
+
+**Status**: Completed 2025-05-31 **Tool**: `bin/analyze_embedding_distributions.py` **Key Findings**:
+
+1. **Critical Discovery**: Similarity distributions are dramatically different
+   - Current System: High similarity (0.82 ± 0.04) - embeddings cluster tightly
+   - New System: Low similarity (0.28 ± 0.16) - embeddings spread widely
+2. **PCA Viability**: 100% variance explained by 1536 components → dimensionality reduction is viable
+3. **Sparsity**: Not the issue (both ~43-46% sparse)
+4. **Norms**: Both systems use unit normalization (1.0)
+
+**Implications**:
+
+- New System's lower inter-document similarity may actually be better for retrieval precision
+- Current System's high similarity suggests potential over-clustering
+- PCA dimensionality reduction should be next priority experiment
+
+### Next Priority Experiments (Based on Analysis)
+
+#### Experiment 1.2: PCA Dimensionality Reduction
+
+**Priority**: HIGH (based on 100% variance explained) **Approach**: Reduce New System embeddings from 3072D to 1536D
+using PCA **Expected Impact**: Significant improvement in retrieval performance
+
+#### Experiment 3.1: Similarity Threshold Tuning
+
+**Priority**: HIGH (based on similarity distribution differences) **Approach**: Test threshold range 0.2-0.8 in 0.1
+increments **Rationale**: New System's lower similarity may require different thresholds
+
+### Technical Implementation Notes
+
+- Library filtering in Pinecone: Use variations like 'Ananda Library', 'ananda.org'
+- PCA component limit: `min(target_dims, n_samples-1, n_features)` to avoid errors
+- Sampling strategy: Random vector query with site-specific filtering fallback
+
+### Project Rules
+
+- Always read memory files first
+- Update memory after significant findings
+- Focus on experiments that don't require re-ingestion
+- Prioritize based on impact-to-effort ratio

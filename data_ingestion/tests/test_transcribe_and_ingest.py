@@ -115,7 +115,7 @@ def test_process_file_private_video():
 
 
 def test_merge_reports():
-    """Test report merging functionality"""
+    """Test report merging functionality with corrected counting logic"""
     reports = [
         {
             "processed": 1,
@@ -141,8 +141,9 @@ def test_merge_reports():
 
     merged = merge_reports(reports)
 
-    assert merged["processed"] == 3
-    assert merged["skipped"] == 1
+    # After the fix: files that are fully_indexed should be counted as processed
+    assert merged["processed"] == 3  # Total fully_indexed files
+    assert merged["skipped"] == 0  # No files should be skipped if they were processed
     assert merged["errors"] == 1
     assert len(merged["error_details"]) == 1
     assert len(merged["warnings"]) == 2
@@ -248,3 +249,69 @@ def test_merge_reports_empty():
     assert merged["errors"] == 0
     assert merged["warnings"] == []
     assert merged["chunk_lengths"] == []
+
+
+def test_counting_logic_for_cached_transcriptions():
+    """
+    Test that files using cached transcriptions but getting fully indexed
+    are correctly counted as 'processed', not 'skipped' after the fix.
+
+    This test verifies that the counting logic properly handles files that
+    use cached transcriptions but still go through the complete processing pipeline.
+    """
+    from data_ingestion.audio_video.transcribe_and_ingest_media import merge_reports
+
+    # Simulate the scenario where a file uses a cached transcription
+    # and goes through complete processing
+
+    # Step 1: Transcription report (file uses cached transcription)
+    transcription_report = {
+        "processed": 0,
+        "skipped": 1,  # Marked as skipped because it used cached transcription
+        "errors": 0,
+        "error_details": [],
+        "warnings": [],
+        "fully_indexed": 0,
+        "chunk_lengths": [],
+        "private_videos": 0,
+    }
+
+    # Step 2: Processing report (file gets fully processed and indexed)
+    processing_report = {
+        "processed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "error_details": [],
+        "warnings": [],
+        "fully_indexed": 1,  # File was successfully indexed
+        "chunk_lengths": [150, 200],  # Word counts for chunks
+        "private_videos": 0,
+    }
+
+    # Step 3: Upload report (successful upload)
+    upload_report = {
+        "processed": 0,
+        "skipped": 0,
+        "errors": 0,
+        "error_details": [],
+        "warnings": [],
+        "fully_indexed": 0,
+        "chunk_lengths": [],
+        "private_videos": 0,
+    }
+
+    # Test the merge logic (this is what process_file does)
+    final_report = merge_reports(
+        [transcription_report, processing_report, upload_report]
+    )
+
+    # AFTER THE FIX: Files that are fully indexed should be counted as processed
+    assert final_report["processed"] == 1, (
+        "File should be marked as processed since it was fully indexed"
+    )
+    assert final_report["skipped"] == 0, (
+        "File shouldn't be marked as skipped if it was processed"
+    )
+    assert final_report["fully_indexed"] == 1, "File was successfully indexed"
+    assert final_report["errors"] == 0, "No errors should be reported"
+    assert len(final_report["chunk_lengths"]) == 2, "Chunk data should be preserved"

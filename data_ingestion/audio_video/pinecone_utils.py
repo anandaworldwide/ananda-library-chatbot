@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import sys
 
 from pinecone import NotFoundException, Pinecone, PineconeException, ServerlessSpec
@@ -207,7 +206,6 @@ def store_in_pinecone(
     # Sanitization for vector ID components
     title = title if title is not None else "Unknown Title"
     title = title.replace("'", "'")  # Replace smart quotes for compatibility
-    sanitized_title = re.sub(r"[^\x00-\x7F]+", "", title)  # ASCII-only for IDs
 
     vectors = []
     for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
@@ -278,7 +276,7 @@ def store_in_pinecone(
             else:
                 # Other infrastructure or configuration issues
                 logger.error(f"Error in upserting vectors: {e}")
-                raise PineconeException(f"Failed to upsert vectors: {str(e)}")
+                raise PineconeException(f"Failed to upsert vectors: {str(e)}") from e
 
     logger.info(f"Successfully stored {len(vectors)} vectors in Pinecone")
 

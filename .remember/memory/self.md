@@ -1,5 +1,118 @@
 # self.md
 
+## Mistake: Website Crawler Exiting After Processing All URLs
+
+**Problem**: The website crawler was designed to run 24/7 but would exit with "signal request" message after processing
+all available URLs, even when no signal was sent. This prevented the daemon-like behavior needed for continuous
+re-crawling.
+
+**Root Cause**: The `get_next_url_to_crawl()` method only looked for URLs with status = 'pending', but successfully
+processed URLs are marked as status = 'visited' with a future `next_crawl` time (default 14 days). There was no
+mechanism to automatically transition visited URLs back to pending when they became due for re-crawling.
+
+**Wrong**: Only considering pending URLs for crawling:
+
+```python
+def get_next_url_to_crawl(self) -> str | None:
+    self.cursor.execute("""
+    SELECT url FROM crawl_queue
+    WHERE status = 'pending'
+    AND (next_crawl IS NULL OR next_crawl <= datetime('now'))
+    AND (retry_after IS NULL OR retry_after <= datetime('now'))
+    ORDER BY last_crawl IS NULL DESC, retry_count ASC, next_crawl ASC, url ASC
+    LIMIT 1
+    """)
+    result = self.cursor.fetchone()
+    return result[0] if result else None
+```
+
+**Correct**: Include visited URLs that are due for re-crawling and automatically reset them to pending:
+
+```python
+def get_next_url_to_crawl(self) -> str | None:
+    self.cursor.execute("""
+    SELECT url FROM crawl_queue
+    WHERE (
+        (status = 'pending' AND (retry_after IS NULL OR retry_after <= datetime('now')))
+        OR
+        (status = 'visited' AND next_crawl <= datetime('now'))
+    )
+    AND (next_crawl IS NULL OR next_crawl <= datetime('now'))
+    ORDER BY
+        status = 'pending' DESC,  -- Prioritize pending URLs first
+        last_crawl IS NULL DESC,  -- Then new URLs
+        retry_count ASC,         -- Then URLs with fewer retries
+        next_crawl ASC,          -- Then URLs due longest ago
+        url ASC                  -- Finally alphabetical for consistency
+    LIMIT 1
+    """)
+    result = self.cursor.fetchone()
+    if result:
+        url = result[0]
+        # If this is a visited URL due for re-crawling, reset it to pending
+        self.cursor.execute("SELECT status FROM crawl_queue WHERE url = ?", (self.normalize_url(url),))
+        status_result = self.cursor.fetchone()
+        if status_result and status_result[0] == 'visited':
+            logging.info(f"Re-crawling due URL: {url}")
+            self.cursor.execute("""
+                UPDATE crawl_queue
+                SET status = 'pending', next_crawl = datetime('now')
+                WHERE url = ?
+            """, (self.normalize_url(url),))
+            self.conn.commit()
+        return url
+    return None
+```
+
+**Impact**: Without this fix, the crawler would complete its initial crawl and then exit instead of waiting for URLs to
+become due for re-crawling. This breaks the intended 24/7 daemon behavior.
+
+**Detection**: The symptom was the crawler exiting with "Exiting script now due to signal request" even though no signal
+was sent, after processing thousands of pages successfully.
+
+## Decision: Abandoning Dynamic Chunking for Paragraph-Based Chunking
+
+**Context**: After implementing and evaluating dynamic chunking across the entire RAG system, evaluation results from
+`evaluate_rag_system.py` showed poor performance compared to other strategies.
+
+**Evaluation Results** (Current System, 18 queries):
+
+- **Dynamic chunking**: Precision@5: 0.2778, NDCG@5: 0.5670, Time: 3.1010s
+- **Paragraph-based chunking**: Precision@5: 0.4444, NDCG@5: 0.7252, Time: 0.3946s
+- **Sentence-based chunking**: Precision@5: 0.4444, NDCG@5: 0.7252, Time: 0.5188s
+
+**Decision Made**: Pivot away from dynamic chunking to paragraph-based chunking for all content types, including
+audio/video transcriptions.
+
+**Rationale**:
+
+- **Performance**: Paragraph-based chunking delivers 60% better precision and 28% better NDCG scores
+- **Efficiency**: 7.8x faster retrieval time (0.39s vs 3.10s)
+- **Consistency**: Fixed-size approach provides more predictable chunking behavior
+- **Proven Strategy**: Already successful in other ingestion methods (PDF, SQL, web crawler)
+
+**Implementation Changes**:
+
+- **Updated `chunk_transcription()` in `transcription_utils.py`**:
+  - Removed dynamic sizing logic (`text_splitter._set_dynamic_chunk_size()`)
+  - Fixed target size at 600 tokens (~300 words for audio content)
+  - Fixed overlap at 20% (120 tokens)
+  - Updated logging to reflect paragraph-based approach
+  - Maintained timestamp accuracy and punctuation preservation
+
+**Target Performance**:
+
+- Expected 87.5%+ target range compliance (225-450 words) for audio content
+- Consistent with other ingestion methods using paragraph-based chunking
+- Faster processing and retrieval times
+
+**Files Modified**:
+
+- `data_ingestion/audio_video/transcription_utils.py` - Updated `chunk_transcription()` function
+
+**Principle**: Always base architectural decisions on empirical evaluation data rather than theoretical benefits.
+Dynamic chunking sounded promising but failed to deliver superior results in practice.
+
 ## Mistake: Separating Unit Tests from Development in Project Planning
 
 **Wrong**: Initially created a project plan with unit tests separated into "Phase III" at the end:
@@ -234,7 +347,7 @@ the refactor. Completed in two phases: initial 12 fixes, then 2 additional fixes
 
 **Wrong**: Creating separate test files for related functionality:
 
-```
+```text
 data_ingestion/tests/test_crawler.py
 data_ingestion/tests/test_crawler_chunking.py  # Separate file
 ```
@@ -2101,14 +2214,14 @@ with special attention to the docs folder and overall project structure.
 1. **Memory consultation**: Read existing memory files to understand past learnings and project context
 2. **Documentation analysis**: Thoroughly reviewed all documentation files in the docs folder to understand:
 
-   - Product requirements ([docs/PRD.md](mdc:docs/PRD.md))
-   - Backend architecture ([docs/backend-structure.md](mdc:docs/backend-structure.md))
-   - Data ingestion strategy ([docs/data-ingestion.md](mdc:docs/data-ingestion.md))
-   - File organization ([docs/file-structure.md](mdc:docs/file-structure.md))
-   - Frontend guidelines ([docs/frontend-guidelines.md](mdc:docs/frontend-guidelines.md))
-   - Tech stack ([docs/tech-stack.md](mdc:docs/tech-stack.md))
-   - Security requirements ([docs/SECURITY-README.md](mdc:docs/SECURITY-README.md))
-   - Testing strategies ([docs/TESTS-README.md](mdc:docs/TESTS-README.md))
+   - Product requirements (`docs/PRD.md`)
+   - Backend architecture (`docs/backend-structure.md`)
+   - Data ingestion strategy (`docs/data-ingestion.md`)
+   - File organization (`docs/file-structure.md`)
+   - Frontend guidelines (`docs/frontend-guidelines.md`)
+   - Tech stack (`docs/tech-stack.md`)
+   - Security requirements (`docs/SECURITY-README.md`)
+   - Testing strategies (`docs/TESTS-README.md`)
 
 3. **Project structure analysis**: Examined the complete codebase hierarchy to understand:
    - Multi-technology stack (TypeScript/React, Python, PHP)
@@ -2845,3 +2958,188 @@ if not is_valid:
     # Successfully processed all sub-chunks
     return
 ```
+
+## Mistake: Audio Transcription Chunking Not Using SpacyTextSplitter Despite Creating It
+
+**Problem**: After switching to paragraph-based chunking, the `chunk_transcription` function in `transcription_utils.py`
+was timing out with "chunk_transcription timed out" errors. Investigation revealed the function was creating a
+`SpacyTextSplitter` instance but never actually using it for text processing.
+
+**Wrong**: Creating SpacyTextSplitter but using manual word-based chunking with expensive regex operations:
+
+```python
+def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
+    # Creates SpacyTextSplitter but doesn't use it
+    text_splitter = SpacyTextSplitter(separator="\n\n", pipeline="en_core_web_sm")
+
+    # Manual word-based chunking instead of using text_splitter
+    while word_index < len(words):
+        chunk_words = words[word_index:end_index]
+
+        # Expensive regex pattern matching for each chunk - TIMEOUT SOURCE
+        pattern = (
+            r"\b" + r"\W*".join(re.escape(word["word"]) for word in chunk_words) + r"[\W]*"
+        )
+        match = re.search(pattern, original_text)
+        # Complex text extraction logic...
+```
+
+**Correct**: Actually use SpacyTextSplitter for text processing and simple word mapping:
+
+```python
+def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
+    text_splitter = SpacyTextSplitter(separator="\n\n", pipeline="en_core_web_sm")
+
+    # **USE** the SpacyTextSplitter for semantic text chunking
+    text_chunks = text_splitter.split_text(original_text, document_id="transcription")
+
+    # Simple word mapping strategy instead of complex regex
+    word_index = 0
+    for chunk_idx, chunk_text in enumerate(text_chunks):
+        chunk_text_words = chunk_text.split()
+        words_matched = 0
+        chunk_words = []
+
+        # Simple word matching without expensive regex
+        while word_index < len(words) and words_matched < len(chunk_text_words):
+            word_obj = words[word_index]
+            expected_word = chunk_text_words[words_matched]
+
+            if (word_obj["word"].lower().strip('.,!?";:()[]') ==
+                expected_word.lower().strip('.,!?";:()[]')):
+                chunk_words.append(word_obj)
+                words_matched += 1
+
+            word_index += 1
+```
+
+**Root Cause**: The function was doing the computational equivalent of paragraph-based chunking manually with expensive
+regex operations instead of leveraging the efficient SpacyTextSplitter that was already instantiated.
+
+**Detection**: Timeout errors on transcription chunking after switching to "paragraph-based" approach. The timeout
+occurred because complex regex pattern matching
+(`r"\b" + r"\W*".join(re.escape(word["word"]) for word in chunk_words) + r"[\W]*"`) was being performed for every chunk.
+
+**Fix Applied**:
+
+- Actually use `text_splitter.split_text()` for semantic chunking
+- Replace expensive regex matching with simple word-by-word mapping
+- Add timing debug logs to identify bottlenecks
+- Maintain timestamp accuracy through word object mapping
+
+**Impact**: Eliminates timeout issues while providing true semantic chunking benefits for audio transcriptions.
+
+**Follow-up Fix**: Word mapping logic was too strict, causing "No words found for chunk X, skipping" warnings. Updated
+to use proportional mapping:
+
+```python
+# Calculate approximate words needed based on original word count ratio
+total_original_words = len(words)
+total_spacy_words = len(' '.join(text_chunks).split())
+if total_spacy_words > 0:
+    chunk_spacy_words = len(chunk_text.split())
+    estimated_words_needed = max(1, int(chunk_spacy_words * total_original_words / total_spacy_words))
+
+# Take estimated words sequentially instead of trying to match text
+chunk_words = words[word_index:word_index + estimated_words_needed]
+```
+
+This approach avoids text matching issues between spaCy's processed text and original transcription words.
+
+## Embedding Distribution Analysis Implementation - RAG Performance Investigation
+
+**Context**: Created comprehensive analysis tool `bin/analyze_embedding_distributions.py` to investigate performance
+differences between Current System (text-embedding-ada-002, 1536D) and New System (text-embedding-3-large, 3072D).
+
+**Key Implementation Details**:
+
+### Pinecone Sampling Strategy
+
+- **Challenge**: Need random samples from large vector databases without expensive scan operations
+- **Solution**: Use dummy random vector query with high top_k to get diverse samples
+- **Fallback**: Attempt library filtering first, fall back to unfiltered if metadata doesn't support site filtering
+
+```python
+def _sample_from_index(self, index, expected_dim: int):
+    # First try unfiltered to discover library values
+    query_result = index.query(vector=dummy_vector, top_k=100, include_values=True, include_metadata=True)
+
+    # Check metadata for matching library values
+    site_variations = [self.site, f"{self.site}.org", self.site.replace("-", ".")]
+    matching_library = None
+    for lib_val in sample_libraries:
+        if lib_val and any(variant in str(lib_val).lower() for variant in site_variations):
+            matching_library = lib_val
+            break
+
+    # Filter by matching library if found, otherwise use unfiltered
+    if matching_library:
+        query_result = index.query(filter={"library": {"$in": [matching_library]}})
+```
+
+### PCA Analysis for High-Dimensional Embeddings
+
+- **Challenge**: PCA requires n_components < min(n_samples, n_features)
+- **Solution**: Use `min(target_dimensions, n_samples - 1, n_features)` for n_components
+
+### Critical Findings from Analysis
+
+1. **Similarity Distribution Difference**: Current System has high similarity (0.82 ± 0.04) vs New System (0.28 ± 0.16)
+2. **PCA Viability**: 100% variance explained by 1536 components suggests dimensionality reduction is viable
+3. **Sparsity Not the Issue**: Both systems have similar sparsity (~43-46%)
+4. **Norm Consistency**: Both systems use unit-normalized embeddings (norm = 1.0)
+
+**Next Priority**: Implement PCA dimensionality reduction experiment based on these findings.
+
+### Mistake: Creating New OpenAI Embeddings Instance for Every Page in Website Crawler
+
+**Problem**: The website crawler was creating a new `OpenAIEmbeddings` instance for every single page processed, causing
+inefficient resource usage and connection overhead.
+
+**Wrong**: Creating embeddings instance in the `create_embeddings` method:
+
+```python
+def create_embeddings(self, chunks: list[str], url: str, page_title: str) -> list[dict]:
+    """Create embeddings for text chunks using shared utilities."""
+    # This creates a new instance and connection for EVERY page!
+    model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+    if not model_name:
+        raise ValueError("OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set")
+    embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
+
+    for i, chunk in enumerate(chunks):
+        vector = embeddings.embed_query(chunk)  # Using new instance each time
+        # ... rest of method
+```
+
+**Correct**: Initialize embeddings once in `__init__` and reuse throughout crawler session:
+
+```python
+# In __init__ method:
+def __init__(self, site_id: str, site_config: dict, retry_failed: bool = False):
+    # ... other initialization code ...
+
+    # Initialize shared embeddings instance (reused for all pages)
+    model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+    if not model_name:
+        raise ValueError("OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set")
+    self.embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
+    logging.info(f"Initialized shared OpenAI embeddings client with model: {model_name}")
+
+# In create_embeddings method:
+def create_embeddings(self, chunks: list[str], url: str, page_title: str) -> list[dict]:
+    """Create embeddings for text chunks using shared embeddings instance."""
+    for i, chunk in enumerate(chunks):
+        vector = self.embeddings.embed_query(chunk)  # Using shared instance
+        # ... rest of method
+```
+
+**Impact**:
+
+- **Performance**: Eliminates OpenAI client re-initialization overhead for every page
+- **Resource efficiency**: Reuses connection throughout crawling session
+- **Cleaner logs**: One initialization message instead of per-page spam
+- **Scalability**: Critical for long-running crawlers processing thousands of pages
+
+**Detection**: Look for repetitive "Initialized OpenAI embeddings" log messages and resource creation in loops or
+per-item processing methods.

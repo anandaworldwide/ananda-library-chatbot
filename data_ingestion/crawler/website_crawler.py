@@ -149,6 +149,17 @@ class WebsiteCrawler:
         # Initialize shared text splitter with consistent configuration
         self.text_splitter = SpacyTextSplitter()
 
+        # Initialize shared embeddings instance (reused for all pages)
+        model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+        if not model_name:
+            raise ValueError(
+                "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
+            )
+        self.embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
+        logging.info(
+            f"Initialized shared OpenAI embeddings client with model: {model_name}"
+        )
+
         # Set up SQLite database for crawl queue
         db_dir = Path(__file__).parent / "db"
         db_dir.mkdir(exist_ok=True)
@@ -250,17 +261,46 @@ class WebsiteCrawler:
     def get_next_url_to_crawl(self) -> str | None:
         """Get the next URL to crawl from the queue"""
         try:
-            # Get URLs that are due for crawling, respecting retry_after for temporary failures
+            # Get URLs that are due for crawling, including visited URLs due for re-crawling
+            # and pending URLs, respecting retry_after for temporary failures
             self.cursor.execute("""
             SELECT url FROM crawl_queue 
-            WHERE status = 'pending' 
+            WHERE (
+                (status = 'pending' AND (retry_after IS NULL OR retry_after <= datetime('now'))) 
+                OR 
+                (status = 'visited' AND next_crawl <= datetime('now'))
+            )
             AND (next_crawl IS NULL OR next_crawl <= datetime('now'))
-            AND (retry_after IS NULL OR retry_after <= datetime('now'))
-            ORDER BY last_crawl IS NULL DESC, retry_count ASC, next_crawl ASC, url ASC
+            ORDER BY 
+                status = 'pending' DESC,  -- Prioritize pending URLs first
+                last_crawl IS NULL DESC,  -- Then new URLs
+                retry_count ASC,         -- Then URLs with fewer retries
+                next_crawl ASC,          -- Then URLs due longest ago
+                url ASC                  -- Finally alphabetical for consistency
             LIMIT 1
             """)
             result = self.cursor.fetchone()
-            return result[0] if result else None
+            if result:
+                url = result[0]
+                # If this is a visited URL due for re-crawling, reset it to pending
+                self.cursor.execute(
+                    "SELECT status FROM crawl_queue WHERE url = ?",
+                    (self.normalize_url(url),),
+                )
+                status_result = self.cursor.fetchone()
+                if status_result and status_result[0] == "visited":
+                    logging.info(f"Re-crawling due URL: {url}")
+                    self.cursor.execute(
+                        """
+                        UPDATE crawl_queue 
+                        SET status = 'pending', next_crawl = datetime('now')
+                        WHERE url = ?
+                    """,
+                        (self.normalize_url(url),),
+                    )
+                    self.conn.commit()
+                return url
+            return None
         except Exception as e:
             logging.error(f"Error getting next URL to crawl: {e}")
             return None
@@ -821,18 +861,11 @@ class WebsiteCrawler:
     def create_embeddings(
         self, chunks: list[str], url: str, page_title: str
     ) -> list[dict]:
-        """Create embeddings for text chunks using shared utilities."""
-        # Use shared embeddings utility
-        model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
-        if not model_name:
-            raise ValueError(
-                "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
-            )
-        embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
+        """Create embeddings for text chunks using shared embeddings instance."""
         vectors = []
 
         for i, chunk in enumerate(chunks):
-            vector = embeddings.embed_query(chunk)
+            vector = self.embeddings.embed_query(chunk)
             chunk_id = generate_vector_id(
                 library_name=self.domain,
                 title=page_title,
@@ -1147,7 +1180,6 @@ def _cleanup_browser(page, browser) -> None:
 def _handle_url_processing(url: str, crawler: WebsiteCrawler, browser, page) -> bool:
     """Handle URL processing setup and skip checks. Returns True if restart needed."""
     crawler.current_processing_url = url
-    logging.info(f"Processing URL: {url}")
 
     if crawler.should_skip_url(url):
         logging.info(f"Skipping URL based on skip patterns: {url}")
@@ -1427,15 +1459,9 @@ def main():
     handle_fresh_start(args)
 
     env_file_str = str(env_file)
-    if not os.path.exists(env_file_str):
-        print(
-            f"Error: Environment file {env_file_str} not found. Pinecone/OpenAI keys required. Exiting."
-        )
-        sys.exit(1)
-    else:
-        logging.info(
-            f"Will load environment variables from: {os.path.abspath(env_file_str)}"
-        )
+    logging.info(
+        f"Will load environment variables from: {os.path.abspath(env_file_str)}"
+    )
 
     # Get Domain & Start URL from Config
     domain = site_config.get("domain")
@@ -1451,6 +1477,14 @@ def main():
     logging.info(f"Configured domain: {domain}")
 
     setup_signal_handlers()
+
+    # Load environment variables first before initializing crawler
+    if not os.path.exists(env_file_str):
+        print(f"Error: Environment file {env_file_str} not found.")
+        sys.exit(1)
+
+    load_dotenv(env_file_str)
+    logging.info(f"Loaded environment from: {os.path.abspath(env_file_str)}")
 
     crawler = WebsiteCrawler(
         site_id=args.site, site_config=site_config, retry_failed=args.retry_failed

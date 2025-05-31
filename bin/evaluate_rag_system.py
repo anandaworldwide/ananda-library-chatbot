@@ -42,13 +42,7 @@ from openai import OpenAI
 from pinecone import NotFoundException, Pinecone
 from sklearn.metrics import ndcg_score
 
-# Add the parent directory to the path so we can find the data_ingestion module
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# Add the root directory to the path for pyutil
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
-from utils.text_splitter_utils import SpacyTextSplitter
-
+from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
 from pyutil.env_utils import load_env
 
 # Download NLTK data (for tokenization)
@@ -65,12 +59,19 @@ except OSError:
 
 # --- Configuration ---
 EVAL_DATASET_PATH = os.path.join(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")),
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
     "reranking",
     "evaluation_dataset_ananda.jsonl",
 )
+SITE_CONFIG_PATH = os.path.join(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+    "web",
+    "site-config",
+    "config.json",
+)
 K = 5  # Evaluate top-K results
 SIMILARITY_THRESHOLD = 0.85  # Threshold for matching chunks
+LENIENT_SIMILARITY_THRESHOLD = 0.35  # More lenient threshold for testing
 
 # Define chunking strategies for evaluation
 CHUNKING_STRATEGIES = [
@@ -110,6 +111,48 @@ CHUNKING_STRATEGIES = [
 ]
 
 # --- Helper Functions ---
+
+
+def load_site_config(site: str):
+    """Load site configuration and return included libraries."""
+    try:
+        with open(SITE_CONFIG_PATH) as f:
+            config = json.load(f)
+
+        site_config = config.get(site)
+        if not site_config:
+            print(f"ERROR: Site '{site}' not found in config.json")
+            sys.exit(1)
+
+        included_libraries = site_config.get("includedLibraries", [])
+
+        # Handle both string and object formats for includedLibraries
+        library_names = []
+        for lib in included_libraries:
+            if isinstance(lib, str):
+                library_names.append(lib)
+            elif isinstance(lib, dict) and "name" in lib:
+                library_names.append(lib["name"])
+
+        print(f"Site '{site}' includes libraries: {library_names}")
+        return library_names
+    except FileNotFoundError:
+        print(f"ERROR: Site config file not found at {SITE_CONFIG_PATH}")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Invalid JSON in config file: {e}")
+        sys.exit(1)
+
+
+def create_library_filter(included_libraries):
+    """Create Pinecone metadata filter for included libraries."""
+    if not included_libraries:
+        return None
+
+    # Create filter for library field
+    filter_dict = {"library": {"$in": included_libraries}}
+    print(f"Created Pinecone filter: {filter_dict}")
+    return filter_dict
 
 
 def load_environment(site: str):
@@ -327,16 +370,41 @@ def match_chunks(retrieved_chunk, judged_chunks):
     """Match a retrieved chunk to judged chunks by content similarity."""
     best_match = None
     best_score = 0.0
+    all_scores = []
+
     for judged in judged_chunks:
         similarity = SequenceMatcher(None, retrieved_chunk, judged["document"]).ratio()
-        if similarity > best_score and similarity >= SIMILARITY_THRESHOLD:
+        all_scores.append(similarity)
+        if similarity > best_score:
             best_score = similarity
             best_match = judged
-    return best_match
+
+    # Log similarity analysis
+    max_score = max(all_scores) if all_scores else 0.0
+    print(
+        f"    Chunk similarity analysis: max={max_score:.3f}, scores={[f'{s:.3f}' for s in sorted(all_scores, reverse=True)[:3]]}"
+    )
+
+    # Try lenient threshold if strict threshold fails
+    if best_score >= SIMILARITY_THRESHOLD:
+        print(f"    ✓ Strict match found (similarity={best_score:.3f})")
+        return best_match
+    elif best_score >= LENIENT_SIMILARITY_THRESHOLD:
+        print(f"    ⚠ Lenient match found (similarity={best_score:.3f})")
+        return best_match
+    else:
+        print(f"    ✗ No match found (best similarity={best_score:.3f})")
+        return None
 
 
 def retrieve_documents(
-    index, query, embedding_model, chunking_strategy, top_k, openai_client
+    index,
+    query,
+    embedding_model,
+    chunking_strategy,
+    top_k,
+    openai_client,
+    library_filter=None,
 ):
     """Retrieve top-K documents for a query using the specified system and chunking strategy."""
     start_time = time.time()
@@ -348,9 +416,17 @@ def retrieve_documents(
 
     # Ensure the embedding dimension matches the index expectation
     try:
-        results = index.query(
-            vector=query_embedding, top_k=top_k * 2, include_metadata=True
-        )
+        query_params = {
+            "vector": query_embedding,
+            "top_k": top_k * 2,
+            "include_metadata": True,
+        }
+
+        # Add library filter if provided
+        if library_filter:
+            query_params["filter"] = library_filter
+
+        results = index.query(**query_params)
         print(
             f"Querying with model: {embedding_model}, Top-K matches: {len(results['matches'])}"
         )
@@ -428,6 +504,7 @@ def evaluate_query_for_system(
     openai_client,
     judged_docs,
     system_name,
+    library_filter=None,
 ):
     """Evaluate a single query for a specific system across all chunking strategies."""
     query_metrics = {}
@@ -437,7 +514,13 @@ def evaluate_query_for_system(
     for strategy in chunking_strategies:
         try:
             docs, time_taken = retrieve_documents(
-                index, query, embedding_model, strategy, K, openai_client
+                index,
+                query,
+                embedding_model,
+                strategy,
+                K,
+                openai_client,
+                library_filter,
             )
             for doc in docs:
                 matched = match_chunks(doc["document"], judged_docs)
@@ -582,6 +665,10 @@ def main():
     # Load environment
     load_environment(args.site)
 
+    # Load site configuration and create library filter
+    included_libraries = load_site_config(args.site)
+    library_filter = create_library_filter(included_libraries)
+
     # Define environment variables after loading
     CURRENT_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
     NEW_INDEX_NAME = os.getenv("PINECONE_INGEST_INDEX_NAME")
@@ -634,6 +721,7 @@ def main():
             openai_client,
             judged_docs,
             "Current System",
+            library_filter,
         )
         update_overall_metrics(
             metrics, times, "current", current_metrics, current_times
@@ -649,6 +737,7 @@ def main():
             openai_client,
             judged_docs,
             "New System",
+            library_filter,
         )
         update_overall_metrics(metrics, times, "new", new_metrics, new_times)
         retrieved_chunks.update(new_chunks)
