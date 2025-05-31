@@ -27,15 +27,12 @@ The chunking logic is implemented in `data_ingestion/utils/spacy_text_splitter.p
 - **Chunk Overlap**: Implements 20% overlap to preserve context across chunk boundaries
 - **Text Cleaning**: Includes robust text preprocessing to handle various input formats
 
-#### Audio/Video Specific Implementation
+#### Audio/Video Timestamp Preservation
 
-For audio/video transcriptions in `data_ingestion/audio_video/transcription_utils.py`:
+Audio/video content uses the same paragraph-based chunking strategy with additional timestamp mapping:
 
-- **Two-Stage Processing**: SpacyTextSplitter creates semantic text chunks, then maps back to timestamped words
-- **Proportional Word Mapping**: Uses word count ratios to allocate timestamped words to spaCy chunks
-- **Timestamp Preservation**: Maintains perfect audio/video timestamp accuracy for playback synchronization
-- **Robust Error Handling**: Includes emergency fallbacks and comprehensive logging
-- **Legacy Fallback**: Falls back to original word-based chunking if spaCy processing fails
+- **Timestamp Preservation**: Maps spaCy text chunks back to original timestamped words for playback synchronization
+- **Word-Level Metadata**: Preserves timing data during chunking process
 
 ### Integration Across Data Sources
 
@@ -49,14 +46,8 @@ The spaCy paragraph-based chunking strategy has been integrated into all major d
 
 #### Audio/Video Transcription (`transcribe_and_ingest_media.py`)
 
-- **Paragraph-Based Chunking**: Uses fixed ~600 token target with spaCy paragraph detection
-- **Semantic Chunking**: Maintains natural speech flow and semantic boundaries
+- **Unified Chunking Strategy**: Uses standard paragraph-based chunking with timestamp mapping
 - **Metadata Preservation**: Maintains audio timestamps and word-level metadata
-- **Quality Metrics**: Enhanced logging for chunk quality and target range achievement
-- **Consistent Performance**: Achieves 87.5%+ target range compliance (225-450 words)
-- **Timestamp Accuracy**: Perfect preservation of audio timestamps for playback synchronization
-- **Robust Word Mapping**: Uses proportional allocation strategy to map spaCy text chunks back to timestamped words
-- **Fallback Strategy**: Legacy word-based chunking available if spaCy processing fails
 
 #### Web Crawling (`website_crawler.py`)
 
@@ -98,7 +89,7 @@ All ingestion scripts now use consistent paragraph-based chunking parameters:
 #### Unified Target Sizes
 
 - **Standard Configuration**: ~600 tokens with 20% overlap (120 tokens)
-- **Audio/Video Content**: ~300 words per chunk (converted from 600 tokens using 2:1 ratio)
+
 - **Target Word Range**: 225-450 words per chunk across all content types
 - **Very short texts** (<200 words): Single chunk, no splitting
 
@@ -106,7 +97,6 @@ All ingestion scripts now use consistent paragraph-based chunking parameters:
 
 - **Primary Goal**: 225-450 words per chunk
 - **Current Achievement**: 70%+ of chunks within target range
-- **Audio Content**: 87.5%+ target range compliance
 - **Smart Merging**: Post-processing combines small chunks to reach target
 
 ### Environment-Specific Settings
@@ -121,16 +111,14 @@ Based on comprehensive evaluation testing with 18 queries, the spaCy paragraph-b
 
 #### Performance Comparison (Current System, ada-002 with 1536 dimension)
 
-- **Paragraph-based chunking**: Precision@5: 0.4444, NDCG@5: 0.7252, Time: 0.39s
-- **Dynamic chunking**: Precision@5: 0.2778, NDCG@5: 0.5670, Time: 3.10s
+- **Fixed paragraph-based chunking**: Precision@5: 0.4444, NDCG@5: 0.7252, Time: 0.39s
 - **Fixed-size chunking (256 tokens)**: Precision@5: 0.1889, NDCG@5: 0.4262, Time: 0.39s
 
 #### Key Benefits
 
-- **60% better precision** compared to dynamic chunking
-- **28% better NDCG scores** for retrieval quality
-- **7.8x faster retrieval time** than dynamic chunking
 - **Consistent performance** across all content types
+- **Optimal retrieval quality** with fixed target sizes
+- **Fast processing time** with paragraph-based semantic boundaries
 
 ### Architectural Benefits
 
@@ -166,19 +154,17 @@ The implementation includes robust fallback mechanisms:
 
 ### Recently Completed ✅
 
-- **Dynamic Chunking Evaluation and Abandonment**: Comprehensive testing showed paragraph-based chunking significantly
-  outperforms dynamic chunking
-- **Audio/Video Transcription Updates**: Converted from dynamic to paragraph-based chunking with fixed 600-token targets
-- **Audio Transcription Chunking Fix**: Resolved timeout issues by implementing actual spaCy text processing instead of
-  manual word-based chunking
+- **Fixed Paragraph-Based Chunking Implementation**: Standardized all content types to use consistent 600-token targets
+- **Audio/Video Transcription Updates**: Implemented fixed paragraph-based chunking with NLTK overlap detection
+- **Audio Transcription Chunking Fix**: Resolved timeout issues by implementing actual spaCy text processing
 - **Improved Word Mapping**: Fixed "No words found for chunk" warnings with proportional word allocation strategy
 - **Comprehensive logging and metrics tracking system**
 - **Refined chunking thresholds achieving 70%+ target range compliance**
 
 ### Strategic Decisions ✅
 
-- **Abandoned Dynamic Chunking**: Based on empirical evaluation data showing poor performance
-- **Standardized on Paragraph-Based**: Consistent approach across all content types
+- **Standardized on Fixed Paragraph-Based Chunking**: Consistent approach across all content types
+- **NLTK Integration**: Added NLTK dependency for robust overlap detection and word boundary handling
 - **Data-Driven Architecture**: All chunking decisions based on RAG evaluation results
 
 ### Future Enhancements 🔮
@@ -232,8 +218,7 @@ Comprehensive evaluation system (`data_ingestion/bin/evaluate_rag_system.py`) pr
 - **Conversational Content**: Maintains natural dialogue flow and semantic boundaries
 - **Technical Documentation**: Preserves procedural steps and logical flow
 - **Creative Content**: Maintains narrative and stylistic coherence
-- **Audio/Video Transcriptions**: Preserves spoken language patterns and timing accuracy using two-stage processing
-  approach
+- **Audio/Video Transcriptions**: Preserves spoken language patterns with timestamp mapping for playback synchronization
 
 ### Configuration Guidelines
 

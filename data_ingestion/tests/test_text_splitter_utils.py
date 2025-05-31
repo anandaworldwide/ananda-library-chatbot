@@ -112,6 +112,7 @@ def test_split_document_into_multiple_chunks(text_splitter: SpacyTextSplitter):
 def test_empty_text(text_splitter: SpacyTextSplitter):
     text = ""
     chunks = text_splitter.split_text(text)
+    # Empty text should return no chunks
     assert len(chunks) == 0
 
 
@@ -125,6 +126,7 @@ def test_text_shorter_than_chunk_size(text_splitter: SpacyTextSplitter):
 def test_text_with_only_separators(text_splitter: SpacyTextSplitter):
     text = "\n\n\n\n"
     chunks = text_splitter.split_text(text)
+    # Text with only separators should return no chunks (empty content)
     assert len(chunks) == 0
 
 
@@ -219,54 +221,55 @@ def test_ensure_nlp_called(mocker):
 
 def test_dynamic_chunk_size_very_short_text():
     splitter = SpacyTextSplitter()
-    # Less than 200 words, should not be chunked
+    # Dynamic chunking has been disabled in favor of fixed 600-token chunks
     text = "Short text. " * 50  # Approx 100 words
     chunks = splitter.split_text(text)
     assert len(chunks) == 1, f"Expected 1 chunk for very short text, got {len(chunks)}"
-    assert splitter.chunk_size == 800, (
-        f"Expected chunk_size=800 for very short text, got {splitter.chunk_size}"
+    # Fixed parameters should remain unchanged
+    assert splitter.chunk_size == 600, (
+        f"Expected chunk_size=600 (fixed), got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 0, (
-        f"Expected overlap=0 for very short text, got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 120, (
+        f"Expected overlap=120 (fixed), got {splitter.chunk_overlap}"
     )
 
 
 def test_dynamic_chunk_size_short_text():
     splitter = SpacyTextSplitter()
-    # Between 200 and 1000 words
+    # Dynamic chunking disabled - parameters remain fixed
     text = "Short text. " * 300  # Approx 600 words
     splitter.split_text(text)
-    assert splitter.chunk_size == 300, (
-        f"Expected chunk_size=300 for short text, got {splitter.chunk_size}"
+    assert splitter.chunk_size == 600, (
+        f"Expected chunk_size=600 (fixed), got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 60, (
-        f"Expected overlap=60 for short text, got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 120, (
+        f"Expected overlap=120 (fixed), got {splitter.chunk_overlap}"
     )
 
 
 def test_dynamic_chunk_size_medium_text():
     splitter = SpacyTextSplitter()
-    # Between 1000 and 5000 words
+    # Dynamic chunking disabled - parameters remain fixed
     text = "Medium text. " * 1500  # Approx 3000 words
     splitter.split_text(text)
-    assert splitter.chunk_size == 400, (
-        f"Expected chunk_size=400 for medium text, got {splitter.chunk_size}"
+    assert splitter.chunk_size == 600, (
+        f"Expected chunk_size=600 (fixed), got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 80, (
-        f"Expected overlap=80 for medium text, got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 120, (
+        f"Expected overlap=120 (fixed), got {splitter.chunk_overlap}"
     )
 
 
 def test_dynamic_chunk_size_long_text():
     splitter = SpacyTextSplitter()
-    # Over 5000 words
+    # Dynamic chunking disabled - parameters remain fixed
     text = "Long text. " * 3000  # Approx 6000 words
     splitter.split_text(text)
-    assert splitter.chunk_size == 500, (
-        f"Expected chunk_size=500 for long text, got {splitter.chunk_size}"
+    assert splitter.chunk_size == 600, (
+        f"Expected chunk_size=600 (fixed), got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 100, (
-        f"Expected overlap=100 for long text, got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 120, (
+        f"Expected overlap=120 (fixed), got {splitter.chunk_overlap}"
     )
 
 
