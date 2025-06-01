@@ -776,3 +776,63 @@ increments **Rationale**: New System's lower similarity may require different th
 - Update memory after significant findings
 - Focus on experiments that don't require re-ingestion
 - Prioritize based on impact-to-effort ratio
+
+## FINAL DECISION: text-embedding-3-large UNSUITABLE FOR PRODUCTION ❌
+
+**Status**: ✅ **CONCLUSIVE EVIDENCE** - DO NOT PROCEED WITH RE-INGESTION
+
+**Evaluation Results** (19 queries, K=5, with explicit dimensions parameter):
+
+### Current System (text-embedding-ada-002, 1536D) - PRODUCTION READY ✅
+
+- **Performance**: 73% Precision@5, 87% NDCG@5 (spaCy sentence/paragraph)
+- **Similarity Scores**: 0.79-0.88 (excellent semantic coherence)
+- **Content Quality**: Highly relevant chunks for target queries
+- **Speed**: 0.36-0.43 seconds (excellent performance)
+- **Status**: **Keep as production system**
+
+### New System (text-embedding-3-large, 3072D) - PRODUCTION FAILURE ❌
+
+- **Performance**: 7-9% Precision@5, 18-26% NDCG@5 (catastrophic failure)
+- **Similarity Scores**: 0.34-0.67 (poor semantic understanding)
+- **Performance Drop**: **88% degradation** across all metrics
+- **All Chunking Strategies Fail**: Fixed, sentence, paragraph, dynamic - none work
+- **Status**: **Abandon completely - do not re-ingest**
+
+### Critical Technical Discovery
+
+- **API Issue Found**: text-embedding-ada-002 does NOT support dimensions parameter
+- **Fix Applied**: Conditional dimensions parameter only for newer models
+- **Result**: Current System restored to full performance, New System failure confirmed
+
+### Business Decision
+
+- **No Re-ingestion**: Would waste time/resources on fundamentally flawed model
+- **Keep Current Architecture**: Proven ada-002 + paragraph chunking
+- **Focus on Optimization**: Improve existing system rather than model migration
+- **Cost Savings**: Avoided expensive re-ingestion of 380K+ vectors
+
+### Lessons Learned
+
+- **Trust Performance Data**: 88% degradation is not a configuration issue
+- **API Parameter Validation**: Always check model-specific parameter support
+- **Diagnostic Before Re-ingestion**: Saved significant time and resources
+- **Embedding Model Selection**: Newer ≠ better for domain-specific content
+
+## Embedding Model Evaluation Completed - Ada-002 Confirmed
+
+**Status**: ✅ COMPLETED - Comprehensive evaluation of embedding models for spiritual content
+
+**Models Tested**:
+
+- **text-embedding-ada-002**: 81.4% avg similarity (winner)
+- **text-embedding-3-small**: 38.6% avg similarity (52% worse)
+- **text-embedding-3-large**: 39.2% avg similarity (52% worse)
+- **voyage-3-large-2048**: 49.2% avg similarity (40% worse)
+
+**Final Decision**: Continue using text-embedding-ada-002 for all Ananda Library Chatbot deployments.
+
+**Key Finding**: Ada-002 demonstrates superior understanding of spiritual/philosophical content with metaphorical
+language and specialized terminology.
+
+**Implementation**: All ingestion scripts standardized on ada-002 with consistent vector ID format.
