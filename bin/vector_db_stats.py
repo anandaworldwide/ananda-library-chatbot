@@ -8,39 +8,35 @@ specifically counting occurrences of metadata fields (author, library, type). It
 the query API with dummy vectors for much faster metadata retrieval.
 
 Usage:
-    python bin/vector_db_stats.py --site <site_id> [--prefix <id_prefix>]
+    python bin/vector_db_stats.py --site <site_id> [--prefix <id_prefix>] [--use-non-ingest|-n]
 
 Example:
     python bin/vector_db_stats.py --site ananda
     python bin/vector_db_stats.py --site ananda --prefix "text||Crystal Clarity||"
+    python bin/vector_db_stats.py --site ananda --use-non-ingest
 """
 
 import argparse
 import os
-import sys
 import time
 from collections import Counter
 
 from pinecone import Pinecone
 from tqdm import tqdm
 
-# Add parent directory to Python path for importing utility modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from pyutil.env_utils import load_env
 
 
-def get_pinecone_stats(id_prefix=None):
+def get_pinecone_stats(index_name, id_prefix=None):
     """
     Retrieves and aggregates statistics from Pinecone vectors using query API.
     Much faster than fetching full vector data since we only need metadata.
 
     Args:
+        index_name (str): Name of the Pinecone index to query
         id_prefix (str, optional): Filter vectors by ID prefix
     """
     pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    index_name = os.getenv("PINECONE_INGEST_INDEX_NAME")
-    if not index_name:
-        raise ValueError("PINECONE_INGEST_INDEX_NAME environment variable not set.")
     index = pc.Index(index_name)
 
     stats = {"author": Counter(), "library": Counter(), "type": Counter()}
@@ -211,13 +207,29 @@ if __name__ == "__main__":
         "--site", required=True, help="Site ID for environment variables"
     )
     parser.add_argument("--prefix", help="Filter vectors by ID prefix")
+    parser.add_argument(
+        "--use-non-ingest",
+        "-n",
+        action="store_true",
+        help="Use non-ingest Pinecone environment variables",
+    )
     args = parser.parse_args()
 
     # Load environment variables for the specified site
     load_env(args.site)
 
+    # Override index name if using non-ingest
+    if args.use_non_ingest:
+        index_name = os.getenv("PINECONE_INDEX_NAME")
+        if not index_name:
+            raise ValueError("PINECONE_INDEX_NAME environment variable not set.")
+    else:
+        index_name = os.getenv("PINECONE_INGEST_INDEX_NAME")
+        if not index_name:
+            raise ValueError("PINECONE_INGEST_INDEX_NAME environment variable not set.")
+
     start_time = time.time()
-    stats, library_doc_counts = get_pinecone_stats(args.prefix)
+    stats, library_doc_counts = get_pinecone_stats(index_name, args.prefix)
     end_time = time.time()
 
     print(f"\nCompleted in {end_time - start_time:.1f} seconds")
