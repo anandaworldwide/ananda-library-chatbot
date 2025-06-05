@@ -4,8 +4,9 @@ globs: *.md
 alwaysApply: false
 ---
 
-# Your rule content
+# Markdown file rules
 
 - Follow markdownlint rules such as 120 character line limit
 - NO Multiple headings with the same content
 - MD029/ol-prefix: Ordered list item prefix 
+- MD040/fenced-code-language: Fenced code blocks should have a language specified

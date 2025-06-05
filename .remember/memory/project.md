@@ -984,7 +984,7 @@ language and specialized terminology.
 - **Threading optimizations** (6 threads) for performance testing
 - **Metrics tracking** for chunking quality analysis
 
-### User Preferences
+### User Prefs
 
 - **Prefers comprehensive analysis** with fair comparisons
 - **Values performance AND accuracy** in solutions

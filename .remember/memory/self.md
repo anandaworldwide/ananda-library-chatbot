@@ -604,7 +604,7 @@ method.
 
 **Problem**: PDF processing was generating excessive debug messages during normal operation:
 
-```
+```bash
 2025-06-02 18:22:32,636 - __main__ - DEBUG - Filtered too many characters, using full text extraction
 ```
 
@@ -991,7 +991,7 @@ directly, not a dictionary with pagination information as initially assumed.
 
 **Evidence from User Error**:
 
-```
+```bash
 Error listing IDs at position 0: 'generator' object has no attribute 'get'
 ```
 
