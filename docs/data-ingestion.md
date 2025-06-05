@@ -1,245 +1,92 @@
 # Data Ingestion Architecture
 
-## Philosophy
+## Overview
 
-The Ananda Library Chatbot employs a sophisticated semantic chunking strategy designed to optimize retrieval-augmented
-generation (RAG) quality while preserving document context and meaning. Our approach prioritizes semantic coherence over
-arbitrary size limits, leveraging natural language processing to create meaningful text segments that enhance search
-relevance and answer quality.
+The Ananda Library Chatbot uses a sophisticated data ingestion pipeline that processes multiple content types into a
+unified vector database for retrieval-augmented generation (RAG). This document provides a high-level overview and
+references to detailed implementation documentation.
 
-## Core Principles
+## Comprehensive Documentation
 
-### 1. Semantic Chunking Over Fixed-Size Splitting
+**For complete details on chunking strategy, implementation, and technical specifications, see:**
 
-Traditional fixed-size chunking often splits text at arbitrary boundaries, breaking sentences and paragraphs
-mid-thought. Our spaCy-based approach respects natural language boundaries:
+**📖 [Chunking Strategy Implementation](chunking-strategy.md)**
 
-- **Paragraph-first**: Preserve complete paragraphs when possible
-- **Sentence-aware**: Split at sentence boundaries when paragraphs exceed limits
-- **Token-precise**: Use spaCy tokenization for accurate text measurement
-- **Context-preserving**: Maintain semantic relationships within chunks
+The chunking-strategy.md document contains the authoritative and up-to-date information on:
 
-### 2. Dynamic Sizing Based on Document Characteristics
+- **Current Implementation**: spaCy word-based token chunking strategy
+- **Technical Details**: SpacyTextSplitter implementation and configuration
+- **Integration Across Data Sources**: PDF, audio/video, web crawling, and database content
+- **Performance Results**: RAG evaluation metrics and strategy comparisons
+- **Quality Assurance**: Testing, validation, and monitoring approaches
+- **Migration Status**: Completed implementations and future enhancements
 
-Rather than using one-size-fits-all chunking, we adapt chunk sizes based on document length and content type:
+## Quick Reference
 
-- **Short documents** (<1000 words): 300 tokens per chunk
-- **Medium documents** (1000-5000 words): 400 tokens per chunk
-- **Long documents** (>5000 words): 500 tokens per chunk
+### Supported Content Types
 
-This ensures optimal granularity for different content types while maintaining searchable units.
+- **PDF Documents**: Native text PDFs using pdfplumber extraction
+- **Audio/Video**: Transcribed content with timestamp preservation
+- **Web Content**: Crawled websites with semantic content extraction
+- **Database Text**: CMS content with HTML cleaning and normalization
 
-### 3. Target Token Range Optimization
+### Core Chunking Strategy
 
-All chunks aim for the **292-585 token range** (approximately 225-450 words), which provides:
+- **Target Size**: ~600 tokens (~300 words) per chunk
+- **Overlap**: 20% token-based overlap for context preservation
+- **Boundary Respect**: Word-based boundaries with sentence preservation
+- **Quality Target**: 70%+ of chunks in 225-450 word range
 
-- Sufficient context for meaningful search results
-- Optimal input size for embedding models
-- Balanced granularity for precise retrieval
-- Enhanced RAG performance through focused content segments
+### Key Scripts
 
-### 4. Intelligent Overlap for Context Preservation
+- `pdf_to_vector_db.py` - PDF document ingestion
+- `transcribe_and_ingest_media.py` - Audio/video processing
+- `website_crawler.py` - Web content crawling
+- `ingest_db_text.py` - Database content ingestion
 
-**20% token-based overlap** between consecutive chunks ensures:
+### Shared Utilities
 
-- Seamless context flow across chunk boundaries
-- Improved retrieval of concepts spanning multiple chunks
-- Enhanced answer coherence by preserving narrative continuity
-- Robust search coverage for queries matching transition areas
+- `data_ingestion/utils/spacy_text_splitter.py` - Core chunking logic
+- `data_ingestion/utils/text_processing.py` - Text cleaning utilities
+- `data_ingestion/utils/pinecone_utils.py` - Vector database operations
+- `data_ingestion/utils/document_hash.py` - Document-level hashing
 
-## Technical Implementation
+## Environment Setup
 
-### Core Components
-
-#### SpacyTextSplitter
-
-The heart of our chunking system, implementing:
-
-```python
-# Dynamic chunk sizing based on document length
-def _set_dynamic_chunk_size(self, word_count: int):
-    if word_count < 1000:
-        self.chunk_size = 300    # tokens
-        self.chunk_overlap = 60  # 20% overlap
-    elif word_count < 5000:
-        self.chunk_size = 400
-        self.chunk_overlap = 80
-    else:
-        self.chunk_size = 500
-        self.chunk_overlap = 100
-```
-
-#### Smart Chunk Merging
-
-Post-processing step that combines small chunks to reach target word counts:
-
-- Merges chunks under 150 words with adjacent chunks
-- Maintains paragraph boundaries where possible
-- Achieves 70% compliance with 225-450 word target range
-- Preserves semantic coherence during merging
-
-#### Comprehensive Metrics Tracking
-
-Real-time quality monitoring with:
-
-- Per-document word count and chunk statistics
-- Target range compliance percentages
-- Edge case detection (very short/long documents)
-- Anomaly identification (unusually small/large chunks)
-- Distribution analysis across word count ranges
-
-### Integration Across Data Sources
-
-#### PDF Documents (`pdf_to_vector_db.py`)
-
-- Full-document processing to preserve context
-- Table of contents artifact removal
-- Punctuation preservation
-- Document-level hashing for consistent chunk grouping
-
-#### Database Text (`ingest_db_text.py`)
-
-- HTML tag cleaning and text normalization
-- Author and source metadata preservation
-- Batch processing with progress tracking
-- Consistent vector ID generation
-
-#### Web Crawling (`website_crawler.py`)
-
-- Semantic content extraction with readability fallbacks
-- Menu and navigation content filtering
-- Dynamic browser management for large-scale crawling
-- Robust error handling and retry logic
-
-#### Audio/Video Transcriptions (`transcription_utils.py`)
-
-- Timestamp-aware chunking for playback synchronization
-- Speaker diarization preservation
-- Punctuation retention from original transcripts
-- Fuzzy matching for text-to-timestamp alignment
-
-## Quality Assurance
-
-### Chunk Quality Metrics
-
-Our system tracks comprehensive quality indicators:
-
-- **Target Range Achievement**: 70% of chunks fall within 292-585 token range (225-450 words)
-- **Average Chunk Size**: 240-333 words across different content types
-- **Overlap Accuracy**: Consistent 20% token-based overlap
-- **Semantic Coherence**: Paragraph and sentence boundary preservation
-
-### Validation Testing
-
-Comprehensive test suite ensures:
-
-- **Integration Tests**: Verify chunk quality across all ingestion methods
-- **Punctuation Preservation**: Ensure formatting integrity
-- **Metadata Consistency**: Validate standardized metadata fields
-- **Edge Case Handling**: Test with diverse content types and sizes
-- **Performance Monitoring**: Track processing speed and memory usage
-
-### Error Handling and Fallbacks
-
-Robust fallback mechanisms provide reliability:
-
-- **spaCy Processing Failures**: Automatic fallback to sentence-based splitting
-- **Network Issues**: Retry logic with exponential backoff
-- **Memory Constraints**: Streaming processing for large documents
-- **Content Type Variations**: Adaptive handling for different media types
-
-## Benefits and Impact
-
-### RAG Performance Improvements
-
-The semantic chunking strategy delivers measurable improvements:
-
-- **Enhanced Search Relevance**: Natural language boundaries improve query matching
-- **Better Context Preservation**: Overlap ensures continuity across related concepts
-- **Improved Answer Quality**: Coherent chunks provide better foundation for responses
-- **Reduced Hallucination**: Precise chunk boundaries minimize context confusion
-
-### Scalability and Maintainability
-
-Our architecture supports growing content needs:
-
-- **Consistent Processing**: Unified chunking across all content types
-- **Efficient Storage**: Document-level hashing enables bulk operations
-- **Monitoring Integration**: Real-time metrics for quality assurance
-- **Modular Design**: Shared utilities reduce code duplication
-
-### Content Quality Standards
-
-Rigorous standards ensure high-quality knowledge base:
-
-- **Semantic Integrity**: Respect for natural language structure
-- **Metadata Completeness**: Consistent field naming and population
-- **Version Control**: Document-level hashing for change detection
-- **Quality Metrics**: Continuous monitoring and improvement
-
-## Configuration and Usage
-
-### Environment Setup
-
-Each site requires configuration in `crawler_config/{site}-config.json`:
-
-```json
-{
-  "domain": "example.org",
-  "skip_patterns": ["pattern1", "pattern2"],
-  "crawl_frequency_days": 14
-}
-```
-
-### Command Line Usage
+Each site requires configuration:
 
 ```bash
-# PDF ingestion with force refresh
-python pdf_to_vector_db.py --site ananda --force
+# Load site-specific environment
+python script_name.py --site ananda
 
-# Web crawling with debug output
-python website_crawler.py --site ananda-public --debug
-
-# Audio processing with dry run
-python process_media_files.py --site ananda --dryrun
+# Configuration files
+.env.ananda                           # Environment variables
+crawler_config/ananda-config.json     # Crawling configuration
+site-config/prompts/ananda.txt        # System prompts
 ```
 
-### Quality Monitoring
-
-Regular quality assessments using:
+## Quality Monitoring
 
 ```bash
-# Analyze chunk word count distribution
-python bin/analyze_text_field_words.py
+# Run comprehensive tests
+cd data_ingestion && python -m pytest
 
-# Run integration quality tests
-python -m pytest tests/test_integration_chunk_quality.py
+# Analyze chunk quality
+python bin/analyze_small_chunks.py --site ananda --library "Library Name"
 
-# Check vector ID consistency
-python bin/verify_vector_ids.py
+# Evaluate RAG performance
+python bin/evaluate_spacy_chunking_strategies.py --site ananda
 ```
 
-## Future Enhancements
+## Getting Started
 
-### Planned Improvements
+1. **Review the comprehensive documentation**: [chunking-strategy.md](chunking-strategy.md)
+2. **Set up environment**: Configure `.env.{site}` file with required API keys
+3. **Choose ingestion method**: Select appropriate script for your content type
+4. **Run with site parameter**: Use `--site {site}` to load correct configuration
+5. **Monitor quality**: Use testing and analysis tools to validate results
 
-- **Multi-language Support**: Extend spaCy processing to additional languages
-- **Content-Type Optimization**: Specialized chunking for technical documentation
-- **Advanced Overlap Strategies**: Context-aware overlap based on semantic similarity
-- **Performance Optimization**: GPU acceleration for large-scale processing
+## Support
 
-### Monitoring and Analytics
-
-- **Quality Dashboards**: Real-time visualization of chunk quality metrics
-- **Performance Tracking**: Processing speed and resource utilization monitoring
-- **Content Analysis**: Automated detection of content quality issues
-- **Usage Analytics**: Understanding of search patterns and chunk effectiveness
-
-## Conclusion
-
-The spaCy-based semantic chunking strategy represents a significant advancement in knowledge base construction for RAG
-applications. By prioritizing semantic coherence over arbitrary size limits, maintaining intelligent overlap, and
-implementing comprehensive quality monitoring, we've created a robust foundation for high-quality question answering.
-
-This approach ensures that the Ananda Library Chatbot can provide accurate, contextual responses while maintaining the
-integrity and meaning of the original spiritual and philosophical teachings it serves to share.
+For detailed implementation questions, troubleshooting, and technical specifications, refer to the comprehensive
+documentation in [chunking-strategy.md](chunking-strategy.md).

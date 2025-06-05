@@ -28,18 +28,76 @@ def exponential_backoff(attempt):
     return min(5, (2**attempt) + random.uniform(0, 1))
 
 
+def file_exists_with_same_size(s3_client, bucket_name, s3_key, local_file_path):
+    """
+    Check if file exists in S3 with the same size as local file.
+
+    Args:
+        s3_client: Boto3 S3 client
+        bucket_name: S3 bucket name
+        s3_key: S3 object key
+        local_file_path: Path to local file
+
+    Returns:
+        bool: True if file exists in S3 with same size, False otherwise
+    """
+    try:
+        # Get local file size
+        local_size = os.path.getsize(local_file_path)
+
+        # Check if object exists in S3 and get its size
+        response = s3_client.head_object(Bucket=bucket_name, Key=s3_key)
+        s3_size = response["ContentLength"]
+
+        if local_size == s3_size:
+            return True
+        else:
+            logger.info(
+                f"File {s3_key} exists in S3 but size differs (local: {local_size}, S3: {s3_size} bytes)"
+            )
+            return False
+
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "404":
+            # File doesn't exist in S3
+            return False
+        else:
+            # Other error occurred
+            logger.warning(f"Error checking S3 file {s3_key}: {e}")
+            return False
+    except OSError as e:
+        logger.error(f"Error getting local file size for {local_file_path}: {e}")
+        return False
+
+
 def upload_to_s3(file_path, s3_key, max_attempts=5):
+    """
+    Upload file to S3, skipping if file already exists with same size.
+
+    Args:
+        file_path: Path to local file
+        s3_key: S3 object key
+        max_attempts: Maximum retry attempts
+
+    Raises:
+        S3UploadError: If upload fails after all attempts
+        ValueError: If s3_key is not provided
+    """
     if not s3_key:
         raise ValueError("s3_key must be provided")
 
     s3_client = get_s3_client()
     bucket_name = get_bucket_name()
 
+    # Check if file already exists with same size
+    if file_exists_with_same_size(s3_client, bucket_name, s3_key, file_path):
+        return
+
     for attempt in range(max_attempts):
         try:
             s3_client.upload_file(file_path, bucket_name, s3_key)
             logger.info(f"Successfully uploaded {file_path} to {bucket_name}/{s3_key}")
-            return None
+            return
         except ClientError as e:
             if e.response["Error"]["Code"] == "RequestTimeTooSkewed":
                 if attempt < max_attempts - 1:

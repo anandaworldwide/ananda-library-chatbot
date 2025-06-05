@@ -907,19 +907,24 @@ class TestRobotsTxtCompliance(unittest.TestCase):
 
 
 class TestRateLimiting(unittest.TestCase):
-    """Test cases for rate limiting functionality."""
+    """Test cases for rate limiting enforcement."""
 
     def setUp(self):
         """Set up test environment."""
         self.temp_dir = tempfile.mkdtemp()
-        self.site_id = "test-site"
 
-        # Mock Path to use temp directory
+        self.site_id = "test-site"
+        self.site_config = {
+            "domain": "example.com",
+            "skip_patterns": ["pattern1", "pattern2"],
+            "crawl_frequency_days": 7,
+            "crawl_delay_seconds": 2,  # 2 seconds between requests
+        }
+
         self.path_patcher = patch("crawler.website_crawler.Path")
         mock_path_constructor = self.path_patcher.start()
         mock_path_constructor.return_value.parent.return_value = Path(self.temp_dir)
 
-        # Mock sqlite3 to use in-memory database
         self.original_sqlite_connect = sqlite3.connect
         self.connect_patcher = patch("sqlite3.connect")
         mock_sqlite_connect = self.connect_patcher.start()
@@ -927,78 +932,66 @@ class TestRateLimiting(unittest.TestCase):
             lambda db_path_arg: self.original_sqlite_connect(":memory:")
         )
 
-        # Mock robots.txt to avoid network calls
-        self.robots_patcher = patch("crawler.website_crawler.RobotFileParser")
-        mock_robot_parser_class = self.robots_patcher.start()
-        mock_parser = Mock()
-        mock_robot_parser_class.return_value = mock_parser
-
     def tearDown(self):
         """Clean up after tests."""
         self.path_patcher.stop()
         self.connect_patcher.stop()
-        self.robots_patcher.stop()
         shutil.rmtree(self.temp_dir)
 
     def test_crawl_delay_configuration(self):
-        """Test that crawl delay is properly configured from config file."""
-        site_config = {
-            "domain": "example.com",
-            "skip_patterns": [],
-            "crawl_frequency_days": 7,
-            "crawl_delay_seconds": 2,
-        }
+        """Test that crawl delay is properly configured from site config."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
 
-        crawler = WebsiteCrawler(self.site_id, site_config)
-
+        # Verify crawler delay is set from config
         self.assertEqual(crawler.crawl_delay_seconds, 2)
+
         crawler.close()
 
     def test_crawl_delay_default_value(self):
         """Test default crawl delay when not specified in config."""
-        site_config = {
+        config_without_delay = {
             "domain": "example.com",
             "skip_patterns": [],
             "crawl_frequency_days": 7,
-            # crawl_delay_seconds not specified
+            # No crawl_delay_seconds specified
         }
 
-        crawler = WebsiteCrawler(self.site_id, site_config)
+        crawler = WebsiteCrawler(self.site_id, config_without_delay)
 
-        self.assertEqual(crawler.crawl_delay_seconds, 1)  # Default value
+        # Default delay should be 1 second (from crawler code)
+        self.assertEqual(crawler.crawl_delay_seconds, 1)
+
         crawler.close()
 
     @patch("time.sleep")
     def test_rate_limiting_enforcement(self, mock_sleep):
-        """Test that rate limiting sleep is enforced after successful page processing."""
+        """Test that rate limiting sleep is called after successful page processing."""
         from crawler.website_crawler import _process_crawl_iteration
 
-        site_config = {
-            "domain": "example.com",
-            "skip_patterns": [],
-            "crawl_frequency_days": 7,
-            "crawl_delay_seconds": 3,
-        }
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
 
-        crawler = WebsiteCrawler(self.site_id, site_config)
-
-        # Mock the necessary components for _process_crawl_iteration
+        # Mock dependencies for _process_crawl_iteration
         mock_browser = Mock()
         mock_page = Mock()
         mock_pinecone_index = Mock()
         index_name = "test-index"
-        test_url = "https://example.com/test"
+        url = "https://example.com/test"
 
-        # Mock successful page processing
+        # Mock sub-functions for successful processing
         with (
             patch("crawler.website_crawler._handle_url_processing", return_value=False),
-            patch.object(crawler, "crawl_page", return_value=(Mock(), [], False)),
-            patch("crawler.website_crawler.is_exiting", return_value=False),
-            patch("crawler.website_crawler._process_page_content", return_value=(1, 1)),
+            patch(
+                "crawler.website_crawler._process_page_content",
+                return_value=(
+                    1,
+                    1,
+                ),  # pages_inc=1, restart_inc=1 (successful processing)
+            ),
             patch.object(crawler, "commit_db_changes"),
+            patch("crawler.website_crawler.is_exiting", return_value=False),
         ):
             pages_inc, restart_inc, should_exit = _process_crawl_iteration(
-                test_url,
+                url,
                 crawler,
                 mock_browser,
                 mock_page,
@@ -1006,45 +999,42 @@ class TestRateLimiting(unittest.TestCase):
                 index_name,
             )
 
-            # Verify rate limiting sleep was called
-            mock_sleep.assert_called_with(3)
+            # Verify function executed successfully
             self.assertEqual(pages_inc, 1)
             self.assertEqual(restart_inc, 1)
             self.assertFalse(should_exit)
+
+            # Verify rate limiting sleep was called with correct delay
+            mock_sleep.assert_called_once_with(2)  # crawl_delay_seconds from config
 
         crawler.close()
 
     @patch("time.sleep")
     def test_no_rate_limiting_on_failed_processing(self, mock_sleep):
-        """Test that rate limiting is not applied when page processing fails."""
+        """Test that rate limiting sleep is NOT called when page processing fails."""
         from crawler.website_crawler import _process_crawl_iteration
 
-        site_config = {
-            "domain": "example.com",
-            "skip_patterns": [],
-            "crawl_frequency_days": 7,
-            "crawl_delay_seconds": 2,
-        }
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
 
-        crawler = WebsiteCrawler(self.site_id, site_config)
-
-        # Mock the necessary components
+        # Mock dependencies
         mock_browser = Mock()
         mock_page = Mock()
         mock_pinecone_index = Mock()
         index_name = "test-index"
-        test_url = "https://example.com/test"
+        url = "https://example.com/test"
 
-        # Mock failed page processing (pages_inc = 0)
+        # Mock sub-functions to simulate failed processing
         with (
             patch("crawler.website_crawler._handle_url_processing", return_value=False),
-            patch.object(crawler, "crawl_page", return_value=(None, [], False)),
-            patch("crawler.website_crawler.is_exiting", return_value=False),
-            patch("crawler.website_crawler._process_page_content", return_value=(0, 0)),
+            patch(
+                "crawler.website_crawler._process_page_content",
+                return_value=(0, 0),  # pages_inc=0, restart_inc=0 (failed processing)
+            ),
             patch.object(crawler, "commit_db_changes"),
+            patch("crawler.website_crawler.is_exiting", return_value=False),
         ):
             pages_inc, restart_inc, should_exit = _process_crawl_iteration(
-                test_url,
+                url,
                 crawler,
                 mock_browser,
                 mock_page,
@@ -1052,43 +1042,53 @@ class TestRateLimiting(unittest.TestCase):
                 index_name,
             )
 
-            # Verify rate limiting sleep was NOT called since pages_inc = 0
-            mock_sleep.assert_not_called()
+            # Verify processing failed
             self.assertEqual(pages_inc, 0)
+            self.assertEqual(restart_inc, 0)
+            self.assertFalse(should_exit)
+
+            # Verify NO rate limiting sleep was called
+            mock_sleep.assert_not_called()
 
         crawler.close()
 
     @patch("time.sleep")
     def test_no_rate_limiting_when_delay_zero(self, mock_sleep):
-        """Test that no sleep occurs when crawl delay is set to 0."""
-        from crawler.website_crawler import _process_crawl_iteration
-
-        site_config = {
+        """Test that rate limiting sleep is NOT called when delay is set to 0."""
+        # Config with zero delay
+        config_no_delay = {
             "domain": "example.com",
             "skip_patterns": [],
             "crawl_frequency_days": 7,
             "crawl_delay_seconds": 0,  # No delay
         }
 
-        crawler = WebsiteCrawler(self.site_id, site_config)
+        from crawler.website_crawler import _process_crawl_iteration
 
-        # Mock the necessary components
+        crawler = WebsiteCrawler(self.site_id, config_no_delay)
+
+        # Mock dependencies
         mock_browser = Mock()
         mock_page = Mock()
         mock_pinecone_index = Mock()
         index_name = "test-index"
-        test_url = "https://example.com/test"
+        url = "https://example.com/test"
 
-        # Mock successful page processing
+        # Mock sub-functions for successful processing
         with (
             patch("crawler.website_crawler._handle_url_processing", return_value=False),
-            patch.object(crawler, "crawl_page", return_value=(Mock(), [], False)),
-            patch("crawler.website_crawler.is_exiting", return_value=False),
-            patch("crawler.website_crawler._process_page_content", return_value=(1, 1)),
+            patch(
+                "crawler.website_crawler._process_page_content",
+                return_value=(
+                    1,
+                    1,
+                ),  # pages_inc=1, restart_inc=1 (successful processing)
+            ),
             patch.object(crawler, "commit_db_changes"),
+            patch("crawler.website_crawler.is_exiting", return_value=False),
         ):
             pages_inc, restart_inc, should_exit = _process_crawl_iteration(
-                test_url,
+                url,
                 crawler,
                 mock_browser,
                 mock_page,
@@ -1096,11 +1096,202 @@ class TestRateLimiting(unittest.TestCase):
                 index_name,
             )
 
-            # Verify no sleep was called since delay is 0
-            mock_sleep.assert_not_called()
+            # Verify processing succeeded
             self.assertEqual(pages_inc, 1)
+            self.assertEqual(restart_inc, 1)
+            self.assertFalse(should_exit)
+
+            # Verify NO sleep was called (delay is 0)
+            mock_sleep.assert_not_called()
 
         crawler.close()
+
+
+class TestBrowserRestartCounter(unittest.TestCase):
+    """Test cases for browser restart counter logic."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.site_id = "test-site"
+        self.site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+        }
+
+    def tearDown(self):
+        """Clean up after tests."""
+        shutil.rmtree(self.temp_dir)
+
+    @patch("crawler.website_crawler.sync_playwright")
+    def test_error_restart_counter_bug(self, mock_sync_playwright):
+        """Test that error-triggered restart doesn't manipulate pages_since_restart counter incorrectly."""
+        from crawler.website_crawler import run_crawl_loop
+
+        # Mock args
+        args = Mock()
+        args.stop_after = 5  # Stop after 5 pages for testing
+
+        # Mock crawler
+        mock_crawler = Mock()
+        mock_crawler.get_next_url_to_crawl = Mock()
+        mock_crawler.get_queue_stats.return_value = {
+            "pending": 10,
+            "visited": 5,
+            "failed": 2,
+            "total": 17,
+        }
+
+        # Mock pinecone
+        mock_pinecone_index = Mock()
+
+        # Set up URL sequence: first URL causes error, then successful URLs
+        urls = [
+            "https://example.com/error",
+            "https://example.com/page1",
+            "https://example.com/page2",
+        ]
+        mock_crawler.get_next_url_to_crawl.side_effect = urls + [
+            None
+        ]  # None to end loop
+
+        # Mock browser setup
+        mock_playwright = Mock()
+        mock_browser = Mock()
+        mock_page = Mock()
+        mock_sync_playwright.return_value.__enter__.return_value = mock_playwright
+        mock_playwright.firefox.launch.return_value = mock_browser
+        mock_browser.new_page.return_value = mock_page
+
+        # Track calls to _handle_browser_restart to verify bug
+        restart_calls = []
+
+        def mock_handle_browser_restart(*args):
+            pages_since_restart_arg = args[3]  # Fourth argument is pages_since_restart
+            restart_calls.append(pages_since_restart_arg)
+            # Return mocked values
+            return mock_browser, mock_page, 0.0, []
+
+        # Track calls to _process_crawl_iteration
+        iteration_calls = []
+
+        def mock_process_iteration(url, *args):
+            if "error" in url:
+                # Simulate error that requires restart: return (0, 0, False)
+                iteration_calls.append((url, "error"))
+                return (0, 0, False)  # pages_inc=0, restart_inc=0, should_exit=False
+            else:
+                # Simulate successful processing: return (1, 1, False)
+                iteration_calls.append((url, "success"))
+                return (1, 1, False)  # pages_inc=1, restart_inc=1, should_exit=False
+
+        # Mock environment variable needed by crawler loop
+        with (
+            patch("os.getenv") as mock_getenv,
+            patch(
+                "crawler.website_crawler._handle_browser_restart",
+                side_effect=mock_handle_browser_restart,
+            ),
+            patch(
+                "crawler.website_crawler._process_crawl_iteration",
+                side_effect=mock_process_iteration,
+            ),
+            patch("crawler.website_crawler._should_stop_crawling") as mock_should_stop,
+            patch("crawler.website_crawler.is_exiting", return_value=False),
+        ):
+            mock_getenv.return_value = "test-index"  # Mock PINECONE_INGEST_INDEX_NAME
+
+            # Set up stop condition to prevent infinite loop
+            mock_should_stop.side_effect = [
+                False,
+                False,
+                False,
+                True,
+            ]  # Stop after a few iterations
+
+            # This should trigger the bug: error on first URL causes restart to be called
+            # with pages_since_restart=1 (not 50), demonstrating premature stats printing
+            run_crawl_loop(mock_crawler, mock_pinecone_index, args)
+
+        # Verify the bug exists: restart should be called with the actual counter value
+        # (1 page since restart) not the PAGES_PER_RESTART constant (50)
+        self.assertTrue(
+            len(restart_calls) > 0, "Browser restart should have been triggered"
+        )
+
+        # The bug causes this assertion to fail - restart is called with actual pages_since_restart
+        # instead of being forced to 50
+        first_restart_pages = restart_calls[0]
+        self.assertLess(
+            first_restart_pages,
+            50,
+            f"Bug detected: Browser restart was called with {first_restart_pages} pages, "
+            f"indicating premature restart stats printing instead of waiting for 50 pages",
+        )
+
+
+class TestGracefulSleep(unittest.TestCase):
+    """Test cases for graceful sleep functionality."""
+
+    @patch("crawler.website_crawler.is_exiting")
+    @patch("time.sleep")
+    def test_graceful_sleep_normal_completion(self, mock_sleep, mock_is_exiting):
+        """Test that graceful sleep completes normally when no exit signal."""
+        from crawler.website_crawler import _graceful_sleep
+
+        # Mock is_exiting to always return False (no exit requested)
+        mock_is_exiting.return_value = False
+
+        # Test sleeping for 90 seconds with 30-second intervals
+        result = _graceful_sleep(90, 30)
+
+        # Should complete normally (return False)
+        self.assertFalse(result)
+
+        # Should call sleep 3 times: 30, 30, 30 seconds
+        self.assertEqual(mock_sleep.call_count, 3)
+        mock_sleep.assert_has_calls(
+            [unittest.mock.call(30), unittest.mock.call(30), unittest.mock.call(30)]
+        )
+
+    @patch("crawler.website_crawler.is_exiting")
+    @patch("time.sleep")
+    def test_graceful_sleep_exit_requested(self, mock_sleep, mock_is_exiting):
+        """Test that graceful sleep exits early when signal received."""
+        from crawler.website_crawler import _graceful_sleep
+
+        # Mock is_exiting to return False first, then True (exit after first interval)
+        mock_is_exiting.side_effect = [False, True]
+
+        # Test sleeping for 90 seconds with 30-second intervals
+        result = _graceful_sleep(90, 30)
+
+        # Should exit early (return True)
+        self.assertTrue(result)
+
+        # Should only call sleep once before detecting exit
+        self.assertEqual(mock_sleep.call_count, 1)
+        mock_sleep.assert_called_once_with(30)
+
+    @patch("crawler.website_crawler.is_exiting")
+    @patch("time.sleep")
+    def test_graceful_sleep_short_duration(self, mock_sleep, mock_is_exiting):
+        """Test graceful sleep with duration shorter than check interval."""
+        from crawler.website_crawler import _graceful_sleep
+
+        # Mock is_exiting to always return False
+        mock_is_exiting.return_value = False
+
+        # Test sleeping for 15 seconds with 30-second intervals
+        result = _graceful_sleep(15, 30)
+
+        # Should complete normally
+        self.assertFalse(result)
+
+        # Should call sleep once for the full 15 seconds
+        self.assertEqual(mock_sleep.call_count, 1)
+        mock_sleep.assert_called_once_with(15)
 
 
 if __name__ == "__main__":

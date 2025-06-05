@@ -7,7 +7,6 @@ import re
 import signal
 import sqlite3
 import tempfile
-import time
 from datetime import datetime
 
 from openai import APIConnectionError, APIError, APITimeoutError, OpenAI
@@ -325,17 +324,6 @@ def save_transcription(file_path, transcripts, youtube_id=None):
         logger.error(f"Database error: {e}")
         raise
 
-    # Create a meaningful identifier for logging
-    if youtube_id:
-        file_identifier = f"YouTube video {youtube_id}"
-    elif file_path:
-        file_identifier = f"file {file_path}"
-    else:
-        file_identifier = f"transcription {file_hash[:8]}"
-
-    logger.info(f"Transcription metadata updated for {file_identifier}")
-    logger.info(f"Transcription json: {json_filepath}")
-
 
 def transcribe_media(
     file_path,
@@ -474,32 +462,17 @@ def timeout_handler(signum, frame):
 
 def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
     """
-    Chunk a transcription into segments based on semantic boundaries using spaCy paragraph-based chunking.
+    Chunk a transcription into segments based on semantic boundaries using spaCy.
 
     Uses fixed 600-token chunks with 20% overlap for optimal RAG performance.
-    Based on evaluation results showing 60% better precision vs dynamic chunking.
 
     Returns a list of chunk dictionaries with text, start time, end time, and word objects.
     """
-    start_time = time.time()
-    logger.debug(f"chunk_transcription started at {start_time}")
 
-    # Use paragraph-based chunking with FIXED parameters for optimal RAG performance
-    # SpacyTextSplitter now defaults to 600 tokens with 120-token overlap (20%)
+    # Use spaCy chunking with FIXED parameters for optimal RAG performance
+    # SpacyTextSplitter defaults to 600 tokens with 120-token overlap (20%)
     text_splitter = SpacyTextSplitter(separator="\n\n", pipeline="en_core_web_sm")
 
-    logger.info(
-        f"Using FIXED chunking parameters: {text_splitter.chunk_size} tokens, "
-        f"{text_splitter.chunk_overlap} token overlap for optimal audio transcription chunking"
-    )
-
-    # Convert tokens to approximate word count for audio content (2:1 ratio)
-    target_words_per_chunk = int(text_splitter.chunk_size / 2.0)
-    logger.debug(
-        f"Target words per chunk for audio (paragraph-based): {target_words_per_chunk}"
-    )
-
-    # Rest of the function remains unchanged
     global chunk_lengths  # Ensure we are using the global list
     chunks = []
 
@@ -518,11 +491,6 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
     original_text = transcript["text"]
     total_words = len(words)
 
-    logger.debug(
-        f"Starting spaCy paragraph-based chunk_transcription with {total_words} words."
-    )
-    logger.debug(f"Setup completed at {time.time() - start_time:.2f}s")
-
     if not words or not original_text.strip():
         logger.warning("Transcription is empty or invalid.")
         return chunks
@@ -539,28 +507,16 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
     signal.alarm(60)
 
     try:
-        # **FIX: Actually use the SpacyTextSplitter for text processing**
-        logger.debug(
-            f"Starting spaCy text splitting at {time.time() - start_time:.2f}s"
-        )
-
         # Use spaCy to create semantic text chunks from the original transcription text
         text_chunks = text_splitter.split_text(
             original_text, document_id="transcription"
-        )
-        logger.debug(
-            f"spaCy created {len(text_chunks)} text chunks at {time.time() - start_time:.2f}s"
         )
 
         # Map spaCy text chunks back to timestamped word objects
         word_index = 0
 
         for chunk_idx, chunk_text in enumerate(text_chunks):
-            logger.debug(
-                f"Processing chunk {chunk_idx} at {time.time() - start_time:.2f}s"
-            )
-
-            # **IMPROVED: More robust word mapping strategy**
+            # Map spaCy text chunks to timestamped word objects
             chunk_words = []
 
             # Calculate approximate words needed based on original word count ratio
@@ -623,9 +579,7 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
             # Move to next position for next chunk
             word_index = end_word_index
 
-        logger.debug(f"Chunk mapping completed at {time.time() - start_time:.2f}s")
-
-        # Log chunk statistics with paragraph-based approach
+        # Log chunk statistics
         if chunks:
             chunk_word_counts = [len(chunk["words"]) for chunk in chunks]
             avg_words = sum(chunk_word_counts) / len(chunk_word_counts)
@@ -635,7 +589,7 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
             target_percentage = (target_range_chunks / len(chunks)) * 100
 
             logger.info(
-                f"Paragraph-based chunking results: {len(chunks)} chunks, avg {avg_words:.1f} words/chunk"
+                f"Chunking results: {len(chunks)} chunks, avg {avg_words:.1f} words/chunk"
             )
             logger.info(
                 f"Target range (225-450 words): {target_range_chunks}/{len(chunks)} chunks ({target_percentage:.1f}%)"
@@ -650,16 +604,12 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
                     f"Found {len(small_chunks)} chunks with <30 words: {small_chunks[:5]}"
                 )
 
-        logger.debug(
-            f"Finished paragraph-based chunk_transcription with {len(chunks)} chunks in {time.time() - start_time:.2f}s"
-        )
-
     except TimeoutException:
         logger.error("chunk_transcription timed out.")
         return {"error": "chunk_transcription timed out."}
     except Exception as e:
         logger.error(
-            f"Error in paragraph-based chunking at {time.time() - start_time:.2f}s, falling back to legacy method: {str(e)}"
+            f"Error in spaCy chunking, falling back to legacy method: {str(e)}"
         )
         # Fall back to legacy chunking if spaCy fails
         return _legacy_chunk_transcription(transcript, target_chunk_size, overlap)

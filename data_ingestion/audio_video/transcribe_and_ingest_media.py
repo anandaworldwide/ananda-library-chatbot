@@ -903,30 +903,6 @@ def merge_reports(reports):
     return combined_report
 
 
-def graceful_shutdown(pool, queue, items_to_process, overall_report, _signum, _frame):
-    """
-    Signal handler for graceful termination:
-    - Stops worker pool
-    - Updates status of in-progress items
-    - Prints final report
-    - Resets terminal state
-    """
-    logger.info("\nReceived interrupt signal. Shutting down gracefully...")
-    pool.terminate()
-    pool.join()
-    for item in items_to_process:
-        queue.update_item_status(item["id"], "interrupted")
-    print_report(overall_report)
-
-    # Print spaCy chunking statistics on graceful shutdown as well
-    if overall_report["chunk_lengths"]:
-        print("\nSpaCy Chunking Statistics:")
-        print_enhanced_chunk_statistics(overall_report["chunk_lengths"])
-
-    reset_terminal()
-    sys.exit(0)
-
-
 def _parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -1006,6 +982,7 @@ def _process_items_with_progress(
     overall_report,
     ingest_queue,
     num_processes,
+    report_container=None,
 ):
     """Process items with progress tracking."""
     total_items = 0  # Track the total number of items
@@ -1043,6 +1020,10 @@ def _process_items_with_progress(
                 items_processed += 1
                 pbar.update(1)
 
+                # Update the report container so signal handler can access latest results
+                if report_container is not None:
+                    report_container["report"] = overall_report
+
                 # Keep task queue filled by adding new items as others complete
                 item = ingest_queue.get_next_item()
                 if item:
@@ -1067,6 +1048,9 @@ def _run_worker_pool_processing(args, overall_report):
     stop_event = Event()
     items_to_process = []  # Track active items for cleanup on shutdown
 
+    # Use a mutable container to hold the report so the signal handler can access the latest version
+    report_container = {"report": overall_report}
+
     # Limit processes to prevent resource exhaustion
     num_processes = min(4, cpu_count())
     with Pool(
@@ -1084,12 +1068,15 @@ def _run_worker_pool_processing(args, overall_report):
             pool.join()
             for item in items_to_process:
                 ingest_queue.update_item_status(item["id"], "interrupted")
-            print_report(overall_report)
+
+            # Use the latest report from the container
+            current_report = report_container["report"]
+            print_report(current_report)
 
             # Print spaCy chunking statistics on graceful shutdown as well
-            if overall_report["chunk_lengths"]:
+            if current_report["chunk_lengths"]:
                 print("\nSpaCy Chunking Statistics:")
-                print_enhanced_chunk_statistics(overall_report["chunk_lengths"])
+                print_enhanced_chunk_statistics(current_report["chunk_lengths"])
 
             reset_terminal()
             sys.exit(0)
@@ -1102,14 +1089,18 @@ def _run_worker_pool_processing(args, overall_report):
         )
 
         try:
-            overall_report = _process_items_with_progress(
+            updated_report = _process_items_with_progress(
                 task_queue,
                 result_queue,
                 items_to_process,
                 overall_report,
                 ingest_queue,
                 num_processes,
+                report_container,
             )
+            # Update the container with the latest report
+            report_container["report"] = updated_report
+            overall_report = updated_report
         except Exception as e:
             logger.error(f"Error processing items: {str(e)}")
             logger.exception("Full traceback:")

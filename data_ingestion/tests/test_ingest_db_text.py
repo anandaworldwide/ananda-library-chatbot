@@ -311,7 +311,6 @@ class TestVectorIdGeneration(unittest.TestCase):
         """Test vector ID generation with all parameters."""
         library_name = "Test Library"
         title = "Test Article: Meditation & Mindfulness"
-        content_chunk = "This is a test chunk of content."
         chunk_index = 0
         author = "Test Author"
         permalink = "https://example.com/test-article"
@@ -348,7 +347,6 @@ class TestVectorIdGeneration(unittest.TestCase):
         """Test that vector ID preserves meaningful punctuation and only removes null characters."""
         library_name = "Test Library"
         title = "Special Characters: !@#$%^&*()[]{}|\\;:'\",.<>?/`~\x00"  # Include null char
-        content_chunk = "Test content"
         chunk_index = 0
 
         vector_id = ingest_db_text.generate_vector_id(
@@ -641,6 +639,287 @@ Questions? Email us at info@example.com or call (555) 123-4567.""",
             self.assertTrue(
                 has_punctuation,
                 f"Vector metadata text should contain punctuation: '{metadata_text}'",
+            )
+
+
+class TestSQLChunkingStrategy(unittest.TestCase):
+    """Test cases for SQL to vector DB chunking strategy."""
+
+    def test_spacy_text_splitter_uses_fixed_parameters(self):
+        """Test that SpacyTextSplitter uses fixed parameters for optimal RAG performance."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        # Initialize with default parameters (what the script should use)
+        splitter = SpacyTextSplitter()
+
+        # Verify fixed parameters are used (from data ingestion rules)
+        # The implementation uses 75% of target_chunk_size as base chunk_size to provide buffer
+        self.assertEqual(
+            splitter.target_chunk_size,
+            600,
+            f"Expected fixed target_chunk_size=600 tokens, got {splitter.target_chunk_size}",
+        )
+        self.assertEqual(
+            splitter.chunk_size,
+            450,
+            f"Expected base chunk_size=450 tokens (75% of target), got {splitter.chunk_size}",
+        )
+        self.assertEqual(
+            splitter.chunk_overlap,
+            120,
+            f"Expected fixed chunk_overlap=120 tokens (20%), got {splitter.chunk_overlap}",
+        )
+        self.assertEqual(
+            splitter.separator,
+            "\n\n",
+            f"Expected paragraph separator '\\n\\n', got '{splitter.separator}'",
+        )
+
+    def test_spacy_text_splitter_produces_reasonable_chunks(self):
+        """Test that the chunking produces reasonable chunk sizes."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        splitter = SpacyTextSplitter()
+
+        # Test with sample spiritual content similar to what's in the database
+        sample_text = """
+        Meditation is the process by which the soul methodically seeks to reunite with Spirit. 
+        It is an ancient science that has been practiced for thousands of years by seekers 
+        of truth in all parts of the world.
+
+        The word meditation comes from the Latin meditari, meaning "to think about" or 
+        "to consider." In its deeper sense, meditation means "to become familiar with" 
+        the divine consciousness within oneself.
+
+        Regular meditation practice helps to calm the restless mind and awaken the soul's 
+        innate wisdom and bliss. Through meditation, we learn to withdraw our attention 
+        from the constant chatter of thoughts and the bombardment of sensory stimuli.
+
+        In the stillness of deep meditation, the soul experiences its true nature as 
+        consciousness itself—pure, eternal, and one with the infinite Spirit that 
+        pervades all creation.
+        """
+
+        chunks = splitter.split_text(sample_text, document_id="test_meditation_text")
+
+        # Verify we get chunks
+        self.assertGreater(len(chunks), 0, "Should produce at least one chunk")
+
+        # Verify chunk sizes are reasonable in tokens (600 token target)
+        for i, chunk in enumerate(chunks):
+            # Count tokens using the same method as the splitter
+            token_count = len(splitter._tokenize_text(chunk))
+
+            # Tokens should be close to 600 target (allow some flexibility)
+            self.assertGreaterEqual(
+                token_count,
+                50,
+                f"Chunk {i} has {token_count} tokens, below minimum range [50-1200]",
+            )
+            self.assertLessEqual(
+                token_count,
+                1200,
+                f"Chunk {i} has {token_count} tokens, above maximum range [50-1200]",
+            )
+
+    def test_reproduces_large_chunk_issue_with_token_validation(self):
+        """Test that reproduces the large chunk issue and validates token counts."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        splitter = SpacyTextSplitter()
+
+        # Create a long text that might cause the issue (simulating content from DB)
+        # This simulates spiritual content that might not have clear paragraph breaks
+        long_spiritual_text = (
+            """The art of superconscious living involves understanding the subtle laws that govern consciousness and the relationship between the individual soul and the universal Spirit. Through meditation, right living, and the cultivation of divine qualities, one can gradually expand their awareness beyond the limitations of the ego-mind and experience the joy and freedom of their true spiritual nature. This ancient wisdom has been taught by masters and saints throughout history, offering practical guidance for those seeking to awaken to higher states of consciousness. The path requires dedication, patience, and the willingness to transform old patterns of thinking and behavior that keep us bound to limited perceptions of reality. As we learn to live in harmony with divine principles, we naturally begin to express more love, compassion, wisdom, and joy in our daily lives. This is not merely an intellectual understanding but a lived experience that transforms every aspect of our being. Through consistent practice and sincere effort, we can learn to maintain awareness of our divine nature even while engaged in the activities of daily life. This is the essence of superconscious living - the integration of spiritual awareness with practical action in the world."""
+            * 20
+        )  # Make it very long
+
+        chunks = splitter.split_text(
+            long_spiritual_text, document_id="test_long_spiritual_content"
+        )
+
+        self.assertGreater(len(chunks), 0, "Should produce at least one chunk")
+
+        for i, chunk in enumerate(chunks):
+            token_count = len(splitter._tokenize_text(chunk))
+            word_count = len(chunk.split())
+
+            # PRIMARY TEST: Token count should respect the 600-token target
+            self.assertLessEqual(
+                token_count,
+                900,
+                f"Chunk {i} is too large: {token_count} tokens (target: 600 tokens). "
+                f"This exceeds reasonable bounds even with overlap.",
+            )
+
+            # SECONDARY: Word count should be reasonable based on token-to-word ratio
+            # With ~2:1 ratio, 600 tokens ≈ 300 words, so max should be ~450 words + overlap
+            self.assertLessEqual(
+                word_count,
+                600,
+                f"Chunk {i} has {word_count} words, which suggests token counting isn't working properly. "
+                f"Expected roughly 300 words for 600 tokens.",
+            )
+
+    def test_token_counting_accuracy(self):
+        """Test that token counting is working properly and matches expectations."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        splitter = SpacyTextSplitter()
+
+        # Test with known text
+        test_text = "This is a simple test sentence with exactly ten words total."
+        tokens = splitter._tokenize_text(test_text)
+
+        # Token count should be close to word count for simple English text
+        # Allow some variation due to punctuation and tokenization differences
+        self.assertGreaterEqual(
+            len(tokens),
+            8,
+            f"Token count {len(tokens)} seems too low for simple sentence. "
+            f"Expected 8-15 tokens for 10 words.",
+        )
+        self.assertLessEqual(
+            len(tokens),
+            15,
+            f"Token count {len(tokens)} seems too high for simple sentence. "
+            f"Expected 8-15 tokens for 10 words.",
+        )
+
+    def test_fixed_chunking_consistency(self):
+        """Test that fixed chunking produces consistent results."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        splitter1 = SpacyTextSplitter()
+        splitter2 = SpacyTextSplitter()
+
+        # Both should have identical parameters
+        self.assertEqual(splitter1.chunk_size, splitter2.chunk_size)
+        self.assertEqual(splitter1.chunk_overlap, splitter2.chunk_overlap)
+        self.assertEqual(splitter1.separator, splitter2.separator)
+
+        # Both should produce the same results for the same input
+        test_text = "This is a test paragraph.\n\nThis is another test paragraph with more content."
+
+        chunks1 = splitter1.split_text(test_text)
+        chunks2 = splitter2.split_text(test_text)
+
+        self.assertEqual(
+            chunks1, chunks2, "Fixed chunking should produce consistent results"
+        )
+
+    def test_sql_chunking_uses_fixed_parameters_by_default(self):
+        """Test that SQL chunking uses the correct fixed parameters by default."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        # This test verifies that when the script creates a SpacyTextSplitter(),
+        # it gets the correct fixed parameters for optimal RAG performance
+        splitter = SpacyTextSplitter()  # Same as what the script does
+
+        # These should match the proven evaluation parameters
+        # The implementation uses target_chunk_size=600 with base chunk_size=450 (75% buffer)
+        self.assertEqual(splitter.target_chunk_size, 600)
+        self.assertEqual(splitter.chunk_size, 450)
+        self.assertEqual(splitter.chunk_overlap, 120)  # 20% of 600
+        self.assertEqual(splitter.separator, "\n\n")  # Paragraph-based chunking
+
+    def test_sql_chunking_matches_other_ingestion_methods(self):
+        """Test that SQL chunking uses same parameters as other ingestion methods."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        # This ensures consistency across all ingestion pipelines
+
+        # SQL ingestion splitter (default parameters)
+        sql_splitter = SpacyTextSplitter()
+
+        # Audio/video ingestion splitter (from transcription_utils.py)
+        audio_splitter = SpacyTextSplitter(separator="\n\n", pipeline="en_core_web_sm")
+
+        # PDF ingestion splitter (should use same defaults)
+        pdf_splitter = SpacyTextSplitter()
+
+        # All should use the same core parameters for consistency
+        self.assertEqual(sql_splitter.chunk_size, audio_splitter.chunk_size)
+        self.assertEqual(sql_splitter.chunk_size, pdf_splitter.chunk_size)
+        self.assertEqual(sql_splitter.chunk_overlap, audio_splitter.chunk_overlap)
+        self.assertEqual(sql_splitter.chunk_overlap, pdf_splitter.chunk_overlap)
+
+    def test_chunking_respects_token_limits(self):
+        """Test that overlap application respects the 600-token limit."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        splitter = SpacyTextSplitter()
+
+        # Create text that would produce chunks near the 600-token limit
+        medium_text = (
+            "This is a test of the emergency broadcast system. " * 200
+        )  # Should be close to token limit
+
+        chunks = splitter.split_text(medium_text, document_id="test_token_limit")
+
+        # All chunks should respect the 600-token limit
+        for i, chunk in enumerate(chunks):
+            token_count = len(splitter._tokenize_text(chunk))
+            self.assertLessEqual(
+                token_count,
+                600,
+                f"Chunk {i} exceeds 600-token limit: {token_count} tokens",
+            )
+
+    def test_integration_with_sql_ingestion_script(self):
+        """Test that the chunking works correctly with the SQL ingestion script structure."""
+        from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
+
+        # This mimics how the SQL script initializes the text splitter
+        text_splitter = SpacyTextSplitter()  # No parameters - uses defaults
+
+        # Test with content structure similar to what comes from the database
+        database_content = {
+            "content": """Welcome to our meditation guide! This is a comprehensive introduction to the ancient practice of meditation.
+
+Meditation is a practice that has been used for thousands of years to cultivate inner peace and awareness. Through regular practice, one can develop greater clarity, compassion, and understanding.
+
+The basic steps are simple: find a quiet place, sit comfortably, and focus your attention. Many practitioners find it helpful to focus on the breath as an anchor for the mind.""",
+            "id": 123,
+            "title": "Complete Meditation Guide",
+            "author": "Test Author",
+            "library": "Test Library",
+        }
+
+        # Create a document similar to how the SQL script does it
+        from data_ingestion.utils.text_splitter_utils import Document
+
+        document_metadata = {
+            "id": f"wp_{database_content['id']}",
+            "title": database_content["title"],
+            "source": "https://example.com/meditation-guide",
+            "wp_id": database_content["id"],
+        }
+
+        langchain_doc = Document(
+            page_content=database_content["content"], metadata=document_metadata
+        )
+
+        # Split the document using the text splitter
+        docs = text_splitter.split_documents([langchain_doc])
+
+        # Verify we get reasonable results
+        self.assertGreater(len(docs), 0, "Should produce at least one chunk")
+
+        # Verify each chunk has proper metadata and content
+        for i, doc in enumerate(docs):
+            self.assertIsInstance(doc.page_content, str)
+            self.assertGreater(len(doc.page_content.strip()), 0)
+            self.assertIn("chunk_index", doc.metadata)
+            self.assertEqual(doc.metadata["chunk_index"], i)
+
+            # Verify token count is reasonable
+            token_count = len(text_splitter._tokenize_text(doc.page_content))
+            self.assertLessEqual(
+                token_count,
+                900,  # Allow some buffer for overlap
+                f"Chunk {i} exceeds reasonable token limit: {token_count} tokens",
             )
 
 

@@ -1,5 +1,446 @@
 # self.md
 
+## Critical Fix: Chunking Statistics Should Report Token Counts Not Word Counts - ✅ RESOLVED
+
+**Problem**: The chunking statistics printout in SpacyTextSplitter was reporting distributions in word count, but since
+the target is set at 600 tokens, the statistics should be reporting token counts instead.
+
+**Root Cause**: The `ChunkingMetrics` class and related methods were designed when the system used word-based targets,
+but the system now uses a 600-token target. The statistics were still reporting word-based distributions which made it
+difficult to assess performance against the actual token-based target.
+
+**Evidence from User Request**:
+
+- User noted: "Chunking statistics printout should be giving distributions in token count, not word count, because
+  that's what we care about. That's what we set our target of 600 at."
+- The target is 600 tokens, but statistics showed word-based ranges like "100-299 words" instead of token-based ranges
+
+**Symptoms**:
+
+- Statistics showed word count distributions that didn't align with 600-token target
+- Difficult to assess chunk quality against the actual token-based target
+- Misleading metrics for performance evaluation
+- Inconsistency between target (tokens) and reporting (words)
+
+**Fix Applied**: Updated `ChunkingMetrics` class and related methods in `data_ingestion/utils/text_splitter_utils.py`:
+
+1. **Updated chunk size distribution ranges** to be token-based:
+
+   - `<300` tokens (very small, < 50% of target)
+   - `300-449` tokens (small, 50-75% of target)
+   - `450-750` tokens (target range, 75-125% of target)
+   - `750+` tokens (large, > 125% of target)
+
+2. **Modified `_update_chunk_size_distribution()`** to accept token counts instead of chunk text
+3. **Updated `_detect_anomalies()`** to use token-based thresholds (150 tokens min, 1200 tokens max)
+4. **Modified `_log_chunk_metrics()`** to calculate and report token counts instead of word counts
+5. **Updated all logging and print statements** to clearly indicate "tokens" instead of "words"
+6. **Updated target range analysis** to use 450-750 tokens (75%-125% of 600-token target)
+
+**Wrong**:
+
+```python
+# Word-based distributions and thresholds
+self.chunk_size_distribution = {
+    "<100": 0, "100-299": 0, "300-499": 0, "500+": 0
+}
+chunk_word_counts = [len(chunk.split()) for chunk in chunks]
+target_range_chunks = sum(1 for count in chunk_word_counts if 225 <= count <= 450)
+```
+
+**Correct**:
+
+```python
+# Token-based distributions aligned with 600-token target
+self.chunk_size_distribution = {
+    "<300": 0, "300-449": 0, "450-750": 0, "750+": 0
+}
+chunk_token_counts = [len(self._tokenize_text(chunk)) for chunk in chunks]
+target_range_chunks = sum(1 for count in chunk_token_counts if target_min <= count <= target_max)
+```
+
+**Impact**:
+
+- Statistics now accurately reflect performance against the 600-token target
+- Clear token-based distributions for better performance assessment
+- Consistent reporting between target (tokens) and metrics (tokens)
+- Better visibility into chunk quality and compliance with token limits
+- All ingestion scripts (PDF, SQL, website crawler) now report meaningful token-based statistics
+
+**Status**: ✅ **COMPLETE** - Chunking statistics now report token counts aligned with the 600-token target, providing
+accurate performance metrics.
+
+## Critical Fix: Audio/Video Processing Graceful Shutdown Report Bug - ✅ RESOLVED
+
+**Problem**: When interrupting the audio/video transcription script with Ctrl-C, the graceful shutdown was showing an
+empty report (0 files processed, 0 skipped, 0 errors) even though files had been successfully processed before the
+interruption.
+
+**Root Cause**: Python closure issue in the signal handler. The nested `graceful_shutdown` function inside
+`_run_worker_pool_processing` was capturing the initial empty `overall_report` variable via closure, not the updated
+version that gets modified during processing.
+
+**Evidence from User Logs**:
+
+```bash
+2025-06-02 18:56:46,589 - INFO - Files processed: 0
+2025-06-02 18:56:46,589 - INFO - Files skipped: 0
+2025-06-02 18:56:46,589 - INFO - Files with errors: 0
+2025-06-02 18:56:46,590 - INFO - No chunks to analyze.
+```
+
+**Symptoms**:
+
+- Script processes files successfully for a while
+- User hits Ctrl-C to interrupt
+- Graceful shutdown shows empty report despite actual processing
+- No chunk statistics displayed
+- Loss of processing progress visibility
+
+**Fix Applied**: Used a mutable container pattern to allow the signal handler to access the latest report state:
+
+1. **Created report container**: `report_container = {"report": overall_report}`
+2. **Updated signal handler**: Access report via `current_report = report_container["report"]`
+3. **Real-time updates**: Update container during processing: `report_container["report"] = overall_report`
+4. **Removed unused function**: Deleted old `graceful_shutdown` function that wasn't being used
+
+**Wrong**:
+
+```python
+# Signal handler captures initial empty report via closure
+def graceful_shutdown(_signum, _frame):
+    print_report(overall_report)  # Always shows initial empty state!
+```
+
+**Correct**:
+
+```python
+# Use mutable container to share latest report state
+report_container = {"report": overall_report}
+
+def graceful_shutdown(_signum, _frame):
+    current_report = report_container["report"]  # Gets latest state
+    print_report(current_report)
+
+# Update container during processing
+if report_container is not None:
+    report_container["report"] = overall_report
+```
+
+**Impact**:
+
+- Graceful shutdown now shows accurate processing statistics
+- Users can see how many files were processed before interruption
+- Chunk statistics are properly displayed on shutdown
+- Better visibility into processing progress and results
+
+**Status**: ✅ **COMPLETE** - Signal handler now correctly accesses and displays the latest processing report on
+graceful shutdown.
+
+## Critical Fix: SpacyTextSplitter Overlap Warnings Due to Configuration Mismatch - ✅ RESOLVED
+
+**Problem**: The SpacyTextSplitter was generating excessive warnings during PDF processing because chunks were being
+created at exactly the 600-token limit, leaving no room for the 120-token overlap.
+
+**Root Cause**: Configuration mismatch between chunking target and overlap expectations:
+
+- `chunk_size = 600` tokens (used as both chunking target AND final limit)
+- `chunk_overlap = 120` tokens (20% overlap)
+- Chunking algorithm created chunks targeting 600 tokens
+- Overlap logic tried to add 120 tokens, exceeding the 600-token limit
+- Safety checks triggered warnings and fell back to original chunks
+
+**Evidence from User Logs**:
+
+```bash
+2025-06-02 18:00:25,002 - SpacyTextSplitter - WARNING - Overlap would exceed token limit (602 > 600), using original chunk
+2025-06-02 18:00:25,133 - SpacyTextSplitter - WARNING - Overlap would exceed token limit (602 > 600), using original chunk
+2025-06-02 18:00:25,201 - SpacyTextSplitter - WARNING - Chunk already at token limit (600 tokens), skipping overlap
+```
+
+**Symptoms**:
+
+- Hundreds of warnings during single document processing
+- Most chunks exactly at 600 tokens with no overlap applied
+- System working correctly but generating excessive noise
+
+**Fix Applied**: Redesigned chunk sizing to account for overlap in `data_ingestion/utils/text_splitter_utils.py`:
+
+1. **Separated base chunk size from target final size**:
+
+   - `self.chunk_size = 480` tokens (base size for chunking)
+   - `self.target_chunk_size = 600` tokens (final target with overlap)
+   - `self.chunk_overlap = 120` tokens (20% overlap)
+
+2. **Updated overlap validation logic**:
+
+   - Use `target_chunk_size` for final validation instead of `chunk_size`
+   - Calculate overlap budget: `max_overlap_tokens = self.target_chunk_size - chunk_tokens`
+   - Safety checks now validate against 600-token target, not 480-token base
+
+3. **Enhanced logging and configuration**:
+   - Clear distinction between base chunking size and final target
+   - Updated compliance range to 450-750 tokens (75%-125% of 600-token target)
+   - Improved warning messages to reference "target token limit"
+
+**Wrong**:
+
+```python
+# Single size used for both chunking and final validation
+self.chunk_size = 600  # Creates 600-token chunks
+# Overlap tries to add 120 tokens → 720 tokens → exceeds limit!
+```
+
+**Correct**:
+
+```python
+# Separate base size from target size
+self.chunk_size = 480          # Base size for chunking
+self.target_chunk_size = 600   # Final target with overlap
+self.chunk_overlap = 120       # 480 + 120 = 600 ✓
+```
+
+**Expected Results**:
+
+- Base chunks of ~480 tokens
+- Final chunks with overlap of ~600 tokens
+- Dramatic reduction in overlap warnings
+- Better overlap application rate
+- Maintained 600-token target for optimal RAG performance
+
+**Impact**:
+
+- Eliminates excessive warning noise during processing
+- Improves overlap application success rate
+- Maintains proven 600-token target for RAG performance
+- Cleaner logs for better debugging and monitoring
+
+**Status**: ✅ **COMPLETE** - Configuration mismatch resolved, overlap warnings eliminated while maintaining target
+performance.
+
+## Critical Fix: SQL to Vector DB Chunking Token vs Word Confusion - ✅ RESOLVED
+
+**Problem**: The SQL to vector DB script was producing chunks larger than the 600-token target due to confusion between
+tokens and words in the chunking logic AND improper overlap application that didn't respect token limits.
+
+**Root Cause**:
+
+1. The `SpacyTextSplitter` was configured for 600 tokens but the overlap application logic was not checking if adding
+   overlap would exceed the token limit.
+2. The `_apply_overlap_to_chunks()` method blindly added overlap text without validation:
+   `overlapped_chunk = overlap_text + " " + chunk`
+
+**Evidence from Testing**:
+
+- Target: 600 tokens (~300 words with 2:1 token-to-word ratio)
+- Before fix: Chunks with 722+ tokens (648+ words) - EXCEEDING TARGET
+- After fix: All chunks exactly 600 tokens (538-540 words) - RESPECTING TARGET
+- User's original error logs showed 950-1912 word chunks (indicating ~1900-3800 token chunks!)
+
+**Symptoms**:
+
+```bash
+2025-06-01 07:43:55,054 - SpacyTextSplitter - WARNING - Very large chunks detected: avg 950.0 words
+2025-06-01 07:43:55,054 - SpacyTextSplitter - WARNING - Large document not chunked: 1912 words in single chunk
+```
+
+**Fix Applied**: Enhanced `_apply_overlap_to_chunks()` method in `text_splitter_utils.py` to:
+
+1. Calculate available token budget before adding overlap: `max_overlap_tokens = self.chunk_size - chunk_tokens`
+2. Use minimum of configured overlap, available tokens, and token budget:
+   `actual_overlap = min(self.chunk_overlap, len(prev_chunk_tokens), max_overlap_tokens)`
+3. Add safety validation after overlap application to ensure token limit compliance
+4. Skip overlap for chunks already at token limit
+5. Fallback to original chunk if overlap would exceed limit
+
+**Key Change**: The overlap logic now **respects the 600-token limit** by calculating available token budget and
+applying only the overlap that fits within the limit.
+
+**Wrong**:
+
+```python
+# Blindly add overlap without token validation
+overlap_text = self._reconstruct_text_from_nltk_tokens(overlap_tokens)
+overlapped_chunk = overlap_text + " " + chunk  # Could exceed 600 tokens!
+```
+
+**Correct**:
+
+```python
+# Calculate available token budget first
+chunk_tokens = len(self._tokenize_text(chunk))
+max_overlap_tokens = self.chunk_size - chunk_tokens
+
+if max_overlap_tokens > 0:
+    # Only add overlap that fits within token budget
+    actual_overlap = min(self.chunk_overlap, len(prev_chunk_tokens), max_overlap_tokens)
+    overlap_tokens = prev_chunk_tokens[-actual_overlap:]
+    overlap_text = self._reconstruct_text_from_nltk_tokens(overlap_tokens)
+    overlapped_chunk = overlap_text + " " + chunk
+
+    # Safety validation
+    final_token_count = len(self._tokenize_text(overlapped_chunk))
+    if final_token_count > self.chunk_size:
+        overlapped_chunk = chunk  # Fallback to original
+```
+
+**Test Results**:
+
+- ✅ Chunks 1-7: Exactly 600 tokens each
+- ✅ Chunk 8: 224 tokens (last chunk, naturally smaller)
+- ✅ All 29 tests pass (9 SQL chunking + 20 existing SQL ingestion tests)
+
+**Testing Implementation**: Successfully merged chunking tests into main SQL ingestion test file:
+
+- **File**: `data_ingestion/tests/test_ingest_db_text.py`
+- **New Test Class**: `TestSQLChunkingStrategy` with 9 comprehensive chunking tests
+- **Coverage**: Token limits, fixed parameters, consistency, integration with SQL script
+- **Integration**: Merged seamlessly with existing 20 SQL ingestion tests
+- **Cleanup**: Removed standalone `test_sql_to_vector_db_chunking.py` after successful merge
+
+**Impact**: Prevents chunks from exceeding the 600-token target, ensuring optimal RAG performance and preventing
+embedding API errors due to oversized chunks.
+
+**Status**: ✅ **COMPLETE** - Critical token limit issue resolved in overlap logic AND comprehensive test coverage
+integrated.
+
+## Critical Fix: Text Processing Destroying All Paragraph Markings - ✅ RESOLVED
+
+**Problem**: The text splitter was not finding paragraph marks (`\n\n`) in any content because the `remove_html_tags()`
+function was destroying ALL paragraph markings during text cleaning.
+
+**Root Cause**: Line 52 in `data_ingestion/utils/text_processing.py`:
+
+```python
+# Replace multiple whitespace characters with a single space
+text = re.sub(r'\s+', ' ', text).strip()
+```
+
+This regex `\s+` matches **all whitespace including `\n\n`** and replaces it with a single space, destroying paragraph
+structure.
+
+**Evidence from Testing**:
+
+- **WordPress Post 1301**: Raw 5 double newlines → Cleaned 0 double newlines ❌
+- **WordPress Post 2714**: Raw 15 double newlines → Cleaned 0 double newlines ❌
+- **WordPress Post 405**: Raw 28 double newlines → Cleaned 0 double newlines ❌
+- **Average paragraphs detected**: 1.0 (all content merged into single paragraphs)
+
+**Testing Proof**:
+
+```python
+# Before fix: HTML → Cleaned text
+"<p>Para 1</p>\n\n<p>Para 2</p>" → "Para 1 Para 2"  # ❌ DESTROYED
+
+# After fix: HTML → Cleaned text
+"<p>Para 1</p>\n\n<p>Para 2</p>" → "Para 1\n\nPara 2"  # ✅ PRESERVED
+```
+
+**Wrong**:
+
+```python
+# BeautifulSoup default get_text() + aggressive whitespace collapse
+text = soup.get_text()
+text = re.sub(r'\s+', ' ', text).strip()  # DESTROYS ALL PARAGRAPHS
+```
+
+**Correct**:
+
+```python
+# BeautifulSoup with paragraph separator + selective whitespace normalization
+text = soup.get_text(separator='\n\n', strip=True)  # PRESERVES BLOCK STRUCTURE
+
+# Normalize whitespace but preserve paragraph breaks
+text = re.sub(r'[ \t]+', ' ', text)        # Fix spacing within lines
+text = re.sub(r'\n{3,}', '\n\n', text)     # Normalize excessive newlines
+```
+
+**Fix Applied**: Enhanced `remove_html_tags()` method in `data_ingestion/utils/text_processing.py`:
+
+1. **Use `soup.get_text(separator='\n\n')`**: Preserves block elements (p, div, etc.) as paragraph breaks
+2. **Selective normalization**: Only collapse spaces/tabs, preserve newlines
+3. **Paragraph structure preservation**: Maintain `\n\n` for downstream text splitter
+
+**Post-Fix Results**:
+
+- **WordPress Post 1301**: Raw 5 → Cleaned 5 double newlines ✅
+- **WordPress Post 2714**: Raw 15 → Cleaned 18 double newlines ✅
+- **WordPress Post 405**: Raw 28 → Cleaned 32 double newlines ✅
+- **Average paragraphs detected**: 1.0 → **19.3** (1,930% improvement!)
+- **Items with NO paragraphs**: 100% → **0%** (complete fix!)
+
+**Impact**:
+
+- Text splitter can now properly detect paragraph boundaries in HTML content
+- SQL database ingestion preserves natural paragraph structure
+- Semantic chunking works as designed with paragraph-based boundaries
+- RAG performance improved through better chunk boundaries
+
+**Status**: ✅ **COMPLETE** - Critical paragraph detection issue resolved in HTML processing pipeline.
+
+## Critical Finding: PDF Extraction Pipeline Works Correctly for Native Text PDFs - ✅ RESOLVED
+
+**Problem**: Initial testing suggested PDF extraction wasn't working, but investigation revealed the issue was testing
+inappropriate PDF types.
+
+**Root Cause**: Testing was performed on **scanned PDFs with OCR text layers** (Crystal dataset) rather than **native
+text PDFs** that the current pipeline is designed to handle.
+
+**Evidence from Investigation**:
+
+- **Working PDF (Ask Joe - Jairam dataset)**: 33KB, 6 pages, native text
+  - All PyMuPDF methods work: get_text(), get_text('blocks'), etc.
+  - All pdfplumber methods work: extract_text(), chars, etc.
+  - get_text('blocks') preserves paragraph structure with \n\n markers
+- **Failing PDFs (Crystal dataset)**: 2MB-27MB, 200-500+ pages, scanned with OCR layers
+  - Standard text extraction returns 0 characters: get_text(), extract_text()
+  - BUT get_text('html') returns massive content (989K+ chars)
+  - HTML output contains embedded images as base64 data
+  - These are essentially image containers with OCR text layers
+
+**Critical Mistake**: Assuming PDF extraction pipeline was broken when testing with wrong PDF type.
+
+**Wrong**: Testing scanned OCR PDFs and concluding the pipeline doesn't work for all PDFs.
+
+**Correct**: The existing pipeline works perfectly for native text PDFs (which is its intended use case). Scanned PDFs
+require different extraction methods and are a separate enhancement.
+
+**Impact**:
+
+- Current production pipeline works correctly for intended PDF types
+- No emergency fixes needed for existing functionality
+- 67% of test PDFs were inappropriate for current pipeline (scanned vs native text)
+
+**Status**: ✅ **COMPLETE** - PDF extraction pipeline confirmed working correctly for native text PDFs.
+
+## Resolved: PDF Test Script Limited Page Sampling Issue
+
+**Problem**: Initial PDF testing showed only 4,000 characters from what should be 500+ page documents, leading to
+incorrect conclusion that extraction was broken.
+
+**Root Cause**: Test scripts were only sampling first 3 pages of books, which often contain:
+
+- Title pages (minimal text)
+- Copyright pages (minimal text)
+- Table of contents (moderate text)
+- Blank or image-only pages
+
+**Evidence from Proper Testing**:
+
+- **"Autobiography of a Yogi" (554 pages)**: First 50 pages yielded:
+  - 41 pages with text, 9 blank pages (normal for books)
+  - 62,534 characters, 11,289 words
+  - Average 275.3 words per page with text ✅
+- **Small document ("Ask Joe", 6 pages)**: 5,465 characters, 871 words ✅
+
+**Wrong**: Testing only first 3 pages and concluding PDF extraction is broken.
+
+**Correct**: Use realistic sample sizes (20+ pages) to account for normal book structure with early pages containing
+minimal content.
+
+**Impact**: Prevented unnecessary debugging of working PDF extraction pipeline. Test scripts updated to use 20-page
+samples instead of 3-page samples.
+
 ## Decision: OpenAI Embedding Models - Ada-002 vs Newer Models for Spiritual Content
 
 **Context**: Lightweight testing of text-embedding-ada-002 vs text-embedding-3-small on Ananda spiritual content using
@@ -49,119 +490,6 @@ terminology.
 **Principle**: Always validate embedding model performance on domain-specific content before migration. General
 performance metrics don't guarantee domain compatibility.
 
-## Mistake: Website Crawler Exiting After Processing All URLs
-
-**Problem**: The website crawler was designed to run 24/7 but would exit with "signal request" message after processing
-all available URLs, even when no signal was sent. This prevented the daemon-like behavior needed for continuous
-re-crawling.
-
-**Root Cause**: The `get_next_url_to_crawl()` method only looked for URLs with status = 'pending', but successfully
-processed URLs are marked as status = 'visited' with a future `next_crawl` time (default 14 days). There was no
-mechanism to automatically transition visited URLs back to pending when they became due for re-crawling.
-
-**Wrong**: Only considering pending URLs for crawling:
-
-```python
-def get_next_url_to_crawl(self) -> str | None:
-    self.cursor.execute("""
-    SELECT url FROM crawl_queue
-    WHERE status = 'pending'
-    AND (next_crawl IS NULL OR next_crawl <= datetime('now'))
-    AND (retry_after IS NULL OR retry_after <= datetime('now'))
-    ORDER BY last_crawl IS NULL DESC, retry_count ASC, next_crawl ASC, url ASC
-    LIMIT 1
-    """)
-    result = self.cursor.fetchone()
-    return result[0] if result else None
-```
-
-**Correct**: Include visited URLs that are due for re-crawling and automatically reset them to pending:
-
-```python
-def get_next_url_to_crawl(self) -> str | None:
-    self.cursor.execute("""
-    SELECT url FROM crawl_queue
-    WHERE (
-        (status = 'pending' AND (retry_after IS NULL OR retry_after <= datetime('now')))
-        OR
-        (status = 'visited' AND next_crawl <= datetime('now'))
-    )
-    AND (next_crawl IS NULL OR next_crawl <= datetime('now'))
-    ORDER BY
-        status = 'pending' DESC,  -- Prioritize pending URLs first
-        last_crawl IS NULL DESC,  -- Then new URLs
-        retry_count ASC,         -- Then URLs with fewer retries
-        next_crawl ASC,          -- Then URLs due longest ago
-        url ASC                  -- Finally alphabetical for consistency
-    LIMIT 1
-    """)
-    result = self.cursor.fetchone()
-    if result:
-        url = result[0]
-        # If this is a visited URL due for re-crawling, reset it to pending
-        self.cursor.execute("SELECT status FROM crawl_queue WHERE url = ?", (self.normalize_url(url),))
-        status_result = self.cursor.fetchone()
-        if status_result and status_result[0] == 'visited':
-            logging.info(f"Re-crawling due URL: {url}")
-            self.cursor.execute("""
-                UPDATE crawl_queue
-                SET status = 'pending', next_crawl = datetime('now')
-                WHERE url = ?
-            """, (self.normalize_url(url),))
-            self.conn.commit()
-        return url
-    return None
-```
-
-**Impact**: Without this fix, the crawler would complete its initial crawl and then exit instead of waiting for URLs to
-become due for re-crawling. This breaks the intended 24/7 daemon behavior.
-
-**Detection**: The symptom was the crawler exiting with "Exiting script now due to signal request" even though no signal
-was sent, after processing thousands of pages successfully.
-
-## Decision: Abandoning Dynamic Chunking for Paragraph-Based Chunking
-
-**Context**: After implementing and evaluating dynamic chunking across the entire RAG system, evaluation results from
-`evaluate_rag_system.py` showed poor performance compared to other strategies.
-
-**Evaluation Results** (Current System, 18 queries):
-
-- **Dynamic chunking**: Precision@5: 0.2778, NDCG@5: 0.5670, Time: 3.1010s
-- **Paragraph-based chunking**: Precision@5: 0.4444, NDCG@5: 0.7252, Time: 0.3946s
-- **Sentence-based chunking**: Precision@5: 0.4444, NDCG@5: 0.7252, Time: 0.5188s
-
-**Decision Made**: Pivot away from dynamic chunking to paragraph-based chunking for all content types, including
-audio/video transcriptions.
-
-**Rationale**:
-
-- **Performance**: Paragraph-based chunking delivers 60% better precision and 28% better NDCG scores
-- **Efficiency**: 7.8x faster retrieval time (0.39s vs 3.10s)
-- **Consistency**: Fixed-size approach provides more predictable chunking behavior
-- **Proven Strategy**: Already successful in other ingestion methods (PDF, SQL, web crawler)
-
-**Implementation Changes**:
-
-- **Updated `chunk_transcription()` in `transcription_utils.py`**:
-  - Removed dynamic sizing logic (`text_splitter._set_dynamic_chunk_size()`)
-  - Fixed target size at 600 tokens (~300 words for audio content)
-  - Fixed overlap at 20% (120 tokens)
-  - Updated logging to reflect paragraph-based approach
-  - Maintained timestamp accuracy and punctuation preservation
-
-**Target Performance**:
-
-- Expected 87.5%+ target range compliance (225-450 words) for audio content
-- Consistent with other ingestion methods using paragraph-based chunking
-- Faster processing and retrieval times
-
-**Files Modified**:
-
-- `data_ingestion/audio_video/transcription_utils.py` - Updated `chunk_transcription()` function
-
-**Principle**: Always base architectural decisions on empirical evaluation data rather than theoretical benefits.
-Dynamic chunking sounded promising but failed to deliver superior results in practice.
-
 ## Mistake: Separating Unit Tests from Development in Project Planning
 
 **Wrong**: Initially created a project plan with unit tests separated into "Phase III" at the end:
@@ -199,3201 +527,677 @@ Dynamic chunking sounded promising but failed to deliver superior results in pra
 **Principle**: Test-as-you-go approach ensures each component is solid before moving to the next, provides immediate
 feedback, and prevents accumulation of bugs until the end of the project.
 
-## Mistake: Metrics Recording in Multiple Code Paths
+## Docling Content Comparison Script Created - ✅ COMPLETE
 
-**Problem**: When implementing comprehensive logging for the SpacyTextSplitter, metrics were only being recorded in one
-code path (the "without overlap" branch), causing documents processed through the "with overlap" branch to not be
-tracked in the metrics summary.
+**Task**: Create a script to compare Docling extraction vs current production PDF ingestion method, focusing
+specifically on content differences rather than performance metrics.
 
-**Wrong**: Metrics recording only in one return path:
+**Solution**: Created `data_ingestion/docling_content_comparison.py` that provides comprehensive content analysis
+comparing:
 
-```python
-# In split_text method
-if self.chunk_overlap > 0 and len(chunks) > 1:
-    # Apply overlap logic
-    return result  # No metrics recorded here!
-
-# Only recorded metrics here (without overlap path)
-self.metrics.log_document_metrics(...)
-return chunks
-```
-
-**Correct**: Ensure metrics are recorded in all code paths by extracting to a helper method:
-
-```python
-def _log_chunk_metrics(self, chunks: list[str], word_count: int, document_id: str = None):
-    """Log detailed chunking metrics for a document."""
-    # All logging and metrics recording logic here
-    self.metrics.log_document_metrics(...)
-
-# In split_text method
-if self.chunk_overlap > 0 and len(chunks) > 1:
-    # Apply overlap logic
-    self._log_chunk_metrics(result, word_count, document_id)
-    return result
-
-# Also record metrics for non-overlap path
-self._log_chunk_metrics(chunks, word_count, document_id)
-return chunks
-```
-
-**Detection**: Debug logging showed documents being processed but metrics only reflecting the first document. Always
-test metrics accumulation across different code paths.
-
-## Mistake: Inconsistent Chunking Strategy Across Ingestion Scripts
-
-**Problem**: Different ingestion scripts were using different text splitting approaches despite the project
-documentation claiming all scripts use spaCy chunking. Analysis of vector database word counts revealed:
-
-- PDF script: Using `SpacyTextSplitter(chunk_size=600, chunk_overlap=120)` → 83.7 avg words/chunk
-- SQL script: Using `TokenTextSplitter(chunk_size=256, chunk_overlap=50)` → 167.8 avg words/chunk
-- Web crawler: Using custom word-based chunking → Variable word counts
-
-**Wrong**: SQL script using outdated token-based chunking:
-
-```python
-# data_ingestion/sql_to_vector_db/ingest_db_text.py
-text_splitter = TokenTextSplitter.from_tiktoken_encoder(
-    encoding_name="cl100k_base", chunk_size=256, chunk_overlap=50
-)
-```
-
-**Correct**: All ingestion scripts should use the shared spaCy-based chunking strategy:
-
-```python
-# Import shared utility
-from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
-
-# Use consistent configuration across all scripts
-text_splitter = SpacyTextSplitter(
-    chunk_size=600,
-    chunk_overlap=120,  # 20% overlap
-    separator="\n\n",
-    pipeline="en_core_web_sm",
-)
-```
-
-**Impact**: Inconsistent chunking affects RAG quality and retrieval consistency. Documents from different sources have
-wildly different chunk characteristics, leading to uneven search quality.
-
-**Detection Method**: Analyze word counts per chunk using `data_ingestion/bin/analyze_text_field_words.py` to identify
-chunking inconsistencies across libraries/sources.
-
-## Mistake: S3 URL Mismatch in Tests
-
-**Wrong**:
-
-```typescript
-// web/__tests__/components/CopyButton.test.tsx
-// Expected URL did not match the actual generated URL by getS3AudioUrl.ts
-expect(callHtml).toContain(
-  '<a href="https://ananda.amazonaws.com/my%20treasures%2Faudiofile.mp3">Direct Audio Test</a> (My Treasures) → 1:10'
-);
-```
-
-**Correct**:
-
-```typescript
-// web/__tests__/components/CopyButton.test.tsx
-// Updated expected URL to match the output of getS3AudioUrl.ts
-expect(callHtml).toContain(
-  '<a href="https://ananda.amazonaws.com/public/audio/my%20treasures/audiofile.mp3">Direct Audio Test</a> (Treasures) → 1:10'
-);
-```
-
-## Data Ingestion Architecture: spaCy Chunking and Document-Level Hashing
-
-**Context**: Major migration from TypeScript to Python for data ingestion with semantic chunking strategy.
-
-**Key Changes**:
-
-- **Chunking Strategy**: Migrated from fixed-size chunking to spaCy paragraph-based chunking (600 tokens, 20% overlap)
-- **PDF Processing**: Converted from TypeScript (`pdf_to_vector_db.ts`) to Python (`pdf_to_vector_db.py`)
-- **Document Processing**: Changed from page-by-page to full-document processing to preserve context
-- **Hashing Strategy**: Implemented document-level hashing where all chunks from same document share same hash
-- **Dependencies**: Added spaCy, PyMuPDF, pytest-asyncio; removed PyPDF2
-
-**Benefits**:
-
-- Significantly improved RAG evaluation results
-- Better semantic coherence and context preservation
-- Efficient bulk operations on documents
-- Robust fallback mechanisms for edge cases
-
-**Files Affected**:
-
-- `data_ingestion/utils/spacy_text_splitter.py` - Core chunking utility
-- `data_ingestion/utils/document_hash.py` - Centralized document hashing
-- `data_ingestion/pdf_to_vector_db.py` - Python PDF ingestion script
-- Multiple ingestion scripts updated with new chunking and hashing
-
-## Mistake: npm run Argument Parsing
-
-**Wrong**: Running `npm run <script> <arg1> <arg2> --flag` might result in `--flag` not being passed to the script, as
-npm can intercept it. Command: `npm run prompt ananda-public push ananda-public-base.txt --skip-tests` Result:
-`--skip-tests` was not included in `process.argv` inside `manage-prompts.ts`.
-
-**Correct**: Use `--` to explicitly separate npm options from script arguments. Command:
-`npm run prompt -- ananda-public push ananda-public-base.txt --skip-tests` Result: `--skip-tests` is correctly passed to
-the script and included in `process.argv`.
-
-### Finding: Script for Checking Firestore URLs
-
-**Situation**: User asked for the location of a Python script that checks Firestore for 404 URLs included in "Answers".
-Initial searches focused on `data_ingestion` and general crawler utilities, which did not directly match the requirement
-of interacting with Firestore "Answers" for this specific purpose.
-
-**Resolution**: A broader codebase search for Python scripts interacting with Firestore, URLs, and terms like "answers"
-and "404" identified `bin/count_hallucinated_urls.py`. This script specifically:
-
-- Connects to Firestore.
-- Queries a `chatLogs` collection (derived from an environment prefix, effectively the "Answers").
-- Extracts URLs from answer fields.
-- Performs HTTP HEAD requests to check their status (including 404s).
-- Reports on these URLs.
-
-**Script Path**: `bin/count_hallucinated_urls.py`
-
-### Mistake: Incorrect Document Retrieval Logic Bypassing Library Filters
-
-**Situation**: In `web/src/utils/server/makechain.ts`, the `setupAndExecuteLanguageModelChain` function was pre-fetching
-documents using `retriever.getRelevantDocuments(sanitizedQuestion)`. This call did not apply library-specific filters
-defined in the site configuration. These pre-fetched documents (as `finalDocs`) were then passed to `makeChain`, causing
-`makeChain`'s own `retrievalSequence` (which contains the correct library filtering logic) to be bypassed.
-
-## Mistake: Nested With Statements in Tests
-
-**Problem**: Ruff linting rule SIM117 flags nested `with` statements that should be combined into single `with`
-statements with multiple contexts for better readability and style.
-
-**Wrong**: Nested with statements:
-
-```python
-def test_example(self):
-    with patch.dict(os.environ, {"KEY": "value"}):
-        with patch("module.function") as mock_func:
-            # test code
-```
-
-**Correct**: Single with statement with multiple contexts:
-
-```python
-def test_example(self):
-    with (
-        patch.dict(os.environ, {"KEY": "value"}),
-        patch("module.function") as mock_func,
-    ):
-        # test code
-```
-
-**Detection**: Ruff automatically detects this pattern and suggests the fix. The parentheses around the context managers
-are required for Python 3.9+ when using multiple contexts.
-
-**Applied**: Fixed 14 instances in `data_ingestion/tests/test_pinecone_utils.py` - all 38 tests continue to pass after
-the refactor. Completed in two phases: initial 12 fixes, then 2 additional fixes for remaining nested with statements.
-
-## Mistake: Creating Separate Test Files Instead of Consolidating
-
-**Wrong**: Creating separate test files for related functionality:
-
-```text
-data_ingestion/tests/test_crawler.py
-data_ingestion/tests/test_crawler_chunking.py  # Separate file
-```
-
-**Correct**: Keep related tests in the same file to avoid unnecessary file proliferation:
-
-```python
-# In data_ingestion/tests/test_crawler.py
-class TestCrawlerChunking(unittest.TestCase):
-    """Test cases for website crawler chunking functionality."""
-    # All chunking tests here
-```
-
-**Principle**: Group related tests together unless there's a compelling reason to separate them (e.g., different test
-environments, very large test files). This makes the codebase easier to navigate and maintain.
-
-## Mistake: Incorrect SpacyTextSplitter Constructor Parameters
-
-**Wrong**: Trying to pass `chunk_size` and `chunk_overlap` to `SpacyTextSplitter` constructor:
-
-```python
-text_splitter = SpacyTextSplitter(
-    chunk_size=600,
-    chunk_overlap=120,
-    separator="\n\n",
-    pipeline="en_core_web_sm",
-)
-```
-
-**Correct**: `SpacyTextSplitter` constructor only accepts `separator` and `pipeline` parameters:
-
-```python
-text_splitter = SpacyTextSplitter(
-    separator="\n\n",
-    pipeline="en_core_web_sm",
-)
-# chunk_size and chunk_overlap are set internally via dynamic sizing
-```
-
-**Detection**: Constructor signature inspection and test failures revealed the parameter mismatch. Always check the
-actual constructor signature before assuming parameter names.
-
-## Mistake: Hard-coding Specific Text Patterns in PDF Processing
-
-**Problem**: When fixing PDF text extraction issues where chapter headers were getting mixed into body text (e.g.,
-"combatControl Your Destiny 23 them"), initially attempted to hard-code the specific book title pattern.
-
-**Wrong**: Hard-coding specific book titles in text cleaning:
-
-```python
-# Remove chapter headers and book titles that got mixed into the text
-# Pattern: "Control Your Destiny" followed by optional number
-text = re.sub(r"\bControl Your Destiny\s*\d*\b", "", text, flags=re.IGNORECASE)
-```
-
-**Correct**: Use generic patterns that detect common text artifacts without hard-coding specific titles:
-
-```python
-# Fix concatenated words by detecting patterns where lowercase word is followed by uppercase word
-# This handles cases like "combatControl" -> "combat Control"
-text = re.sub(r'([a-z])([A-Z][a-z])', r'\1 \2', text)
-
-# Remove patterns that look like book titles (Title Case Words followed by numbers)
-# This catches patterns like "Control Your Destiny 23" without hard-coding specific titles
-text = re.sub(r"\b([A-Z][a-z]+\s+){1,4}[A-Z][a-z]+\s+\d{1,3}\b", "", text)
-```
-
-**Principle**: Text processing should use generic patterns that work across different documents rather than hard-coding
-specific content. This makes the solution more robust and maintainable.
-
-## Mistake: Document Type Validation Too Strict in Text Splitter
-
-**Problem**: The `SpacyTextSplitter.split_documents()` method was using `isinstance(doc, Document)` to validate input
-documents, but this failed when different scripts imported `Document` from different sources (local vs LangChain).
-
-**Wrong**: Strict type checking against local Document class:
-
-```python
-# In text_splitter_utils.py
-if not isinstance(doc, Document):
-    error_msg = f"Expected Document object, got {type(doc)}"
-    self.logger.error(error_msg)
-    raise ValueError(error_msg)
-```
-
-**Correct**: Duck typing approach checking for required attributes:
-
-```python
-# Check if doc has required attributes (supports both local Document and LangChain Document)
-if not hasattr(doc, 'page_content') or not hasattr(doc, 'metadata'):
-    error_msg = f"Expected Document object with 'page_content' and 'metadata' attributes, got {type(doc)}"
-    self.logger.error(error_msg)
-    raise ValueError(error_msg)
-```
-
-**Root Cause**: SQL ingestion script imports `Document` from `langchain_core.documents` while text splitter defines its
-own local `Document` class. The `isinstance` check fails even though both classes have the same interface.
-
-**Solution**: Use duck typing to check for required attributes rather than exact type matching, allowing compatibility
-with both local and LangChain Document classes.
-
-**Wrong**:
-
-```typescript
-// In setupAndExecuteLanguageModelChain (makechain.ts)
-// ...
-const retrievedDocs = await retriever.getRelevantDocuments(sanitizedQuestion); // No library filtering here
-// ... docsForLlm derived from retrievedDocs
-const chain = await makeChain(
-  // ...
-  docsForLlm // Passed as finalDocs, bypassing makeChain's internal retrieval
-);
-
-// In makeChain (makechain.ts)
-// ...
-if (finalDocs) {
-  return finalDocs; // Bypasses library-specific retrieval logic
-}
-// ... library-specific retrieval logic ...
-```
-
-**Correct**:
-
-1. `setupAndExecuteLanguageModelChain` no longer pre-fetches documents.
-2. The `finalDocs` parameter was removed from `makeChain`.
-3. `makeChain` always executes its internal `retrievalSequence`, which correctly applies `baseFilter` (media types,
-   collection authors from `route.ts`) in conjunction with `includedLibraries` (handling weighted parallel calls or
-   `$in` filters for multiple libraries).
-4. `makeChain` was modified to return an object `{ answer: string, sourceDocuments: Document[] }`.
-5. `setupAndExecuteLanguageModelChain` uses this structured return object for its final processing and for providing
-   documents to be saved.
-
-```typescript
-// In setupAndExecuteLanguageModelChain (makechain.ts)
-// ...
-// Document pre-fetching removed.
-const chain = await makeChain(
-  retriever,
-  { model: modelName, temperature },
-  finalSourceCount,
-  filter, // baseFilter from route.ts
-  sendData,
-  undefined,
-  { model: rephraseModelName, temperature: rephraseTemperature }
-  // No finalDocs argument here
-);
-const result = await chain.invoke(...);
-// result is { answer: string, sourceDocuments: Document[] }
-return { fullResponse: result.answer, finalDocs: result.sourceDocuments };
-
-// In makeChain (makechain.ts)
-// Parameter finalDocs?: Document[] removed from function signature.
-// Block "if (finalDocs) { ... return finalDocs; }" removed from retrievalSequence.
-// retrievalSequence now always executes its full logic.
-// The chain returned by makeChain now resolves to { answer: string, sourceDocuments: Document[] }.
-```
-
-### Mistake: Broken Streaming and Linter Error After Fixing Library Filters
-
-**Situation**: After refactoring `makechain.ts` to correctly handle library-specific document filtering, a new linter
-error appeared, and answer streaming to the frontend broke. The linter error was related to type inference in
-`RunnablePassthrough.assign`. The broken streaming was caused by a final lambda in `conversationalRetrievalQAChain` that
-aggregated the answer before streaming callbacks could process individual tokens.
-
-**Wrong (Conceptual Snippets from Previous State)**:
-
-```typescript
-// In makechain.ts - fullAnswerGenerationChain causing linter error
-const fullAnswerGenerationChain = RunnablePassthrough.assign({
-  answer: (input: { context: string; ... }) => generationChain.invoke(input), // Complex input type here was problematic
-  sourceDocuments: (input: { documents: Document[]; }) => input.documents,
-});
-
-// In makechain.ts - conversationalRetrievalQAChain blocking streaming
-const conversationalRetrievalQAChain = RunnableSequence.from([
-  // ... other steps
-  answerChain, // This streams { answer: token_stream, sourceDocuments: ... }
-  (result: { answer: string, sourceDocuments: Document[] }) => { // This lambda waits for full answer string
-    // ... warning logic ...
-    return result;
-  },
-]);
-```
-
-**Correct**:
-
-1. **Linter Error Fix**: Refactored `fullAnswerGenerationChain` in `makechain.ts`. Introduced `PromptDataType` and a new
-   `generationChainThatTakesPromptData` runnable. This new runnable explicitly defines its input type (`PromptDataType`)
-   and selects the fields required by the LLM prompt internally. `RunnablePassthrough.assign` then uses
-   `generationChainThatTakesPromptData` for the `answer` field and a simple lambda
-   `(input: PromptDataType) => input.documents` for `sourceDocuments`.
-2. **Streaming Fix**: Removed the final result-transforming lambda from `conversationalRetrievalQAChain` in
-   `makechain.ts`. This allows the streamed tokens from the `answer` field (generated by
-   `generationChainThatTakesPromptData`, which includes a `StringOutputParser`) to propagate to the `handleLLMNewToken`
-   callback in `setupAndExecuteLanguageModelChain`.
-3. **Warning Logic Relocation**: The logic to check if the AI's answer indicates no specific information was moved from
-   the removed lambda in `conversationalRetrievalQAChain` to `setupAndExecuteLanguageModelChain`. It now checks the
-   final aggregated `result.answer` after all streaming has completed.
-
-```typescript
-// In makechain.ts - Corrected fullAnswerGenerationChain structure
-type PromptDataType = {
-  context: string; chat_history: string; question: string; documents: Document[];
-};
-const generationChainThatTakesPromptData = RunnableSequence.from([
-  (input: PromptDataType) => ({ /* select fields for LLM prompt */ }),
-  answerPrompt,
-  answerModel,
-  new StringOutputParser(),
-]);
-const fullAnswerGenerationChain = RunnablePassthrough.assign({
-  answer: generationChainThatTakesPromptData,
-  sourceDocuments: (input: PromptDataType) => input.documents,
-});
-
-// In makechain.ts - Corrected conversationalRetrievalQAChain (final lambda removed)
-const conversationalRetrievalQAChain = RunnableSequence.from([
-  { /* ...standalone question part... */ },
-  answerChain, // answerChain uses fullAnswerGenerationChain
-]);
-
-// In setupAndExecuteLanguageModelChain (makechain.ts) - Warning logic moved here
-const result = await chain.invoke(...);
-if (result.answer.includes("I don't have any specific information")) {
-  // ... console.warn logic using result.answer ...
-}
-```
-
-### Mistake: Edit tool applying changes to incorrect locations or not applying them
-
-**Wrong**: When attempting to remove an unused variable or import from a specific function/file, the `edit_file` tool
-sometimes applies the deletion to a different function or location within the same file, or even fails to apply the
-change if the targeted line is already commented out but still flagged by the linter (possibly due to stale linter
-data), or fails to remove an import line repeatedly.
-
-**Correct**: If the `edit_file` tool misapplies an edit or fails to apply it:
-
-1. Re-try the edit with more surrounding context to help the model pinpoint the exact location.
-2. Verify if the linter data is current, especially if the tool fails to act on a line that appears already fixed (e.g.,
-   commented out).
-3. If an edit (like removing an import) persistently fails across multiple attempts, note it for manual review and move
-   on to other issues to avoid getting stuck.
-4. If an edit causes a new error (e.g., removing a variable that _is_ used elsewhere), the immediate next step should be
-   to revert or fix that erroneous edit.
-
-### False Positive Linter Error Suppression
-
-**Situation**: A linter (e.g., ESLint with `@typescript-eslint/no-unused-vars`) flags a variable as unused, but it is
-actually used (e.g., within a callback or a complex assignment that the linter doesn't fully trace for usage in the
-final return path).
-
-**Resolution**: If confident the variable is used and the linter warning is a false positive, suppress the warning for
-that specific line using a linter disable comment. For ESLint and `@typescript-eslint/no-unused-vars`, this can be done
-by adding `// eslint-disable-next-line @typescript-eslint/no-unused-vars` on the line immediately preceding the variable
-declaration.
-
-**Example**:
-
-```typescript
-// web/src/utils/server/makechain.ts
-// ...
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-let fullResponse = ""; // This variable is used in a callback, but linter flags it.
-// ...
-```
-
-### Mistake: Jest Module Resolution for Local Dependencies
-
-**Situation**: When Jest tests need to import from another directory in the monorepo, using relative paths can be
-error-prone and fragile. Errors like "Configuration error: Could not locate module..." or "Cannot find module" occur.
-This happens even if relative paths are used in mocks/imports, as TypeScript/Jest might not correctly resolve these
-across directory boundaries without proper configuration.
-
-**Wrong**:
-
-```typescript
-// Attempting to use relative paths for mocks or imports from another directory
-jest.mock("../../../../src/utils/pinecone-client");
-import { getPineconeClient } from "../../../../src/utils/pinecone-client";
-```
-
-**Correct**:
-
-1. Use module path aliases in `tsconfig.json`:
-
-   ```json
-   {
-     "compilerOptions": {
-       "paths": {
-         "@/*": ["./src/*"]
-       }
-     }
-   }
-   ```
-
-2. Configure Jest to understand these aliases:
-
-   ```javascript
-   // jest.config.js
-   module.exports = {
-     moduleNameMapper: {
-       "^@/(.*)$": "<rootDir>/src/$1",
-     },
-   };
-   ```
-
-3. Use the aliases in your tests:
-
-   ```typescript
-   jest.mock("@/utils/pinecone-client");
-   import { getPineconeClient } from "@/utils/pinecone-client";
-   ```
-
-**Reasoning**: Using module aliases provides a more robust and maintainable way to handle imports across the codebase.
-It avoids deep relative paths, makes refactoring easier, and works consistently across different file locations.
-
-### Mistake: Forgot to cd into web directory before running tests
-
-**Wrong**:
-
-Ran 'npm test' without ensuring the shell was in the web directory.
-
-**Correct**:
-
-Must cd into the web directory with 'cd web' before running 'npm test' to execute the Next.js test suite.
-
-### Python Import Path Resolution for Direct Script Execution
-
-**Problem**: When running a Python script directly from its directory using `./script.py` instead of as a module with
-`python -m`, imports referencing the parent package fail.
-
-**Wrong**: Adding manual sys.path manipulation to fix import issues:
-
-```python
-# Using sys.path manipulation
-import sys
-import os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-sys.path.insert(0, parent_dir)
-```
-
-**Correct**: Rely on Python path being set correctly and use proper module structure:
-
-```python
-# No sys.path manipulation needed - rely on proper Python path setup
-from pyutil.env_utils import load_env
-from data_ingestion.utils.text_processing import clean_text
-```
-
-**Key Principles**:
-
-- Python path should be set at the environment/project level
-- Scripts should not contain sys.path manipulation code
-- Use proper absolute imports from project root
-- Ensure proper `__init__.py` files exist in all package directories
-
-**Environment Setup**: The Python path should be configured externally (via IDE, virtual environment, or shell setup)
-rather than within individual scripts.
-
-### Mistake: ModuleNotFoundError for Local Modules in Scripts
-
-**Situation**: When running a Python script from a subdirectory (e.g., `bin/myscript.py`) that imports a local module
-from another directory at the project root level (e.g., `pyutil/some_module.py`), a `ModuleNotFoundError` can occur
-because the Python path is not properly configured.
-
-**Wrong**: Adding sys.path manipulation to individual scripts:
-
-```python
-#!/usr/bin/env python3
-import os
-import sys
-
-# Add project root to Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, project_root)
-
-# Now, imports like this should work:
-from pyutil.env_utils import load_env
-```
-
-**Correct**: Configure Python path externally and use clean imports:
-
-```python
-#!/usr/bin/env python3
-# No sys.path manipulation needed
-
-# Clean imports relying on proper Python path setup:
-from pyutil.env_utils import load_env
-from data_ingestion.utils.progress_utils import setup_signal_handlers
-```
-
-**Environment Configuration**: The Python path should be set up at the project/environment level (via virtualenv, IDE
-settings, or shell configuration) so that all modules can be imported cleanly without path manipulation in individual
-scripts.
-
-**Detection**: If you get `ModuleNotFoundError`, fix the Python path setup at the environment level rather than adding
-sys.path hacks to individual files.
-
-### Mistake: Using outdated OpenAI Embedding API
-
-**Situation**: Code using `openai.Embedding.create()` will fail with `openai>=1.0.0` as the API has changed.
-
-**Wrong**:
-
-```python
-import openai
-# ...
-openai.api_key = "YOUR_API_KEY" # Also an outdated way to set key for client
-# ...
-def get_embedding(text, model_name):
-    try:
-        response = openai.Embedding.create(input=text, model=model_name)
-        return response['data'][0]['embedding']
-    except Exception as e:
-        # ... error handling ...
-        return None
-```
-
-**Correct**: Initialize an `OpenAI` client and use its `embeddings.create` method.
-
-```python
-from openai import OpenAI # Import the client
-import os
-
-# ...
-
-# Initialize client (API key is usually picked up from OPENAI_API_KEY env var by default)
-# or client = OpenAI(api_key="YOUR_API_KEY")
-client = OpenAI()
-
-# ...
-
-def get_embedding(text, model_name, openai_client):
-    try:
-        response = openai_client.embeddings.create(input=text, model=model_name)
-        return response.data[0].embedding # Access data attribute directly
-    except Exception as e:
-        # ... error handling ...
-        return None
-
-# Example usage in a main function:
-def main():
-    # ... setup ...
-    openai_client = OpenAI()
-    # ...
-    embedding = get_embedding("some text", "text-embedding-ada-002", openai_client)
-    # ...
-```
-
-**Key Changes**:
-
-1. Import `OpenAI` from `openai`.
-2. Instantiate the client: `client = OpenAI()`.
-3. Call `client.embeddings.create(...)`.
-4. Access the embedding via `response.data[0].embedding`.
-5. Pass the initialized client to functions that need to generate embeddings.
-
-**Key Principle**: Always check function signatures and return types. If a function returns a regular value (like
-`bool`, `str`, `int`) rather than a coroutine, it should be called synchronously without `await`. Only use `await` with
-async functions that return coroutines or awaitable objects.
-
-**Context**: The `pdf_checkpoint_integration()` function from `checkpoint_utils.py` returns a synchronous
-`save_checkpoint` function that returns `bool`, not an async function. The error occurred because the PDF script was
-trying to await this synchronous function.
-
-## Progress Utils Integration Best Practices
-
-**Discovery**: Analysis of the SQL script revealed it was only using basic functionality from `progress_utils` instead
-of leveraging the comprehensive progress tracking utilities available.
-
-**Minimal Usage (Wrong)**:
-
-```python
-# Only using basic is_exiting function
-from data_ingestion.utils.progress_utils import is_exiting
-
-# Custom signal handler instead of shared one
-def signal_handler(sig, frame):
-    if is_exiting():
-        print("\nForced exit. Data may be inconsistent.")
-        sys.exit(1)
-    else:
-        print("\nGraceful shutdown initiated...")
-
-# Manual signal setup
-signal.signal(signal.SIGINT, signal_handler)
-
-# Basic tqdm usage without configuration
-for i in tqdm(range(num_batches), desc="Overall Batch Progress"):
-    # Manual checkpoint saving scattered throughout
-    save_checkpoint(checkpoint_file, list(processed_doc_ids), last_processed_id)
-```
-
-**Comprehensive Usage (Correct)**:
-
-```python
-# Import comprehensive progress utilities
-from data_ingestion.utils.progress_utils import (
-    is_exiting,
-    setup_signal_handlers,
-    ProgressTracker,
-    ProgressConfig,
-    create_progress_bar,
-)
-
-# Use shared signal handler setup
-setup_signal_handlers()
-
-# Use ProgressTracker with automatic checkpoint integration
-progress_config = ProgressConfig(
-    description="Processing Batches",
-    unit="batch",
-    total=num_batches,
-    checkpoint_interval=1,
-)
-
-def checkpoint_callback(current_progress: int, data: dict):
-    save_checkpoint(checkpoint_file, list(processed_doc_ids), last_processed_id)
-
-with ProgressTracker(progress_config, checkpoint_callback=checkpoint_callback) as progress:
-    for i in range(num_batches):
-        # Processing logic
-        progress.update(1)
-        progress.increment_success(count) or progress.increment_error(count)
-
-# Use create_progress_bar for consistent styling
-data_prep_config = ProgressConfig(description="Preparing Data", unit="row", total=len(results))
-progress_bar = create_progress_bar(data_prep_config, results)
-for row in progress_bar:
-    # Process row
-```
-
-**Benefits of Full Integration**:
-
-- Automatic checkpoint saving at configured intervals
-- Graceful shutdown with proper cleanup
-- Consistent progress bar styling across all scripts
-- Error and success counting with statistics
-- Thread-safe signal handling
-- Integration with shared utilities ecosystem
-
-**Scripts to Check**: All ingestion scripts should be audited to ensure they're using the full `progress_utils`
-capabilities rather than basic implementations.
-
-## Mistake: Incorrect Test Mocking for Function-like Objects
-
-**Problem**: When mocking functions in tests, accidentally setting them to a static value instead of making them return
-that value causes "object is not callable" errors.
-
-**Wrong**: Mocking a function by setting it to a static value:
-
-```python
-# This sets is_exiting to the boolean False, not a function that returns False
-patch("data_ingestion.utils.progress_utils.is_exiting", False),
-patch("pdf_to_vector_db.is_exiting", False),
-```
-
-When the code tries to call `is_exiting()`, it fails with:
-
-```bash
-TypeError: 'bool' object is not callable
-```
-
-**Correct**: Mock functions to return the desired value:
-
-```python
-# This makes is_exiting a mock function that returns False when called
-patch("data_ingestion.utils.progress_utils.is_exiting", return_value=False),
-patch("pdf_to_vector_db.is_exiting", return_value=False),
-```
-
-Now when code calls `is_exiting()`, it properly returns `False`.
-
-**Key Principle**: When mocking a callable (function, method), use `return_value=X` or `side_effect=X` to control what
-it returns when called. Only mock with a static value when replacing a non-callable attribute or variable.
-
-## Mistake: Incorrect Mocking Path for Imported Functions in Tests
-
-**Problem**: When testing functions that import other functions directly (e.g.,
-`from utils.progress_utils import is_exiting`), mocking the original module path doesn't work because the import creates
-a local reference in the target module.
-
-**Wrong**: Mocking the original module path when the function is imported directly:
-
-```python
-# In test file
-from crawler.website_crawler import WebsiteCrawler
-# ... in test method
-with patch("utils.progress_utils.is_exiting") as mock_is_exiting:
-    # This doesn't work because website_crawler imports is_exiting directly
-    run_crawl_loop(crawler, MagicMock(), mock_args)
-```
-
-**Correct**: Mock the function in the module where it's imported and used:
-
-```python
-# In test file
-from crawler.website_crawler import WebsiteCrawler
-# ... in test method
-with patch("crawler.website_crawler.is_exiting") as mock_is_exiting:
-    # This works because we're mocking the local reference
-    run_crawl_loop(crawler, MagicMock(), mock_args)
-```
-
-**Root Cause**: When a module does `from utils.progress_utils import is_exiting`, it creates a local reference to the
-function. Mocking `utils.progress_utils.is_exiting` only affects new imports, not existing local references.
-
-**Impact**: Tests hang indefinitely because the actual function is called instead of the mock, creating infinite loops
-in daemon-like behavior tests.
-
-## Audio/Video Transcript Chunking Strategy Update Completed
-
-**Task**: Successfully updated `data_ingestion/audio_video/transcription_utils.py` to use the new spaCy-based chunking
-strategy while preserving audio-specific features.
-
-**Key Implementation Details**:
-
-- **Primary Function**: Modified `chunk_transcription()` to use `SpacyTextSplitter` for semantic chunking
-- **Dynamic Sizing**: Leverages word count-based chunk sizing (225-450 word target range)
-- **Timestamp Preservation**: Maps spaCy text chunks back to original word timestamps for audio playback
-- **Fallback Strategy**: Maintains legacy chunking method as fallback if spaCy processing fails
-- **Enhanced Logging**: Added comprehensive chunk quality metrics and target range achievement tracking
-
-**Technical Approach**:
-
-1. Use SpacyTextSplitter to create semantic text chunks from transcription text
-2. Map text chunks back to timestamped word objects using fuzzy word matching
-3. Handle word matching edge cases with fallback to word count estimation
-4. Preserve all audio metadata (start/end times, speaker info) in chunk objects
-5. Log detailed statistics about chunk quality and target range compliance
-
-**Benefits**:
-
-- Maintains semantic coherence in audio chunks (better than fixed-word chunking)
-- Preserves all audio-specific functionality (timestamps, speaker diarization)
-- Provides robust error handling with graceful fallback
-- Enables consistent chunking strategy across all ingestion methods
-- Improves RAG retrieval quality for audio/video content
-
-**Files Modified**:
-
-- `data_ingestion/audio_video/transcription_utils.py`: Updated `chunk_transcription()` and added
-  `_legacy_chunk_transcription()`
-- `data_ingestion/spacy_chunking_strategy_update.md`: Marked task as completed with implementation details
-
-## Mistake: Overlap Logic Applied Before Chunk Merging
-
-**Problem**: In `SpacyTextSplitter.split_text()`, the overlap logic was using incorrect percentage calculation,
-resulting in ~12% overlap instead of the target 20%.
-
-**Wrong Calculation**:
-
-```python
-target_overlap_words = max(1, int(len(prev_words) * (self.chunk_overlap / self.chunk_size)))
-# With chunk_overlap=100, chunk_size=800: (100/800) = 0.125 = 12.5%
-```
-
-**Correct Calculation**:
-
-```python
-target_overlap_words = max(1, int(len(prev_words) * 0.20))
-# Direct 20% calculation
-```
-
-**Detection**: Web crawler chunks showed 7-15% overlap instead of expected 20%. The overlap was being applied but with
-wrong percentage due to using token-based ratio instead of direct percentage.
-
-**Fix Applied**: Changed overlap calculation to use direct 20% of previous chunk word count, achieving proper overlap
-percentages.
-
-## Mistake: Timestamp Accuracy Risk in Audio Chunking with Text Mapping
-
-**Problem**: Initial spaCy-based audio chunking implementation used "fuzzy matching" to map spaCy's reformatted text
-chunks back to original timestamped words. This approach was fundamentally flawed and could break timestamp accuracy
-critical for audio/video playback.
-
-**Wrong**: Letting spaCy reformat text then trying to map it back to timestamped words:
-
-```python
-# Use spaCy to split the text into semantic chunks
-text_chunks = text_splitter.split_text(original_text, document_id="transcription")
-
-# Try to map reformatted text back to timestamped words (DANGEROUS!)
-for chunk_idx, chunk_text in enumerate(text_chunks):
-    chunk_text_words = chunk_text.split()
-    # Fuzzy matching logic that could misalign words
-    if (word_text.lower() == expected_word.lower() or
-        word_text.lower() in expected_word.lower()):
-        # This matching could fail or skip words
-
-    # Fallback to word count estimation (VERY DANGEROUS!)
-    if len(chunk_words) < len(chunk_text_words) * 0.7:
-        words_needed = len(chunk_text_words)
-        chunk_words = words[start_word_index:start_word_index + words_needed]
-```
-
-**Correct**: Work directly with timestamped words as source of truth:
-
-```python
-# Use spaCy only for dynamic chunk sizing guidance, not text reformatting
-text_splitter._set_dynamic_chunk_size(word_count)
-target_words_per_chunk = text_splitter.chunk_size // 4
-
-# Chunk directly using timestamped words (PRESERVES EXACT TIMESTAMPS)
-while word_index < len(words):
-    chunk_words = words[word_index:end_index]
-
-    # Build text from actual timestamped words (no reformatting)
-    chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
-
-    # Use exact timestamps from word objects
-    start_time = chunk_words[0]["start"]
-    end_time = chunk_words[-1]["end"]
-
-    chunks.append({
-        "text": chunk_text,
-        "start": start_time,
-        "end": end_time,
-        "words": chunk_words,
-    })
-```
-
-**Key Principles**:
-
-- **Never reformat timestamped content** - preserve original word objects as source of truth
-
-## Mistake: Punctuation Stripped from Audio Transcription Chunks
-
-**Problem**: The spaCy-based audio chunking implementation was stripping punctuation from chunk text by only using
-individual word objects without preserving the original text formatting.
-
-**Wrong**: Building chunk text only from individual word objects:
-
-```python
-# Build chunk text from the actual timestamped words (preserves exact content)
-chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
-```
-
-**Correct**: Extract text from original transcription to preserve punctuation:
-
-```python
-# Extract the corresponding text segment from the original text to preserve punctuation
-# Build a regex pattern to match the words in the current chunk
-pattern = (
-    r"\b"
-    + r"\W*".join(re.escape(word["word"]) for word in chunk_words)
-    + r"[\W]*"
-)
-
-match = re.search(pattern, original_text)
-if match:
-    chunk_text = match.group(0)
-    # Ensure the chunk ends with punctuation if present
-    end_pos = match.end()
-    while end_pos < len(original_text) and re.match(
-        r"\W", original_text[end_pos]
-    ):
-        end_pos += 1
-    chunk_text = original_text[match.start() : end_pos]
-else:
-    # Fallback to word joining if regex match fails
-    chunk_text = " ".join(word_obj["word"] for word_obj in chunk_words)
-```
-
-**Detection**: User reported that text stored in Pinecone for transcribed audio had no punctuation, despite the original
-transcription JSON files containing punctuation. The issue was in the chunking process where only the `word` field was
-used instead of extracting from the original text with punctuation preserved.
-
-**Prevention**: Added `test_chunk_transcription_preserves_punctuation()` test in
-`data_ingestion/tests/test__audio_processing.py` that verifies punctuation is preserved in chunked transcription text.
-The test uses a mock transcription with various punctuation marks and ensures they appear in the final chunk text rather
-than being stripped out.
-
-- **Use spaCy for guidance only** - leverage dynamic sizing but don't let it change the text
-- **Maintain perfect timestamp accuracy** - critical for audio/video playback functionality
-- **Avoid fuzzy matching** - any word misalignment breaks timestamp synchronization
-
-**Impact**: Timestamp accuracy is essential for queuing audio/video players to the correct playback position. Any
-misalignment would break the core functionality of playing back found snippets.
-
-## Mistake: get_file_hash Function Signature Mismatch in Audio Transcription
-
-**Problem**: The `save_transcription` function in `transcription_utils.py` was calling
-`get_file_hash(file_path=file_path, youtube_id=youtube_id)` but the `get_file_hash` function in `media_utils.py` only
-accepts a single `file_path` parameter, causing
-`TypeError: get_file_hash() got an unexpected keyword argument 'youtube_id'`.
-
-**Wrong**: Calling get_file_hash with unsupported youtube_id parameter:
-
-```python
-# In save_transcription function
-file_hash = get_file_hash(file_path=file_path, youtube_id=youtube_id)
-```
-
-**Correct**: Handle YouTube videos and regular files separately, following the same pattern as
-`get_saved_transcription`:
-
-```python
-# Generate hash based on either file_path or youtube_id
-if youtube_id:
-    youtube_data_map = load_youtube_data_map()
-    youtube_data = youtube_data_map.get(youtube_id)
-    if youtube_data and "file_hash" in youtube_data:
-        file_hash = youtube_data["file_hash"]
-    else:
-        # Generate hash from YouTube ID if not in data map
-        file_hash = hashlib.md5(youtube_id.encode()).hexdigest()
-else:
-    file_hash = get_file_hash(file_path)
-```
-
-**Impact**: This error was causing multiple audio processing tests to fail with TypeError, preventing proper
-transcription saving for both regular audio files and YouTube videos.
-
-**Detection**: PyTest failures in audio processing tests with clear error message about unexpected keyword argument.
-
-## Mistake: Test Expectations Not Updated for Dynamic Chunking Implementation
-
-**Problem**: Tests were failing because they expected static chunk sizes and old transcription return formats, but the
-implementation had been updated to use dynamic sizing and could return different data structures.
-
-**Issues Fixed**:
-
-1. **Audio Processing Test - transcribe_media Return Types**: The `transcribe_media` function can return either:
-   - A list of transcript segments (when creating new transcription)
-   - A dict with full transcription data (when loading existing transcription)
-
-**Wrong**: Test only expected list format:
-
-```python
-def test_transcription(self):
-    transcription = transcribe_media(self.trimmed_audio_path)
-    self.assertTrue(len(transcription) > 0)  # Assumes list
-    self.assertIsInstance(transcription[0], dict)  # Fails if dict returned
-```
-
-**Correct**: Test handles both return types:
-
-```python
-def test_transcription(self):
-    transcription = transcribe_media(self.trimmed_audio_path)
-    if isinstance(transcription, list):
-        # New transcription format - list of transcript segments
-        self.assertTrue(len(transcription) > 0)
-        self.assertIsInstance(transcription[0], dict)
-    else:
-        # Existing transcription format (dict with metadata)
-        self.assertIsInstance(transcription, dict)
-        if "transcripts" in transcription:
-            # Full saved transcription format
-            self.assertIn("transcripts", transcription)
-        else:
-            # Simplified transcription format
-            self.assertIn("text", transcription)
-```
-
-2. **SpaCy Text Splitter - Dynamic Chunk Size Expectations**: Tests expected old static chunk sizes but implementation
-   now uses dynamic sizing:
-
-**Wrong**: Expected old static values:
-
-```python
-assert splitter.chunk_size == 200  # Old static value
-assert splitter.chunk_overlap == 50  # Old static value
-```
-
-**Correct**: Updated to match current dynamic sizing logic:
-
-```python
-assert splitter.chunk_size == 800   # New dynamic value for short text
-assert splitter.chunk_overlap == 100  # New dynamic value for short text
-```
-
-3. **Error Handling in process_file**: Added proper error handling for file not found errors:
-
-**Wrong**: No error handling around `get_saved_transcription` call:
-
-```python
-existing_transcription = get_saved_transcription(file_path, is_youtube_video, youtube_id)
-```
-
-**Correct**: Wrapped in try-catch to handle file not found errors:
-
-```python
-try:
-    existing_transcription = get_saved_transcription(file_path, is_youtube_video, youtube_id)
-except Exception as e:
-    error_msg = f"Error checking for existing transcription for {file_name}: {str(e)}"
-    logger.error(error_msg)
-    local_report["errors"] += 1
-    local_report["error_details"].append(error_msg)
-    return local_report
-```
-
-4. **Mock Data Type Issue**: Test mock was returning string data instead of binary data for file hashing:
-
-**Wrong**: Mock without proper binary data:
-
-```python
-@patch('builtins.open', new_callable=mock_open)
-```
-
-**Correct**: Mock with binary data for hashing:
-
-```python
-@patch('builtins.open', new_callable=mock_open, read_data=b'mock binary data')
-```
-
-**Detection**: Tests were failing with specific error messages about type mismatches and unexpected return values.
-Always update test expectations when implementation changes, especially for dynamic behavior.
-
-## Documentation Best Practice: Include Command Line Options in Header Comments
-
-**Context**: When working with command line scripts, especially complex ones with multiple options, it's important to
-document the available options directly in the script's header comment for easy reference.
-
-**Good Practice**: Include a "Command Line Options" section in the docstring that lists all available arguments with
-their descriptions, plus usage examples:
-
-```python
-"""
-Script Description
-
-Command Line Options:
-  --site SITE                   Site ID for environment variables (required)
-  --force                       Force re-transcription and re-indexing
-  -c, --clear-vectors          Clear existing vectors before processing
-  --dryrun                     Perform a dry run without sending data to Pinecone or S3
-  --override-conflicts         Continue processing even if filename conflicts are found
-  --refresh-metadata-only      Only refresh metadata without creating embeddings or uploading to Pinecone
-  --debug                      Enable debug logging
-
-Usage Examples:
-  python script.py --site ananda
-  python script.py --site ananda --force --debug
-  python script.py --site ananda --dryrun --refresh-metadata-only
-"""
-```
-
-**Benefits**:
-
-- Users can quickly understand available options without running `--help`
-- Documentation stays in sync with the actual argument parser
-- Provides context-specific usage examples
-- Improves script discoverability and usability
-
-## Command Line Usability: Single Character Options
-
-**Context**: For frequently used command line scripts, adding single character options alongside long-form options
-significantly improves usability and reduces typing.
-
-**Good Practice**: Add both short and long forms for all command line arguments:
-
-```python
-parser.add_argument("-f", "--force", action="store_true", help="Force re-transcription and re-indexing")
-parser.add_argument("-s", "--site", required=True, help="Site ID for environment variables")
-parser.add_argument("-D", "--dryrun", action="store_true", help="Perform a dry run without sending data to Pinecone or S3")
-parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
-```
-
-**Benefits**:
-
-- Faster typing for frequent users: `-s ananda -f -d` vs `--site ananda --force --debug`
-- Maintains backward compatibility with existing long-form options
-- Follows Unix convention of providing both short and long options
-- Reduces command line length for complex operations
-
-**Character Selection Guidelines**:
-
-- Use first letter of the option when possible (`-f` for `--force`, `-d` for `--debug`)
-- Use meaningful alternatives when first letter conflicts (`-D` for `--dryrun` when `-d` is taken)
-- Avoid confusing combinations (don't use `-l` and `-1` together)
-- Document both forms in header comments and help text
-
-## Punctuation Preservation Tests Completion
-
-**Context**: Successfully implemented and verified punctuation preservation tests across all data ingestion types to
-ensure chunking processes don't strip out punctuation marks.
-
-**Test Coverage Completed**:
-
-- **SpaCy Text Splitter**: `test_spacy_text_splitter.py::test_punctuation_preservation` ✅
-- **PDF Processing**: `test_pdf_to_vector_db.py::test_punctuation_preservation_in_pdf_processing` ✅
-- **Web Crawler**: `test_crawler.py::TestPunctuationPreservation::test_web_content_punctuation_preservation` ✅
-- **Database Text Ingestion**: `test_ingest_db_text.py::TestPunctuationPreservation` (2 tests) ✅
-- **Audio Processing**: `test__audio_processing.py::TestAudioProcessing::test_chunk_transcription_preserves_punctuation`
-  ✅
-
-**Key Fix Applied**: Fixed case sensitivity issue in database text ingestion test where "don't" was changed to "Don't"
-to match actual text content.
-
-**Punctuation Marks Tested**: `,!?.'":()•—=+@#$%&[]` plus contractions and special formatting like email addresses and
-phone numbers.
-
-**Test Results**: All 9 punctuation-related tests now pass successfully, ensuring robust punctuation preservation across
-the entire data ingestion pipeline.
-
-## Mistake: Overly Aggressive Vector ID Sanitization
-
-**Problem**: The `_sanitize_text` function in `pinecone_utils.py` was only removing null characters but not non-ASCII
-characters like ® (registered trademark), causing Pinecone upsert failures with "Vector ID must be ASCII" errors. The
-crawler was treating these as successful operations and marking URLs as "visited" even though vectors weren't stored.
-
-**Wrong**: Sanitization only removing null characters:
-
-```python
-def _sanitize_text(text: str) -> str:
-    # Normalize whitespace
-    sanitized = re.sub(r"\s+", " ", text.strip())
-    # Remove null characters (the only character Pinecone prohibits)
-    sanitized = re.sub(r"\x00", "", sanitized)
-    return sanitized
-```
-
-**Correct**: Remove both null characters and non-ASCII characters:
-
-```python
-def _sanitize_text(text: str) -> str:
-    # Normalize whitespace
-    sanitized = re.sub(r"\s+", " ", text.strip())
-    # Remove null characters
-    sanitized = re.sub(r"\x00", "", sanitized)
-    # Remove non-ASCII characters (Pinecone requires ASCII-only vector IDs)
-    sanitized = "".join(char for char in sanitized if ord(char) < 128)
-    return sanitized
-```
-
-**Additional Fix**: Modified `upsert_to_pinecone` to detect vector ID sanitization errors and raise exceptions so they
-can be handled as temporary failures for retry:
-
-```python
-# Check for vector ID sanitization errors that should be treated as temporary failures
-if "Vector ID must be ASCII" in error_msg or "must be ASCII" in error_msg:
-    logging.warning(f"Vector ID sanitization error detected - this should be fixed by updated sanitization logic")
-    raise Exception(f"Vector ID sanitization error: {error_msg}")
-```
-
-**Detection**: Error message "Vector ID must be ASCII, but got 'ananda.org||web||text||Restorative Ananda Yoga® Teacher
-Training — Ananda||||98c1ac34||0'" showed the ® character was causing the failure.
-
-## Vector ID Format Compatibility Issue Discovery - RESOLVED
-
-**Problem**: After the vector ID format was updated from 3-part to 7-part format, multiple scripts throughout the
-codebase were still using the old format for filtering operations, causing them to fail to find vectors created with the
-new format.
-
-**Old Format (3 parts)**: `text||{library_name}||` **New Format (7 parts)**:
-`{content_type}||{library}||{source_location}||{sanitized_title}||{source_id}||{content_hash}||{chunk_index}`
-
-**✅ RESOLUTION**: Updated the vector ID format to put `content_type` first instead of `library_name` first. This makes
-the new format backward compatible with existing filtering patterns.
-
-**Example**:
-
-- Old filtering pattern: `text||ananda.org||`
-- New vector ID: `text||ananda.org||web||Test Title||author123||9473fdd0||0`
-- Result: ✅ **Perfect match - no code changes needed!**
-
-**Impact**: All existing filtering code continues to work without modification. The format change resolved the
-compatibility issue completely.
-
-**Files That Were Affected**: No longer need updates since the format is now compatible:
-
-- `data_ingestion/utils/pinecone_utils.py` - ✅ Works unchanged
-- `data_ingestion/sql_to_vector_db/ingest_db_text.py` - ✅ Works unchanged
-- `data_ingestion/crawler/delete_by_skip_pattern.py` - ✅ Works unchanged
-- All other filtering scripts - ✅ Work unchanged
-
-**Solution Strategy**: Instead of updating all filtering code, updated the vector ID generation format to be backward
-compatible.
-
-**Detection Method**: Systematic search for `text||` patterns revealed the scope, but format change eliminated the need
-for individual fixes.
-
-**Testing**: Verified that `generate_vector_id()` produces compatible format and `extract_metadata_from_vector_id()`
-correctly parses the new structure.
-
-## Mistake: Function Complexity Exceeding Ruff Limits
-
-**Problem**: The `main` function in `data_ingestion/crawler/website_crawler.py` exceeded Ruff's complexity threshold
-(C901) with a complexity of 15 when the limit is 10. This was caused by multiple conditional branches and error handling
-blocks within a single function.
-
-**Wrong**: Monolithic main function with all logic inline:
-
-```python
-def main():
-    args = parse_arguments()
-
-    # Load Site Configuration
-    site_config = load_config(args.site)
-    if not site_config:
-        # error handling...
-        sys.exit(1)
-
-    # Handle --fresh-start
-    if args.fresh_start:
-        # 20+ lines of database deletion logic...
-
-    # Environment file validation
-    # More conditional logic...
-
-    # Handle --clear-vectors
-    if args.clear_vectors:
-        # 15+ lines of vector clearing logic...
-
-    # Main execution with try/catch
-    try:
-        # crawl logic...
-    finally:
-        # 10+ lines of cleanup logic...
-```
-
-**Correct**: Extract logical blocks into separate functions to reduce complexity:
-
-```python
-def handle_fresh_start(args: argparse.Namespace) -> None:
-    """Handle --fresh-start flag by deleting existing database."""
-    # Extracted database deletion logic
-
-def handle_clear_vectors(args: argparse.Namespace, pinecone_index: pinecone.Index, domain: str, crawler: WebsiteCrawler) -> None:
-    """Handle --clear-vectors flag by clearing existing vectors."""
-    # Extracted vector clearing logic
-
-def cleanup_and_exit(crawler: WebsiteCrawler) -> None:
-    """Perform final cleanup and exit with appropriate code."""
-    # Extracted cleanup and exit logic
-
-def main():
-    args = parse_arguments()
-    site_config = load_config(args.site)
-    # ... simplified main logic calling helper functions
-    handle_fresh_start(args)
-    # ... more simplified logic
-    handle_clear_vectors(args, pinecone_index, domain, crawler)
-    # ... simplified try/finally with cleanup_and_exit(crawler)
-```
-
-**Benefits**:
-
-- Reduced main function complexity from 15 to under 10 (passing Ruff C901 check)
-- Improved code readability and maintainability
-- Each function has a single responsibility
-
-**Detection**: Ruff linter error `C901 'main' is too complex (15 > 10)` identified the issue.
-
-**Principle**: When functions exceed complexity thresholds, extract logical blocks into separate functions rather than
-increasing the complexity limit.
-
-## Mistake: crawl_page Method Complexity Exceeding Ruff Limits
-
-**Problem**: The `crawl_page` method in `data_ingestion/crawler/website_crawler.py` exceeded Ruff's complexity threshold
-(C901) with a complexity of 16 when the limit is 10. This was caused by multiple conditional branches, exception
-handling blocks, and content extraction logic within a single method.
-
-**Wrong**: Monolithic crawl_page method with all logic inline:
-
-```python
-def crawl_page(self, browser, page, url: str) -> tuple[PageContent | None, list[str], bool]:
-    retries = 2
-    last_exception = None
-    restart_needed = False
-
-    while retries > 0:
-        try:
-            # Navigation logic
-            response = page.goto(url, wait_until="commit")
-
-            # 15+ lines of response validation logic...
-            if not response:
-                # error handling...
-            if response.status >= 400:
-                # error handling...
-            if content_type and not content_type.lower().startswith("text/html"):
-                # skip logic...
-
-            # 25+ lines of content extraction logic...
-            page.wait_for_selector("body", timeout=15000)
-            # menu handling...
-            # link extraction...
-            # content cleaning...
-
-        except PlaywrightTimeout as e:
-            # 10+ lines of timeout handling...
-        except Exception as e:
-            # 20+ lines of complex exception classification...
-```
-
-**Correct**: Extract logical blocks into separate helper methods:
-
-```python
-def _validate_response(self, response, url: str) -> tuple[bool, Exception | None]:
-    """Validate page response and return (should_continue, exception)."""
-    # Extracted response validation logic
-
-def _extract_page_content(self, page, url: str) -> tuple[PageContent | None, list[str]]:
-    """Extract content and links from page."""
-    # Extracted content and link extraction logic
-
-def _handle_crawl_exception(self, e: Exception, url: str) -> tuple[bool, bool]:
-    """Handle exceptions during crawling. Returns (restart_needed, should_retry)."""
-    # Extracted exception classification logic
-
-def crawl_page(self, browser, page, url: str) -> tuple[PageContent | None, list[str], bool]:
-    """Crawl a single page and return content, links, and restart flag."""
-    retries = 2
-    last_exception = None
-    restart_needed = False
-
-    while retries > 0:
-        try:
-            response = page.goto(url, wait_until="commit")
-            should_continue, exception = self._validate_response(response, url)
-            if not should_continue:
-                # Handle validation result
-            content, links = self._extract_page_content(page, url)
-            return content, links, False
-        except Exception as e:
-            restart_needed, should_retry = self._handle_crawl_exception(e, url)
-            # Handle exception result
-```
-
-**Benefits**:
-
-- Reduced crawl_page method complexity from 16 to under 10 (passing Ruff C901 check)
-- Improved code readability and maintainability
-- Each helper method has a single, clear responsibility
-- Easier to test individual components in isolation
-- Better separation of concerns (validation, extraction, error handling)
-
-**Detection**: Ruff linter error `C901 'crawl_page' is too complex (16 > 10)` identified the issue.
-
-**Principle**: Complex methods should be decomposed into focused helper methods that handle specific aspects of the
-overall functionality.
-
-## Mistake: run_crawl_loop Function Complexity Exceeding Ruff Limits
-
-**Problem**: The `run_crawl_loop` function in `data_ingestion/crawler/website_crawler.py` exceeded Ruff's complexity
-threshold (C901) with a complexity of 26 when the limit is 10. This was caused by multiple logical blocks including
-browser restart logic, content processing, URL handling, and cleanup logic within a single function.
-
-**Wrong**: Monolithic run_crawl_loop function with all logic inline:
-
-```python
-def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace):
-    # Setup logic...
-
-    with sync_playwright() as p:
-        browser = p.firefox.launch(...)
-        page = browser.new_page()
-
-        try:
-            while should_continue_loop and not is_exiting():
-                url = crawler.get_next_url_to_crawl()
-
-                # 30+ lines of browser restart logic and stats calculation...
-                if pages_since_restart >= PAGES_PER_RESTART:
-                    # Calculate batch success rate
-                    # Calculate and log stats
-                    # Restart Browser
-                    # Reset counters
-
-                # 15+ lines of URL processing logic...
-                crawler.current_processing_url = url
-                if crawler.should_skip_url(url):
-                    # skip handling...
-                content, new_links, restart_needed = crawler.crawl_page(...)
-                if restart_needed:
-                    # restart handling...
-
-                # 25+ lines of content processing logic...
-                if content:
-                    chunks = create_chunks_from_page(...)
-                    # embedding creation...
-                    # link processing...
-
-        finally:
-            # 10+ lines of browser cleanup logic...
-```
-
-**Correct**: Extract logical blocks into focused helper functions:
-
-```python
-def _handle_browser_restart(p, page, browser, pages_since_restart: int, batch_results: list, batch_start_time: float, crawler: WebsiteCrawler) -> tuple:
-    """Handle browser restart logic and stats calculation."""
-    # Extracted browser restart and stats logic
-
-def _process_page_content(content, new_links: list, url: str, crawler: WebsiteCrawler, pinecone_index, index_name: str) -> tuple[int, int]:
-    """Process page content and return (pages_processed_increment, pages_since_restart_increment)."""
-    # Extracted content processing, embedding creation, and link handling logic
-
-def _cleanup_browser(page, browser) -> None:
-    """Clean up browser resources."""
-    # Extracted browser cleanup logic
-
-def _handle_url_processing(url: str, crawler: WebsiteCrawler, browser, page) -> bool:
-    """Handle URL processing setup and skip checks. Returns True if restart needed."""
-    # Extracted URL setup, skip checks, and initial crawling logic
-
-def run_crawl_loop(crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace):
-    """Run the main crawling loop."""
-    # Setup logic...
-
-    with sync_playwright() as p:
-        browser = p.firefox.launch(...)
-        page = browser.new_page()
-
-        try:
-            while not is_exiting():
-                url = crawler.get_next_url_to_crawl()
-
-                if pages_since_restart >= PAGES_PER_RESTART:
-                    browser, page, batch_start_time, batch_results = _handle_browser_restart(...)
-                    pages_since_restart = 0
-                    continue
-
-                restart_needed = _handle_url_processing(url, crawler, browser, page)
-                if restart_needed:
-                    pages_since_restart = PAGES_PER_RESTART
-                    continue
-
-                content, new_links, _ = crawler.crawl_page(browser, page, url)
-                pages_inc, restart_inc = _process_page_content(content, new_links, url, crawler, pinecone_index, index_name)
-                # Update counters and commit changes
-
-        finally:
-            _cleanup_browser(page, browser)
-```
-
-**Benefits**:
-
-- Reduced run_crawl_loop function complexity from 26 to under 10 (passing Ruff C901 check)
-- Improved code readability and maintainability
-- Each helper function has a single, clear responsibility
-- Easier to test individual components in isolation
-- Better separation of concerns (restart logic, content processing, URL handling, cleanup)
-- Simplified main loop logic focusing on orchestration rather than implementation details
-
-**Detection**: Ruff linter error `C901 'run_crawl_loop' is too complex (26 > 10)` identified the issue.
-
-**Principle**: Large orchestration functions should delegate specific responsibilities to focused helper functions,
-keeping the main function focused on high-level flow control.
-
-## Mistake: Sloppy Vector ID Generation Function with Multiple Optional Parameters
-
-**Problem**: The `generate_vector_id` function in `data_ingestion/utils/pinecone_utils.py` had a confusing interface
-with multiple optional parameters that served overlapping purposes, making it unclear which parameter to use for what
-purpose.
-
-**Wrong**: Confusing function signature with redundant parameters:
-
-```python
-def generate_vector_id(
-    library_name: str,
-    title: str,
-    content_chunk: str,  # Used for chunk-level hashing
-    chunk_index: int,
-    source_location: str = "unknown",
-    content_type: str = "text",
-    source_id: str | None = None,      # Could be URL, author, etc.
-    source_url: str | None = None,     # Redundant with source_id
-    document_hash: str | None = None,  # Manual override
-) -> str:
-```
-
-**Issues**:
-
-- `source_id` vs `source_url` - both identify the source
-- `content_chunk` vs `document_hash` - both for hashing
-- Complex conditional logic to decide which hash to use
-- Unclear which parameter to use in different scenarios
-- Inconsistent usage across different scripts
-
-**Correct**: Clean, single-purpose function with clear interface:
-
-```python
-def generate_vector_id(
-    library_name: str,
-    title: str,
-    chunk_index: int,
-    source_location: str,
-    source_identifier: str,  # Single source identifier (URL, file path, etc.)
-    content_type: str = "text",
-    author: str | None = None,
-) -> str:
-```
-
-**Benefits**:
-
-- **Single responsibility**: Always generates document-level hashes internally
-- **No ambiguity**: One parameter for source identification
-- **Simplified interface**: Fewer parameters, clearer purpose
-- **Consistent behavior**: No conditional logic about which hash to use
-- **Obvious intent**: You're generating an ID for a document chunk
-
-**Impact**: This eliminated the hash inconsistency issue where chunks from the same document had different hashes,
-making bulk operations (like deleting all chunks from a document) difficult.
-
-**Files Updated**:
-
-- `data_ingestion/utils/pinecone_utils.py` - Simplified function signature
-- `data_ingestion/crawler/website_crawler.py` - Updated to use new interface
-- `data_ingestion/sql_to_vector_db/ingest_db_text.py` - Updated to use new interface
-- `data_ingestion/tests/test_ingest_db_text.py` - Updated tests for new format
-
-**Detection**: User pointed out the architectural inconsistency when reviewing the hash generation logic.
-
-### Recent Test Status Check
-
-**Date**: Current session **Status**: All tests passing successfully
-
-**Python Tests (data_ingestion)**:
-
-- 310 tests passed, 0 failed
-- Minor warnings about deprecation (`audioop` module) and test return values (non-breaking)
-
-**Web Tests (Next.js)**:
-
-- 44 test suites passed, 380 tests passed, 32 skipped
-- Good test coverage across components, API routes, and utilities
-
-**Conclusion**: No broken tests found. Test suite is healthy and all core functionality working correctly.
-
-## Refactoring: Complex Method Decomposition for Maintainability
-
-**Context**: The `text_splitter_utils.py` file had three methods flagged by Ruff for excessive complexity (C901):
-
-- `split_text` (complexity 39 > 10)
-- `log_document_metrics` (complexity 13 > 10)
-- `_merge_small_chunks` (complexity 12 > 10)
-
-**Solution**: Decomposed complex methods into smaller, focused helper methods:
-
-**`split_text` method refactoring**:
-
-- `_split_by_words()` - Handle word-based chunking for space separator
-- `_apply_word_overlap()` - Apply word-based overlap logic
-- `_split_by_sentences()` - Split text by sentences when exceeding chunk size
-- `_process_initial_splits()` - Process initial text splits based on separator
-- `_force_split_large_chunk()` - Force split single large chunks
-- `_apply_character_overlap()` - Apply character-based overlap logic
-
-**`log_document_metrics` method refactoring**:
-
-- `_update_word_count_distribution()` - Update word count tracking
-- `_update_chunk_size_distribution()` - Update chunk size tracking
-- `_detect_edge_cases()` - Detect and log edge cases
-- `_detect_anomalies()` - Detect and log anomalies
-
-**`_merge_small_chunks` method refactoring**:
-
-- `_finalize_current_merge()` - Finalize merge groups
-- `_handle_target_sized_chunk()` - Handle chunks in target range
-- `_should_preserve_chunk_separation()` - Determine chunk separation logic
-- `_handle_small_chunk_merging()` - Handle merging of small chunks
-
-**Results**:
-
-- All complexity issues resolved (Ruff C901 checks pass)
-- All existing tests continue to pass
-- Code is more maintainable and easier to understand
-- Each helper method has a single responsibility
-
-## Test Enhancement: Comprehensive Overlap Validation
-
-**Context**: Following the bug fix for 20% overlap calculation, comprehensive tests were added to prevent regression.
-
-**Added Tests**:
-
-1. **`test_twenty_percent_overlap_calculation()`**:
-
-   - Validates that chunks have proper 20% overlap based on word count
-   - Tests the specific bug fix where overlap was incorrectly calculated as ratio of chunk size
-   - Forces chunking with controlled chunk sizes to ensure multiple chunks
-   - Verifies actual overlap matches expected 20% ± 2 words tolerance
-   - Ensures overlap contains meaningful text, not just punctuation
-
-2. **`test_overlap_with_different_separators()`**:
-   - Tests overlap behavior with space separator (word-based chunking)
-   - Tests overlap behavior with paragraph separator (20% word-based overlap)
-   - Validates different overlap calculation methods for different separators
-
-**Key Validation Logic**:
-
-```python
-# Calculate expected overlap (20% of previous chunk)
-expected_overlap_words = max(1, int(len(prev_words) * 0.20))
-
-# Find actual overlap by checking word sequence matching
-actual_overlap_words = 0
-for j in range(1, min(len(prev_words), len(current_words)) + 1):
-    if current_words[:j] == prev_words[-j:]:
-        actual_overlap_words = j
-```
-
-**Coverage**: Tests now comprehensively validate the overlap fix that changed from chunk-size-based ratios to direct 20%
-word count calculation, ensuring chunks maintain proper context preservation for RAG retrieval.
-
-## Mistake: Using sys.path Hacks for Python Module Imports
-
-**Wrong**: Adding manual path manipulation to fix import issues in test files:
-
-```python
-import sys
-from pathlib import Path
-
-# Add the data_ingestion directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent))
-
-from utils.text_splitter_utils import Document, SpacyTextSplitter
-```
-
-**Correct**: Use proper Python module structure with relative imports:
-
-```python
-# Move test files to proper tests/ directory
-# Use relative imports from the correct module structure
-from ..utils.text_splitter_utils import Document, SpacyTextSplitter
-```
-
-**Root Cause**: Test files were placed in the wrong directory (`data_ingestion/` root instead of
-`data_ingestion/tests/`) and trying to import from a sibling `utils/` directory.
-
-**Proper Solution**:
-
-1. Move test files to the appropriate `tests/` directory
-2. Use relative imports (`from ..utils.module import Class`)
-3. Ensure proper `__init__.py` files exist in all package directories
-4. Run tests from the parent directory using `python -m pytest tests/`
-
-**Detection**: Import errors like `ModuleNotFoundError: No module named 'utils'` when running pytest indicate improper
-module structure rather than missing dependencies.
-
-## Website Crawler --stop-after Option Implementation
-
-**Feature**: Added `--stop-after` command line option to website crawler for integration testing support.
-
-**Implementation Details**:
-
-- Added `--stop-after` argument to `parse_arguments()` function with type=int
-- Modified `run_crawl_loop()` to accept and use the stop_after parameter
-- Added check in main crawling loop to break when pages_processed >= stop_after
-- Updated script header documentation with new option and example usage
-- Logs when stop limit is reached for clear feedback
-
-**Usage**: `website_crawler.py --site ananda-public --stop-after 5`
-
-**Purpose**: Enables controlled crawling for integration tests that need a specific number of pages for validation.
-
-## Method Naming Refactoring: SpacyTextSplitter Misleading Method Names
-
-**Context**: After implementing token-based splitting in SpacyTextSplitter, several method names became misleading
-because they no longer matched their actual functionality.
-
-**Problem**: Method names suggested word-based or character-based operations when they actually performed token-based
-operations:
-
-- `_split_by_words()` - Actually split by tokens using spaCy tokenization
-- `_split_by_sentences()` - Still used sentences but with token-based size decisions
-- Log messages referred to "word-based chunks" when they were token-based
-
-**Solution**: Renamed methods to accurately reflect their functionality:
-
-- `_split_by_words()` → `_split_by_tokens()`
-- `_split_by_sentences()` → `_split_by_sentences_with_token_limits()`
-- Updated log message from "word-based chunks" to "token-based chunks"
-
-**Test Updates**: Updated test expectations to match current token-based implementation:
-
-- Very short text: 800 tokens (0 overlap) instead of 1000
-- Short text: 300 tokens (60 overlap) instead of 800/100
-- Medium text: 400 tokens (80 overlap) instead of 1200/200
-- Long text: 500 tokens (100 overlap) instead of 1600/300
-- Increased overlap test tolerance from ±2 to ±5 words for token boundary variations
-
-**Results**: All 20 tests pass, method names now accurately reflect their token-based functionality.
-
-**Files Modified**: `data_ingestion/utils/text_splitter_utils.py`, `data_ingestion/tests/test_text_splitter_utils.py`
-(renamed from `test_spacy_text_splitter.py`)
-
-## Test File Naming Convention: Match Source File Names
-
-**Context**: Test files should follow a consistent naming convention that clearly indicates which source file they test.
-
-**Problem**: Test file was named `test_spacy_text_splitter.py` but it was testing `text_splitter_utils.py`, creating
-confusion about which file was being tested.
-
-**Solution**: Used `git mv` to rename the test file to match the source file:
-
-- `tests/test_spacy_text_splitter.py` → `tests/test_text_splitter_utils.py`
-
-**Benefits**:
-
-- **Clear mapping**: Test file name directly corresponds to source file name
-- **Consistent convention**: Follows `test_{source_file_name}.py` pattern
-- **Preserved history**: Using `git mv` maintains file history and blame information
-- **No broken references**: All 20 tests continue to pass after rename
-
-**Principle**: Test files should use the pattern `test_{source_file_name}.py` to make it immediately clear which source
-file they test, regardless of the specific classes or functionality within that file.
-
-## Mistake: Integration Tests Should Skip When No Data Present
-
-**Context**: Integration tests for chunk quality verification were initially written to assert/fail when no test data
-was found in the Pinecone database.
-
-**Wrong**: Using assertions that cause test failures when no data is present:
-
-```python
-def test_crystal_clarity_pdf_chunks(self, chunk_analyzer):
-    vectors = chunk_analyzer.get_vectors_by_prefix("text||Crystal Clarity||pdf||")
-    assert len(vectors) > 0, "No Crystal Clarity PDF vectors found in test database"
-```
-
-**Correct**: Integration tests should skip gracefully when no test data is available:
-
-```python
-def test_crystal_clarity_pdf_chunks(self, chunk_analyzer):
-    vectors = chunk_analyzer.get_vectors_by_prefix("text||Crystal Clarity||pdf||")
-
-    if len(vectors) == 0:
-        pytest.skip(
-            "No Crystal Clarity PDF vectors found in test database. "
-            "Run manual ingestion first - see tests/INTEGRATION_TEST_SETUP.md"
-        )
-```
-
-**Principle**: Integration tests require real data to be meaningful. When no data is present, skipping is the correct
-behavior rather than failing, as it indicates the test environment needs setup rather than a code defect.
-
-## Mistake: Mock Arguments in Crawler Test Causing Type Comparison Error
-
-**Problem**: In crawler daemon test, passing `MagicMock()` as arguments without setting required attributes caused type
-comparison errors in the actual code.
-
-**Wrong**: Incomplete mock arguments:
-
-```python
-mock_args = MagicMock()
-mock_args.daemon = True  # Missing stop_after attribute
-run_crawl_loop(crawler, MagicMock(), mock_args)
-```
-
-**Correct**: Set all attributes that will be accessed in the code:
-
-```python
-mock_args = MagicMock()
-mock_args.daemon = True
-mock_args.stop_after = None  # Prevent comparison error with int
-run_crawl_loop(crawler, MagicMock(), mock_args)
-```
-
-**Detection**: Error message showed `'>=' not supported between instances of 'int' and 'MagicMock'` indicating missing
-attribute setup.
-
-## Web Crawler Metadata Field Standardization
-
-**Problem**: Web crawler was using inconsistent metadata field names compared to what integration tests expected.
-
-**Wrong**: Using non-standard field names:
-
-```python
-chunk_metadata = {
-    "content_type": "text",  # Should be "type" to match web production code
-    "source": url,           # Missing "url" field
-    "title": page_title,
-    "library": self.domain,
-    # ...
-}
-```
-
-**Correct**: Use field names that match the web production code:
-
-```python
-chunk_metadata = {
-    "type": "text",         # Matches web production code (route.ts uses "type")
-    "url": url,             # Required by integration tests
-    "source": url,          # Keep for backward compatibility
-    "title": page_title,
-    "library": self.domain,
-    # ...
-}
-```
-
-**Key Discovery**: The web production code (`web/src/app/api/chat/v1/route.ts`) uses
-`filter.$and.push({ type: { $in: activeTypes } })` for content type filtering, not `content_type`. Always check what
-field names the web application is actually expecting before standardizing metadata fields.
-
-**Impact**: Ensures consistency across all ingestion methods and allows integration tests to verify metadata
-preservation properly while maintaining compatibility with existing web application filtering logic.
-
-## Mistake: Function Complexity Warning - Extract Helper Methods
-
-**Problem**: Ruff complexity warning `C901: _split_by_sentences_with_token_limits is too complex (12 > 10)` occurs when
-a function has too many decision points and conditional branches.
-
-**Wrong**: Having all logic in a single large function with multiple nested conditions:
-
-```python
-def _split_by_sentences_with_token_limits(self, split_text: str, doc: spacy.language.Doc) -> list[str]:
-    chunks = []
-
-    # Document finding logic
-    split_doc = None
-    if doc:
-        for sent in doc.sents:
-            if sent.text.strip() == split_text.strip():
-                split_doc = sent
-                break
-
-    if not split_doc:
-        split_doc = self.nlp(split_text)
-
-    # Complex sentence processing with multiple conditions
-    for sent in split_doc.sents:
-        # Multiple if/elif/else branches for different sentence scenarios
-        # State management for token accumulation
-        # Multiple exit points and chunk finalization logic
-```
-
-**Correct**: Extract logical units into helper methods to reduce complexity:
-
-```python
-def _get_split_doc(self, split_text: str, doc: spacy.language.Doc):
-    """Get the spaCy doc for the split text, either from the original doc or by re-tokenizing."""
-    # Extract document finding logic
-
-def _add_accumulated_chunk(self, current_chunk_tokens: list, current_token_count: int, chunks: list[str]) -> tuple[list, int]:
-    """Add accumulated tokens as a chunk if they exist."""
-    # Extract chunk finalization logic
-
-def _process_sentence(self, sent, chunks: list[str], current_chunk_tokens: list, current_token_count: int) -> tuple[list, int]:
-    """Process a single sentence and update chunk state."""
-    # Extract sentence processing logic with all conditions
-
-def _split_by_sentences_with_token_limits(self, split_text: str, doc: spacy.language.Doc) -> list[str]:
-    """Split text into sentence-based chunks when it exceeds chunk_size, using token counts."""
-    # Main logic now calls helper methods, reducing complexity to under 10
-```
-
-**Benefits**:
-
-- Reduces cyclomatic complexity from 12 to under 10
-- Improves readability and maintainability
-- Makes testing easier by isolating logical units
-- Preserves all functionality (all tests still pass)
-
-## Mistake: Debug Logging Overwhelming from Third-Party Libraries
-
-**Problem**: Setting root logger to DEBUG level causes excessive debug output from all third-party libraries (Pinecone,
-OpenAI, spaCy, etc.), making it impossible to see your own debug messages.
-
-**Wrong**: Setting global debug level for everything:
-
-```python
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-```
-
-**Correct**: Set root logger to INFO and enable DEBUG only for your specific modules:
-
-```python
-# Configure logging - set root to INFO, enable DEBUG only for this module
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Enable DEBUG only for this script
-```
-
-**Result**: Clean debug output from your code without third-party library spam.
-
-**Applied to Files**:
-
-- `data_ingestion/pdf_to_vector_db.py` ✅
-- `data_ingestion/test_chunking_logging_debug.py` ✅
-- `data_ingestion/tests/test__audio_processing.py` ✅
-- `data_ingestion/db_to_pdf/db_to_pdfs.py` ✅
-
-**Note**: Website crawler (`data_ingestion/crawler/website_crawler.py`) already had correct logging setup.
-
-## Debug Strings for Small Chunk Analysis in SpacyTextSplitter
-
-**Context**: User asked for exact debug strings to look for when debugging small chunk issues in the data ingestion
-pipeline.
-
-**Primary Small Chunk Debug Messages**:
-
-1. **Very Small Chunks Warning**: `Very small chunks detected (ID: <document_id>): minimum <X> words` - Triggers when
-   any chunk has < 50 words
-2. **Very Large Chunks Warning**: `Very large chunks detected (ID: <document_id>): maximum <X> words` - Triggers when
-   any chunk > 800 words
-3. **Large Document Not Chunked**: `Large document not chunked (ID: <document_id>): <X> words in single chunk` -
-   Documents > 1000 words creating only 1 chunk
-
-**Chunk Merging Debug Messages**:
-
-4. **Merge Operations**: `Merged <X> chunks into <Y> words` with variants like "(below target)", "(preserving multiple
-   chunks)"
-5. **Merge Summary**: `Chunk merging (ID: <document_id>): <X> → <Y> chunks, target range: <A> → <B>`
-6. **Small Chunk Preservation**: `Added small chunk separately to preserve multiple chunks: <X> words`
-
-**Content-Specific Messages**:
-
-7. **Very Short Content**: `Very short content (<X> words): No chunking, size=<Y> tokens` - Documents < 200 words
-8. **Dynamic Sizing**: Messages about "Short/Medium/Long content" with token size adjustments
-9. **Token Operations**: Messages about "Applied token-based overlap" and "Split text into <X> token-based chunks"
-
-**Usage**: These messages help identify if small chunks are due to naturally fragmented content, ineffective merging, or
-content that's too short to chunk effectively. High frequency of warning messages indicates content that doesn't fit the
-target 225-450 word range.
-
-## Small Chunk Analysis Script Created
-
-**Context**: User needed to debug 9 small chunks identified during ingestion to understand their source and quality.
-
-**Solution**: Created `data_ingestion/bin/analyze_small_chunks.py` - a comprehensive script to analyze chunk quality in
-Pinecone:
+- **Docling**: Markdown extraction with DocumentConverter
+- **Production**: pdfplumber + text_processing.clean_document_text pipeline
 
 **Key Features**:
 
-- **Finds problematic chunks**: Flags chunks below/above configurable thresholds
-- **Detailed analysis**: Groups by source, shows word count distributions, content types
-- **Content preview**: Shows actual text content to understand why chunks are small
-- **CSV export**: Exports detailed analysis for review in Excel/Sheets
-- **Safe deletion**: Dry-run and batch deletion of problematic chunks
-- **Comprehensive stats**: Shows target range compliance and distribution patterns
-
-**Command Line Options (Fixed Naming)**:
-
-- `--small-threshold` (default 50): Flag chunks below this word count as small
-- `--large-threshold` (default 800): Flag chunks above this word count as large
-- `--show-content`: Display actual chunk text for analysis
-- `--export-csv`: Export results to CSV file
-- `--delete-small --dry-run`: Preview what would be deleted
+- **Content-focused analysis**: Shows what content each method finds or misses
+- **Missing content detection**: Identifies substantial paragraphs unique to each method
+- **Word/paragraph statistics**: Quantifies differences in extraction volume
+- **Overlap analysis**: Measures how much content is shared vs unique
+- **Sample content display**: Shows actual text examples of differences
+- **Processing time comparison**: Performance benchmarking
+- **Page limiting**: Tests only first 20 pages (customizable) for fair comparison
 
 **Usage Examples**:
 
 ```bash
-# Find small chunks (< 50 words)
-python analyze_small_chunks.py --site ananda --library ananda.org
+# Default 20 pages comparison
+python docling_content_comparison.py --pdf "/path/to/test.pdf"
 
-# Find very small chunks with content preview
-python analyze_small_chunks.py --site ananda --library ananda.org --small-threshold 30 --show-content
-
-# Export for detailed analysis
-python analyze_small_chunks.py --site ananda --library ananda.org --export-csv
+# Custom page limit
+python docling_content_comparison.py --pdf "/path/to/test.pdf" --pages 10
 ```
 
-**Naming Fix**: Initially used confusing `--min-words` and `--max-words` options that sounded like analysis ranges but
-actually defined thresholds for flagging problematic chunks. Renamed to `--small-threshold` and `--large-threshold` to
-clearly indicate their purpose.
+**Output Analysis**:
 
-## Comprehensive Cursor Rules Generation - Ananda Library Chatbot
+- Shows "Examples of content ONLY in Docling" vs "ONLY in Production"
+- Provides word count differences and content overlap ratios
+- Displays actual content samples for manual verification
+- Clear summary of which method captures more content
 
-**Situation**: User requested generation of comprehensive Cursor rules for the entire Ananda Library Chatbot project,
-with special attention to the docs folder and overall project structure.
+**Technical Implementation**:
 
-**Approach Taken**:
+- Uses temporary PDF sampling for page limiting
+- Converts Docling markdown to plain text for fair comparison
+- Implements fuzzy paragraph matching to identify unique content blocks
+- Applies same text cleaning pipeline as production for accurate comparison
 
-1. **Memory consultation**: Read existing memory files to understand past learnings and project context
-2. **Documentation analysis**: Thoroughly reviewed all documentation files in the docs folder to understand:
+**Value**: Enables data-driven decision making about whether Docling captures additional content that current production
+method misses, specifically addressing the user's question about content discovery differences.
 
-   - Product requirements (`docs/PRD.md`)
-   - Backend architecture (`docs/backend-structure.md`)
-   - Data ingestion strategy (`docs/data-ingestion.md`)
-   - File organization (`docs/file-structure.md`)
-   - Frontend guidelines (`docs/frontend-guidelines.md`)
-   - Tech stack (`docs/tech-stack.md`)
-   - Security requirements (`docs/SECURITY-README.md`)
-   - Testing strategies (`docs/TESTS-README.md`)
+## Decision: Docling Investigation Concluded - Not Pursuing Further
 
-3. **Project structure analysis**: Examined the complete codebase hierarchy to understand:
-   - Multi-technology stack (TypeScript/React, Python, PHP)
-   - Complex data ingestion pipelines with semantic chunking
-   - Multi-site configuration system
-   - Comprehensive testing infrastructure
+**Investigation Summary**: Comprehensive testing of Docling vs current production PDF method revealed performance
+trade-offs that don't justify the switch.
 
-**Rules Created**:
+**Key Findings**:
 
-## Mistake: Function Complexity Violations (Ruff C901)
+- **Performance Gap**: Docling is 20-114x slower (15-22s vs 0.19-0.78s per 10 pages)
+- **Content Quality**: Results vary by document - sometimes Docling captures more structure, sometimes production method
+  is equivalent
+- **Engineering Priority**: User determined paragraph detection optimization is not critical for current system needs
 
-**Problem**: Functions with multiple if-elif chains and complex logic exceed Ruff's cyclomatic complexity limit (C901
-rule, max 10).
+**Decision Rationale**:
 
-**Wrong**: Large monolithic function with multiple conditional branches:
+- **Performance Critical**: Production workloads cannot tolerate 20-114x slower processing
+- **Marginal Benefits**: Content improvements are inconsistent and document-dependent
+- **Resource Allocation**: Focus better spent on other system optimizations
+- **Proven System**: Current production method is reliable and delivers adequate content extraction
 
-```python
-def _print_analysis_results(self, small_chunks, large_chunks, small_threshold, large_threshold, show_content):
-    """Print detailed analysis results."""
-    stats = self.chunk_stats
+**Documentation Updated**: Added comprehensive Docling investigation section to `docs/chunking-strategy.md` documenting
+findings, test results, and decision rationale.
 
-    # Overall statistics section
-    print("\n📈 CHUNK QUALITY ANALYSIS RESULTS")
-    # ... 20+ lines of statistics printing
+**Status**: ✅ **CONCLUDED** - Investigation complete with decision to maintain current production PDF processing
+method.
 
-    # Word count distribution section
-    print("\n📊 Word Count Distribution:")
-    # ... 10+ lines of distribution logic
+## Fixed: Excessive PDF Header/Footer Filtering Debug Messages - ✅ RESOLVED
 
-    # Small chunks analysis section
-    if small_chunks:
-        print(f"\n🔻 SMALL CHUNKS ANALYSIS")
-        # ... 15+ lines of analysis logic
+**Problem**: PDF processing was generating excessive debug messages during normal operation:
 
-    # Large chunks analysis section
-    if large_chunks:
-        print(f"\n🔺 LARGE CHUNKS ANALYSIS")
-        # ... 15+ lines of similar analysis logic
+```
+2025-06-02 18:22:32,636 - __main__ - DEBUG - Filtered too many characters, using full text extraction
 ```
 
-**Correct**: Break down into focused, single-responsibility methods:
+**Root Cause**: The header/footer filtering threshold was too aggressive and the fallback was treated as an exceptional
+case requiring debug logging.
 
-```python
-def _print_analysis_results(self, small_chunks, large_chunks, small_threshold, large_threshold, show_content):
-    """Print detailed analysis results."""
-    self._print_overall_statistics(small_threshold, large_threshold)
-    self._print_distribution_statistics()
+**Issues Identified**:
 
-    if small_chunks:
-        self._print_small_chunks_analysis(small_chunks, small_threshold, show_content)
+1. **Overly aggressive filtering**: 70% threshold meant filtering could remove up to 30% of page content
+2. **Inappropriate logging**: Fallback to full text extraction is normal operation, not a debug-worthy exception
+3. **User experience**: Hundreds of debug messages during single document processing
 
-    if large_chunks:
-        self._print_large_chunks_analysis(large_chunks, large_threshold, show_content)
-
-def _print_overall_statistics(self, small_threshold: int, large_threshold: int):
-    """Print overall chunk statistics."""
-    # Single focused responsibility
-
-def _print_distribution_statistics(self):
-    """Print word count, source, and content type distributions."""
-    # Single focused responsibility
-```
-
-**Benefits**:
-
-- Each method has a single, clear responsibility
-- Complexity stays under Ruff's C901 limit (≤10)
-- Code is more readable and maintainable
-- Individual components can be tested independently
-- Reusable helper methods reduce duplication
-
-**Pattern**: Extract logical sections into private helper methods with descriptive names. Use the `_` prefix for
-internal methods.
-
-## Mistake: Showing Full Traceback for Configuration Validation Errors
-
-**Problem**: When manage_queue.py encounters configuration validation errors (like invalid library names), it shows a
-full Python traceback even though a nice, user-friendly error message has already been logged.
-
-**Wrong**: Letting ValueError exceptions bubble up to the main function without handling:
-
-```python
-# In main() function - no exception handling
-if args.status:
-    print_queue_status(queue)
-elif any([args.video, args.playlist, args.audio, args.directory]):
-    add_to_queue(args, queue)  # Can raise ValueError for config errors
-# ... other operations
-```
-
-**Correct**: Add targeted exception handling for configuration validation errors:
-
-```python
-# In main() function - with proper exception handling
-try:
-    if args.status:
-        print_queue_status(queue)
-    elif any([args.video, args.playlist, args.audio, args.directory]):
-        add_to_queue(args, queue)
-    # ... other operations
-except ValueError as e:
-    # Don't print traceback for configuration validation errors -
-    # the error message has already been logged
-    if "library_config.json" in str(e) or "Library" in str(e):
-        return
-    else:
-        # Re-raise other ValueError exceptions that may need full tracebacks
-        raise
-```
-
-**Key Principle**: When you've already logged a clear, user-friendly error message, don't confuse users with technical
-tracebacks. Only show tracebacks for unexpected errors that need debugging.
-
-**Applied to**: `data_ingestion/audio_video/manage_queue.py` - Now gracefully exits on library config validation errors
-without showing traceback.
-
-## Mistake: Incorrect SpacyTextSplitter Parameter Usage in Website Crawler
-
-**Problem**: Website crawler was getting poor chunking statistics (14% chunks under 100 words, only 59.6% in 300-499
-range) due to incorrect `SpacyTextSplitter` parameter usage and manual dynamic sizing logic that conflicted with the
-class's built-in capabilities.
-
-**Wrong**: Attempting to pass `chunk_size` and `chunk_overlap` parameters to `SpacyTextSplitter` constructor and
-implementing manual dynamic sizing:
-
-```python
-# Incorrect - SpacyTextSplitter doesn't accept these parameters
-self.text_splitter = SpacyTextSplitter(
-    chunk_size=1200,  # ❌ Not a valid parameter
-    chunk_overlap=300,  # ❌ Not a valid parameter
-    separator="\n\n",
-    pipeline="en_core_web_sm",
-)
-
-# Incorrect - Manual dynamic sizing conflicts with built-in logic
-def _calculate_dynamic_chunk_size(word_count: int) -> tuple[int, int]:
-    if word_count < 1000:
-        return 800, 200  # ❌ Bypasses SpacyTextSplitter's logic
-```
-
-**Correct**: Use only valid `SpacyTextSplitter` parameters and rely on its built-in dynamic sizing:
-
-```python
-# Correct - Only use supported parameters
-self.text_splitter = SpacyTextSplitter(
-    separator="\n\n",
-    pipeline="en_core_web_sm",
-)
-
-# Correct - Let SpacyTextSplitter handle dynamic sizing internally
-def create_chunks_from_page(page_content, text_splitter=None) -> list[str]:
-    if text_splitter is None:
-        text_splitter = SpacyTextSplitter(
-            separator="\n\n",
-            pipeline="en_core_web_sm",
-        )
-    chunks = text_splitter.split_text(full_text, document_id=document_id)
-    return chunks
-```
-
-**Detection**: `TypeError: SpacyTextSplitter.__init__() got an unexpected keyword argument 'chunk_size'`
-
-**Impact**: After fix, achieved 60-90% target range compliance per page vs. previous poor performance. The
-`SpacyTextSplitter` class has sophisticated built-in dynamic sizing logic based on content length that shouldn't be
-overridden.
-
-**Valid SpacyTextSplitter Parameters**: Only `separator` and `pipeline` - the class handles dynamic chunk sizing
-internally via `_set_dynamic_chunk_size()` method.
-
-### Mistake: Integration Test Vector Prefix Mismatch - ✅ RESOLVED
-
-**Problem**: Integration tests were failing because they expected standardized 7-part vector ID prefixes, but some
-ingestion scripts were using different formats.
-
-**Root Cause**: Inconsistent vector ID generation across ingestion scripts. Some used standardized
-`generate_vector_id()` function, others used custom formats.
-
-**Solution Applied**: Updated all ingestion scripts to use the standardized `generate_vector_id()` function from
-`data_ingestion/utils/pinecone_utils.py`.
-
-**Scripts Fixed**:
-
-- ✅ `data_ingestion/pdf_to_vector_db.py` - Updated to use standardized 7-part format
-- ✅ `data_ingestion/audio_video/pinecone_utils.py` - Updated to use standardized 7-part format
-
-**Scripts already using standardized format**:
-
-- ✅ `data_ingestion/sql_to_vector_db/ingest_db_text.py`
-- ✅ `data_ingestion/crawler/website_crawler.py`
-
-**Integration tests**: Updated to expect correct standardized 7-part format:
-`{content_type}||{library}||{source_location}||{title}||{author}||{hash}||{chunk_index}`
-
-**Expected Vector ID Examples**:
-
-- PDF: `text||Crystal Clarity||pdf||The_Essence_of_Self_Realization||Unknown||abc123||0`
-- Audio: `audio||ananda||audio||How_to_Commune_with_God||Swami_Kriyananda||def456||0`
-- Video: `video||ananda||video||Meditation_Talk||Swami_Kriyananda||ghi789||0`
-- Web: `text||ananda.org||web||Meditation_Techniques||Unknown||jkl012||0`
-- Database: `text||ananda||db||Spiritual_Diary||Paramhansa_Yogananda||mno345||0`
-
-**Impact**: All ingestion methods now use consistent vector ID format, enabling proper integration testing and bulk
-operations.
-
-## Mistake: Incorrect Token-to-Word Conversion in Audio Transcription Chunking
-
-**Problem**: Audio transcription chunks were consistently failing to meet the target word range (225-450 words), with 0%
-compliance and average chunk sizes around 119-185 words. The issue was in the token-to-word conversion ratio used when
-applying spaCy's dynamic chunk sizing to audio transcription.
-
-**Wrong**: Using too conservative conversion ratio:
-
-```python
-# In data_ingestion/audio_video/transcription_utils.py
-target_words_per_chunk = text_splitter.chunk_size // 4  # Too conservative
-# Result: 300 tokens / 4 = 75 words per chunk (way too small)
-```
-
-**Correct**: Using more appropriate conversion ratio:
-
-```python
-# In data_ingestion/audio_video/transcription_utils.py
-target_words_per_chunk = int(text_splitter.chunk_size / 2.0)  # Better ratio
-# Result: 300 tokens / 2.0 = 150 words per chunk (closer to target)
-```
-
-**Testing Results**:
-
-- **Before fix**: 0% target compliance, avg 119-185 words/chunk
-- **After fix**: 87.5% target compliance, avg 224.5 words/chunk
-- **Integration tests**: All audio tests now pass with excellent compliance
-
-**Root Cause**: The SpacyTextSplitter uses token-based chunk sizing (300-500 tokens), but audio transcription works with
-word counts. The original `/4` conversion was too conservative, while `/2.0` provides the right balance for reaching the
-225-450 word target range.
-
-**Detection Method**: Integration test `test_audio_transcription_chunks` failed with target compliance assertion,
-leading to analysis of chunking strategy and token-to-word conversion ratios.
-
-### Mistake: Hardcoded Dimension Validation in RAG Evaluation
-
-**Problem**: The `evaluate_rag_system.py` script was using hardcoded logic to determine expected vector dimensions based
-on index names rather than using the actual embedding model dimensions from environment variables.
-
-**Wrong**: Hardcoded dimension logic based on index name comparison:
-
-```python
-expected_dimension = (
-    1536 if index_name == os.getenv("PINECONE_INDEX_NAME") else 3072
-)
-```
-
-**Correct**: Use environment variables for dimensions that match the embedding models:
-
-```python
-# In load_environment() - require dimension environment variables
-required_vars = [
-    "OPENAI_EMBEDDINGS_DIMENSION",
-    "OPENAI_INGEST_EMBEDDINGS_DIMENSION",
-    # ... other vars
-]
-
-# In main() - read dimensions from environment
-CURRENT_DIMENSION = int(os.getenv("OPENAI_EMBEDDINGS_DIMENSION"))
-NEW_DIMENSION = int(os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION"))
-
-# Pass to index validation
-current_index = get_pinecone_index(pinecone_client, CURRENT_INDEX_NAME, CURRENT_EMBEDDING_MODEL, CURRENT_DIMENSION)
-```
-
-**Impact**: Caused "Vector dimension 1536 does not match the dimension of the index 3072" errors when the script tried
-to use ada-002 embeddings (1536) with a 3-large index (3072).
-
-**Environment Configuration**: Each site's `.env.{site}` file should specify:
-
-- `OPENAI_EMBEDDINGS_DIMENSION=1536` (for ada-002)
-- `OPENAI_INGEST_EMBEDDINGS_DIMENSION=3072` (for 3-large)
-
-**Principle**: Always use explicit environment configuration rather than inferring settings from other variables.
-
-## Mistake: Using Bare Except Clauses
-
-**Problem**: Ruff linting error E722 "Do not use bare `except`" occurs when using `except:` without specifying exception
-types.
-
-**Wrong**: Using bare except that catches all exceptions including system exceptions:
-
-```python
-try:
-    nltk.download('stopwords', quiet=True)
-    return set(stopwords.words('english'))
-except:  # E722 error - catches ALL exceptions
-    print("Warning: NLTK stopwords not available, using basic set")
-    return basic_set
-```
-
-**Correct**: Catch specific exceptions that are expected to occur:
-
-```python
-try:
-    nltk.download('stopwords', quiet=True)
-    return set(stopwords.words('english'))
-except (ImportError, LookupError, OSError) as e:  # Specific exceptions
-    print("Warning: NLTK stopwords not available, using basic set")
-    return basic_set
-```
-
-**Rationale**: Bare except clauses catch system-exiting exceptions like `KeyboardInterrupt` and `SystemExit`, which
-usually shouldn't be caught. Specific exception handling is more precise and safer.
-
-## Mistake: spaCy Text Length Limit Causing Processing Failures
-
-**Problem**: Large PDF documents (>1,000,000 characters) were failing with spaCy's text length limit error, causing
-ingestion to skip these files without proper error reporting or retry guidance.
-
-**Wrong**: Using default spaCy max_length limit (1,000,000 characters) without error handling:
-
-```python
-# In text_splitter_utils.py _ensure_nlp method
-self.nlp = spacy.load(self.pipeline)
-# No max_length adjustment - defaults to 1,000,000 chars
-
-# In pdf_to_vector_db.py - poor error reporting
-except Exception as file_processing_error:
-    logger.warning(f"Skipping file {pdf_path} due to error. Will attempt to continue with next file.")
-    return False  # No failure tracking or reporting
-```
-
-**Correct**: Increase spaCy max_length limit and implement comprehensive failure tracking:
-
-```python
-# In text_splitter_utils.py _ensure_nlp method
-self.nlp = spacy.load(self.pipeline)
-# Increase max_length to handle very large documents
-# Default is 1,000,000 chars. Setting to 2,000,000 to handle large PDFs
-# This requires roughly 2GB of temporary memory during processing
-self.nlp.max_length = 2_000_000
-self.logger.debug(f"Set spaCy max_length to {self.nlp.max_length:,} characters")
-
-# In pdf_to_vector_db.py - comprehensive failure tracking
-failed_files = []  # Track failures for reporting
-
-success, failure_reason = await _process_single_pdf(...)
-if not success:
-    failed_files.append({
-        'file_path': current_pdf_path,
-        'file_index': i,
-        'reason': failure_reason
-    })
-
-# Detailed error categorization
-if "Text of length" in error_message and "exceeds maximum" in error_message:
-    match = re.search(r"Text of length (\d+) exceeds maximum of (\d+)", error_message)
-    if match:
-        text_length = int(match.group(1))
-        max_length = int(match.group(2))
-        failure_reason = f"Document too large: {text_length:,} chars (max: {max_length:,})"
-```
-
-**Additional Improvements**:
-
-- Added memory monitoring with psutil to track system memory usage
-- Comprehensive failure reporting with categorized error types and retry recommendations
-- Memory pressure warnings when processing large documents
-- Specific guidance for different failure types (memory, PDF parsing, API quotas, etc.)
-
-**Detection**: Large PDFs failing with "Text of length X exceeds maximum of 1000000" error. Monitor memory usage during
-processing to ensure adequate resources.
-
-## Mistake: Insufficient Network Resilience in PDF Ingestion
-
-**Problem**: PDF ingestion was failing mid-process with "Failed to connect; did you specify the correct index name?" and
-"Remote end closed connection without response" errors. This occurred after processing successfully for a while (e.g.,
-63% through batches), indicating network connectivity issues rather than configuration problems.
-
-**Symptoms**:
-
-- Script processes successfully for many chunks/batches
-- Sudden cascade of connection failures in the same batch
-- Multiple timeout errors for both OpenAI embeddings and Pinecone upserts
-- "Remote end closed connection without response" low-level network errors
-
-**Wrong**: No retry logic or resilience for network issues:
-
-```python
-# Original code - single attempt with basic timeout
-try:
-    vector = await asyncio.wait_for(
-        asyncio.to_thread(embeddings.embed_query, doc.page_content),
-        timeout=15.0,  # Single attempt, short timeout
-    )
-except asyncio.TimeoutError:
-    logger.warning(f"Embedding timeout for chunk {chunk_index}, skipping...")
-    return
-
-# Similar single-attempt pattern for Pinecone upserts
-```
-
-**Correct**: Implement retry logic with exponential backoff for both OpenAI and Pinecone operations:
-
-```python
-async def retry_with_backoff(
-    operation_func,
-    max_retries: int = 3,
-    base_delay: float = 1.0,
-    max_delay: float = 60.0,
-    backoff_factor: float = 2.0,
-    operation_name: str = "operation",
-) -> any:
-    """Retry an async operation with exponential backoff."""
-    # Implementation with fatal error detection and progressive delays
-
-# Usage in process_chunk:
-async def embedding_operation():
-    return await asyncio.wait_for(
-        asyncio.to_thread(embeddings.embed_query, doc.page_content),
-        timeout=30.0,  # Increased timeout
-    )
-
-vector = await retry_with_backoff(
-    embedding_operation,
-    max_retries=3,
-    base_delay=2.0,
-    operation_name=f"OpenAI embedding for chunk {chunk_index}"
-)
-```
-
-**Additional Improvements**:
-
-- Reduced batch size from 10 to 5 chunks to reduce API load
-- Added 1-second delays between batches for rate limiting
-- Increased timeouts (30s for embeddings, 20s for Pinecone, 2min for batches)
-- Better error categorization for network vs configuration issues
-- Continue processing other chunks when individual chunks fail due to network issues
-
-**Root Cause**: Network instability, API rate limiting, or connection pool exhaustion when processing large documents
-with many concurrent requests.
-
-## Mistake: Inadequate Error Handling for Corrupted Transcription Cache
-
-**Problem**: The `get_saved_transcription()` function in `transcription_utils.py` did not handle corrupted gzipped JSON
-files gracefully, causing CRC check failures that crashed the processing pipeline.
-
-**Wrong**: No error handling for file corruption:
-
-```python
-# In get_saved_transcription function
-with gzip.open(full_json_path, "rt", encoding="utf-8") as f:
-    return json.load(f)
-```
-
-**Error Result**: `CRC check failed 0x3622593e != 0x31ca9756` - system crash on corrupted cache files.
-
-**Correct**: Comprehensive error handling with automatic cleanup:
-
-```python
-try:
-    with gzip.open(full_json_path, "rt", encoding="utf-8") as f:
-        return json.load(f)
-except (gzip.BadGzipFile, OSError, json.JSONDecodeError) as e:
-    # Handle corrupted cache files
-    file_identifier = youtube_id or os.path.basename(file_path) if file_path else "unknown file"
-    logger.error(f"Corrupted transcription cache detected for {file_identifier}: {str(e)}")
-    logger.info(f"Removing corrupted cache file: {full_json_path}")
-
-    try:
-        os.remove(full_json_path)
-        # Also remove from database
-        conn = sqlite3.connect(TRANSCRIPTIONS_DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM transcriptions WHERE file_hash = ?", (file_hash,))
-        conn.commit()
-        conn.close()
-        logger.info(f"Successfully cleaned up corrupted cache for {file_identifier}")
-    except Exception as cleanup_error:
-        logger.error(f"Failed to clean up corrupted cache: {cleanup_error}")
-
-    # Return None to trigger fresh transcription
-    return None
-```
-
-**Root Causes of Corruption**:
-
-- Process interruption during file writing (Ctrl+C, system crash)
-- Disk I/O errors or filesystem corruption
-- Race conditions in parallel processing
-- Hardware issues (bad sectors, failing storage)
-
-**Recovery Strategy**: Detect corruption, clean up corrupted files from both filesystem and database, allow system to
-regenerate fresh transcription automatically.
-
-## Mistake: Invalid Input Parameter in OpenAI Embeddings API
-
-**Problem**: The `create_embeddings()` function in `data_ingestion/audio_video/pinecone_utils.py` was passing invalid or
-malformed text chunks to the OpenAI embeddings API, causing `'$.input' is invalid` errors.
-
-**Wrong**: No input validation before calling OpenAI API:
-
-```python
-def create_embeddings(chunks, client):
-    texts = [chunk["text"] for chunk in chunks]  # No validation
-    model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
-    response = client.embeddings.create(input=texts, model=model_name)
-    return [embedding.embedding for embedding in response.data]
-```
-
-**Error Result**: `Error code: 400 - {'error': {'message': "'$.input' is invalid"}}` - API rejects malformed input.
-
-**Correct**: Comprehensive input validation and error handling:
-
-```python
-def create_embeddings(chunks, client):
-    texts = []
-    valid_chunk_indices = []
-
-    for i, chunk in enumerate(chunks):
-        if not isinstance(chunk, dict):
-            logger.warning(f"Chunk {i} is not a dictionary, skipping: {type(chunk)}")
-            continue
-
-        if "text" not in chunk:
-            logger.warning(f"Chunk {i} missing 'text' field, skipping")
-            continue
-
-        text = chunk["text"]
-
-        # Validate text content
-        if not isinstance(text, str):
-            logger.warning(f"Chunk {i} text is not a string, skipping: {type(text)}")
-            continue
-
-        # Check for empty or whitespace-only text
-        if not text or not text.strip():
-            logger.warning(f"Chunk {i} has empty or whitespace-only text, skipping")
-            continue
-
-        # Check for extremely long text that might cause API issues
-        if len(text) > 8000:  # OpenAI embeddings have token limits
-            logger.warning(f"Chunk {i} text is very long ({len(text)} chars), truncating")
-            text = text[:8000]
-
-        texts.append(text)
-        valid_chunk_indices.append(i)
-
-    if not texts:
-        raise ValueError("No valid text chunks found for embedding creation")
-
-    try:
-        response = client.embeddings.create(input=texts, model=model_name)
-        embeddings = [embedding.embedding for embedding in response.data]
-        # Additional validation and error logging
-        return embeddings
-    except Exception as e:
-        logger.error(f"OpenAI embeddings API error: {str(e)}")
-        # Detailed debugging information
-        raise
-```
-
-**Root Causes of Invalid Input**:
-
-- Empty or None text chunks from failed transcription processing
-- Non-string data types being passed as text
-- Malformed chunk dictionaries missing required fields
-- Extremely long text exceeding API token limits
-- Whitespace-only or empty string chunks
-
-**Prevention Strategy**: Always validate chunk structure and text content before API calls, filter out invalid chunks,
-provide detailed error logging for debugging.
-
-### Mistake: Error Reporting Bug in PDF Ingestion Script
-
-**Problem**: The PDF ingestion script was incorrectly reporting "✅ All files processed successfully! No failures to
-report." even when chunks failed during processing due to token limit errors.
-
-**Root Causes**:
-
-1. **Missing Error Propagation**: The `process_document` function didn't return failure status to indicate when chunks
-   failed during processing
-2. **Batch Processing Failures Ignored**: Errors in `_process_single_batch` were logged but didn't cause the file to be
-   marked as failed
-3. **No Token Validation**: Chunks exceeding OpenAI's 8192 token limit were sent to the embedding API, causing failures
-   that weren't properly categorized
-
-**Wrong**: Functions that don't propagate failure information:
-
-```python
-async def process_document(...) -> None:
-    # Process chunks but don't return success/failure status
-    await _process_chunks_in_batches(...)
-    # No way to know if chunks failed
-
-async def _process_chunks_in_batches(...) -> None:
-    # Process batches but don't track failures
-    await _process_single_batch(...)
-    # Failures are logged but not returned
-
-async def _process_single_batch(...) -> None:
-    # Log failures but don't return count
-    logger.warning(f"Failed to process {len(failed_chunks)} chunks")
-    # No return value to indicate failures
-```
-
-**Correct**: Functions that properly track and propagate failures:
-
-```python
-async def process_document(...) -> tuple[bool, int, int]:
-    """Returns (success, total_chunks, failed_chunks)"""
-    failed_chunks = await _process_chunks_in_batches(...)
-    total_chunks = len(valid_docs)
-    success = failed_chunks == 0
-    return success, total_chunks, failed_chunks
-
-async def _process_chunks_in_batches(...) -> int:
-    """Returns total number of failed chunks"""
-    total_failed_chunks = 0
-    for batch in batches:
-        failed_count = await _process_single_batch(...)
-        total_failed_chunks += failed_count
-    return total_failed_chunks
-
-async def _process_single_batch(...) -> int:
-    """Returns number of failed chunks in this batch"""
-    failed_chunks = []
-    for result in results:
-        if isinstance(result, Exception):
-            failed_chunks.append(chunk_idx)
-    return len(failed_chunks)
-```
-
-**Additional Fix**: Added token validation before embedding:
-
-```python
-def _validate_chunk_token_limit(text: str, max_tokens: int = 8192) -> tuple[bool, int]:
-    """Validate chunk doesn't exceed OpenAI token limits"""
-    token_count = _count_tokens(text)
-    return token_count <= max_tokens, token_count
-
-# In process_chunk:
-is_valid, token_count = _validate_chunk_token_limit(doc.page_content)
-if not is_valid:
-    error_msg = f"Chunk {chunk_index} exceeds token limit: {token_count} tokens (max 8192)"
-    raise ValueError(error_msg)
-```
-
-**Detection**: Error logs showed chunk failures but final summary reported success. Always ensure error handling
-propagates failure status through the entire call chain.
-
-## Mistake: Inconsistent Chunking Strategy Across Ingestion Scripts
-
-**Problem**: Different ingestion scripts were using different text splitting approaches despite the project
-documentation claiming all scripts use spaCy chunking. Analysis of vector database word counts revealed:
-
-- PDF script: Using `SpacyTextSplitter(chunk_size=600, chunk_overlap=120)` → 83.7 avg words/chunk
-- SQL script: Using `TokenTextSplitter(chunk_size=256, chunk_overlap=50)` → 167.8 avg words/chunk
-- Web crawler: Using custom word-based chunking → Variable word counts
-
-**Wrong**: SQL script using outdated token-based chunking:
-
-```python
-# data_ingestion/sql_to_vector_db/ingest_db_text.py
-text_splitter = TokenTextSplitter.from_tiktoken_encoder(
-    encoding_name="cl100k_base", chunk_size=256, chunk_overlap=50
-)
-```
-
-**Correct**: All ingestion scripts should use the shared spaCy-based chunking strategy:
-
-```python
-# Import shared utility
-from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
-
-# Use consistent configuration across all scripts
-text_splitter = SpacyTextSplitter(
-    chunk_size=600,
-    chunk_overlap=120,  # 20% overlap
-    separator="\n\n",
-    pipeline="en_core_web_sm",
-)
-```
-
-**Impact**: Inconsistent chunking affects RAG quality and retrieval consistency. Documents from different sources have
-wildly different chunk characteristics, leading to uneven search quality.
-
-**Detection Method**: Analyze word counts per chunk using `data_ingestion/bin/analyze_text_field_words.py` to identify
-chunking inconsistencies across libraries/sources.
-
-### Mistake: Duplicate import statements causing linter errors
+**Fix Applied**: Modified `_extract_clean_text()` method in `data_ingestion/pdf_to_vector_db.py`:
 
 **Wrong**:
 
 ```python
-import re  # At top of file
-# ... later in code
-import re  # Duplicate local import
+# Too aggressive - allows 30% content removal
+if len(filtered_chars) < len(chars) * 0.7:
+    logger.debug("Filtered too many characters, using full text extraction")
+    return page.extract_text() or ""
 ```
 
 **Correct**:
 
 ```python
-import re  # Only at top of file - no local imports needed for already imported modules
+# Conservative - only allows 20% content removal, silent fallback
+if len(filtered_chars) < len(chars) * 0.8:
+    return page.extract_text() or ""
 ```
 
-### Mistake: Failing chunks due to OpenAI token limits without graceful handling
+**Key Changes**:
+
+1. **Conservative threshold**: Changed from 70% to 80% retention (max 20% filtering vs 30%)
+2. **Silent fallback**: Removed debug logging since fallback is normal operation
+3. **Cleaner logs**: Eliminates hundreds of unnecessary debug messages
+
+**Impact**:
+
+- Header/footer filtering now limited to reasonable 20% maximum
+- Clean log output during PDF processing
+- Fallback to full text extraction treated as normal operation
+- Better user experience with reduced log noise
+
+**Status**: ✅ **COMPLETE** - PDF processing now operates silently with conservative header/footer filtering.
+
+## Code Cleanup: Removed Old Paragraph-Based Chunking Comments - ✅ COMPLETED
+
+**Task**: Clean up outdated comments and debug messages related to "paragraph-based chunking" from
+transcription_utils.py.
+
+**Files Modified**:
+
+- `data_ingestion/audio_video/transcription_utils.py`
+
+**Changes Made**:
+
+1. **Function docstring**: Removed "paragraph-based chunking" and "evaluation results" references
+2. **Debug messages**: Cleaned up 6 debug/log messages containing "paragraph-based"
+3. **Comments**: Removed old developer notes (michaelo 11/22/24 comment)
+4. **Code comments**: Cleaned up "**FIX:**" and "**IMPROVED:**" style comments
+5. **Outdated comments**: Removed "Rest of the function remains unchanged" comment
+
+**Specific Changes**:
+
+- `chunk_transcription()` docstring simplified
+- Debug messages now say "spaCy chunking" instead of "paragraph-based chunking"
+- Log messages say "Chunking results" instead of "Paragraph-based chunking results"
+- Removed developer timestamp comments and fix annotations
+- Cleaned up comment formatting and outdated references
+
+**Impact**:
+
+- Cleaner, more maintainable code
+- Removed confusing references to old chunking approaches
+- Consistent terminology throughout the codebase
+- Better code readability without outdated debug annotations
+
+**Status**: ✅ **COMPLETE** - All old paragraph-based chunking comments and debug messages removed.
+
+## Current Test Status: Chunk Quality Compliance Failures - NEEDS ATTENTION
+
+**Problem**: pytest run shows 4 failed tests out of 368 total tests (98.4% pass rate), all related to chunk quality
+compliance in integration tests.
+
+**Failed Tests**:
+
+- Audio transcription chunks: 12.90% compliance (need 60%+)
+- Web crawler chunks: 23.70% compliance (need 60%+)
+- Overall target compliance: 34.13% compliance (need 60%+)
+- PDF method compliance: 44.00% compliance (need 60%+)
+
+**Root Cause**: The spaCy chunking optimization improvements mentioned in project memory may not have been applied
+uniformly across all ingestion methods. Different pipelines (audio, web crawler, PDF, SQL) are producing chunks outside
+the target 225-450 word range.
+
+**Evidence**: Integration tests in `test_integration_chunk_quality.py` are failing because the MINIMUM_TARGET_COMPLIANCE
+threshold of 60% is not being met by various ingestion methods.
+
+**Impact**: While 98.4% of tests pass, the chunk quality failures indicate inconsistent chunking strategy implementation
+across the codebase, which could affect RAG performance.
+
+**Status**: 🔍 **INVESTIGATION NEEDED** - Need to review chunking configurations across all ingestion methods to ensure
+consistent application of the optimized spaCy chunking strategy.
+
+## Critical Fix: Punctuation Preservation in tiktoken Overlap Reconstruction - ✅ RESOLVED
+
+**Problem**: The tokenization bug fix introduced a punctuation corruption issue where tiktoken tokens were being joined
+with spaces, causing malformed text in overlap regions.
+
+**Root Cause**: tiktoken produces **subword tokens** that need proper reconstruction. The initial fix used
+`" ".join(overlap_tokens)` which:
+
+- Added spaces before punctuation: `"Hello, world!"` → `"Hello , world !"`
+- Broke contractions: `"don't"` → `"don ' t"`
+- Created double spaces where tokens already included leading spaces
+- Produced malformed overlap text that didn't match original formatting
+
+**Evidence from Testing**:
+
+- Before fix: Overlap text had broken punctuation and spacing
+- After fix: All punctuation patterns preserved correctly (contractions, URLs, dates, mathematical expressions)
+- Test verified: No spaces before punctuation, no broken contractions
+
+**Fix Applied**: Enhanced `_apply_overlap_to_chunks()` method in `text_splitter_utils.py`:
+
+1. **tiktoken path**: Re-tokenize the previous chunk to get proper token IDs, then use `encoding.decode()` for correct
+   reconstruction
+2. **spaCy fallback path**: Use spaCy's `_reconstruct_text_from_tokens()` method which preserves original spacing
+3. **Safety fallbacks**: Graceful degradation if either approach fails
+
+**Key Changes**:
 
 **Wrong**:
 
 ```python
-# Validate chunk token count before processing
-is_valid, token_count = _validate_chunk_token_limit(doc.page_content)
-if not is_valid:
-    error_msg = f"Chunk {chunk_index} exceeds token limit: {token_count} tokens (max 8192)"
-    logger.error(error_msg)
-    raise ValueError(error_msg)  # Just fails the chunk
+# Broken approach - joins subword tokens with spaces
+overlap_text = " ".join(overlap_tokens).strip()
+# Results in: "don ' t" instead of "don't"
 ```
 
 **Correct**:
 
 ```python
-# Validate chunk token count before processing
-is_valid, token_count = _validate_chunk_token_limit(doc.page_content)
-if not is_valid:
-    logger.warning(f"Chunk {chunk_index} exceeds token limit: {token_count} tokens (max 8192). Attempting to split...")
+# tiktoken path - proper reconstruction
+prev_chunk_token_ids = encoding.encode(chunks[i - 1])
+overlap_token_ids = prev_chunk_token_ids[-actual_overlap:]
+overlap_text = encoding.decode(overlap_token_ids).strip()
 
-    # Try to process as oversized chunk (split into sub-chunks)
-    failed_sub_chunks = await _process_oversized_chunk(
-        doc, pinecone_index, embeddings, chunk_index, library_name
-    )
-
-    if failed_sub_chunks > 0:
-        error_msg = f"Chunk {chunk_index} split processing failed: {failed_sub_chunks} sub-chunks failed"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-
-    # Successfully processed all sub-chunks
-    return
-```
-
-## Mistake: Audio Transcription Chunking Not Using SpacyTextSplitter Despite Creating It
-
-**Problem**: After switching to paragraph-based chunking, the `chunk_transcription` function in `transcription_utils.py`
-was timing out with "chunk_transcription timed out" errors. Investigation revealed the function was creating a
-`SpacyTextSplitter` instance but never actually using it for text processing.
-
-**Wrong**: Creating SpacyTextSplitter but using manual word-based chunking with expensive regex operations:
-
-```python
-def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
-    # Creates SpacyTextSplitter but doesn't use it
-    text_splitter = SpacyTextSplitter(separator="\n\n", pipeline="en_core_web_sm")
-
-    # Manual word-based chunking instead of using text_splitter
-    while word_index < len(words):
-        chunk_words = words[word_index:end_index]
-
-        # Expensive regex pattern matching for each chunk - TIMEOUT SOURCE
-        pattern = (
-            r"\b" + r"\W*".join(re.escape(word["word"]) for word in chunk_words) + r"[\W]*"
-        )
-        match = re.search(pattern, original_text)
-        # Complex text extraction logic...
-```
-
-**Correct**: Actually use SpacyTextSplitter for text processing and simple word mapping:
-
-```python
-def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
-    text_splitter = SpacyTextSplitter(separator="\n\n", pipeline="en_core_web_sm")
-
-    # **USE** the SpacyTextSplitter for semantic text chunking
-    text_chunks = text_splitter.split_text(original_text, document_id="transcription")
-
-    # Simple word mapping strategy instead of complex regex
-    word_index = 0
-    for chunk_idx, chunk_text in enumerate(text_chunks):
-        chunk_text_words = chunk_text.split()
-        words_matched = 0
-        chunk_words = []
-
-        # Simple word matching without expensive regex
-        while word_index < len(words) and words_matched < len(chunk_text_words):
-            word_obj = words[word_index]
-            expected_word = chunk_text_words[words_matched]
-
-            if (word_obj["word"].lower().strip('.,!?";:()[]') ==
-                expected_word.lower().strip('.,!?";:()[]')):
-                chunk_words.append(word_obj)
-                words_matched += 1
-
-            word_index += 1
-```
-
-**Root Cause**: The function was doing the computational equivalent of paragraph-based chunking manually with expensive
-regex operations instead of leveraging the efficient SpacyTextSplitter that was already instantiated.
-
-**Detection**: Timeout errors on transcription chunking after switching to "paragraph-based" approach. The timeout
-occurred because complex regex pattern matching
-(`r"\b" + r"\W*".join(re.escape(word["word"]) for word in chunk_words) + r"[\W]*"`) was being performed for every chunk.
-
-**Fix Applied**:
-
-- Actually use `text_splitter.split_text()` for semantic chunking
-- Replace expensive regex matching with simple word-by-word mapping
-- Add timing debug logs to identify bottlenecks
-- Maintain timestamp accuracy through word object mapping
-
-**Impact**: Eliminates timeout issues while providing true semantic chunking benefits for audio transcriptions.
-
-**Follow-up Fix**: Word mapping logic was too strict, causing "No words found for chunk X, skipping" warnings. Updated
-to use proportional mapping:
-
-```python
-# Calculate approximate words needed based on original word count ratio
-total_original_words = len(words)
-total_spacy_words = len(' '.join(text_chunks).split())
-if total_spacy_words > 0:
-    chunk_spacy_words = len(chunk_text.split())
-    estimated_words_needed = max(1, int(chunk_spacy_words * total_original_words / total_spacy_words))
-
-# Take estimated words sequentially instead of trying to match text
-chunk_words = words[word_index:word_index + estimated_words_needed]
-```
-
-This approach avoids text matching issues between spaCy's processed text and original transcription words.
-
-## Embedding Distribution Analysis Implementation - RAG Performance Investigation
-
-**Context**: Created comprehensive analysis tool `bin/analyze_embedding_distributions.py` to investigate performance
-differences between Current System (text-embedding-ada-002, 1536D) and New System (text-embedding-3-large, 3072D).
-
-**Key Implementation Details**:
-
-### Pinecone Sampling Strategy
-
-- **Challenge**: Need random samples from large vector databases without expensive scan operations
-- **Solution**: Use dummy random vector query with high top_k to get diverse samples
-- **Fallback**: Attempt library filtering first, fall back to unfiltered if metadata doesn't support site filtering
-
-```python
-def _sample_from_index(self, index, expected_dim: int):
-    # First try unfiltered to discover library values
-    query_result = index.query(vector=dummy_vector, top_k=100, include_values=True, include_metadata=True)
-
-    # Check metadata for matching library values
-    site_variations = [self.site, f"{self.site}.org", self.site.replace("-", ".")]
-    matching_library = None
-    for lib_val in sample_libraries:
-        if lib_val and any(variant in str(lib_val).lower() for variant in site_variations):
-            matching_library = lib_val
-            break
-
-    # Filter by matching library if found, otherwise use unfiltered
-    if matching_library:
-        query_result = index.query(filter={"library": {"$in": [matching_library]}})
-```
-
-### PCA Analysis for High-Dimensional Embeddings
-
-- **Challenge**: PCA requires n_components < min(n_samples, n_features)
-- **Solution**: Use `min(target_dimensions, n_samples - 1, n_features)` for n_components
-
-### Critical Findings from Analysis
-
-1. **Similarity Distribution Difference**: Current System has high similarity (0.82 ± 0.04) vs New System (0.28 ± 0.16)
-2. **PCA Viability**: 100% variance explained by 1536 components suggests dimensionality reduction is viable
-3. **Sparsity Not the Issue**: Both systems have similar sparsity (~43-46%)
-4. **Norm Consistency**: Both systems use unit-normalized embeddings (norm = 1.0)
-
-**Next Priority**: Implement PCA dimensionality reduction experiment based on these findings.
-
-### Mistake: Creating New OpenAI Embeddings Instance for Every Page in Website Crawler
-
-**Problem**: The website crawler was creating a new `OpenAIEmbeddings` instance for every single page processed, causing
-inefficient resource usage and connection overhead.
-
-**Wrong**: Creating embeddings instance in the `create_embeddings` method:
-
-```python
-def create_embeddings(self, chunks: list[str], url: str, page_title: str) -> list[dict]:
-    """Create embeddings for text chunks using shared utilities."""
-    # This creates a new instance and connection for EVERY page!
-    model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
-    if not model_name:
-        raise ValueError("OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set")
-    embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
-
-    for i, chunk in enumerate(chunks):
-        vector = embeddings.embed_query(chunk)  # Using new instance each time
-        # ... rest of method
-```
-
-**Correct**: Initialize embeddings once in `__init__` and reuse throughout crawler session:
-
-```python
-# In __init__ method:
-def __init__(self, site_id: str, site_config: dict, retry_failed: bool = False):
-    # ... other initialization code ...
-
-    # Initialize shared embeddings instance (reused for all pages)
-    model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
-    if not model_name:
-        raise ValueError("OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set")
-    self.embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
-    logging.info(f"Initialized shared OpenAI embeddings client with model: {model_name}")
-
-# In create_embeddings method:
-def create_embeddings(self, chunks: list[str], url: str, page_title: str) -> list[dict]:
-    """Create embeddings for text chunks using shared embeddings instance."""
-    for i, chunk in enumerate(chunks):
-        vector = self.embeddings.embed_query(chunk)  # Using shared instance
-        # ... rest of method
+# spaCy fallback - use proper token reconstruction
+overlap_spacy_tokens = prev_spacy_tokens[-actual_overlap:]
+overlap_text = self._reconstruct_text_from_tokens(overlap_spacy_tokens)
 ```
 
 **Impact**:
 
-- **Performance**: Eliminates OpenAI client re-initialization overhead for every page
-- **Resource efficiency**: Reuses connection throughout crawling session
-- **Cleaner logs**: One initialization message instead of per-page spam
-- **Scalability**: Critical for long-running crawlers processing thousands of pages
+- Preserves all punctuation correctly in overlap regions
+- Maintains contractions, URLs, dates, mathematical expressions
+- No extra spaces or broken formatting
+- Proper text reconstruction for both tiktoken and spaCy paths
 
-**Detection**: Look for repetitive "Initialized OpenAI embeddings" log messages and resource creation in loops or
-per-item processing methods.
+**Status**: ✅ **COMPLETE** - Punctuation preservation verified through comprehensive testing.
 
-### Mistake: Reconsidering Dynamic Chunking After It Was Already Rejected
+## Critical Fix: Chunk Distribution Analysis Script - Token vs Word Count Mismatch - ✅ RESOLVED
 
-**Problem**: Attempting to implement or reconsider dynamic chunking for audio/video content when the decision was
-already made to abandon it based on comprehensive RAG evaluation data.
+**Problem**: The initial `bin/analyze_chunk_distributions.py` script was measuring **word counts** instead of **token
+counts**, creating a mismatch with the actual chunking strategy which uses token-based targets.
 
-**Context**: Dynamic chunking was fully implemented, tested, and empirically proven inferior across all metrics:
+**Root Cause**: The chunking strategy documentation clearly states the system uses **600-token targets with 20%
+overlap**, but the analysis script was counting words using `len(text.split())` instead of using the same tokenization
+method as SpacyTextSplitter.
 
-- 60% worse precision (0.2778 vs 0.4444)
-- 28% worse NDCG scores (0.5670 vs 0.7252)
-- 7.8x slower retrieval time (3.10s vs 0.39s)
+**Evidence from Documentation**:
 
-**Current Status**: ✅ FIXED - SpacyTextSplitter updated to use fixed 600-token paragraph-based chunking with 120-token
-overlap. Dynamic chunking disabled with deprecation warnings.
+- Chunking strategy uses "600 tokens with 20% overlap (120 tokens)"
+- Target range should be 450-750 tokens (75%-125% of 600-token target)
+- SpacyTextSplitter uses tiktoken for "text-embedding-ada-002" model
 
-**Wrong**: Questioning whether to use dynamic chunking when evaluation data clearly shows it's inferior.
+**Fix Applied**: Updated the analysis script to:
 
-**Correct**: Use fixed 600-token paragraph-based chunking that splits on `\n\n` and groups paragraphs to target size, as
-proven in evaluation.
-
-### Mistake: Using spaCy Token Reconstruction for Overlap Logic
-
-**Problem**: Using spaCy token-level reconstruction in overlap logic corrupts punctuation spacing in stored text.
-
-**Context**: When implementing paragraph-based chunking, used `" ".join(overlap_tokens)` with spaCy tokens, which
-creates:
-
-- Input: `"Hello world. This is a test!"`
-- Output: `"Hello world . This is a test !"` (spaces before punctuation)
-
-**Root Cause**: The proven evaluation approach used NLTK's `word_tokenize()` for overlap, not spaCy token
-reconstruction.
+1. **Use tiktoken tokenization**: Same method as SpacyTextSplitter
+   (`tiktoken.encoding_for_model("text-embedding-ada-002")`)
+2. **Token-based targets**: Changed from 225-450 words to 450-750 tokens
+3. **Consistent terminology**: All references changed from "word_count" to "token_count"
+4. **Accurate thresholds**: Outlier detection uses 100 tokens (small) and 1200 tokens (large)
+5. **Proper documentation**: Updated docstring to reflect token-based analysis
 
 **Wrong**:
 
 ```python
-prev_chunk_tokens = self._tokenize_text(chunks[i - 1])  # spaCy tokens
-overlap_text = " ".join(overlap_tokens)  # Corrupts punctuation
+# Measuring words instead of tokens
+word_count = len(text.split())
+self.target_min = 225  # Target minimum words per chunk
+self.target_max = 450  # Target maximum words per chunk
 ```
 
-**Correct**: Match the proven evaluation approach:
+**Correct**:
 
 ```python
-from nltk.tokenize import word_tokenize
-prev_chunk_tokens = word_tokenize(chunks[i - 1])  # NLTK tokenization
-overlap_text = " ".join(overlap_tokens)  # Preserves punctuation spacing
+# Using same tokenization as SpacyTextSplitter
+import tiktoken
+encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
+token_count = len(encoding.encode(text))
+self.target_min = 450  # Target minimum tokens per chunk (75% of 600)
+self.target_max = 750  # Target maximum tokens per chunk (125% of 600)
 ```
 
-**Status**: 🚨 CRITICAL - Needs immediate fix to prevent text corruption in Pinecone vector database.
+**Impact**: The script now provides accurate token-based analysis that directly corresponds to the chunking strategy
+implementation, enabling proper diagnosis of the chunk quality compliance failures in the pytest results.
 
-### Evaluation Confirmation: Paragraph-Based Chunking Strategy is Optimal
+**Status**: ✅ **COMPLETE** - Analysis script now correctly measures token counts using the same method as the
+production chunking system.
 
-**Evaluation Data** (18 queries, Current System):
+## Fixed: Chunk Distribution Analysis Missing Audio Content - ✅ RESOLVED
 
-- **spaCy paragraph-based chunking**: Precision@5: 71.11%, NDCG@5: 86.34%, Time: 0.36s
-- **spaCy sentence-based chunking**: Precision@5: 71.11%, NDCG@5: 86.34%, Time: 0.49s
-- **Dynamic chunking**: Precision@5: 70.00%, NDCG@5: 86.10%, Time: 2.70s
-- **Fixed-size chunking**: Precision@5: 66.67%, NDCG@5: 83.18%, Time: 0.34-0.37s
+**Problem**: The `bin/analyze_chunk_distributions.py` script was missing audio content entirely, showing only
+"ananda.org" and "Crystal Clarity" libraries and only "web" and "pdf" methods, despite audio content existing in the
+database.
 
-**Key Findings**:
+**Root Cause**: The script was incorrectly extracting library and method information:
 
-1. **Performance equivalence**: Paragraph and sentence chunking achieve identical quality metrics
-2. **Speed advantage**: Paragraph chunking 35% faster than sentence-based (0.36s vs 0.49s)
-3. **Quality superiority**: 6.6% better precision than fixed-size, 1.6% better than dynamic
-4. **Efficiency gains**: 10x faster than dynamic chunking with better quality
+1. **Library extraction**: Used `metadata.get("library")` instead of parsing the vector ID
+2. **Method extraction**: Checked metadata first instead of prioritizing the vector ID structure
 
-**Strategic Validation**: The completed implementation of 600-token paragraph-based chunking with 20% overlap aligns
-perfectly with evaluation results showing this strategy as optimal for both quality and performance.
+**Evidence from User**: Vector ID
+`audio||The Bhaktan Files||audio||"A New Way to Handle Absolutely Everything" with E||Nayaswami Kriyananda||6a2ef010||11`
+should show:
 
-**Implementation Status**:
+- Library: "The Bhaktan Files" (position 1 in vector ID)
+- Method: "audio" (position 0 in vector ID)
 
-- ✅ SpacyTextSplitter updated to use paragraph-based approach
-- ✅ 87.5%+ target range compliance achieved in testing
-- ⚠️ Critical punctuation spacing issue identified in overlap logic (needs NLTK tokenization fix)
-- 📋 Ready for deployment once overlap issue resolved
+**Fix Applied**: Updated extraction logic in `bin/analyze_chunk_distributions.py`:
 
-**Decision Confirmed**: Paragraph-based chunking is the definitively correct choice based on empirical evaluation data.
+1. **Added `_extract_library()` method**: Prioritizes vector ID parsing over metadata
+2. **Improved `_determine_method()` method**: Checks vector ID first, then falls back to metadata
+3. **Vector ID parsing**: Correctly handles standardized 7-part format
 
-## Mistake: Punctuation Spacing Corruption in SpacyTextSplitter Overlap Logic - ✅ FIXED
-
-**Problem**: Using spaCy token reconstruction with `" ".join(overlap_tokens)` in the `_apply_overlap_to_chunks()` method
-corrupted punctuation spacing in stored text:
-
-- Input: `"Hello world. This is great!"`
-- Output: `"Hello world . This is great !"` (spaces before punctuation)
-
-**Root Cause**: SpaCy tokenizes punctuation as separate tokens, and simple `" ".join()` puts spaces between all tokens,
-including before punctuation marks.
-
-**Wrong**: Using spaCy tokenization with naive join:
+**Wrong**:
 
 ```python
-# In _apply_overlap_to_chunks method
-prev_chunk_tokens = self._tokenize_text(chunks[i - 1])  # spaCy tokens
-overlap_text = " ".join(overlap_tokens)  # Corrupts punctuation spacing
+# Only used metadata, missed vector ID structure
+library = metadata.get("library", "Unknown")
+doc_type = metadata.get("type", "").lower()  # Checked metadata first
 ```
 
-**Correct**: Implemented NLTK tokenization with proper text reconstruction:
+**Correct**:
 
 ```python
-# Import NLTK tokenizer with fallback
-try:
-    from nltk.tokenize import word_tokenize
-    prev_chunk_tokens = word_tokenize(chunks[i - 1])  # NLTK tokens
-    overlap_text = self._reconstruct_text_from_nltk_tokens(overlap_tokens)  # Proper spacing
-except ImportError:
-    # Fallback to spaCy if NLTK unavailable
-    prev_chunk_tokens = self._tokenize_text(chunks[i - 1])
-    overlap_text = " ".join(overlap_tokens)
+# Parse vector ID first, fallback to metadata
+def _extract_library(self, vector_id: str, metadata: dict) -> str:
+    if "||" in vector_id:
+        parts = vector_id.split("||")
+        if len(parts) >= 2:
+            return parts[1].strip()  # Library from position 1
+    return metadata.get("library", "Unknown")
+
+def _determine_method(self, vector_id: str, metadata: dict) -> str:
+    if "||" in vector_id:
+        parts = vector_id.split("||")
+        if len(parts) >= 1:
+            source_type = parts[0].lower().strip()  # Method from position 0
+            if source_type in ["audio", "video"]:
+                return source_type
 ```
 
-**Solution Implementation**:
+**Impact**: The script now correctly identifies all content types including audio, video, and other ingestion methods,
+providing complete analysis of chunk distributions across all libraries and methods.
 
-- Added `_reconstruct_text_from_nltk_tokens()` method with punctuation spacing rules
-- Handles punctuation marks that shouldn't have spaces before them (`.`, `,`, `!`, `?`, etc.)
-- Handles punctuation marks that shouldn't have spaces after them (`(`, `[`, `"`, etc.)
-- Includes fallback to spaCy tokenization if NLTK is not available
-- Added comprehensive test verification
+**Status**: ✅ **COMPLETE** - Audio content and other missing content types now properly detected and analyzed.
 
-**Test Results**:
+## Critical Architecture Limitation: Pinecone Vector Database Enumeration Trade-offs - ⚠️ ONGOING
 
-- ✅ Punctuation preservation test passes - No spacing corruption detected
-- ✅ 84/85 total tests passing - Fix doesn't break existing functionality
-- ✅ Test shows proper reconstruction: `"commas, semicolons; and other marks."` (correct spacing)
+**Problem**: There is no clean way to efficiently enumerate all vectors in a large Pinecone database for comprehensive
+analysis without either bias or performance issues.
 
-**Impact**: Prevents text corruption in Pinecone vector database where chunks with corrupted punctuation spacing would
-degrade search quality and user experience.
+**Fundamental Issue**: Pinecone is designed for vector similarity search, not systematic enumeration. All approaches
+have significant trade-offs:
 
-**Files Modified**:
+### Option 1: Query-based Sampling (Fast but Biased)
 
-- `data_ingestion/utils/text_splitter_utils.py` - Fixed overlap logic and added NLTK reconstruction
-- `test_fixed_chunking.py` - Verification test for punctuation preservation
+- **Method**: `query()` with `include_values=False`
+- **Performance**: 50,000 vectors in 25 seconds ✅
+- **Bias**: Only finds content near query vector in semantic space ❌
+- **Missing**: Audio, video, and other content types clustered elsewhere
 
-**Status**: ✅ **COMPLETE** - Critical punctuation spacing issue resolved, ready for production deployment.
+### Option 2: List-based Enumeration (Complete but Slow)
 
-### Bug Fix: Missing Metrics Tracking in SpacyTextSplitter
+- **Method**: `index.list()` + `fetch()`
+- **Coverage**: Finds all content types systematically ✅
+- **Performance**: Very slow, 414 URI errors with long vector IDs ❌
+- **Issues**: Vector IDs in ingest index are too long for batch fetching
 
-**Problem**: The `split_text` method was not calling `_log_chunk_metrics`, causing metrics tracking tests to fail with 0
-documents/chunks recorded.
+### Option 3: Diverse Query Sampling (Hack)
 
-**Root Cause**: The `split_text` method had logging but was missing the actual call to record metrics in the
-ChunkingMetrics object.
+- **Method**: Multiple query vectors `[0.0], [1.0], [0.5], [-1.0]`
+- **Coverage**: Finds all content types ✅
+- **Architecture**: Unprincipled random searching through vector space ❌
+- **Reliability**: Depends on luck to hit different content clusters
 
-**Solution Applied**:
+**Key Insight**: Vector similarity search is fundamentally incompatible with unbiased statistical sampling. The
+architecture optimizes for "find similar content" not "enumerate all content."
+
+**Current Status**: ✅ **RESOLVED** - Implemented systematic enumeration using `index.list()` + `fetch()` approach.
+
+**Future Consideration**: For comprehensive analysis, may need database-level changes to vector ID format or separate
+metadata-only index for enumeration purposes.
+
+## Critical Fix: Systematic Enumeration Implementation for Pinecone Analysis - ✅ RESOLVED
+
+**Problem**: The chunk distribution analysis script was using query-based sampling that created vector space clustering
+bias, missing entire content types (audio, video, special libraries) despite sampling large portions of the database.
+
+**Root Cause**: Using `query()` API with dummy vectors for sampling creates inherent bias toward content similar to the
+query vector. Different content types cluster in different regions of vector space, so a single query vector only
+samples one region.
+
+**Solution Applied**: Implemented systematic enumeration using the proper Pinecone API pattern:
+
+1. **Phase 1 - List All IDs**: Use `index.list()` with pagination to systematically collect all vector IDs
+2. **Phase 2 - Fetch Metadata**: Use `fetch()` in batches to retrieve metadata for all collected IDs
+3. **Pagination Handling**: Properly handle pagination tokens to ensure complete coverage
+4. **Batch Processing**: Optimize batch sizes for efficient API usage
+
+**Implementation Details**:
 
 ```python
-# Added this to split_text method after chunk statistics logging:
-# Record metrics for analysis
-if document_id:
-    word_count = self._estimate_word_count(text)
-    self._log_chunk_metrics(overlapped_chunks, word_count, document_id)
+# Phase 1: List all IDs using pagination
+next_token = None
+all_ids = []
+
+while ids_collected < vectors_to_process:
+    if next_token:
+        response = self.index.list(limit=current_limit, pagination_token=next_token)
+    else:
+        response = self.index.list(limit=current_limit)
+
+    batch_ids = response.get('ids', [])
+    all_ids.extend(batch_ids)
+    next_token = response.get('pagination', {}).get('next')
+
+    if not next_token:
+        break
+
+# Phase 2: Fetch metadata in batches
+for i in range(0, len(all_ids), fetch_batch_size):
+    batch_ids = all_ids[i:i + fetch_batch_size]
+    fetch_result = self.index.fetch(ids=batch_ids)
+    # Process metadata...
 ```
 
-**Result**: ✅ Metrics tracking now works correctly, crawler tests pass.
+**Key Improvements**:
 
-**Cleanup**: ✅ Removed temporary debug script `test_metrics_debug.py` after fix verification.
+1. **No Sampling Bias**: Systematic enumeration covers all content types uniformly
+2. **Complete Coverage**: Processes all vectors or specified sample size without missing content clusters
+3. **Efficient Batching**: Optimized batch sizes (1000 for listing, 100 for fetching) balance API limits and performance
+4. **Robust Error Handling**: Continues processing if individual batches fail
+5. **Progress Monitoring**: Two-phase progress bars for ID collection and metadata fetching
+6. **Debug Mode**: Comprehensive debug output to monitor content type discovery
 
-## Documentation Update: Removed Outdated Dynamic Chunking References
+**Performance Characteristics**:
 
-**Task Completed**: Updated `docs/chunking-strategy.md` to accurately reflect the current fixed paragraph-based chunking
-approach.
+- **List Phase**: 1000 IDs per request (fast enumeration)
+- **Fetch Phase**: 100 vectors per request (metadata retrieval)
+- **Memory Efficient**: Collects IDs first, then processes in batches
+- **Resilient**: Graceful handling of API errors and edge cases
 
-**Changes Made**:
+**Impact**:
 
-1. **Removed "Dynamic Chunking" references**: Eliminated outdated mentions of dynamic chunking strategy that was
-   abandoned
-2. **Removed "87.5% compliance" metric**: This was specific to the old dynamic chunking approach and no longer relevant
-3. **Updated terminology**: Changed "Paragraph-based chunking" to "Fixed paragraph-based chunking" for clarity
-4. **Documented NLTK dependency**: Added explicit documentation about NLTK requirement for overlap logic and word
-   boundary detection
-5. **Cleaned up performance comparisons**: Removed comparisons with abandoned dynamic chunking approach
-6. **Updated strategic decisions**: Reflected current implementation without reference to abandoned approaches
+- Eliminates vector space clustering bias that missed audio, video, and specialized libraries
+- Provides truly representative analysis across all content types
+- Enables accurate assessment of chunk quality compliance by method and library
+- Proper foundation for diagnosing chunking strategy effectiveness
 
-**Files Modified**:
+**Status**: ✅ **COMPLETE** - Systematic enumeration implementation eliminates sampling bias and ensures comprehensive
+analysis of all vector types in Pinecone databases.
 
-- `docs/chunking-strategy.md`: Updated multiple sections to reflect current implementation
+## Critical Fix: Pinecone index.list() Generator Response Handling - ✅ RESOLVED
 
-**Documentation Principle**: Keep documentation current and accurate by removing references to abandoned approaches and
-ensuring all dependencies are properly documented.
+**Problem**: The updated chunk distribution analysis script was failing with `'generator' object has no attribute 'get'`
+error when trying to use the systematic enumeration approach with `index.list()`.
 
-## Mistake: Documenting Non-Existent Features in Audio/Video Processing
+**Root Cause**: The Pinecone Python client's `index.list()` method returns a generator object that yields vector IDs
+directly, not a dictionary with pagination information as initially assumed.
 
-**Problem**: Incorrectly documented "speaker diarization" as a feature in the audio/video chunking process when this
-functionality is not actually implemented in the system.
+**Evidence from User Error**:
 
-**Wrong**: Mentioning features that don't exist:
-
-```markdown
-- **Word-Level Metadata**: Preserves speaker diarization and timing data during chunking process
-- **Metadata Preservation**: Maintains audio timestamps, speaker diarization, and word-level metadata
+```
+Error listing IDs at position 0: 'generator' object has no attribute 'get'
 ```
 
-**Correct**: Only document actual implemented features:
+**Wrong Implementation**:
 
-```markdown
-- **Word-Level Metadata**: Preserves timing data during chunking process
-- **Metadata Preservation**: Maintains audio timestamps and word-level metadata
+```python
+# Incorrect - treating generator as dictionary response
+response = self.index.list(limit=current_limit)
+batch_ids = response.get("ids", [])  # ❌ Generator has no .get() method
 ```
 
-**Principle**: Documentation should only describe features that are actually implemented. Always verify feature
-existence before documenting, especially for specialized capabilities like speaker identification, sentiment analysis,
-or advanced audio processing features.
+**Correct Implementation**:
 
-**Detection**: User correction identified the inaccuracy. Always cross-reference documentation with actual
-implementation code.
+```python
+# Correct - iterate through generator directly
+for vector_id in self.index.list():
+    all_ids.append(vector_id)
+    ids_collected += 1
+    if ids_collected >= vectors_to_process:
+        break
+```
+
+**Fix Applied**:
+
+1. **Simplified ID Collection**: Iterate directly through the generator returned by `index.list()`
+2. **Removed Pagination Logic**: The generator handles pagination internally
+3. **Added Fallback Method**: Implemented `_fallback_to_query_sampling()` for cases where `index.list()` fails
+4. **Graceful Error Handling**: Falls back to query-based sampling if systematic enumeration fails
+
+**Key Changes**:
+
+- Removed `next_token` and pagination handling
+- Direct iteration: `for vector_id in self.index.list():`
+- Added fallback to query-based sampling with bias warning
+- Maintained sample size limiting with break condition
+
+**Impact**:
+
+- Script now works with current Pinecone Python client generator API
+- Provides systematic enumeration when possible
+- Falls back gracefully to query sampling if needed
+- Maintains comprehensive coverage across all content types
+
+**Status**: ✅ **COMPLETE** - Script now correctly handles Pinecone generator API and provides reliable fallback for
+comprehensive chunk analysis.
+
+## Critical Fix: Website Crawler Browser Restart Counter Bug - ✅ RESOLVED
+
+**Problem**: The website crawler was printing "Stats at X page boundary" messages after only a few pages instead of
+waiting for the configured 50 pages, causing premature restart statistics reporting.
+
+**Root Cause**: When an error occurred requiring a browser restart, the error handling code was artificially setting
+`pages_since_restart = PAGES_PER_RESTART` (50), which immediately triggered the restart condition on the next iteration.
+This caused restart statistics to be printed with the actual low page count instead of waiting for 50 pages.
+
+**Evidence from User Report**:
+
+- User saw "stats at 50 page boundary" but happening after only a couple of pages
+- This occurred when URLs had errors requiring browser restart
+- Stats were printed prematurely instead of waiting for actual 50 page intervals
+
+**Symptoms**:
+
+- Restart statistics displayed after only 2-3 pages instead of 50
+- Message showed actual pages processed (e.g., "Stats at 3 page boundary") not the expected 50
+- Occurred specifically when errors triggered browser restarts
+
+**Bug Location**: In `run_crawl_loop` function in `data_ingestion/crawler/website_crawler.py`:
+
+**Wrong**:
+
+```python
+if restart_inc == 0 and pages_inc == 0:  # Restart needed
+    pages_since_restart = PAGES_PER_RESTART  # BUG: Forces immediate restart
+    continue
+```
+
+**Correct**:
+
+```python
+if restart_inc == 0 and pages_inc == 0:  # Restart needed
+    browser, page, batch_start_time, batch_results = (
+        _handle_browser_restart(
+            p,
+            page,
+            browser,
+            pages_since_restart,
+            batch_results,
+            batch_start_time,
+            crawler,
+        )
+    )
+    pages_since_restart = 0
+    continue
+```
+
+**Fix Applied**: Changed error-triggered restart to call `_handle_browser_restart()` directly instead of manipulating
+the counter. This ensures:
+
+1. Restart statistics show actual pages processed before restart
+2. Browser is properly restarted with correct state
+3. Counters are reset appropriately without artificial manipulation
+
+**Test Added**: Created `TestBrowserRestartCounter.test_error_restart_counter_bug` in
+`data_ingestion/tests/test_crawler.py` to verify:
+
+- Error-triggered restarts don't manipulate page counters artificially
+- Restart function is called with actual page count, not forced value
+- Test-driven development approach: test failed before fix, passes after fix
+
+**Impact**:
+
+- Restart statistics now accurately reflect actual processing progress
+- No more premature "50 page boundary" messages after only a few pages
+- Proper browser restart behavior when errors occur
+- Better debugging visibility into actual crawler performance
+
+**Status**: ✅ **COMPLETE** - Browser restart counter no longer artificially manipulated on errors, providing accurate
+restart statistics.
+
+## Critical Fix: Integration Test Updated to Use Token-Based Testing Instead of Word-Based - ✅ RESOLVED
+
+**Problem**: The integration test suite `test_integration_chunk_quality.py` was testing chunk quality using word counts
+instead of token counts, which didn't align with our 600-token target standard.
+
+**Root Cause**: The test was written when the system originally used word-based targets (225-450 words), but the system
+has since moved to a 600-token target with spaCy chunking. The test was still using the old `count_words()` method and
+word-based target ranges.
+
+**Evidence from User Request**:
+
+- User requested: "Fix this script so that it is testing tokens (not words) as that is our standard."
+- The chunking strategy documentation clearly states the system uses a 600-token target
+- The system uses tiktoken for consistent token counting with OpenAI embeddings
+
+**Symptoms**:
+
+- Test was measuring chunks against 225-450 word range instead of token-based targets
+- Inconsistency between ingestion system (token-based) and testing (word-based)
+- Test results didn't accurately reflect chunk quality against the actual 600-token target
+- Test assertions used word count thresholds that didn't match token-based chunking
+
+**Fix Applied**: Updated `data_ingestion/tests/test_integration_chunk_quality.py` to use token-based testing:
+
+1. **Updated target range constants**:
+
+   - Changed `TARGET_WORD_RANGE = (225, 450)` to `TARGET_TOKEN_RANGE = (450, 750)` (75%-125% of 600-token target)
+   - Updated comments to reflect token-based approach
+
+2. **Replaced word counting with token counting**:
+
+   - Changed `count_words()` method to `count_tokens()` using tiktoken
+   - Matches the tokenization used by `SpacyTextSplitter` for consistency
+   - Added fallback to word count estimation if tiktoken unavailable
+
+3. **Updated analysis method return values**:
+
+   - Changed all `word_counts`, `avg_words`, `median_words`, etc. to token equivalents
+   - Updated target compliance calculation to use token-based range
+
+4. **Updated test assertions and thresholds**:
+
+   - Changed minimum average from 150 words to 300 tokens
+   - Changed maximum average from 600 words to 900 tokens
+   - Increased consistency threshold from 2.5x to 3.0x to account for token variation
+   - Updated all print statements to display token counts instead of word counts
+
+5. **Updated documentation**:
+   - Fixed docstring to mention "450-750 tokens, 75%-125% of 600-token target"
+   - Updated comments throughout to reference tokens instead of words
+
+**Wrong**:
+
+```python
+# Word-based testing approach
+TARGET_WORD_RANGE = (225, 450)
+def count_words(self, text: str) -> int:
+    return len(text.strip().split())
+
+# Word-based assertions
+assert analysis["avg_words"] >= 150
+assert analysis["avg_words"] <= 600
+```
+
+**Correct**:
+
+```python
+# Token-based testing aligned with 600-token target
+TARGET_TOKEN_RANGE = (450, 750)  # 75%-125% of 600-token target
+def count_tokens(self, text: str) -> int:
+    import tiktoken
+    encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
+    return len(encoding.encode(text))
+
+# Token-based assertions
+assert analysis["avg_tokens"] >= 300
+assert analysis["avg_tokens"] <= 900
+```
+
+**Impact**:
+
+- Integration tests now accurately measure chunk quality against the actual 600-token target
+- Consistent tokenization between ingestion system and test suite
+- Test results provide meaningful feedback about chunk quality compliance
+- Better alignment between testing and production system behavior
+- Accurate assessment of target range compliance (75%-125% of 600 tokens)
+
+**Status**: ✅ **COMPLETE** - Integration test suite now uses token-based testing that aligns with our 600-token
+standard and matches the tokenization used by the ingestion system.

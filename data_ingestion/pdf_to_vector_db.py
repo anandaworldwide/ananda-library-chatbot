@@ -253,8 +253,7 @@ class PyPDFLoader:
                     filtered_parts.append(f"'{char_text}' (filtered)")
 
             # If we filtered too much, fall back to full text
-            if len(filtered_chars) < len(chars) * 0.7:
-                logger.debug("Filtered too many characters, using full text extraction")
+            if len(filtered_chars) < len(chars) * 0.8:
                 return page.extract_text() or ""
 
             # Use pdfplumber's layout-aware text extraction on filtered content
@@ -1103,11 +1102,6 @@ async def process_chunk(
             # Successfully processed all sub-chunks
             return
 
-        # Log token count for successful validation
-        logger.debug(
-            f"Chunk {chunk_index} token validation passed: {token_count} tokens"
-        )
-
         # Process the chunk normally (within token limits)
         await _process_valid_chunk(
             doc, pinecone_index, embeddings, chunk_index, library_name
@@ -1667,14 +1661,6 @@ async def run(keep_data: bool, library_name: str, max_files: int | None) -> None
             sys.exit(0)
 
         current_pdf_path = pdf_file_paths[i]
-
-        # Check memory before processing each file
-        current_memory = psutil.virtual_memory()
-        if current_memory.percent > 85:
-            logger.warning(
-                f"⚠️  High memory usage ({current_memory.percent:.1f}%) before processing {os.path.basename(current_pdf_path)}. "
-                "Consider restarting the script if memory errors occur."
-            )
 
         # Process single PDF file
         success, failure_reason = await _process_single_pdf(

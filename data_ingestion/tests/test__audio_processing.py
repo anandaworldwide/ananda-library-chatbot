@@ -369,6 +369,10 @@ class TestAudioProcessing(unittest.TestCase):
                 ),
                 None,  # Successful on second attempt
             ]
+            # Mock head_object to return 404 (file doesn't exist)
+            mock_s3.head_object.side_effect = ClientError(
+                {"Error": {"Code": "404"}}, "head_object"
+            )
             mock_get_s3_client.return_value = mock_s3
 
             # Attempt to upload the file
@@ -381,6 +385,63 @@ class TestAudioProcessing(unittest.TestCase):
             self.assertEqual(mock_s3.upload_file.call_count, 2)
 
         logger.debug("S3 upload RequestTimeTooSkewed test completed")
+
+    def test_s3_upload_skip_existing_file(self):
+        logger.debug("Starting S3 upload skip existing file test")
+
+        # Mock the S3 client to simulate file already exists with same size
+        with (
+            patch(
+                "data_ingestion.audio_video.s3_utils.get_s3_client"
+            ) as mock_get_s3_client,
+            patch("os.path.getsize") as mock_getsize,
+        ):
+            mock_s3 = MagicMock()
+            # Mock head_object to return file metadata with same size
+            mock_getsize.return_value = 1024  # Local file size
+            mock_s3.head_object.return_value = {"ContentLength": 1024}  # S3 file size
+            mock_get_s3_client.return_value = mock_s3
+
+            # Attempt to upload the file
+            result = upload_to_s3(self.trimmed_audio_path, "test_s3_key")
+
+            # Check that the upload was skipped (returns None)
+            self.assertIsNone(result)
+
+            # Verify that upload_file was not called
+            mock_s3.upload_file.assert_not_called()
+
+        logger.debug("S3 upload skip existing file test completed")
+
+    def test_s3_upload_different_size_file(self):
+        logger.debug("Starting S3 upload different size file test")
+
+        # Mock the S3 client to simulate file exists but with different size
+        with (
+            patch(
+                "data_ingestion.audio_video.s3_utils.get_s3_client"
+            ) as mock_get_s3_client,
+            patch("os.path.getsize") as mock_getsize,
+        ):
+            mock_s3 = MagicMock()
+            # Mock head_object to return file metadata with different size
+            mock_getsize.return_value = 1024  # Local file size
+            mock_s3.head_object.return_value = {
+                "ContentLength": 2048
+            }  # Different S3 file size
+            mock_s3.upload_file.return_value = None  # Successful upload
+            mock_get_s3_client.return_value = mock_s3
+
+            # Attempt to upload the file
+            result = upload_to_s3(self.trimmed_audio_path, "test_s3_key")
+
+            # Check that the upload was successful (returns None)
+            self.assertIsNone(result)
+
+            # Verify that upload_file was called
+            mock_s3.upload_file.assert_called_once()
+
+        logger.debug("S3 upload different size file test completed")
 
     def test_chunk_transcription_timeout(self):
         logger.debug("Starting chunk transcription timeout test")

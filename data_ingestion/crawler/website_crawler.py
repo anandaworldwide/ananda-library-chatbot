@@ -1046,6 +1046,43 @@ def initialize_pinecone(env_file: str) -> pinecone.Index | None:
         return None
 
 
+def _graceful_sleep(total_seconds: int, check_interval: int = 10) -> bool:
+    """
+    Sleep for a specified duration while periodically checking for exit signals.
+
+    Args:
+        total_seconds: Total time to sleep in seconds
+        check_interval: How often to check for exit signal (default 10 seconds)
+
+    Returns:
+        bool: True if exit was requested during sleep, False if completed normally
+    """
+    elapsed = 0
+    while elapsed < total_seconds:
+        if is_exiting():
+            logging.info(
+                f"Exit requested during sleep (slept {elapsed}/{total_seconds} seconds)"
+            )
+            return True
+
+        # Sleep for the shorter of remaining time or check interval
+        sleep_time = min(check_interval, total_seconds - elapsed)
+        time.sleep(sleep_time)
+        elapsed += sleep_time
+
+    return False
+
+
+def _setup_browser(p) -> tuple:
+    """Setup and return browser and page."""
+    browser = p.firefox.launch(
+        headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
+    )
+    page = browser.new_page()
+    page.set_extra_http_headers({"User-Agent": USER_AGENT})
+    return browser, page
+
+
 def _handle_browser_restart(
     p,
     page,
@@ -1247,16 +1284,6 @@ def _process_crawl_iteration(
     return pages_inc, restart_inc, False  # Continue normally
 
 
-def _setup_browser(p) -> tuple:
-    """Setup and return browser and page."""
-    browser = p.firefox.launch(
-        headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
-    )
-    page = browser.new_page()
-    page.set_extra_http_headers({"User-Agent": USER_AGENT})
-    return browser, page
-
-
 def _initialize_crawl_loop(
     args: argparse.Namespace, crawler: WebsiteCrawler
 ) -> tuple[str, int, int, int, list, float]:
@@ -1322,9 +1349,13 @@ def run_crawl_loop(
                 url = crawler.get_next_url_to_crawl()
                 if not url:
                     logging.info(
-                        "No URLs ready for processing. Sleeping for 60 seconds..."
+                        "No URLs ready for processing. Sleeping for four hours..."
                     )
-                    time.sleep(60)
+                    exit_requested = _graceful_sleep(
+                        60 * 60 * 4
+                    )  # 4 hours with 30-second intervals
+                    if exit_requested:
+                        break
                     continue
 
                 if pages_since_restart >= PAGES_PER_RESTART:
@@ -1350,7 +1381,18 @@ def run_crawl_loop(
                     break
 
                 if restart_inc == 0 and pages_inc == 0:  # Restart needed
-                    pages_since_restart = PAGES_PER_RESTART
+                    browser, page, batch_start_time, batch_results = (
+                        _handle_browser_restart(
+                            p,
+                            page,
+                            browser,
+                            pages_since_restart,
+                            batch_results,
+                            batch_start_time,
+                            crawler,
+                        )
+                    )
+                    pages_since_restart = 0
                     continue
 
                 pages_processed += pages_inc
