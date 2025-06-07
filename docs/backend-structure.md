@@ -1,20 +1,20 @@
 # Backend Structure
 
 **Purpose:** This document describes the architecture and organization of the backend for the Ananda Library Chatbot
-application. It details API endpoints, data storage, authentication mechanisms, and key server-side processes to facilitate
-understanding and future development.
+application. It details API endpoints, data storage, authentication mechanisms, and key server-side processes to
+facilitate understanding and future development.
 
 ---
 
 ## 1. Architecture Overview
 
-- **Framework:** The backend is built primarily using **Next.js**, leveraging both the `pages/api` directory for traditional
-  serverless functions and the `app/api` directory (App Router) for edge-compatible routes.
-- **Language:** **TypeScript** is the primary language for the Next.js backend logic. **Python** is used for data ingestion
-  and processing scripts, including website crawling (`data_ingestion/crawler/website_crawler.py`), PDF parsing,
-  audio transcription, and SQL data conversion.
-- **Hosting:** Likely deployed on **Vercel** (implied by Next.js usage and edge functions) and potentially uses **AWS S3**
-  for media storage and **Firebase** services (Firestore).
+- **Framework:** The backend is built primarily using **Next.js**, leveraging both the `pages/api` directory for
+  traditional serverless functions and the `app/api` directory (App Router) for edge-compatible routes.
+- **Language:** **TypeScript** is the primary language for the Next.js backend logic. **Python** is used for data
+  ingestion and processing scripts, including website crawling (`data_ingestion/crawler/website_crawler.py`), PDF
+  parsing, audio transcription, and SQL data conversion.
+- **Hosting:** Likely deployed on **Vercel** (implied by Next.js usage and edge functions) and potentially uses **AWS
+  S3** for media storage and **Firebase** services (Firestore).
 - **Key Technologies:**
   - **Node.js:** Runtime for the Next.js application.
   - **LangChain:** Framework used for building the core chat logic, orchestrating retrieval, context management, and LLM
@@ -26,7 +26,7 @@ understanding and future development.
     potentially ingestion queue state (`firestoreUtils.ts`, `services/firebase.ts`).
   - **Redis:** In-memory data store used primarily for API rate limiting (`redisUtils.ts`, `genericRateLimiter.ts`).
   - **AWS S3:** Object storage used for hosting source audio files (`awsConfig.ts`,
-    `data_ingestion/scripts/s3_utils.py`).
+    `data_ingestion/audio_video/s3_utils.py`).
   - **AssemblyAI / Whisper:** Likely used for audio transcription within the Python ingestion scripts.
 
 ---
@@ -49,8 +49,8 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
 - **`POST /api/login`** (`pages/api/login.ts`)
   - **Purpose:** Authenticates users based on username/password.
   - **Auth:** Open.
-  - **Logic:** Compares provided password with stored hash (`passwordUtils.ts`), generates a JWT (`jwtUtils.ts`), and sets
-    it as an HttpOnly cookie.
+  - **Logic:** Compares provided password with stored hash (`passwordUtils.ts`), generates a JWT (`jwtUtils.ts`), and
+    sets it as an HttpOnly cookie.
 - **`POST /api/logout`** (`pages/api/logout.ts`)
   - **Purpose:** Logs out the user.
   - **Auth:** Requires valid JWT.
@@ -172,8 +172,8 @@ Data is stored across multiple services:
 
 - **Redis:**
 
-  - Stores key-value pairs for rate limiting, typically mapping an IP address or user ID to a request count within a time
-    window. Keys might look like `rateLimit:<ip_address>`.
+  - Stores key-value pairs for rate limiting, typically mapping an IP address or user ID to a request count within a
+    time window. Keys might look like `rateLimit:<ip_address>`.
 
 - **AWS S3:**
   - Stores raw media files (primarily audio `.mp3`, `.wav`) processed during data ingestion. File paths are stored in
@@ -231,11 +231,19 @@ Data is stored across multiple services:
   - `transcribe_and_ingest_media.py`: Main script orchestrating the process for various media types.
   - **Steps:**
     1. **Source Acquisition:** Fetches files from local paths, S3, or downloads from URLs.
-    2. **Preprocessing:** Extracts text from PDFs, transcribes audio/video.
-    3. **Chunking:** Splits large documents/transcripts into smaller, manageable chunks.
+    2. **Preprocessing:** Extracts text from PDFs using PyMuPDF, transcribes audio/video.
+    3. **Chunking:** Uses spaCy for semantic paragraph-based chunking with dynamic sizing (225-450 word target range)
+       which significantly outperforms fixed-size chunking. Adaptive token sizes based on content length with smart
+       merging to achieve optimal word counts. Includes fallback to sentence-based chunking for texts without
+       paragraphs.
     4. **Metadata Extraction:** Gathers relevant metadata (source, author, title, etc.).
     5. **Embedding:** Generates vector embeddings for text chunks.
-    6. **Upserting:** Uploads vectors and associated metadata to the correct Pinecone namespace.
+    6. **Upserting:** Uploads vectors and associated metadata to the correct Pinecone namespace using document-level
+       hashing for efficient bulk operations.
+  - **PDF Processing:** Converted from TypeScript (`pdf_to_vector_db.ts`) to Python (`pdf_to_vector_db.py`) with
+    improved full-document processing instead of page-by-page to preserve context across page boundaries.
+  - **Document Hashing:** Implements centralized document-level hashing (`data_ingestion/utils/document_hash.py`) where
+    all chunks from the same document share the same hash, enabling easy bulk operations and deduplication.
   - Uses helper scripts for specific tasks (`youtube_utils.py`, `s3_utils.py`, `pinecone_utils.py`).
   - Manages tasks potentially via a queue (`IngestQueue.py`, `manage_queue.py`).
 - **Related Questions Generation:**
@@ -260,7 +268,7 @@ Data is stored across multiple services:
 
 ## 5. Utility Scripts & Cron Jobs
 
-The `bin/` directory and parts of `data_ingestion/scripts/` contain various Python utility scripts for maintenance,
+The `bin/` directory and parts of `data_ingestion/audio_video/` contain various Python utility scripts for maintenance,
 data processing, and analysis.
 
 - **`bin/count_hallucinated_urls.py`**

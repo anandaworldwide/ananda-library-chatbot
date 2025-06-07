@@ -3,32 +3,26 @@
 [![Run All Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml)
 [![Comprehensive Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml)
 
-Build a chatGPT chatbot for multiple Large PDF files, audio files, and YouTube
-videos. Optionally generate the PDF fileset from a Wordpress database.
-Transcribe mp3 files en masse. Download YouTube videos en masse and transcribe
-their audio. Allow users to share the best answers they get with each other
-through a social sharing interface.
+Build a chatGPT chatbot for multiple Large PDF files, audio files, and YouTube videos. Optionally generate the PDF
+fileset from a Wordpress database. Transcribe mp3 files en masse. Download YouTube videos en masse and transcribe their
+audio. Allow users to share the best answers they get with each other through a social sharing interface.
 
-Audio and video results are shown inline with a player queued to the moment
-matched in the transcript!
+Audio and video results are shown inline with a player queued to the moment matched in the transcript!
 
-Tech stack used includes LangChain, Pinecone, Typescript, Openai, Next.js,
-Google Firestore, AWS, and Python. LangChain is a framework that makes it easier
-to build scalable AI/LLM apps and chatbots. Pinecone is a vectorstore for
-storing embeddings to later retrieve similar docs.
+Tech stack used includes LangChain, Pinecone, Typescript, Openai, Next.js, Google Firestore, AWS, and Python. LangChain
+is a framework that makes it easier to build scalable AI/LLM apps and chatbots. Pinecone is a vectorstore for storing
+embeddings to later retrieve similar docs.
 
 [Tutorial video from project we forked from](https://www.youtube.com/watch?v=ih9PBGVVOO4)
 
-**If you run into errors, please review the troubleshooting section further down
-this page.**
+**If you run into errors, please review the troubleshooting section further down this page.**
 
-Prelude: Please make sure you have already downloaded node on your system and
-the version is 18 or greater.
+Prelude: Please make sure you have already downloaded node on your system and the version is 18 or greater.
 
 ## Documentation
 
-For detailed information about the project architecture and functionality, please refer to the documentation in
-the `docs` directory:
+For detailed information about the project architecture and functionality, please refer to the documentation in the
+`docs` directory:
 
 - [PRD](docs/PRD.md) - Product Requirements Document outlining the project's features and specifications
 - [Tech Stack](docs/tech-stack.md) - Overview of technologies used in the project
@@ -45,21 +39,19 @@ These documents provide comprehensive guidance for developers working on or exte
 
 ## Forked Version
 
-This is a fork of gpt4-pdf-chatbot-langchain. This version looks for a specified
-source in the Subject metadata of the PDF file.
+This is a fork of gpt4-pdf-chatbot-langchain. This version looks for a specified source in the Subject metadata of the
+PDF file.
 
 ## Generate PDF's to use from Wordpress MySQL database
 
-For the Ananda Library, we have provided code that can take a wordpress MySQL
-database and generate PDF files for all of the published content. For us, that
-is about 7,000 documents.
+For the Ananda Library, we have provided code that can take a wordpress MySQL database and generate PDF files for all of
+the published content. For us, that is about 7,000 documents.
 
 we have also transcribed and ingested 1,500 Audio files and 800+ YouTube videos.
 
 ## Enhanced Frontend with Social Media Sharing
 
-The runtime website code is significantly extended from the forked project. We
-have added
+The runtime website code is significantly extended from the forked project. We have added
 
 - Display of sources with links and inline audio/video players
 - Thumbs up for social feedback and thumbs down for system feedback
@@ -120,11 +112,10 @@ npm install
    - GOOGLE_APPLICATION_CREDENTIALS
    - Etc.
 
-- Visit [openai](https://help.openai.com/en/articles/4936850-where-do-i-find-my-secret-api-key)
-  to retrieve API keys and insert into your `.env` file.
-- Visit [pinecone](https://pinecone.io/) to create and retrieve your API keys, and also retrieve
-  your environment and index name from the dashboard. Be sure to use 1,536 as dimensions when setting
-  up your pinecone index.
+- Visit [openai](https://help.openai.com/en/articles/4936850-where-do-i-find-my-secret-api-key) to retrieve API keys and
+  insert into your `.env` file.
+- Visit [pinecone](https://pinecone.io/) to create and retrieve your API keys, and also retrieve your environment and
+  index name from the dashboard. Be sure to use 1,536 as dimensions when setting up your pinecone index.
 - Visit [upstash](https://upstash.com/) to create an upstash function to cache keywords for related questions.
 
 ### Site Configurations
@@ -144,10 +135,9 @@ npm install
 
 ### Optional: Firebase Emulator Setup
 
-The Firebase Emulator is optional for local development. It is used to
-simulate the behavior of Firebase services in a local environment. You don't
-need it to run the chatbot, but it is useful for local development and
-debugging, and to avoid charges for using the Firebase services.
+The Firebase Emulator is optional for local development. It is used to simulate the behavior of Firebase services in a
+local environment. You don't need it to run the chatbot, but it is useful for local development and debugging, and to
+avoid charges for using the Firebase services.
 
 1. Install Firebase CLI:
 
@@ -209,6 +199,42 @@ debugging, and to avoid charges for using the Firebase services.
    pyenv local ananda-library-chatbot
    ```
 
+5. Install Python dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### Python Code Quality and Linting
+
+This project uses [Ruff](https://github.com/astral-sh/ruff) for Python linting and formatting. The configuration follows
+PEP 8 standards and includes automatic fixing of common issues.
+
+**Setup for VS Code/Cursor:**
+
+1. Install the Ruff extension: Search for "Ruff" by Charlie Marsh in the Extensions panel
+2. The project includes pre-configured settings in `.vscode/settings.json` that will:
+   - Enable Ruff as the default linter and formatter
+   - Auto-fix issues on save
+   - Organize imports automatically
+   - Show linting errors in the Problems panel
+
+**Manual linting commands:**
+
+```bash
+# Check for linting issues
+ruff check .
+
+# Fix auto-fixable issues
+ruff check --fix .
+
+# Format code
+ruff format .
+```
+
+**Note for contributors:** If VS Code/Cursor doesn't auto-detect your Python interpreter, refer to
+`.vscode/settings.json.example` for guidance on setting the interpreter path for your specific environment.
+
 ## Data Ingestion
 
 This project supports ingesting data from multiple sources:
@@ -220,8 +246,8 @@ This project supports ingesting data from multiple sources:
 
 ### Ingesting from WordPress Database (Recommended for WP Sites)
 
-This is the primary method for ingesting content originating from a WordPress database. It directly transfers
-content, calculated metadata (author, permalink), and **categories** (from specified taxonomies) into Pinecone.
+This is the primary method for ingesting content originating from a WordPress database. It directly transfers content,
+calculated metadata (author, permalink), and **categories** (from specified taxonomies) into Pinecone.
 
 **(Optional) Import MySQL Dump Details:**
 
@@ -238,50 +264,70 @@ preprocessing, and imports the data. It can be adapted for other WordPress dumps
 
 1. **Ensure Database Access:** Make sure the MySQL connection details (`DB_USER`, `DB_PASSWORD`, `DB_HOST`) are
    correctly configured in your `.env.[site]` file for the target database.
-2. **Import Dump (if necessary):** If working with a dump file, use the `bin/process_anandalib_dump.py`
-   script to import it into a local MySQL database (see details below).
-3. **Run the Ingestion Script:** Execute the `ingest-db-text.py` script:
+2. **Import Dump (if necessary):** If working with a dump file, use the `bin/process_anandalib_dump.py` script to import
+   it into a local MySQL database (see details below).
+3. **Run the Ingestion Script:** Execute the `ingest_db_text.py` script:
 
    ```bash
-   python python/data_ingestion/sql-to-vector-db/ingest-db-text.py --site [site] --database [database_name] \
+   python python/data_ingestion/sql-to-vector-db/ingest_db_text.py --site [site] --database [database_name] \
      --library-name "[Library Name]"
    ```
 
-   - `--site`: Your site configuration name (e.g., `ananda`) used for `.env` loading and site-specific settings
-     (like base URL, post types, category taxonomy).
+   - `--site`: Your site configuration name (e.g., `ananda`) used for `.env` loading and site-specific settings (like
+     base URL, post types, category taxonomy).
    - `--database`: The name of the MySQL database containing the WordPress data.
    - `--library-name`: The name to assign to this library within Pinecone metadata.
-   - `--keep-data` (optional): Add this flag to resume ingestion from the last checkpoint. If omitted (or `False`),
-     the script will prompt you to confirm deletion of existing vectors for the specified library name before
-     starting fresh.
+   - `--keep-data` (optional): Add this flag to resume ingestion from the last checkpoint. If omitted (or `False`), the
+     script will prompt you to confirm deletion of existing vectors for the specified library name before starting
+     fresh.
    - `--batch-size` (optional): Number of documents to process in each embedding/upsert batch (default: 50).
 
 4. **Monitor Progress:** The script will show progress bars for data preparation and batch processing.
-5. **Verify in Pinecone:** Check your Pinecone dashboard to confirm vectors have been added with the correct
-   metadata, including the `categories` field.
+5. **Verify in Pinecone:** Check your Pinecone dashboard to confirm vectors have been added with the correct metadata,
+   including the `categories` field.
 
 ### Ingesting Standalone PDF Files
 
 Use this method for PDF files that _do not_ originate from the WordPress database.
 
-1. Place your PDF files (or folders containing them) inside a designated directory (e.g., create `pdf-docs/[library-name]/`).
-2. Run the `ingest-text-data.ts` script (via npm):
+1. Place your PDF files (or folders containing them) inside a designated directory (e.g., create
+   `pdf-docs/[library-name]/`).
+2. Run the ingestion script using one of these commands:
 
    ```bash
-   # Example: Ingest PDFs from pdf-docs/my-library/
-   npm run ingest -- --file-path ./pdf-docs/my-library --site [site] --library-name "My Library Name"
+   # Standard ingestion
+   npm run ingest:pdf -- --file-path ./pdf-docs/my-library --site [site] --library-name "My Library Name"
+
+   # With deprecation warnings
+   npm run ingest:pdf:trace -- --file-path ./pdf-docs/my-library --site [site] --library-name "My Library Name"
    ```
 
-   - `--file-path`: Path to the directory containing the PDFs.
-   - `--site`: Your site configuration name (for `.env` loading).
-   - `--library-name`: Name for this library in Pinecone.
-   - `--keep-data` (optional): Resume from checkpoint.
+   Arguments:
+
+   - `--file-path`: Path to the directory containing the PDFs
+   - `--site`: Your site configuration name (for `.env` loading)
+   - `--library-name`: Name for this library in Pinecone
+   - `--keep-data` (optional): Resume from checkpoint
 
 3. Check Pinecone dashboard to verify vectors.
 
-_(Note: The `npm run ingest` command likely needs adjustment in `package.json` if it currently points to the TS script
-with different default arguments or assumptions. Alternatively, run the TS script directly with `ts-node` and the
-required arguments.)_
+### Ingesting from WordPress Database
+
+For WordPress database ingestion, use the Python script directly:
+
+```bash
+python data_ingestion/sql_to_vector_db/ingest_db_text.py --site [site] --database [database_name] \
+  --library-name "[Library Name]"
+```
+
+Arguments:
+
+- `--site`: Your site configuration name (e.g., `ananda`) used for `.env` loading and site-specific settings
+- `--database`: The name of the MySQL database containing the WordPress data
+- `--library-name`: The name to assign to this library within Pinecone metadata
+- `--keep-data` (optional): Resume ingestion from the last checkpoint
+- `--batch-size` (optional): Number of documents to process in each embedding/upsert batch (default: 50)
+- `--dry-run` (optional): Perform all steps except Pinecone operations
 
 ### Crawl Websites and Convert to Embeddings
 
@@ -304,8 +350,8 @@ This repo includes a script to crawl websites and ingest their content.
 
 ### Transcribe MP3 files and YouTube videos and convert to embeddings
 
-Put your MP3 files in `data-ingestion/media/`, in subfolders. Create a list of YouTube videos or
-playlists. Then add files to the processing queue and process them.
+Put your MP3 files in `data-ingestion/media/`, in subfolders. Create a list of YouTube videos or playlists. Then add
+files to the processing queue and process them.
 
 #### Audio files
 
@@ -325,12 +371,13 @@ python ingest_queue.py \
  --author 'Swami Kriyananda' --library 'Ananda Sangha' --site ananda
 ```
 
-`--playlists-file` is an option to specify an Excel file with a list of YouTube playlists. See sample file `youtube-links-sample.xlsx`.
+`--playlists-file` is an option to specify an Excel file with a list of YouTube playlists. See sample file
+`youtube-links-sample.xlsx`.
 
 Then process the queue:
 
 ```bash
-python data_ingestion/scripts/transcribe_and_ingest_media.py
+python data_ingestion/audio_video/transcribe_and_ingest_media.py
 ```
 
 Check Pinecone dashboard to verify your namespace and vectors have been added.
@@ -409,16 +456,16 @@ In general, keep an eye out in the `issues` and `discussions` section of this re
 ### General errors
 
 - Make sure you're running the latest Node version. Run `node -v`
-- Try a different PDF or convert your PDF to text first. It's possible your PDF is corrupted, scanned, or
-  requires OCR to convert to text.
+- Try a different PDF or convert your PDF to text first. It's possible your PDF is corrupted, scanned, or requires OCR
+  to convert to text.
 - `Console.log` the `env` variables and make sure they are exposed.
 - Make sure you're using the same versions of LangChain and Pinecone as this repo.
-- Check that you've created an `.env.[site]` file that contains your valid (and working) API keys,
-  environment and index name.
+- Check that you've created an `.env.[site]` file that contains your valid (and working) API keys, environment and index
+  name.
 - If you change `modelName` in `OpenAI`, make sure you have access to the api for the appropriate model.
 - Make sure you have enough OpenAI credits and a valid card on your billings account.
-- Check that you don't have multiple OPENAPI keys in your global environment. If you do, the local `env` file
-  from the project will be overwritten by systems `env` variable.
+- Check that you don't have multiple OPENAPI keys in your global environment. If you do, the local `env` file from the
+  project will be overwritten by systems `env` variable.
 - Try to hard code your API keys into the `process.env` variables if there are still issues.
 
 ### Pinecone errors
@@ -431,10 +478,10 @@ In general, keep an eye out in the `issues` and `discussions` section of this re
 
 1. Copy `site-config/config.json` to `site-config/config.[site].json`
 2. Edit the new config file with your site's details
-3. Write your system prompt in site-config/prompts/[site]-prompt.txt. Be sure above config file references
-   the correct prompt for your site.
-4. Create .env.[site] and add your site's API keys. Be sure to get a unique GOOGLE_APPLICATION_CREDENTIALS for
-   your site.
+3. Write your system prompt in site-config/prompts/[site]-prompt.txt. Be sure above config file references the correct
+   prompt for your site.
+4. Create .env.[site] and add your site's API keys. Be sure to get a unique GOOGLE_APPLICATION_CREDENTIALS for your
+   site.
 
 ## Using S3 for Prompts (Optional)
 
@@ -443,8 +490,8 @@ You can store prompt files in AWS S3 instead of the local filesystem. The system
 - With `s3:` prefix from your S3 bucket
 - Without prefix from the local filesystem
 
-**Note:** Currently, S3 prompt files are shared between development and production environments. Be cautious
-when making changes as they will affect all environments immediately.
+**Note:** Currently, S3 prompt files are shared between development and production environments. Be cautious when making
+changes as they will affect all environments immediately.
 
 1. Configure S3 access in your .env file:
 
@@ -508,7 +555,8 @@ when making changes as they will affect all environments immediately.
 
 ## To activate NPS survey
 
-1. Create a Google Sheet with columns: timestamp, uuid, score, feedback, additionalComments. Rename the tab to "Responses".
+1. Create a Google Sheet with columns: timestamp, uuid, score, feedback, additionalComments. Rename the tab to
+   "Responses".
 2. Add your Google Sheet ID to the .env file as NPS_SURVEY_GOOGLE_SHEET_ID
 3. Add your survey frequency in days to the .env file as NPS_SURVEY_FREQUENCY_DAYS
 4. Get client email from GOOGLE_APPLICATION_CREDENTIALS in .env file and add it to the Google Sheet as an "editor" user
@@ -520,13 +568,13 @@ when making changes as they will affect all environments immediately.
    - Search for "Google Sheets API" and enable it
 6. Make sure your GOOGLE_APPLICATION_CREDENTIALS in the .env file is correctly set up with the necessary permissions
 
-Note: If you encounter any errors related to Google Sheets API activation, check the backend logs
-for specific instructions and follow the provided link to activate the API for your project.
+Note: If you encounter any errors related to Google Sheets API activation, check the backend logs for specific
+instructions and follow the provided link to activate the API for your project.
 
 ## WordPress Plugin Integration
 
-We provide a WordPress plugin in the `wordpress/plugins/ananda-ai-chatbot` directory
-that adds an AI chatbot bubble to your WordPress site. The plugin connects to this
-project's chat backend (deployed on Vercel or locally for development).
+We provide a WordPress plugin in the `wordpress/plugins/ananda-ai-chatbot` directory that adds an AI chatbot bubble to
+your WordPress site. The plugin connects to this project's chat backend (deployed on Vercel or locally for development).
 
-For detailed installation instructions, features, and development setup, please refer to the [plugin's README file](wordpress/plugins/ananda-ai-chatbot/README.md).
+For detailed installation instructions, features, and development setup, please refer to the
+[plugin's README file](wordpress/plugins/ananda-ai-chatbot/README.md).

@@ -4,8 +4,8 @@
 
 ### 1. Introduction
 
-The Ananda Library Chatbot is a sophisticated question-answering system designed to respond to user queries based on
-a specific corpus of knowledge, primarily spiritual teachings and related materials associated with Ananda. It utilizes
+The Ananda Library Chatbot is a sophisticated question-answering system designed to respond to user queries based on a
+specific corpus of knowledge, primarily spiritual teachings and related materials associated with Ananda. It utilizes
 Retrieval-Augmented Generation (RAG) by leveraging Large Language Models (LLMs) combined with vector database lookups
 (Pinecone) to provide contextually relevant answers derived from ingested source documents (texts, PDFs, potentially
 audio/video transcripts). The system features configurable personalities/prompts, user feedback mechanisms,
@@ -23,8 +23,8 @@ authentication, and integration options, including a WordPress plugin.
 
 ### 3. User Roles
 
-- **End User:** Interacts with the chatbot via a web interface or integrated plugin to ask questions and receive answers.
-  May provide feedback on answer quality (like/dislike).
+- **End User:** Interacts with the chatbot via a web interface or integrated plugin to ask questions and receive
+  answers. May provide feedback on answer quality (like/dislike).
 - **Administrator:** Configures chatbot instances (prompts, models, data sources), manages the data ingestion process,
   monitors system health and usage, manages user access (if applicable), and potentially reviews feedback.
 
@@ -45,16 +45,17 @@ authentication, and integration options, including a WordPress plugin.
   - **FR2.2:** Process user queries using Langchain (`makechain.ts`).
   - **FR2.3:** Query the configured Pinecone vector index to retrieve relevant document chunks based on the user's
     question.
-  - **FR2.4:** Construct a prompt for the LLM (e.g., OpenAI's GPT models) including the user query and retrieved context.
+  - **FR2.4:** Construct a prompt for the LLM (e.g., OpenAI's GPT models) including the user query and retrieved
+    context.
   - **FR2.5:** Utilize pre-defined system prompts based on the selected configuration (`site-config/prompts`,
     `loadSiteConfig`).
   - **FR2.6:** Generate a coherent answer based on the LLM response.
   - **FR2.7:** Extract and format source citations from the retrieved document metadata (`DocMetadata.ts`).
 - **FR3: Data Ingestion & Management**
-  - **FR3.1:** Provide Python scripts for processing and ingesting data into Pinecone (`data_ingestion/`). Other scripts,
-    such as TypeScript-based PDF ingestion (`data_ingestion/pdf_to_vector_db.ts`), also exist.
-  - **FR3.2:** Support ingestion from text files and PDFs (`customPDFLoader.ts`, `db-to-pdfs.py` Python script,
-    `pdf_to_vector_db.ts` TypeScript script).
+  - **FR3.1:** Provide Python scripts for processing and ingesting data into Pinecone (`data_ingestion/`). The primary
+    PDF ingestion script is `data_ingestion/pdf_to_vector_db.py`.
+  - **FR3.2:** Support ingestion from text files and PDFs (`db_to_pdfs.py` Python script, `pdf_to_vector_db.py` Python
+    script).
   - **FR3.3:** Support transcription of audio/video files (using external services like AssemblyAI inferred from
     `transcription_utils.py`) and ingestion of transcripts (`transcribe_and_ingest_media.py`).
   - **FR3.4:** Support crawling web content using `data_ingestion/crawler/website_crawler.py`.

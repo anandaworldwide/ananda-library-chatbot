@@ -1,0 +1,11 @@
+# data ingestion specific
+/db_to_pdf/docs-*/
+/db_to_pdf/freejoehunt/
+/media/
+/audio_video/queue/
+/audio_video/queue-*/
+/audio_video/data/
+**/ingestion_checkpoints/
+/pdf_corpus_analysis_*
+/queue*/*.json
+/data/processing_time_estimates.json

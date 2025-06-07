@@ -1,0 +1,167 @@
+---
+description: 
+globs: *.py
+alwaysApply: false
+---
+# Data Ingestion Pipeline Rules
+
+## Core Philosophy: Semantic Chunking
+
+The project uses **spaCy-based semantic chunking** instead of fixed-size chunking for optimal RAG performance. Key principles:
+
+### Chunking Strategy
+- **Dynamic sizing** based on document length (300-500 tokens per chunk)
+- **Paragraph-first approach** preserving semantic boundaries
+- **Target range**: 225-450 words per chunk (70% compliance target)
+- **20% token-based overlap** for context preservation
+- **Smart merging** of small chunks to reach target range
+
+### Implementation Files
+- **[data_ingestion/utils/spacy_text_splitter.py](mdc:data_ingestion/utils/spacy_text_splitter.py)** - Core chunking logic
+- **[data_ingestion/utils/text_processing.py](mdc:data_ingestion/utils/text_processing.py)** - Text cleaning utilities
+- **[data_ingestion/utils/document_hash.py](mdc:data_ingestion/utils/document_hash.py)** - Document-level hashing
+
+## Ingestion Scripts
+
+### PDF Processing
+- **Primary script**: [data_ingestion/pdf_to_vector_db.py](mdc:data_ingestion/pdf_to_vector_db.py)
+- Uses PyMuPDF for better text extraction than PyPDF2
+- Full-document processing to preserve context
+- Table of contents artifact removal
+- Command: `python pdf_to_vector_db.py --site [site] --force`
+
+### Web Crawling
+- **Primary script**: [data_ingestion/crawler/website_crawler.py](mdc:data_ingestion/crawler/website_crawler.py)
+- Configuration: [data_ingestion/crawler/crawler_config/](mdc:data_ingestion/crawler/crawler_config)
+- Semantic content extraction with readability fallbacks
+- SQLite-based crawl state management
+- Command: `python website_crawler.py --site [site] --debug`
+
+### Audio/Video Processing
+- **Directory**: [data_ingestion/audio_video/](mdc:data_ingestion/audio_video)
+- **Main script**: [data_ingestion/audio_video/transcribe_and_ingest_media.py](mdc:data_ingestion/audio_video/transcribe_and_ingest_media.py)
+- AssemblyAI for transcription
+- Timestamp-aware chunking for playback synchronization
+- S3 integration for media storage
+
+### Database to Vector
+- **Directory**: [data_ingestion/sql_to_vector_db/](mdc:data_ingestion/sql_to_vector_db)
+- **Main script**: [data_ingestion/sql_to_vector_db/ingest_db_text.py](mdc:data_ingestion/sql_to_vector_db/ingest_db_text.py)
+- HTML tag cleaning and text normalization
+- Author and source metadata preservation
+- Batch processing with progress tracking
+
+## Shared Utilities
+
+### Must Use Consistent Utilities
+All ingestion scripts must use these shared utilities for consistency:
+
+#### Text Processing ([data_ingestion/utils/text_processing.py](mdc:data_ingestion/utils/text_processing.py))
+```python
+from data_ingestion.utils.text_processing import (
+    clean_document_text,
+    remove_html_tags,
+    normalize_whitespace
+)
+```
+
+#### SpaCy Text Splitter ([data_ingestion/utils/spacy_text_splitter.py](mdc:data_ingestion/utils/spacy_text_splitter.py))
+```python
+from data_ingestion.utils.spacy_text_splitter import SpacyTextSplitter
+
+text_splitter = SpacyTextSplitter(
+    chunk_size=600,        # Will be dynamically adjusted
+    chunk_overlap=120,     # 20% overlap
+    separator="\n\n",
+    pipeline="en_core_web_sm"
+)
+```
+
+#### Document Hashing ([data_ingestion/utils/document_hash.py](mdc:data_ingestion/utils/document_hash.py))
+```python
+from data_ingestion.utils.document_hash import generate_document_hash
+
+# All chunks from same document share same hash
+doc_hash = generate_document_hash(document_content, source_info)
+```
+
+#### Pinecone Operations ([data_ingestion/utils/pinecone_utils.py](mdc:data_ingestion/utils/pinecone_utils.py))
+```python
+from data_ingestion.utils.pinecone_utils import (
+    upsert_vectors_batch,
+    delete_vectors_by_hash,
+    get_pinecone_stats
+)
+```
+
+## Quality Assurance
+
+### Metrics Tracking
+The SpacyTextSplitter includes comprehensive metrics:
+- Document-level word count and chunk statistics
+- Target range compliance (225-450 words)
+- Edge case detection (very short/long documents)
+- Anomaly identification (unusual chunk sizes)
+- Distribution analysis across content types
+
+### Testing Requirements
+- **Integration tests**: [data_ingestion/tests/test_integration_chunk_quality.py](mdc:data_ingestion/tests/test_integration_chunk_quality.py)
+- **Unit tests**: Individual utility functions
+- **Quality validation**: Chunk size distribution analysis
+- Run tests: `cd data_ingestion && python -m pytest`
+
+## Configuration Management
+
+### Environment Setup
+Each site requires:
+- Environment file (`.env.[site]`)
+- Crawler configuration ([data_ingestion/crawler/crawler_config/[site]-config.json](mdc:data_ingestion/crawler/crawler_config/))
+- Pinecone namespace configuration
+
+### Site-Specific Settings
+```json
+{
+  "domain": "example.org",
+  "skip_patterns": ["pattern1", "pattern2"],
+  "crawl_frequency_days": 14,
+  "max_pages": 1000
+}
+```
+
+## Error Handling
+
+### Fallback Strategies
+- **spaCy failures**: Automatic fallback to sentence-based splitting
+- **Network issues**: Retry logic with exponential backoff
+- **Memory constraints**: Streaming processing for large documents
+- **Content type variations**: Adaptive handling for different media
+
+### Progress Tracking
+- Document-level progress logging
+- Checkpoint system for resumable processing
+- Error aggregation and reporting
+- Processing statistics and summaries
+
+## Vector Database Standards
+
+### Metadata Schema
+All ingested content must include standardized metadata:
+```python
+metadata = {
+    "source": str,           # Original filename or URL
+    "pageNumber": int,       # Page number for PDFs
+    "text": str,            # The actual text chunk
+    "type": str,            # 'pdf', 'audio', 'youtube', 'txt', 'web'
+    "title": str,           # Document title
+    "author": str,          # Document author
+    "url": str,             # URL source
+    "publishedDate": str,   # Publication date
+    "s3Key": str,           # Path to audio file (audio sources)
+    "startSecond": float,   # Start timestamp (audio/video)
+    "endSecond": float      # End timestamp (audio/video)
+}
+```
+
+### Vector ID Format
+Standardized 7-part vector ID format:
+`{site}#{source_type}#{doc_hash}#{chunk_index}#{start_word}#{end_word}#{metadata_hash}`

@@ -1,0 +1,269 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Security & Deployment Rules
+
+## Security Architecture
+
+The system implements **multi-layered security** with authentication, authorization, rate limiting, and input validation across all components.
+
+### Security Documentation
+- **Primary reference**: [docs/SECURITY-README.md](mdc:docs/SECURITY-README.md)
+- **Security TODOs**: [docs/SECURITY-TODO.md](mdc:docs/SECURITY-TODO.md)
+- **User authentication**: [docs/user-auth-TODO.md](mdc:docs/user-auth-TODO.md)
+
+## Authentication & Authorization
+
+### JWT Implementation
+- **Token generation**: [web/src/utils/server/jwtUtils.ts](mdc:web/src/utils/server/jwtUtils.ts)
+- **App Router auth**: [web/src/utils/server/appRouterJwtUtils.ts](mdc:web/src/utils/server/appRouterJwtUtils.ts)
+- **Middleware**: [web/src/utils/server/authMiddleware.ts](mdc:web/src/utils/server/authMiddleware.ts)
+- **HttpOnly cookies** for secure token storage
+- **Role-based access control** (admin/user roles)
+
+### Password Security
+- **Hashing**: bcrypt implementation in [web/src/utils/server/passwordUtils.ts](mdc:web/src/utils/server/passwordUtils.ts)
+- **Minimum complexity**: 8+ characters with mixed case, numbers, symbols
+- **Salt rounds**: Configurable bcrypt cost factor
+- **No plaintext storage**: Always hash before storing
+
+### Session Management
+- **Cookie configuration**:
+  ```typescript
+  {
+    httpOnly: true,      // Prevent XSS access
+    secure: true,        // HTTPS only in production
+    sameSite: 'strict',  // CSRF protection
+    maxAge: 24 * 60 * 60 * 1000  // 24 hours
+  }
+  ```
+
+## Rate Limiting & DDoS Protection
+
+### Redis-Based Rate Limiting
+- **Implementation**: [web/src/utils/server/genericRateLimiter.ts](mdc:web/src/utils/server/genericRateLimiter.ts)
+- **Redis utilities**: [web/src/utils/server/redisUtils.ts](mdc:web/src/utils/server/redisUtils.ts)
+- **IP-based limiting** with configurable thresholds
+- **Cleanup cron**: [web/src/pages/api/pruneRateLimits.ts](mdc:web/src/pages/api/pruneRateLimits.ts)
+
+### Rate Limit Configuration
+```typescript
+// Standard API rate limits
+const RATE_LIMITS = {
+  chat: { requests: 100, windowMs: 60 * 1000 },      // 100/minute
+  auth: { requests: 5, windowMs: 15 * 60 * 1000 },   // 5/15min
+  admin: { requests: 1000, windowMs: 60 * 1000 }     // 1000/minute
+}
+```
+
+## Input Validation & Sanitization
+
+### API Input Validation
+- **Query sanitization**: Prevent SQL injection
+- **Parameter validation**: Type checking and bounds
+- **Content filtering**: Remove malicious input
+- **HTML sanitization**: Clean user-generated content
+
+### Data Validation Patterns
+```typescript
+// Input validation example
+function validateChatInput(input: unknown): string {
+  if (typeof input !== 'string') {
+    throw new Error('Input must be string')
+  }
+  
+  if (input.length > 10000) {
+    throw new Error('Input too long')
+  }
+  
+  // Sanitize HTML and script tags
+  return sanitizeHtml(input)
+}
+```
+
+## Environment & Configuration Security
+
+### Environment Variable Management
+- **Site-specific configs**: `.env.[site]` files
+- **Required variables**: Validated at startup
+- **No hardcoded secrets**: All sensitive data in env vars
+- **Example file**: [.env.example](mdc:.env.example)
+
+### Critical Environment Variables
+```bash
+# Authentication
+JWT_SECRET=                    # Strong random key
+JWT_EXPIRES_IN=24h
+
+# Database credentials
+PINECONE_API_KEY=
+PINECONE_ENVIRONMENT=
+FIRESTORE_PRIVATE_KEY=
+
+# External services
+OPENAI_API_KEY=
+ASSEMBLYAI_API_KEY=
+REDIS_URL=
+
+# Site configuration
+SITE=                         # ananda, crystal, jairam, etc.
+NEXTAUTH_URL=
+NEXTAUTH_SECRET=
+```
+
+### Configuration Validation
+- **Startup checks**: Verify all required env vars
+- **Type validation**: Ensure proper data types
+- **Connection testing**: Validate database/service connectivity
+- **Fallback handling**: Graceful degradation for optional services
+
+## CORS & Cross-Origin Security
+
+### CORS Configuration
+```typescript
+// API CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS,
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Credentials': 'true'
+}
+```
+
+### Security Headers
+- **Content Security Policy**: Prevent XSS attacks
+- **HSTS**: Force HTTPS connections
+- **X-Frame-Options**: Prevent clickjacking
+- **X-Content-Type-Options**: Prevent MIME sniffing
+
+## Database Security
+
+### Firestore Security Rules
+- **Authentication required**: No anonymous access
+- **Field-level permissions**: Restrict sensitive data
+- **Read/write rules**: User-specific data access
+- **Admin privileges**: Elevated access for admin users
+
+### Pinecone Security
+- **API key management**: Secure credential storage
+- **Namespace isolation**: Separate data by site
+- **Query filtering**: Prevent unauthorized access
+- **Metadata protection**: Sanitize sensitive metadata
+
+## WordPress Integration Security
+
+### Plugin Security
+- **Secure API client**: [wordpress/plugins/ananda-ai-chatbot/secure-api-client.php](mdc:wordpress/plugins/ananda-ai-chatbot/secure-api-client.php)
+- **Token validation**: Verify WordPress to backend communication
+- **Capability checks**: WordPress user permission validation
+- **Nonce verification**: CSRF protection for admin actions
+
+### Cross-Site Communication
+- **Signed tokens**: Cryptographically signed communication
+- **Time-based expiry**: Short-lived tokens
+- **Origin validation**: Verify request source
+- **Rate limiting**: Apply limits to WordPress requests
+
+## Deployment Security
+
+### Vercel Configuration
+- **Environment variables**: Secure variable storage
+- **Domain configuration**: HTTPS enforcement
+- **Build security**: Dependency vulnerability scanning
+- **Runtime security**: Serverless function isolation
+
+### Production Checklist
+- [ ] All environment variables configured
+- [ ] HTTPS certificates valid
+- [ ] Rate limiting configured
+- [ ] Security headers enabled
+- [ ] Database security rules deployed
+- [ ] Monitoring and alerting active
+- [ ] Backup procedures tested
+
+## Monitoring & Incident Response
+
+### Security Monitoring
+- **Authentication failures**: Track failed login attempts
+- **Rate limit violations**: Monitor for abuse patterns
+- **Unusual access patterns**: Detect potential intrusions
+- **API error rates**: Monitor for attacks or abuse
+
+### Logging Standards
+```typescript
+// Security event logging
+interface SecurityEvent {
+  timestamp: string
+  event_type: 'auth_failure' | 'rate_limit' | 'suspicious_activity'
+  user_id?: string
+  ip_address: string
+  user_agent: string
+  additional_context: Record<string, any>
+}
+```
+
+### Incident Response
+1. **Detection**: Automated alerts for security events
+2. **Assessment**: Determine severity and impact
+3. **Containment**: Block malicious actors if needed
+4. **Investigation**: Analyze logs and patterns
+5. **Recovery**: Restore normal operations
+6. **Review**: Update security measures based on learnings
+
+## Data Protection & Privacy
+
+### Data Minimization
+- **Collect only necessary data**: Minimize user data collection
+- **Retention policies**: Automatic data deletion after retention period
+- **Anonymization**: Remove PII where possible
+- **Consent management**: Clear user consent for data usage
+
+### Sensitive Data Handling
+- **PII encryption**: Encrypt personally identifiable information
+- **Secure transmission**: TLS 1.3 for all communications
+- **Access logging**: Track who accesses sensitive data
+- **Data classification**: Classify data by sensitivity level
+
+## Vulnerability Management
+
+### Dependency Security
+- **Automated scanning**: Regular dependency vulnerability checks
+- **Update procedures**: Prompt security patches
+- **Version pinning**: Control dependency versions
+- **Security advisories**: Monitor for disclosed vulnerabilities
+
+### Security Testing
+- **Penetration testing**: Regular security assessments
+- **Code analysis**: Static analysis for security flaws
+- **Dependency auditing**: Regular audit of third-party packages
+- **Configuration review**: Security configuration validation
+
+## Backup & Recovery
+
+### Data Backup Strategy
+- **Automated backups**: Regular Firestore exports
+- **Offsite storage**: Geographically distributed backups
+- **Encryption**: Encrypted backup storage
+- **Recovery testing**: Regular restore procedure validation
+
+### Disaster Recovery
+- **Recovery time objectives**: Target recovery times
+- **Recovery point objectives**: Acceptable data loss limits
+- **Failover procedures**: Automated failover where possible
+- **Communication plans**: Incident communication protocols
+
+## Compliance Considerations
+
+### GDPR Compliance
+- **Data subject rights**: Support for data access/deletion
+- **Consent management**: Clear consent mechanisms
+- **Data protection officer**: Designated privacy contact
+- **Privacy by design**: Privacy considerations in development
+
+### Security Frameworks
+- **OWASP Top 10**: Regular assessment against common vulnerabilities
+- **CIS Controls**: Implementation of security controls
+- **ISO 27001**: Information security management practices
+- **SOC 2**: Service organization control compliance

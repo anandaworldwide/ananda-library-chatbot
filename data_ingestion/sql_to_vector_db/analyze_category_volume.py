@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Analyzes the volume of text content per category from a WordPress MySQL database.
 
@@ -7,39 +7,36 @@ cleans HTML, calculates character counts for cleaned content, aggregates counts
 by category, and prints a report showing total characters and percentage per category.
 """
 
+import argparse
 import os
 import sys
-import argparse
-import pymysql
-import re
 from collections import defaultdict
-from tqdm import tqdm
-from bs4 import BeautifulSoup
 
-# Add the python directory to the path so we can import util
-# Assumes running from workspace root or data_ingestion/sql_to_vector_db
-try:
-    # Running from workspace root
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-    from pyutil.env_utils import load_env
-except ImportError:
-    # Running from data_ingestion/sql_to_vector_db
-    try:
-        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))) # Go up three levels
-        from pyutil.env_utils import load_env
-    except ImportError:
-        print("Error: Could not find the 'pyutil' module. Make sure the script is run from the workspace root or the 'data_ingestion/sql_to_vector_db' directory.")
-        sys.exit(1)
+import pymysql
+from tqdm import tqdm
+
+# Import shared utilities
+from data_ingestion.utils.text_processing import remove_html_tags, replace_smart_quotes
+from pyutil.env_utils import load_env
 
 
 # --- Argument Parsing ---
 def parse_arguments():
     """Parses command-line arguments."""
-    parser = argparse.ArgumentParser(description="Analyze content volume per category from MySQL DB.")
-    parser.add_argument("--site", required=True, help="Site name (e.g., ananda) for config and env loading.")
+    parser = argparse.ArgumentParser(
+        description="Analyze content volume per category from MySQL DB."
+    )
+    parser.add_argument(
+        "--site",
+        required=True,
+        help="Site name (e.g., ananda) for config and env loading.",
+    )
     # Database name is now required
-    parser.add_argument("--database", required=True, help="Name of the MySQL database to connect to.")
+    parser.add_argument(
+        "--database", required=True, help="Name of the MySQL database to connect to."
+    )
     return parser.parse_args()
+
 
 # --- Environment Loading ---
 def load_environment(site: str):
@@ -56,10 +53,13 @@ def load_environment(site: str):
 
     missing_vars = [var for var in required_vars if not os.getenv(var)]
     if missing_vars:
-        print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
+        print(
+            f"Error: Missing required environment variables: {', '.join(missing_vars)}"
+        )
         sys.exit(1)
 
-# --- Database Utilities (Simplified from ingest-db-text.py) ---
+
+# --- Database Utilities (Simplified from ingest_db_text.py) ---
 def get_db_config(args):
     """Constructs the database connection configuration dictionary."""
     # Directly use the required database argument
@@ -72,8 +72,9 @@ def get_db_config(args):
         "database": db_name,
         "charset": os.getenv("DB_CHARSET", "utf8mb4"),
         "collation": os.getenv("DB_COLLATION", "utf8mb4_unicode_ci"),
-        "cursorclass": pymysql.cursors.DictCursor
+        "cursorclass": pymysql.cursors.DictCursor,
     }
+
 
 def get_db_connection(db_config):
     """Establishes and returns a database connection."""
@@ -85,55 +86,22 @@ def get_db_connection(db_config):
         print(f"Error connecting to MySQL: {err}")
         sys.exit(1)
 
+
 def close_db_connection(connection):
     """Closes the database connection if it's open."""
     if connection and connection.open:
         connection.close()
         print("Database connection closed.")
 
-# --- Text Cleaning Utilities (Copied from ingest-db-text.py) ---
-def remove_html_tags(text):
-    """Removes HTML tags, script, style elements, and excessive whitespace from text."""
-    if not text:
-        return ""
-    soup = BeautifulSoup(text, "html.parser")
-    for script_or_style in soup(["script", "style"]):
-        script_or_style.decompose()
-    text = soup.get_text()
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
 
-def replace_smart_quotes(text):
-    """Replaces common 'smart' quotes and other special characters with standard ASCII equivalents."""
-    if not text:
-        return ""
-    smart_quotes = {
-        "\u2018": "'", "\u2019": "'", # Single quotes
-        "\u201c": '"', "\u201d": '"', # Double quotes
-        "\u2032": "'", "\u2033": '"', # Prime symbols
-        "\u2014": "-", "\u2013": "-", # Dashes
-        "\u2026": "...",             # Ellipsis
-        "\u2011": "-",               # Non-breaking hyphen
-        "\u00A0": " ",               # Non-breaking space
-        "\u00AB": '"', "\u00BB": '"', # Guillemets
-        "\u201A": ",", "\u201E": ",", # Low single/double quotes as commas
-        "\u2022": "*",               # Bullet
-        "\u2010": "-",               # Hyphen
-    }
-    for smart, standard in smart_quotes.items():
-        text = text.replace(smart, standard)
-    # Keep basic ASCII and common whitespace
-    text = ''.join(c for c in text if ord(c) < 128 or c in [' ', '\n', '\t'])
-    return text
-
-# --- Site Configuration (Simplified from ingest-db-text.py) ---
+# --- Site Configuration (Simplified from ingest_db_text.py) ---
 def get_config(site):
     """Loads site-specific configuration details."""
     # Add other site configs as needed
     config = {
         "ananda": {
-            "post_types": ["content"], # WordPress post types to analyze
-            "category_taxonomy": "library-category" # WP taxonomy for categories
+            "post_types": ["content"],  # WordPress post types to analyze
+            "category_taxonomy": "library-category",  # WP taxonomy for categories
         },
         # Example for another site:
         # "jairam": {
@@ -147,12 +115,13 @@ def get_config(site):
     print(f"Using configuration for site: {site}")
     return config[site]
 
+
 # --- Data Fetching & Analysis ---
 def analyze_category_content(db_connection, site_config: dict):
     """Fetches posts, cleans content, calculates volume per category."""
-    post_types = site_config['post_types']
-    category_taxonomy = site_config['category_taxonomy']
-    placeholders = ', '.join(['%s'] * len(post_types))
+    post_types = site_config["post_types"]
+    category_taxonomy = site_config["category_taxonomy"]
+    placeholders = ", ".join(["%s"] * len(post_types))
 
     # Query to get post ID, content, and associated categories
     query = f"""
@@ -192,25 +161,27 @@ def analyze_category_content(db_connection, site_config: dict):
 
             print("Analyzing content volume per category...")
             for row in tqdm(results, desc="Analyzing Posts"):
-                post_id = row['ID']
-
                 # 1. Clean content
-                cleaned_content = remove_html_tags(row['post_content'])
+                cleaned_content = remove_html_tags(row["post_content"])
                 cleaned_content = replace_smart_quotes(cleaned_content)
                 char_count = len(cleaned_content)
 
                 if char_count == 0:
                     posts_with_empty_content += 1
-                    continue # Skip posts with no text content after cleaning
+                    continue  # Skip posts with no text content after cleaning
 
                 # 2. Add to total count
                 total_char_count += char_count
-                processed_posts += 1 # Count posts with actual content
+                processed_posts += 1  # Count posts with actual content
 
                 # 3. Assign count to categories
                 category_list = []
-                if row.get('categories'):
-                    category_list = [cat.strip() for cat in row['categories'].split('|||') if cat.strip()]
+                if row.get("categories"):
+                    category_list = [
+                        cat.strip()
+                        for cat in row["categories"].split("|||")
+                        if cat.strip()
+                    ]
 
                 if not category_list:
                     posts_with_no_category += 1
@@ -227,8 +198,12 @@ def analyze_category_content(db_connection, site_config: dict):
 
         print("Analysis complete.")
         print(f"Processed {processed_posts} posts with content.")
-        print(f"Skipped {posts_with_empty_content} posts due to empty content after cleaning.")
-        print(f"Found {posts_with_no_category} posts with content but no assigned category.")
+        print(
+            f"Skipped {posts_with_empty_content} posts due to empty content after cleaning."
+        )
+        print(
+            f"Found {posts_with_no_category} posts with content but no assigned category."
+        )
 
         return category_combination_counts, total_char_count
 
@@ -238,8 +213,10 @@ def analyze_category_content(db_connection, site_config: dict):
     except Exception as e:
         print(f"Unexpected error during analysis: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
+
 
 # --- Reporting ---
 def print_report(category_counts: dict, total_count: int):
@@ -252,20 +229,26 @@ def print_report(category_counts: dict, total_count: int):
     category_col_width = 45
     count_col_width = 20
     percent_col_width = 20
-    total_width = category_col_width + count_col_width + percent_col_width + 2 # Account for spaces
+    total_width = (
+        category_col_width + count_col_width + percent_col_width + 2
+    )  # Account for spaces
 
     print("\n--- Category Content Volume Report ---")
-    print(f"{'Category Combination':<{category_col_width}} {'Character Count':>{count_col_width}} {'Percent of Total':>{percent_col_width}}")
+    print(
+        f"{'Category Combination':<{category_col_width}} {'Character Count':>{count_col_width}} {'Percent of Total':>{percent_col_width}}"
+    )
     print("-" * total_width)
 
     # Sort categories by character count descending
-    sorted_categories = sorted(category_counts.items(), key=lambda item: item[1], reverse=True)
+    sorted_categories = sorted(
+        category_counts.items(), key=lambda item: item[1], reverse=True
+    )
 
     for category_key, count in sorted_categories:
         # Format the category key for display
         if isinstance(category_key, tuple):
             # Join tuple elements with ' & ' for display
-            display_name = ' & '.join(category_key)
+            display_name = " & ".join(category_key)
         else:
             # Should not happen with the new logic, but handle just in case
             display_name = str(category_key)
@@ -273,18 +256,23 @@ def print_report(category_counts: dict, total_count: int):
         percentage = (count / total_count) * 100 if total_count > 0 else 0
         # Format count with commas for readability
         formatted_count = f"{count:,}"
-        print(f"{display_name:<{category_col_width}} {formatted_count:>{count_col_width}} {f'{percentage:.2f}%':>{percent_col_width}}")
+        print(
+            f"{display_name:<{category_col_width}} {formatted_count:>{count_col_width}} {f'{percentage:.2f}%':>{percent_col_width}}"
+        )
 
     print("-" * total_width)
     formatted_total = f"{total_count:,}"
-    print(f"{'TOTAL':<{category_col_width}} {formatted_total:>{count_col_width}} {'100.00%':>{percent_col_width}}")
+    print(
+        f"{'TOTAL':<{category_col_width}} {formatted_total:>{count_col_width}} {'100.00%':>{percent_col_width}}"
+    )
     print("-" * total_width)
+
 
 # --- Main Execution ---
 def main():
     """Main function to orchestrate the analysis process."""
     args = parse_arguments()
-    print(f"--- Starting Category Content Volume Analysis ---")
+    print("--- Starting Category Content Volume Analysis ---")
     print(f"Site: {args.site}")
     # No longer optional, always print the required database name
     # if args.database:
@@ -298,14 +286,17 @@ def main():
     db_connection = None
     try:
         db_connection = get_db_connection(db_config)
-        category_counts, total_count = analyze_category_content(db_connection, site_config)
+        category_counts, total_count = analyze_category_content(
+            db_connection, site_config
+        )
         print_report(category_counts, total_count)
 
     except Exception as e:
         # Catch any unexpected errors during the main flow
-        print(f"--- An unexpected error occurred ---")
+        print("--- An unexpected error occurred ---")
         print(f"Error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     finally:
@@ -313,5 +304,6 @@ def main():
         close_db_connection(db_connection)
         print("Analysis process finished.")
 
+
 if __name__ == "__main__":
-    main() 
+    main()
