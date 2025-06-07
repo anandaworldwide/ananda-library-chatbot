@@ -540,96 +540,167 @@ document.addEventListener('DOMContentLoaded', () => {
     // Normalize line endings and clean up excessive whitespace:
     // - Convert Windows line endings to Unix
     // - Collapse 3+ newlines into 2 (standard markdown paragraph break)
+    // - Ensure consistent spacing before lists (add extra newline if needed)
     text = text
       .trim()
       .replace(/\r\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n');
+      .replace(/\n{3,}/g, '\n\n')
+      // Add extra newline before first list item if there isn't already a blank line
+      .replace(/([^\n])\n([*-] .*\n)(?!\n[*-] )/g, '$1\n\n$2')
+      .replace(/([^\n])\n([*-] .*)$/g, '$1\n\n$2')
+      // Add extra newline before first ordered list item
+      .replace(/([^\n])\n(\d+\. .*\n)(?!\n\d+\. )/g, '$1\n\n$2')
+      .replace(/([^\n])\n(\d+\. .*)$/g, '$1\n\n$2');
 
     // Split text into logical blocks (paragraphs and lists)
-    // Double newlines are used as block separators in markdown
     const blocks = text.split('\n\n');
     let html = '';
     let inList = false; // Tracks whether we're currently processing a list
+    let inOrderedList = false; // Track whether we're in an ordered list
 
-    for (let block of blocks) {
-      block = block.trim();
+    for (let i = 0; i < blocks.length; i++) {
+      let block = blocks[i].trim();
+      let nextBlock = i < blocks.length - 1 ? blocks[i + 1].trim() : '';
 
-      // Check if this block starts with a list marker (* or -)
+      // Check if this block starts with a list marker
       if (block.match(/^[*-]\s/m)) {
-        // Start a new list if we're not already in one
+        // Start a new unordered list if we're not already in one
         if (!inList) {
           html += '<ul>';
           inList = true;
         }
-        // Split the block into individual list items
+        // Close ordered list if we were in one
+        if (inOrderedList) {
+          html += '</ol>';
+          inOrderedList = false;
+        }
+        // Process unordered list items
         const items = block.split('\n');
         for (let item of items) {
           if (item.trim()) {
-            // Process each list item:
-            // 1. Remove the list marker
-            // 2. Process inline markdown (bold, italic, code)
-            // 3. Handle special GETHUMAN links
-            // 4. Process regular links
-            const listContent = item
-              .replace(/^[*-]\s+/, '') // Remove list marker
-              // Process inline markdown within list items
-              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-              .replace(/__(.*?)__/g, '<strong>$1</strong>')
-              .replace(/\*(.*?)\*/g, '<em>$1</em>')
-              .replace(/_(.*?)_/g, '<em>$1</em>')
-              .replace(/`(.*?)`/g, '<code>$1</code>')
-              // Handle links - special case for GETHUMAN
-              .replace(
-                /\[(.*?)\]\(GETHUMAN\)/g,
-                '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
-              )
-              // Regular links
-              .replace(
-                /\[(.*?)\]\((.*?)\)/g,
-                '<a href="$2" target="_blank">$1</a>',
-              );
+            if (item.match(/^[*-]\s/)) {
+              const listContent = item
+                .replace(/^[*-]\s+/, '')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/__(.*?)__/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/_(.*?)_/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(
+                  /\[(.*?)\]\(GETHUMAN\)/g,
+                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+                )
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
 
-            html += `<li>${listContent}</li>`;
+              html += `<li>${listContent}</li>`;
+            } else {
+              if (inList) {
+                html += '</ul>';
+                inList = false;
+              }
+              let paragraph = item
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/__(.*?)__/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/_(.*?)_/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(
+                  /\[(.*?)\]\(GETHUMAN\)/g,
+                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+                )
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+              html += `<p>${paragraph}</p>`;
+            }
           }
         }
-      } else {
-        // This is a regular paragraph block
-
-        // Close any open list before starting a new paragraph
+      } else if (block.match(/^\d+\.\s/m)) {
+        // Start a new ordered list if we're not already in one
+        if (!inOrderedList) {
+          html += '<ol>';
+          inOrderedList = true;
+        }
+        // Close unordered list if we were in one
         if (inList) {
           html += '</ul>';
           inList = false;
         }
+        // Process ordered list items
+        const items = block.split('\n');
+        for (let item of items) {
+          if (item.trim()) {
+            if (item.match(/^\d+\.\s/)) {
+              const listContent = item
+                .replace(/^\d+\.\s+/, '')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/__(.*?)__/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/_(.*?)_/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(
+                  /\[(.*?)\]\(GETHUMAN\)/g,
+                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+                )
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
 
-        // Process the paragraph block:
-        // 1. Handle inline markdown (bold, italic, code)
-        // 2. Process special GETHUMAN links
-        // 3. Process regular links
-        // 4. Convert single newlines to <br /> tags
+              html += `<li>${listContent}</li>`;
+            } else {
+              if (inOrderedList) {
+                html += '</ol>';
+                inOrderedList = false;
+              }
+              let paragraph = item
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/__(.*?)__/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/_(.*?)_/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(
+                  /\[(.*?)\]\(GETHUMAN\)/g,
+                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+                )
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+              html += `<p>${paragraph}</p>`;
+            }
+          }
+        }
+      } else {
+        // This is a regular paragraph block
+        // Close any open lists
+        if (inList) {
+          html += '</ul>';
+          inList = false;
+        }
+        if (inOrderedList) {
+          html += '</ol>';
+          inOrderedList = false;
+        }
+
+        // Process the paragraph block
         let paragraph = block
-          // Process inline markdown
           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
           .replace(/__(.*?)__/g, '<strong>$1</strong>')
           .replace(/\*(.*?)\*/g, '<em>$1</em>')
           .replace(/_(.*?)_/g, '<em>$1</em>')
           .replace(/`(.*?)`/g, '<code>$1</code>')
-          // Handle links - special case for GETHUMAN
           .replace(
             /\[(.*?)\]\(GETHUMAN\)/g,
             '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
           )
-          // Regular links
           .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')
-          // Handle line breaks within paragraphs
           .replace(/\n/g, '<br />');
 
         html += `<p>${paragraph}</p>`;
       }
     }
 
-    // Ensure any open list is properly closed
+    // Ensure any open lists are properly closed
     if (inList) {
       html += '</ul>';
+    }
+    if (inOrderedList) {
+      html += '</ol>';
     }
 
     return html;
@@ -804,6 +875,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                   }
 
+                  // Log the raw response before markdown rendering
+                  console.log('Streaming response before markdown:', accumulatedResponse);
+
                   // Render markdown for the accumulated response
                   messageContent.innerHTML =
                     renderMarkdown(accumulatedResponse);
@@ -922,6 +996,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const messageContent = currentBotMessage.querySelector(
           '.aichatbot-message-content',
         );
+
+        // Log the raw response before markdown rendering
+        console.log('Non-streaming response before markdown:', data.reply || 'No response received.');
 
         // Render markdown for the response
         const renderedContent = renderMarkdown(

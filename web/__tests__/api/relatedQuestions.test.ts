@@ -130,7 +130,7 @@ describe('Related Questions API', () => {
   });
 
   describe('Authentication', () => {
-    it('should bypass JWT auth for Vercel cron requests', async () => {
+    it('should use cron secret for JWT auth for Vercel cron requests', async () => {
       // Mock rate limiter to allow the request
       (genericRateLimiter as jest.Mock).mockImplementation(() => {
         return Promise.resolve(true);
