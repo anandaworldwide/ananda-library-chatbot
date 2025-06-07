@@ -270,9 +270,9 @@ class TestAudioProcessing(unittest.TestCase):
                 embeddings,
                 author if author != "Unknown" else self.author,
                 self.library,
-                is_youtube_video=False,
-                title=title,
-                url=url,
+                title,
+                "audio",  # content_type
+                url or "test_audio_source",  # source_identifier
                 album=album,
             )
             logger.debug("Pinecone storage success test completed")
@@ -316,7 +316,9 @@ class TestAudioProcessing(unittest.TestCase):
                 embeddings,
                 self.author,
                 self.library,
-                is_youtube_video=False,
+                "Test Audio Title",  # title
+                "audio",  # content_type
+                "test_audio_source",  # source_identifier
             )
 
         # Check if the error message contains the expected content
@@ -557,7 +559,9 @@ class TestAudioProcessing(unittest.TestCase):
                     empty_embeddings,
                     self.author,
                     self.library,
-                    is_youtube_video=False,
+                    "Test Title",  # title
+                    "audio",  # content_type
+                    "test_source",  # source_identifier
                 )
 
             self.assertIn("No chunks to store", str(context.exception))

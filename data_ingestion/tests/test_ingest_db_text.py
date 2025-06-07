@@ -323,6 +323,7 @@ class TestVectorIdGeneration(unittest.TestCase):
             source_identifier=permalink,
             content_type="text",
             author=author,
+            chunk_text="Sample chunk text for testing",
         )
 
         # Should start with content_type||library||source_location||
@@ -356,6 +357,7 @@ class TestVectorIdGeneration(unittest.TestCase):
             source_location="db",
             source_identifier="https://example.com/test-article",
             content_type="text",
+            chunk_text="Test chunk text with special characters",
         )
 
         parts = vector_id.split("||")
@@ -378,6 +380,7 @@ class TestVectorIdGeneration(unittest.TestCase):
             source_location="db",
             source_identifier="https://example.com/test-article",
             content_type="text",
+            chunk_text="Test chunk text for spaces test",
         )
         parts_spaces = vector_id_spaces.split("||")
         title_part_spaces = parts_spaces[3]  # Title is now at index 3 in the new format

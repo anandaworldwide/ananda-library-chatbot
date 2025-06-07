@@ -985,6 +985,7 @@ async def _process_valid_chunk(
         source_identifier=source_path,
         content_type="text",
         author=author,
+        chunk_text=doc.page_content,
     )
 
     # Minimize metadata

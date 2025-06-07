@@ -843,6 +843,7 @@ def process_and_upsert_batch(
                     source_identifier=post_data["permalink"],
                     content_type="text",
                     author=post_data["author"],
+                    chunk_text=doc.page_content,
                 )
                 # Construct the metadata dictionary to be stored with the vector in Pinecone
                 metadata = {

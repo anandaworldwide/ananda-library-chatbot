@@ -25,6 +25,8 @@ from typing import Any
 
 from pinecone import Index, NotFoundException, Pinecone, ServerlessSpec
 
+from .document_hash import generate_document_hash
+
 logger = logging.getLogger(__name__)
 
 
@@ -572,25 +574,31 @@ def generate_vector_id(
     source_identifier: str,
     content_type: str = "text",
     author: str | None = None,
+    chunk_text: str | None = None,
 ) -> str:
     """
-    Generate a consistent vector ID for Pinecone storage with document-level hashing.
+    Generate a consistent vector ID for Pinecone storage with content-based hashing.
+
+    The hash is now based only on intrinsic content properties (title, author, content_type, chunk_text)
+    to enable deduplication across different libraries and source locations.
 
     Args:
         library_name: Name of the library/collection
         title: Title of the source document/content
         chunk_index: Index of this chunk within the source
         source_location: Where the content came from (web, db, pdf, api, s3)
-        content_type: What type of content (text, audio, video, pdf)
         source_identifier: Unique identifier for the source (URL, file path, permalink, etc.)
+        content_type: What type of content (text, audio, video, pdf)
         author: Optional author for document hash generation
+        chunk_text: The actual text content of the chunk (for content-based hashing)
 
     Returns:
         A unique vector ID following Pinecone requirements
 
     Format: {content_type}||{library}||{source_location}||{sanitized_title}||{author}||{document_hash}||{chunk_index}
+
+    Note: The document_hash is now based on content properties only, not source/library information.
     """
-    from .document_hash import generate_document_hash
 
     # Sanitize inputs: only remove null characters (the only character Pinecone prohibits)
     # and normalize whitespace, but preserve meaningful punctuation
@@ -601,12 +609,12 @@ def generate_vector_id(
     # Limit title length to avoid overly long IDs
     sanitized_title = sanitized_title[:50]
 
-    # Generate document-level hash for consistency across chunks
+    # Generate content-based hash for deduplication across libraries/sources
     document_hash = generate_document_hash(
-        source=source_identifier,
         title=title,
         author=author,
-        library=library_name,
+        content_type=content_type,
+        chunk_text=chunk_text,
     )
 
     # Construct vector ID with new 7-part format (content_type first for compatibility)

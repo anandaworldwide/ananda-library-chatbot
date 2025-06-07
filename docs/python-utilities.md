@@ -74,12 +74,13 @@ chunks = text_splitter.split_text(document_text, document_id="doc_123")
 
 ### 4. Document Hashing (`document_hash.py`)
 
-**Purpose**: Consistent document-level hashing for bulk operations and chunk grouping.
+**Purpose**: Pure content-based hashing for true deduplication across all metadata variations.
 
-**Key Function**: `generate_document_hash(source, title, author, library, page_number) -> str`
+**Key Function**: `generate_document_hash(title, author, content_type, chunk_text) -> str`
 
-Returns 8-character MD5 hash where all chunks from same document share same hash. Supports both paginated and
-non-paginated content.
+Returns 8-character MD5 hash based purely on content (`content_type` and `chunk_text` only), enabling maximum
+deduplication. Title and author parameters are ignored but kept for compatibility. Identical text content will generate
+the same hash regardless of titles, authors, libraries, or source locations, ensuring true content-based deduplication.
 
 ### 5. Embeddings Management (`embeddings_utils.py`)
 

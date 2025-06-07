@@ -873,6 +873,8 @@ class WebsiteCrawler:
                 source_location="web",
                 source_identifier=url,
                 content_type="text",
+                author=None,  # Web content typically doesn't have individual authors
+                chunk_text=chunk,
             )
 
             chunk_metadata = {

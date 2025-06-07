@@ -81,8 +81,13 @@ text_splitter = SpacyTextSplitter(
 ```python
 from data_ingestion.utils.document_hash import generate_document_hash
 
-# All chunks from same document share same hash
-doc_hash = generate_document_hash(document_content, source_info)
+# Content-based hash for deduplication across libraries and sources
+doc_hash = generate_document_hash(
+    title=title,
+    author=author,
+    content_type="text",
+    chunk_text=chunk_content
+)
 ```
 
 #### Pinecone Operations ([data_ingestion/utils/pinecone_utils.py](mdc:data_ingestion/utils/pinecone_utils.py))

@@ -198,10 +198,10 @@ async def test_process_chunk(mock_env):
 
         # Generate expected document hash for verification
         expected_document_hash = generate_document_hash(
-            source="https://test.com",
             title="Test Document",
             author="Test Author",
-            library="test-library",
+            content_type="text",
+            chunk_text="Test content",
         )
 
         # Verify correct ID generation and metadata

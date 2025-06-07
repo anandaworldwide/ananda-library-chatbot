@@ -444,16 +444,19 @@ def _process_and_store_transcription(
                     )
                     author = mp3_author if mp3_author != "Unknown" else default_author
 
+                # Determine content type and source identifier based on video type
+                content_type = "video" if is_youtube_video else "audio"
+                source_identifier = url if is_youtube_video else s3_key
+
                 store_in_pinecone(
                     pinecone_index,
                     chunks,
                     embeddings,
                     author,
                     library_name,
-                    is_youtube_video,
-                    title=title,
-                    url=url,
-                    s3_key=s3_key,
+                    title,
+                    content_type,
+                    source_identifier,
                     album=album,
                 )
             except Exception as e:

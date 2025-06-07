@@ -166,29 +166,28 @@ def store_in_pinecone(
     embeddings,
     author,
     library_name,
-    is_youtube_video,
-    title=None,
-    url=None,
+    title,
+    content_type,  # 'audio' or 'video'
+    source_identifier,  # URL for video, S3 key for audio
     interrupt_event=None,
-    s3_key=None,
     album=None,
 ):
     """
     Stores vector embeddings with metadata in Pinecone.
 
-    Vector ID Format: type||library||title||content_hash||chunk_number
+    Vector ID Format: type||library||source_location||title||author||content_hash||chunk_index
 
-    Metadata Schema:
-    - text: Raw chunk content
-    - start/end_time: Chunk boundaries
-    - duration: Chunk length
-    - library: Source library
-    - author: Content creator
-    - type: youtube/audio
-    - title: Content title
-    - album: Optional grouping
-    - filename: For audio files
-    - url: For YouTube content
+    Args:
+        pinecone_index: Pinecone index to store in
+        chunks: List of chunk dictionaries with 'text', 'start', 'end'
+        embeddings: List of vector embeddings
+        author: Content creator
+        library_name: Source library
+        title: Content title
+        content_type: 'audio' or 'video'
+        source_identifier: URL for video, S3 key for audio
+        interrupt_event: Optional event for graceful shutdown
+        album: Optional album/grouping metadata
 
     Batch Processing:
     - 100 vectors per upsert
@@ -204,23 +203,24 @@ def store_in_pinecone(
         raise PineconeException("No chunks to store")
 
     # Sanitization for vector ID components
-    title = title if title is not None else "Unknown Title"
-    title = title.replace("'", "'")  # Replace smart quotes for compatibility
+    title = title.replace("'", "'") if title else "Unknown Title"
+
+    # Determine source location from content type
+    source_location = "video" if content_type == "video" else "audio"
+    is_youtube_video = content_type == "video"
 
     vectors = []
     for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
         # Generate standardized vector ID using the shared utility
-        content_type = "video" if is_youtube_video else "audio"
-        source_location = "video" if is_youtube_video else "audio"
-
         chunk_id = generate_vector_id(
             library_name=library_name,
             title=title,
             chunk_index=i,
             source_location=source_location,
-            source_identifier=url or s3_key or "unknown_source",
+            source_identifier=source_identifier,
             content_type=content_type,
             author=author,
+            chunk_text=chunk["text"],
         )
 
         # Duration calculation for content navigation
@@ -242,15 +242,13 @@ def store_in_pinecone(
         if album:
             metadata["album"] = album
 
-        # Only add the filename field if it's not a YouTube video and s3_key is provided
-        if not is_youtube_video and s3_key:
+        # Add content-type specific metadata
+        if is_youtube_video:
+            metadata["url"] = source_identifier
+        else:
             # Extract relative path for audio files
-            filename = s3_key.split("public/audio/", 1)[-1]
+            filename = source_identifier.split("public/audio/", 1)[-1]
             metadata["filename"] = filename
-
-        # Only add the url field if it's not None
-        if url is not None:
-            metadata["url"] = url
 
         vectors.append({"id": chunk_id, "values": embedding, "metadata": metadata})
 
