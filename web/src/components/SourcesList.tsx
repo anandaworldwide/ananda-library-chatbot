@@ -18,28 +18,21 @@
  * provide a consistent display across different source types.
  */
 
-import React, { useState, useCallback } from 'react';
-import { Document } from 'langchain/document';
-import ReactMarkdown from 'react-markdown';
-import gfm from 'remark-gfm';
-import styles from '@/styles/Home.module.css';
-import {
-  collectionsConfig,
-  CollectionKey,
-} from '@/utils/client/collectionsConfig';
-import { logEvent } from '@/utils/client/analytics';
-import { AudioPlayer } from './AudioPlayer';
-import {
-  getMappedLibraryName,
-  getLibraryUrl,
-} from '@/utils/client/libraryMappings';
-import { DocMetadata } from '@/types/DocMetadata';
-import { SiteConfig } from '@/types/siteConfig';
-import { getS3AudioUrl } from '@/utils/client/getS3AudioUrl';
+import React, { useState, useCallback } from "react";
+import { Document } from "langchain/document";
+import ReactMarkdown from "react-markdown";
+import gfm from "remark-gfm";
+import styles from "@/styles/Home.module.css";
+import { collectionsConfig, CollectionKey } from "@/utils/client/collectionsConfig";
+import { logEvent } from "@/utils/client/analytics";
+import { AudioPlayer } from "./AudioPlayer";
+import { getMappedLibraryName, getLibraryUrl } from "@/utils/client/libraryMappings";
+import { DocMetadata } from "@/types/DocMetadata";
+import { SiteConfig } from "@/types/siteConfig";
 
-// Helper function to extract the title from document metadata
+// Helper function to extract the title from document metadata.
 const extractTitle = (metadata: DocMetadata): string => {
-  return metadata.title || metadata['pdf.info.Title'] || 'Unknown source';
+  return metadata.title || metadata["pdf.info.Title"] || "Unknown source";
 };
 
 interface SourcesListProps {
@@ -52,19 +45,16 @@ interface SourcesListProps {
 // Function to transform YouTube URLs into embed URLs
 const transformYouTubeUrl = (url: string, startTime: number | undefined) => {
   const urlObj = new URL(url);
-  let videoId = '';
-  if (urlObj.hostname === 'youtu.be') {
+  let videoId = "";
+  if (urlObj.hostname === "youtu.be") {
     videoId = urlObj.pathname.slice(1);
-  } else if (
-    urlObj.hostname === 'www.youtube.com' &&
-    urlObj.pathname.includes('watch')
-  ) {
-    videoId = urlObj.searchParams.get('v') || '';
+  } else if (urlObj.hostname === "www.youtube.com" && urlObj.pathname.includes("watch")) {
+    videoId = urlObj.searchParams.get("v") || "";
   }
   const baseUrl = `https://www.youtube.com/embed/${videoId}`;
   const params = new URLSearchParams(urlObj.search);
-  params.set('start', Math.floor(startTime || 0).toString());
-  params.set('rel', '0');
+  params.set("start", Math.floor(startTime || 0).toString());
+  params.set("rel", "0");
   return `${baseUrl}?${params.toString()}`;
 };
 
@@ -75,55 +65,43 @@ const SourcesList: React.FC<SourcesListProps> = ({
   isSudoAdmin = false,
 }) => {
   // State hooks
-  const [expandedSources, setExpandedSources] = useState<Set<number>>(
-    new Set(),
-  );
+  const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set());
   const [showSourcesPopover, setShowSourcesPopover] = useState<boolean>(false);
 
   // Callback hooks
-  const renderAudioPlayer = useCallback(
-    (doc: Document<DocMetadata>, index: number, isExpanded: boolean) => {
-      if (doc.metadata.type === 'audio' && doc.metadata.filename) {
-        const audioId = `audio_${doc.metadata.file_hash}_${index}`;
-        return (
-          <div className="pt-1 pb-2">
-            <AudioPlayer
-              key={audioId}
-              src={doc.metadata.filename}
-              library={doc.metadata.library}
-              startTime={doc.metadata.start_time ?? 0}
-              audioId={audioId}
-              lazyLoad={true}
-              isExpanded={isExpanded}
-            />
-          </div>
-        );
-      }
-      return null;
-    },
-    [],
-  );
+  const renderAudioPlayer = useCallback((doc: Document<DocMetadata>, index: number, isExpanded: boolean) => {
+    if (doc.metadata.type === "audio" && doc.metadata.filename) {
+      const audioId = `audio_${doc.metadata.file_hash}_${index}`;
+      return (
+        <div className="pt-1 pb-2">
+          <AudioPlayer
+            key={audioId}
+            src={doc.metadata.filename}
+            library={doc.metadata.library}
+            startTime={doc.metadata.start_time ?? 0}
+            audioId={audioId}
+            lazyLoad={true}
+            isExpanded={isExpanded}
+          />
+        </div>
+      );
+    }
+    return null;
+  }, []);
 
   const renderYouTubePlayer = useCallback((doc: Document<DocMetadata>) => {
-    if (doc.metadata.type === 'youtube') {
+    if (doc.metadata.type === "youtube") {
       if (!doc.metadata.url) {
-        return (
-          <div className="text-red-500 mb-2">
-            Error: YouTube URL is missing for this source.
-          </div>
-        );
+        return <div className="text-red-500 mb-2">Error: YouTube URL is missing for this source.</div>;
       }
-      const embedUrl = transformYouTubeUrl(
-        doc.metadata.url,
-        doc.metadata.start_time,
-      );
+      const embedUrl = transformYouTubeUrl(doc.metadata.url, doc.metadata.start_time);
       return (
         <div className="aspect-video mb-7">
           <iframe
             className="h-full w-full rounded-lg"
             src={embedUrl}
             title={doc.metadata.title}
-            style={{ border: 'none' }}
+            style={{ border: "none" }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           ></iframe>
@@ -145,21 +123,18 @@ const SourcesList: React.FC<SourcesListProps> = ({
   // double colon separates parent title from the (child) source title,
   // e.g., "2009 Summer Clarity Magazine:: Letters of Encouragement". We here
   // replace double colon with right arrow.
-  const formatTitle = (title: string | undefined) =>
-    (title || '').replace(/::/g, ' > ');
+  const formatTitle = (title: string | undefined) => (title || "").replace(/::/g, " > ");
 
-  const displayCollectionName = collectionName
-    ? collectionsConfig[collectionName as CollectionKey]
-    : '';
+  const displayCollectionName = collectionName ? collectionsConfig[collectionName as CollectionKey] : "";
 
   // Handle expanding/collapsing all sources
   const handleExpandAll = () => {
     if (expandedSources.size === sources.length) {
       setExpandedSources(new Set());
-      logEvent('collapse_all_sources', 'UI', 'accordion');
+      logEvent("collapse_all_sources", "UI", "accordion");
     } else {
       setExpandedSources(new Set(sources.map((_, index) => index)));
-      logEvent('expand_all_sources', 'UI', 'accordion');
+      logEvent("expand_all_sources", "UI", "accordion");
     }
   };
 
@@ -170,47 +145,41 @@ const SourcesList: React.FC<SourcesListProps> = ({
       const isExpanding = !newSet.has(index);
       if (isExpanding) {
         newSet.add(index);
-        logEvent('expand_source', 'UI', `expanded:${index}`);
+        logEvent("expand_source", "UI", `expanded:${index}`);
       } else {
         newSet.delete(index);
-        logEvent('collapse_source', 'UI', `collapsed:${index}`);
+        logEvent("collapse_source", "UI", `collapsed:${index}`);
       }
       return newSet;
     });
   };
 
   // Handle clicking on a source link
-  const handleSourceClick = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    source: string,
-  ) => {
+  const handleSourceClick = (e: React.MouseEvent<HTMLAnchorElement>, source: string) => {
     e.preventDefault(); // Prevent default link behavior
-    logEvent('click_source', 'UI', source);
-    window.open(source, '_blank', 'noopener,noreferrer'); // Open link manually
+    logEvent("click_source", "UI", source);
+    window.open(source, "_blank", "noopener,noreferrer"); // Open link manually
   };
 
   // Handle clicking on a library link
-  const handleLibraryClick = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    library: string,
-  ) => {
+  const handleLibraryClick = (e: React.MouseEvent<HTMLAnchorElement>, library: string) => {
     e.preventDefault();
     const libraryUrl = getLibraryUrl(library);
     if (libraryUrl) {
-      logEvent('click_library', 'UI', library);
-      window.open(libraryUrl, '_blank', 'noopener,noreferrer');
+      logEvent("click_library", "UI", library);
+      window.open(libraryUrl, "_blank", "noopener,noreferrer");
     }
   };
 
   // Get the appropriate icon for each source type
   const getSourceIcon = (doc: Document<DocMetadata>) => {
     switch (doc.metadata.type) {
-      case 'audio':
-        return 'mic';
-      case 'youtube':
-        return 'videocam';
+      case "audio":
+        return "mic";
+      case "youtube":
+        return "videocam";
       default:
-        return 'description';
+        return "description";
     }
   };
 
@@ -220,35 +189,38 @@ const SourcesList: React.FC<SourcesListProps> = ({
     let sourceTitle = formatTitle(extractTitle(doc.metadata));
 
     // For audio sources with album metadata, format as "Album > Title"
-    if (doc.metadata.type === 'audio' && doc.metadata.album) {
+    if (doc.metadata.type === "audio" && doc.metadata.album) {
       sourceTitle = `${doc.metadata.album} > ${sourceTitle}`;
     }
 
-    let linkUrl = doc.metadata.source; // Default to metadata.source
-    if (doc.metadata.type === 'audio' && doc.metadata.filename) {
-      linkUrl = getS3AudioUrl(doc.metadata.filename, doc.metadata.library);
-    } else if (doc.metadata.type === 'youtube' && doc.metadata.url) {
-      linkUrl = doc.metadata.url; // YouTube links should use metadata.url
+    // All source titles should be non-clickable to encourage proper interaction patterns:
+    // - Audio: expand to use inline player with download button
+    // - YouTube: expand to use inline video player
+    // - Text: expand to read content with "Go to source" button
+    return <span className="text-black font-medium">{sourceTitle}</span>;
+  };
+
+  // Render a "Go to source" button for text sources
+  const renderGoToSourceButton = (doc: Document<DocMetadata>) => {
+    const linkUrl = doc.metadata.source;
+
+    if (!linkUrl || doc.metadata.type !== "text") {
+      return null;
     }
 
     return (
-      <span
-        className={
-          linkUrl ? 'text-blue-600 font-medium' : 'text-black font-medium'
-        }
-      >
-        {linkUrl ? (
-          <a
-            href={linkUrl || '#'}
-            onClick={(e) => linkUrl && handleSourceClick(e, linkUrl)}
-            className="hover:underline"
-          >
-            {sourceTitle}
-          </a>
-        ) : (
-          sourceTitle
-        )}
-      </span>
+      <div className="mt-2 mb-3">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            handleSourceClick(e as any, linkUrl);
+          }}
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors"
+        >
+          <span className="material-icons text-sm">open_in_new</span>
+          Go to source
+        </button>
+      </div>
     );
   };
 
@@ -266,9 +238,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
         {libraryName}
       </a>
     ) : (
-      <span className={`${styles.libraryNameText} text-gray-400 text-sm`}>
-        {libraryName}
-      </span>
+      <span className={`${styles.libraryNameText} text-gray-400 text-sm`}>{libraryName}</span>
     );
   };
 
@@ -280,25 +250,19 @@ const SourcesList: React.FC<SourcesListProps> = ({
           onClick={() => setShowSourcesPopover(!showSourcesPopover)}
           className="text-blue-600 hover:underline text-sm"
         >
-          {showSourcesPopover ? 'Admin: Hide sources' : 'Admin: Show sources'}
+          {showSourcesPopover ? "Admin: Hide sources" : "Admin: Show sources"}
         </button>
 
         {showSourcesPopover && (
           <>
             {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              onClick={() => setShowSourcesPopover(false)}
-            />
+            <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setShowSourcesPopover(false)} />
 
             {/* Popover */}
             <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-50 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">Sources</h3>
-                <button
-                  onClick={() => setShowSourcesPopover(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
+                <button onClick={() => setShowSourcesPopover(false)} className="text-gray-500 hover:text-gray-700">
                   <span className="material-icons">close</span>
                 </button>
               </div>
@@ -307,35 +271,23 @@ const SourcesList: React.FC<SourcesListProps> = ({
                 {sources.map((doc, index) => (
                   <div key={index} className="border-b border-gray-200 pb-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="material-icons text-sm">
-                        {getSourceIcon(doc)}
-                      </span>
+                      <span className="material-icons text-sm">{getSourceIcon(doc)}</span>
                       {renderSourceTitle(doc)}
-                      {doc.metadata.library &&
-                        doc.metadata.library !== 'Default Library' && (
-                          <span className="text-gray-400 text-sm ml-auto">
-                            {renderLibraryName(doc)}
-                          </span>
-                        )}
+                      {doc.metadata.library && doc.metadata.library !== "Default Library" && (
+                        <span className="text-gray-400 text-sm ml-auto">{renderLibraryName(doc)}</span>
+                      )}
                     </div>
-                    {doc.metadata.type === 'audio' &&
-                      renderAudioPlayer(doc, index, true)}
-                    {doc.metadata.type === 'youtube' &&
-                      renderYouTubePlayer(doc)}
+                    {doc.metadata.type === "audio" && renderAudioPlayer(doc, index, true)}
+                    {doc.metadata.type === "youtube" && renderYouTubePlayer(doc)}
                     <ReactMarkdown
                       remarkPlugins={[gfm]}
                       components={{
-                        a: ({ ...props }) => (
-                          <a
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            {...props}
-                          />
-                        ),
+                        a: ({ ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
                       }}
                     >
                       {doc.pageContent}
                     </ReactMarkdown>
+                    {renderGoToSourceButton(doc)}
                   </div>
                 ))}
               </div>
@@ -352,19 +304,17 @@ const SourcesList: React.FC<SourcesListProps> = ({
       {/* Render sources header if there are sources */}
       {sources.length > 0 && (
         <div
-          className={`flex justify-between items-center w-full px-3 py-1 ${!shouldHideSources || (shouldHideSources && isSudoAdmin) ? 'border-b border-gray-200' : ''}`}
+          className={`flex justify-between items-center w-full px-3 py-1 ${!shouldHideSources || (shouldHideSources && isSudoAdmin) ? "border-b border-gray-200" : ""}`}
         >
           <div className="flex items-baseline">
-            {!shouldHideSources && (
-              <h3 className="text-base font-bold mr-2">Sources</h3>
-            )}
+            {!shouldHideSources && <h3 className="text-base font-bold mr-2">Sources</h3>}
             {shouldHideSources ? (
               isSudoAdmin && (
                 <button
                   onClick={() => setShowSourcesPopover(!showSourcesPopover)}
                   className="text-sm text-blue-600 hover:underline"
                 >
-                  {showSourcesPopover ? '(hide sources)' : '(show sources)'}
+                  {showSourcesPopover ? "(hide sources)" : "(show sources)"}
                 </button>
               )
             ) : (
@@ -376,17 +326,11 @@ const SourcesList: React.FC<SourcesListProps> = ({
                 }}
                 className="text-sm text-blue-600 hover:underline"
               >
-                {expandedSources.size === sources.length
-                  ? '(collapse all)'
-                  : '(expand all)'}
+                {expandedSources.size === sources.length ? "(collapse all)" : "(expand all)"}
               </a>
             )}
           </div>
-          {displayCollectionName && (
-            <span className="text-sm text-gray-400">
-              {displayCollectionName}
-            </span>
-          )}
+          {displayCollectionName && <span className="text-sm text-gray-400">{displayCollectionName}</span>}
         </div>
       )}
       {(!shouldHideSources || (shouldHideSources && showSourcesPopover)) && (
@@ -398,9 +342,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
             return (
               <details
                 key={index}
-                className={`${styles.sourceDocsContainer} ${
-                  isLastSource ? '' : 'border-b border-gray-200'
-                } group`}
+                className={`${styles.sourceDocsContainer} ${isLastSource ? "" : "border-b border-gray-200"} group`}
                 open={isExpanded}
               >
                 {/* Source summary (always visible) */}
@@ -427,17 +369,11 @@ const SourcesList: React.FC<SourcesListProps> = ({
                           />
                         </svg>
                       </span>
-                      <span className="material-icons text-sm ml-1">
-                        {getSourceIcon(doc)}
-                      </span>
+                      <span className="material-icons text-sm ml-1">{getSourceIcon(doc)}</span>
                     </div>
-                    <div className="flex items-center">
-                      {renderSourceTitle(doc)}
-                    </div>
+                    <div className="flex items-center">{renderSourceTitle(doc)}</div>
                     <div className="text-right">
-                      {doc.metadata.library &&
-                        doc.metadata.library !== 'Default Library' &&
-                        renderLibraryName(doc)}
+                      {doc.metadata.library && doc.metadata.library !== "Default Library" && renderLibraryName(doc)}
                     </div>
                   </div>
                 </summary>
@@ -446,29 +382,21 @@ const SourcesList: React.FC<SourcesListProps> = ({
                   {isExpanded && (
                     <>
                       {/* Render audio or YouTube player if applicable */}
-                      {doc.metadata &&
-                        doc.metadata.type === 'audio' &&
-                        renderAudioPlayer(doc, index, isExpanded)}
-                      {doc.metadata &&
-                        doc.metadata.type === 'youtube' &&
-                        renderYouTubePlayer(doc)}
+                      {doc.metadata && doc.metadata.type === "audio" && renderAudioPlayer(doc, index, isExpanded)}
+                      {doc.metadata && doc.metadata.type === "youtube" && renderYouTubePlayer(doc)}
                     </>
                   )}
                   {/* Render source content as markdown */}
                   <ReactMarkdown
                     remarkPlugins={[gfm]}
                     components={{
-                      a: ({ ...props }) => (
-                        <a
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          {...props}
-                        />
-                      ),
+                      a: ({ ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
                     }}
                   >
                     {doc.pageContent}
                   </ReactMarkdown>
+                  {/* Render Go to source button for text sources */}
+                  {renderGoToSourceButton(doc)}
                 </div>
               </details>
             );
