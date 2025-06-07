@@ -78,6 +78,9 @@ python crawler/website_crawler.py --site ananda-public
 - **Overlap**: 20% for context preservation
 - **Quality**: 70% of chunks fall within target range
 
+**Note that as of June 2025, the tests on this new semantic chunking were poor** compared to the old chunking strategy.
+See the task "New production pinecone corpus" in Notion for more details on what to try next.
+
 ### Vector Storage
 
 - **Database**: Pinecone vector database
