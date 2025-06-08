@@ -1130,7 +1130,7 @@ word-based target ranges.
 **Symptoms**:
 
 - Test was measuring chunks against 225-450 word range instead of token-based targets
-- Inconsistency between ingestion system (token-based) and testing (word-based)
+- Inconsistency between ingestion system (token-based) and test suite (word-based)
 - Test results didn't accurately reflect chunk quality against the actual 600-token target
 - Test assertions used word count thresholds that didn't match token-based chunking
 
@@ -1201,3 +1201,98 @@ assert analysis["avg_tokens"] <= 900
 
 **Status**: ✅ **COMPLETE** - Integration test suite now uses token-based testing that aligns with our 600-token
 standard and matches the tokenization used by the ingestion system.
+
+## Critical Fix: Created Cleanup Script for Empty Answer Production Bug - ✅ RESOLVED
+
+**Problem**: Production bug where answers were not being stored properly resulted in Firestore documents with empty or
+very short answers (< 5 characters). These problematic documents needed to be identified and deleted, along with
+cleaning up any references to them in other documents' `relatedQuestionsV2` arrays.
+
+**Root Cause**: Production issue in the chat API route where the `saveOrUpdateDocument` function was validation-checking
+for empty answers but still saving documents even when answers were missing or problematic.
+
+**Evidence from User Request**:
+
+- User reported: "We had a bug in production where answers were not being stored"
+- Need to "delete those question and answer pairs from the Firestore database"
+- Need to "get rid of any references to them in related questions"
+
+**Symptoms**:
+
+- Documents in Firestore with empty, null, or very short (< 5 chars) answer fields
+- References to these problematic documents in other documents' `relatedQuestionsV2` arrays
+- Need for bulk cleanup of affected data across the database
+
+**Solution Created**: Comprehensive cleanup script `bin/cleanup_empty_answers.js` with the following features:
+
+1. **Command Line Interface**:
+
+   - `--env [dev|prod]` - Required environment parameter
+   - `--dry-run` - Show what would be deleted without making changes
+   - `--batch-size N` - Configure batch processing size (default: 100)
+   - `--help` - Display usage information
+
+2. **Problematic Answer Detection**:
+
+   - Empty/null answers: `!answer`
+   - Non-string answers: `typeof answer !== 'string'`
+   - Whitespace-only answers: `answer.trim() === ''`
+   - Very short answers: `answer.length < 5`
+
+3. **Two-Phase Cleanup Process**:
+
+   - **Phase 1**: Scan all documents in `{env}_chatLogs` collection to identify problematic documents
+   - **Phase 2**: Find documents that reference problematic document IDs in their `relatedQuestionsV2` arrays
+
+4. **Safe Cleanup Execution**:
+
+   - Clean up references from `relatedQuestionsV2` arrays **before** deleting the problematic documents
+   - Uses Firestore batched operations (450 operations per batch to stay under 500 limit)
+   - Comprehensive error handling and progress reporting
+
+5. **Detailed Reporting**:
+   - Progress indicators for scanning and processing
+   - Summary of documents found and operations performed
+   - Dry-run mode shows exactly what would be changed
+   - Live mode includes 3-second countdown before executing changes
+
+**Usage Examples**:
+
+```bash
+# Dry run to see what would be cleaned
+node bin/cleanup_empty_answers.js --env dev --dry-run
+
+# Actually clean dev environment
+node bin/cleanup_empty_answers.js --env dev
+
+# Clean production with smaller batch size
+node bin/cleanup_empty_answers.js --env prod --batch-size 50
+```
+
+**Key Features**:
+
+- **Environment Safety**: Requires explicit environment specification, no defaults
+- **Dry Run Mode**: Always test first before making changes
+- **Batch Processing**: Efficient processing of large document collections
+- **Reference Integrity**: Ensures related questions references are cleaned up
+- **Progress Reporting**: Clear progress indicators and operation summaries
+- **Error Handling**: Graceful error handling with informative messages
+
+**Implementation Details**:
+
+- Written in JavaScript using Firebase Admin SDK
+- Uses the same collection naming convention as the application (`${env}_chatLogs`)
+- Implements the same answer validation logic as the production chat API
+- Pagination-based scanning to handle large document collections efficiently
+- Batch commit pattern to optimize Firestore operations
+
+**Impact**:
+
+- Provides safe, comprehensive cleanup of production data corruption
+- Maintains referential integrity by cleaning up cross-references
+- Prevents related questions from pointing to non-existent documents
+- Reusable script for similar cleanup operations in the future
+- Includes comprehensive safety features to prevent accidental data loss
+
+**Status**: ✅ **COMPLETE** - Cleanup script created and ready for use to identify and remove problematic documents with
+empty answers while maintaining database referential integrity.
