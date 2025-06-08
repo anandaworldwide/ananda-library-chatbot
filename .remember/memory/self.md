@@ -1038,261 +1038,65 @@ for vector_id in self.index.list():
 **Status**: ✅ **COMPLETE** - Script now correctly handles Pinecone generator API and provides reliable fallback for
 comprehensive chunk analysis.
 
-## Critical Fix: Website Crawler Browser Restart Counter Bug - ✅ RESOLVED
+## Critical Fix: Website Crawler Duplicate URL Processing Bug - ✅ RESOLVED
 
-**Problem**: The website crawler was printing "Stats at X page boundary" messages after only a few pages instead of
-waiting for the configured 50 pages, causing premature restart statistics reporting.
+**Problem**: Website crawler was processing the same URL twice in a single iteration, causing permanent failures (like
+HTTP 404) to be incorrectly marked as temporary failures and retried.
 
-**Root Cause**: When an error occurred requiring a browser restart, the error handling code was artificially setting
-`pages_since_restart = PAGES_PER_RESTART` (50), which immediately triggered the restart condition on the next iteration.
-This caused restart statistics to be printed with the actual low page count instead of waiting for 50 pages.
+**Root Cause**: In `_process_crawl_iteration()`, the same URL was being crawled twice:
 
-**Evidence from User Report**:
+1. First in `_handle_url_processing()` which called `crawler.crawl_page()`
+2. Then again immediately after with another direct call to `crawler.crawl_page()`
 
-- User saw "stats at 50 page boundary" but happening after only a couple of pages
-- This occurred when URLs had errors requiring browser restart
-- Stats were printed prematurely instead of waiting for actual 50 page intervals
+**Evidence from User Logs**:
+
+```
+2025-06-07 23:46:50,243 - ERROR - HTTP 404 error for https://ananda.org/.../looking-for-your-soul-mate
+2025-06-07 23:46:50,243 - INFO - Permanent failure for https://ananda.org/.../looking-for-your-soul-mate: HTTP 404
+2025-06-07 23:46:51,517 - INFO - Temporary failure for ananda.org/.../looking-for-your-soul-mate (retry 1/10): Will retry in 15 minutes
+```
 
 **Symptoms**:
 
-- Restart statistics displayed after only 2-3 pages instead of 50
-- Message showed actual pages processed (e.g., "Stats at 3 page boundary") not the expected 50
-- Occurred specifically when errors triggered browser restarts
+- URLs correctly identified as permanent failures (HTTP 404, etc.) were being retried
+- Same URL processed twice with different failure classifications
+- First processing: HTTP 404 → Permanent failure (correct)
+- Second processing: "No content extracted" → Temporary failure (incorrect override)
+- Permanent failures getting scheduled for retry instead of being permanently excluded
 
-**Bug Location**: In `run_crawl_loop` function in `data_ingestion/crawler/website_crawler.py`:
+**Fix Applied**: Refactored `_handle_url_processing()` and `_process_crawl_iteration()` to eliminate duplicate crawling:
 
 **Wrong**:
 
 ```python
-if restart_inc == 0 and pages_inc == 0:  # Restart needed
-    pages_since_restart = PAGES_PER_RESTART  # BUG: Forces immediate restart
-    continue
+def _process_crawl_iteration(...):
+    restart_needed = _handle_url_processing(url, crawler, browser, page)  # Calls crawl_page()
+    if restart_needed:
+        return 0, 0, False
+
+    content, new_links, _ = crawler.crawl_page(browser, page, url)  # Calls crawl_page() AGAIN!
 ```
 
 **Correct**:
 
 ```python
-if restart_inc == 0 and pages_inc == 0:  # Restart needed
-    browser, page, batch_start_time, batch_results = (
-        _handle_browser_restart(
-            p,
-            page,
-            browser,
-            pages_since_restart,
-            batch_results,
-            batch_start_time,
-            crawler,
-        )
-    )
-    pages_since_restart = 0
-    continue
-```
+def _handle_url_processing(...) -> tuple[tuple, bool]:
+    # Returns ((content, links, restart_needed), should_skip)
+    content, new_links, restart_needed = crawler.crawl_page(browser, page, url)
+    return (content, new_links, restart_needed), False
 
-**Fix Applied**: Changed error-triggered restart to call `_handle_browser_restart()` directly instead of manipulating
-the counter. This ensures:
-
-1. Restart statistics show actual pages processed before restart
-2. Browser is properly restarted with correct state
-3. Counters are reset appropriately without artificial manipulation
-
-**Test Added**: Created `TestBrowserRestartCounter.test_error_restart_counter_bug` in
-`data_ingestion/tests/test_crawler.py` to verify:
-
-- Error-triggered restarts don't manipulate page counters artificially
-- Restart function is called with actual page count, not forced value
-- Test-driven development approach: test failed before fix, passes after fix
-
-**Impact**:
-
-- Restart statistics now accurately reflect actual processing progress
-- No more premature "50 page boundary" messages after only a few pages
-- Proper browser restart behavior when errors occur
-- Better debugging visibility into actual crawler performance
-
-**Status**: ✅ **COMPLETE** - Browser restart counter no longer artificially manipulated on errors, providing accurate
-restart statistics.
-
-## Critical Fix: Integration Test Updated to Use Token-Based Testing Instead of Word-Based - ✅ RESOLVED
-
-**Problem**: The integration test suite `test_integration_chunk_quality.py` was testing chunk quality using word counts
-instead of token counts, which didn't align with our 600-token target standard.
-
-**Root Cause**: The test was written when the system originally used word-based targets (225-450 words), but the system
-has since moved to a 600-token target with spaCy chunking. The test was still using the old `count_words()` method and
-word-based target ranges.
-
-**Evidence from User Request**:
-
-- User requested: "Fix this script so that it is testing tokens (not words) as that is our standard."
-- The chunking strategy documentation clearly states the system uses a 600-token target
-- The system uses tiktoken for consistent token counting with OpenAI embeddings
-
-**Symptoms**:
-
-- Test was measuring chunks against 225-450 word range instead of token-based targets
-- Inconsistency between ingestion system (token-based) and test suite (word-based)
-- Test results didn't accurately reflect chunk quality against the actual 600-token target
-- Test assertions used word count thresholds that didn't match token-based chunking
-
-**Fix Applied**: Updated `data_ingestion/tests/test_integration_chunk_quality.py` to use token-based testing:
-
-1. **Updated target range constants**:
-
-   - Changed `TARGET_WORD_RANGE = (225, 450)` to `TARGET_TOKEN_RANGE = (450, 750)` (75%-125% of 600-token target)
-   - Updated comments to reflect token-based approach
-
-2. **Replaced word counting with token counting**:
-
-   - Changed `count_words()` method to `count_tokens()` using tiktoken
-   - Matches the tokenization used by `SpacyTextSplitter` for consistency
-   - Added fallback to word count estimation if tiktoken unavailable
-
-3. **Updated analysis method return values**:
-
-   - Changed all `word_counts`, `avg_words`, `median_words`, etc. to token equivalents
-   - Updated target compliance calculation to use token-based range
-
-4. **Updated test assertions and thresholds**:
-
-   - Changed minimum average from 150 words to 300 tokens
-   - Changed maximum average from 600 words to 900 tokens
-   - Increased consistency threshold from 2.5x to 3.0x to account for token variation
-   - Updated all print statements to display token counts instead of word counts
-
-5. **Updated documentation**:
-   - Fixed docstring to mention "450-750 tokens, 75%-125% of 600-token target"
-   - Updated comments throughout to reference tokens instead of words
-
-**Wrong**:
-
-```python
-# Word-based testing approach
-TARGET_WORD_RANGE = (225, 450)
-def count_words(self, text: str) -> int:
-    return len(text.strip().split())
-
-# Word-based assertions
-assert analysis["avg_words"] >= 150
-assert analysis["avg_words"] <= 600
-```
-
-**Correct**:
-
-```python
-# Token-based testing aligned with 600-token target
-TARGET_TOKEN_RANGE = (450, 750)  # 75%-125% of 600-token target
-def count_tokens(self, text: str) -> int:
-    import tiktoken
-    encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
-    return len(encoding.encode(text))
-
-# Token-based assertions
-assert analysis["avg_tokens"] >= 300
-assert analysis["avg_tokens"] <= 900
+def _process_crawl_iteration(...):
+    (content, new_links, restart_needed), should_skip = _handle_url_processing(...)
+    # Use the results directly - no duplicate crawling!
 ```
 
 **Impact**:
 
-- Integration tests now accurately measure chunk quality against the actual 600-token target
-- Consistent tokenization between ingestion system and test suite
-- Test results provide meaningful feedback about chunk quality compliance
-- Better alignment between testing and production system behavior
-- Accurate assessment of target range compliance (75%-125% of 600 tokens)
+- Permanent failures now stay permanently failed instead of being retried
+- HTTP 404s and other permanent errors are correctly excluded from future crawling
+- Eliminates duplicate processing overhead (2x crawling per URL)
+- Crawler respects failure classification logic correctly
+- No more confusing logs showing permanent→temporary failure transitions
 
-**Status**: ✅ **COMPLETE** - Integration test suite now uses token-based testing that aligns with our 600-token
-standard and matches the tokenization used by the ingestion system.
-
-## Critical Fix: Created Cleanup Script for Empty Answer Production Bug - ✅ RESOLVED
-
-**Problem**: Production bug where answers were not being stored properly resulted in Firestore documents with empty or
-very short answers (< 5 characters). These problematic documents needed to be identified and deleted, along with
-cleaning up any references to them in other documents' `relatedQuestionsV2` arrays.
-
-**Root Cause**: Production issue in the chat API route where the `saveOrUpdateDocument` function was validation-checking
-for empty answers but still saving documents even when answers were missing or problematic.
-
-**Evidence from User Request**:
-
-- User reported: "We had a bug in production where answers were not being stored"
-- Need to "delete those question and answer pairs from the Firestore database"
-- Need to "get rid of any references to them in related questions"
-
-**Symptoms**:
-
-- Documents in Firestore with empty, null, or very short (< 5 chars) answer fields
-- References to these problematic documents in other documents' `relatedQuestionsV2` arrays
-- Need for bulk cleanup of affected data across the database
-
-**Solution Created**: Comprehensive cleanup script `bin/cleanup_empty_answers.js` with the following features:
-
-1. **Command Line Interface**:
-
-   - `--env [dev|prod]` - Required environment parameter
-   - `--dry-run` - Show what would be deleted without making changes
-   - `--batch-size N` - Configure batch processing size (default: 100)
-   - `--help` - Display usage information
-
-2. **Problematic Answer Detection**:
-
-   - Empty/null answers: `!answer`
-   - Non-string answers: `typeof answer !== 'string'`
-   - Whitespace-only answers: `answer.trim() === ''`
-   - Very short answers: `answer.length < 5`
-
-3. **Two-Phase Cleanup Process**:
-
-   - **Phase 1**: Scan all documents in `{env}_chatLogs` collection to identify problematic documents
-   - **Phase 2**: Find documents that reference problematic document IDs in their `relatedQuestionsV2` arrays
-
-4. **Safe Cleanup Execution**:
-
-   - Clean up references from `relatedQuestionsV2` arrays **before** deleting the problematic documents
-   - Uses Firestore batched operations (450 operations per batch to stay under 500 limit)
-   - Comprehensive error handling and progress reporting
-
-5. **Detailed Reporting**:
-   - Progress indicators for scanning and processing
-   - Summary of documents found and operations performed
-   - Dry-run mode shows exactly what would be changed
-   - Live mode includes 3-second countdown before executing changes
-
-**Usage Examples**:
-
-```bash
-# Dry run to see what would be cleaned
-node bin/cleanup_empty_answers.js --env dev --dry-run
-
-# Actually clean dev environment
-node bin/cleanup_empty_answers.js --env dev
-
-# Clean production with smaller batch size
-node bin/cleanup_empty_answers.js --env prod --batch-size 50
-```
-
-**Key Features**:
-
-- **Environment Safety**: Requires explicit environment specification, no defaults
-- **Dry Run Mode**: Always test first before making changes
-- **Batch Processing**: Efficient processing of large document collections
-- **Reference Integrity**: Ensures related questions references are cleaned up
-- **Progress Reporting**: Clear progress indicators and operation summaries
-- **Error Handling**: Graceful error handling with informative messages
-
-**Implementation Details**:
-
-- Written in JavaScript using Firebase Admin SDK
-- Uses the same collection naming convention as the application (`${env}_chatLogs`)
-- Implements the same answer validation logic as the production chat API
-- Pagination-based scanning to handle large document collections efficiently
-- Batch commit pattern to optimize Firestore operations
-
-**Impact**:
-
-- Provides safe, comprehensive cleanup of production data corruption
-- Maintains referential integrity by cleaning up cross-references
-- Prevents related questions from pointing to non-existent documents
-- Reusable script for similar cleanup operations in the future
-- Includes comprehensive safety features to prevent accidental data loss
-
-**Status**: ✅ **COMPLETE** - Cleanup script created and ready for use to identify and remove problematic documents with
-empty answers while maintaining database referential integrity.
+**Status**: ✅ **COMPLETE** - Website crawler now processes each URL exactly once per iteration, correctly respecting
+permanent vs temporary failure classifications.

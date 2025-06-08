@@ -1216,15 +1216,17 @@ def _cleanup_browser(page, browser) -> None:
         )
 
 
-def _handle_url_processing(url: str, crawler: WebsiteCrawler, browser, page) -> bool:
-    """Handle URL processing setup and skip checks. Returns True if restart needed."""
+def _handle_url_processing(
+    url: str, crawler: WebsiteCrawler, browser, page
+) -> tuple[tuple, bool]:
+    """Handle URL processing setup and skip checks. Returns ((content, links, restart_needed), should_skip)."""
     crawler.current_processing_url = url
 
     if crawler.should_skip_url(url):
         logging.info(f"Skipping URL based on skip patterns: {url}")
         crawler.mark_url_status(url, "failed", "Skipped by pattern rule")
         crawler.current_processing_url = None
-        return False
+        return (None, [], False), True  # Return empty results and should_skip=True
 
     content, new_links, restart_needed = crawler.crawl_page(browser, page, url)
 
@@ -1232,9 +1234,12 @@ def _handle_url_processing(url: str, crawler: WebsiteCrawler, browser, page) -> 
         logging.warning(f"Browser restart requested after attempting {url}.")
         crawler.mark_url_status(url, "pending")
         crawler.current_processing_url = None
-        return True
 
-    return False
+    return (
+        content,
+        new_links,
+        restart_needed,
+    ), False  # Return actual results and should_skip=False
 
 
 def _should_stop_crawling(stop_after: int | None, pages_processed: int) -> bool:
@@ -1254,11 +1259,15 @@ def _process_crawl_iteration(
     index_name: str,
 ) -> tuple[int, int, bool]:
     """Process a single crawl iteration. Returns (pages_inc, restart_inc, should_continue)."""
-    restart_needed = _handle_url_processing(url, crawler, browser, page)
+    (content, new_links, restart_needed), should_skip = _handle_url_processing(
+        url, crawler, browser, page
+    )
+
+    if should_skip:
+        return 0, 0, False  # URL was skipped, continue normally
+
     if restart_needed:
         return 0, 0, False  # Signal restart needed
-
-    content, new_links, _ = crawler.crawl_page(browser, page, url)
 
     if is_exiting():
         logging.info(
