@@ -1331,6 +1331,118 @@ def _initialize_crawl_loop(
     )
 
 
+def _handle_crawl_loop_iteration(
+    crawler: WebsiteCrawler,
+    browser,
+    page,
+    pinecone_index,
+    index_name: str,
+    stop_after: int | None,
+    pages_processed: int,
+    pages_since_restart: int,
+    PAGES_PER_RESTART: int,
+    batch_results: list,
+    batch_start_time: float,
+    p,
+) -> tuple[int, int, bool, bool, tuple]:
+    """Handle a single iteration of the crawl loop.
+
+    Returns:
+        tuple: (pages_processed, pages_since_restart, should_exit, should_restart, (browser, page, batch_start_time, batch_results))
+    """
+    if _should_stop_crawling(stop_after, pages_processed):
+        return (
+            pages_processed,
+            pages_since_restart,
+            True,
+            False,
+            (browser, page, batch_start_time, batch_results),
+        )
+
+    url = crawler.get_next_url_to_crawl()
+    if not url:
+        logging.info("No URLs ready for processing. Sleeping for four hours...")
+        exit_requested = _graceful_sleep(
+            60 * 60 * 4
+        )  # 4 hours with 30-second intervals
+        if exit_requested:
+            return (
+                pages_processed,
+                pages_since_restart,
+                True,
+                False,
+                (browser, page, batch_start_time, batch_results),
+            )
+        return (
+            pages_processed,
+            pages_since_restart,
+            False,
+            False,
+            (browser, page, batch_start_time, batch_results),
+        )
+
+    if pages_since_restart >= PAGES_PER_RESTART:
+        browser, page, batch_start_time, batch_results = _handle_browser_restart(
+            p,
+            page,
+            browser,
+            pages_since_restart,
+            batch_results,
+            batch_start_time,
+            crawler,
+        )
+        return (
+            pages_processed,
+            0,
+            False,
+            True,
+            (browser, page, batch_start_time, batch_results),
+        )
+
+    pages_inc, restart_inc, should_exit = _process_crawl_iteration(
+        url, crawler, browser, page, pinecone_index, index_name
+    )
+
+    if should_exit:
+        return (
+            pages_processed,
+            pages_since_restart,
+            True,
+            False,
+            (browser, page, batch_start_time, batch_results),
+        )
+
+    if restart_inc == 0 and pages_inc == 0:  # Restart needed
+        browser, page, batch_start_time, batch_results = _handle_browser_restart(
+            p,
+            page,
+            browser,
+            pages_since_restart,
+            batch_results,
+            batch_start_time,
+            crawler,
+        )
+        return (
+            pages_processed,
+            0,
+            False,
+            True,
+            (browser, page, batch_start_time, batch_results),
+        )
+
+    pages_processed += pages_inc
+    pages_since_restart += restart_inc
+    batch_results.append(pages_inc > 0)
+
+    return (
+        pages_processed,
+        pages_since_restart,
+        False,
+        False,
+        (browser, page, batch_start_time, batch_results),
+    )
+
+
 def run_crawl_loop(
     crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace
 ):
@@ -1354,61 +1466,32 @@ def run_crawl_loop(
 
         try:
             while not is_exiting():
-                if _should_stop_crawling(stop_after, pages_processed):
-                    break
-
-                url = crawler.get_next_url_to_crawl()
-                if not url:
-                    logging.info(
-                        "No URLs ready for processing. Sleeping for four hours..."
-                    )
-                    exit_requested = _graceful_sleep(
-                        60 * 60 * 4
-                    )  # 4 hours with 30-second intervals
-                    if exit_requested:
-                        break
-                    continue
-
-                if pages_since_restart >= PAGES_PER_RESTART:
-                    browser, page, batch_start_time, batch_results = (
-                        _handle_browser_restart(
-                            p,
-                            page,
-                            browser,
-                            pages_since_restart,
-                            batch_results,
-                            batch_start_time,
-                            crawler,
-                        )
-                    )
-                    pages_since_restart = 0
-                    continue
-
-                pages_inc, restart_inc, should_exit = _process_crawl_iteration(
-                    url, crawler, browser, page, pinecone_index, index_name
+                (
+                    pages_processed,
+                    pages_since_restart,
+                    should_exit,
+                    should_restart,
+                    (browser, page, batch_start_time, batch_results),
+                ) = _handle_crawl_loop_iteration(
+                    crawler,
+                    browser,
+                    page,
+                    pinecone_index,
+                    index_name,
+                    stop_after,
+                    pages_processed,
+                    pages_since_restart,
+                    PAGES_PER_RESTART,
+                    batch_results,
+                    batch_start_time,
+                    p,
                 )
 
                 if should_exit:
                     break
 
-                if restart_inc == 0 and pages_inc == 0:  # Restart needed
-                    browser, page, batch_start_time, batch_results = (
-                        _handle_browser_restart(
-                            p,
-                            page,
-                            browser,
-                            pages_since_restart,
-                            batch_results,
-                            batch_start_time,
-                            crawler,
-                        )
-                    )
-                    pages_since_restart = 0
+                if should_restart:
                     continue
-
-                pages_processed += pages_inc
-                pages_since_restart += restart_inc
-                batch_results.append(pages_inc > 0)
 
             crawler.current_processing_url = None
 

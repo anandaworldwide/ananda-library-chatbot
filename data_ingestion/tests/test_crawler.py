@@ -928,14 +928,28 @@ class TestRateLimiting(unittest.TestCase):
         self.original_sqlite_connect = sqlite3.connect
         self.connect_patcher = patch("sqlite3.connect")
         mock_sqlite_connect = self.connect_patcher.start()
-        mock_sqlite_connect.side_effect = (
-            lambda db_path_arg: self.original_sqlite_connect(":memory:")
-        )
+        mock_sqlite_connect.return_value.row_factory = sqlite3.Row
+        mock_sqlite_connect.return_value.cursor.return_value.execute.return_value.fetchall.return_value = []
+
+        # Mock environment variables for OpenAI using os.environ.get
+        self.environ_patcher = patch("os.environ")
+        mock_environ = self.environ_patcher.start()
+        mock_environ.get.side_effect = lambda key, default=None: {
+            "OPENAI_INGEST_EMBEDDINGS_MODEL": "text-embedding-3-small",
+            "OPENAI_API_KEY": "mock-api-key",
+        }.get(key, default)
+
+        # Mock other dependencies as needed
+        self.robots_parser_patcher = patch("crawler.website_crawler.RobotFileParser")
+        mock_robots_parser = self.robots_parser_patcher.start()
+        mock_robots_parser.return_value.can_fetch.return_value = True
 
     def tearDown(self):
         """Clean up after tests."""
         self.path_patcher.stop()
         self.connect_patcher.stop()
+        self.environ_patcher.stop()
+        self.robots_parser_patcher.stop()
         shutil.rmtree(self.temp_dir)
 
     def test_crawl_delay_configuration(self):
@@ -979,7 +993,10 @@ class TestRateLimiting(unittest.TestCase):
 
         # Mock sub-functions for successful processing
         with (
-            patch("crawler.website_crawler._handle_url_processing", return_value=False),
+            patch(
+                "crawler.website_crawler._handle_url_processing",
+                return_value=((Mock(), [], False), False),
+            ),
             patch(
                 "crawler.website_crawler._process_page_content",
                 return_value=(
@@ -1025,7 +1042,10 @@ class TestRateLimiting(unittest.TestCase):
 
         # Mock sub-functions to simulate failed processing
         with (
-            patch("crawler.website_crawler._handle_url_processing", return_value=False),
+            patch(
+                "crawler.website_crawler._handle_url_processing",
+                return_value=((Mock(), [], False), False),
+            ),
             patch(
                 "crawler.website_crawler._process_page_content",
                 return_value=(0, 0),  # pages_inc=0, restart_inc=0 (failed processing)
@@ -1076,7 +1096,10 @@ class TestRateLimiting(unittest.TestCase):
 
         # Mock sub-functions for successful processing
         with (
-            patch("crawler.website_crawler._handle_url_processing", return_value=False),
+            patch(
+                "crawler.website_crawler._handle_url_processing",
+                return_value=((Mock(), [], False), False),
+            ),
             patch(
                 "crawler.website_crawler._process_page_content",
                 return_value=(
