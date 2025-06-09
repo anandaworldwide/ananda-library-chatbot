@@ -421,18 +421,6 @@ class SpacyTextSplitter:
                 f"avg_chars={avg_chunk_chars:.1f}"
             )
 
-            # Check if chunks meet target range (450-750 tokens, 75%-125% of 600-token target)
-            target_min = int(self.target_chunk_size * 0.75)  # 450 tokens
-            target_max = int(self.target_chunk_size * 1.25)  # 750 tokens
-            target_range_chunks = sum(
-                1 for count in chunk_token_counts if target_min <= count <= target_max
-            )
-            target_percentage = (target_range_chunks / len(chunks)) * 100
-            self.logger.info(
-                f"Target range ({target_min}-{target_max} tokens): {target_range_chunks}/{len(chunks)} chunks "
-                f"({target_percentage:.1f}%)"
-            )
-
             # Log edge cases for this document using token counts
             if min_chunk_tokens < 150:  # Less than 25% of target
                 self.logger.warning(
@@ -1359,81 +1347,6 @@ class SpacyTextSplitter:
             overlap_progress = tqdm(
                 total=len(chunks), desc="Applying overlap", unit="chunk", leave=False
             )
-
-        # Import NLTK tokenizer to match proven evaluation approach
-        try:
-            from nltk.tokenize import word_tokenize
-        except ImportError:
-            self.logger.warning(
-                "NLTK not available for overlap tokenization, falling back to spaCy. "
-                "Install NLTK for better punctuation preservation."
-            )
-            # Fallback to spaCy tokenization if NLTK is not available
-            overlapped_chunks = []
-            for i, chunk in enumerate(chunks):
-                if show_overlap_progress:
-                    overlap_progress.update(1)
-
-                overlapped_chunk = chunk
-                if i > 0:
-                    # Calculate how much overlap we can add without exceeding target token limit
-                    chunk_tokens = len(self._tokenize_text(chunk))
-                    max_overlap_tokens = self.target_chunk_size - chunk_tokens
-
-                    if max_overlap_tokens > 0:
-                        prev_chunk_tokens = self._tokenize_text(chunks[i - 1])
-                        # Use the minimum of: configured overlap, available previous tokens, and token budget
-                        actual_overlap = min(
-                            self.chunk_overlap,
-                            len(prev_chunk_tokens),
-                            max_overlap_tokens,
-                        )
-                        overlap_tokens = prev_chunk_tokens[-actual_overlap:]
-                        # For spaCy fallback, try to reconstruct text properly
-                        # Since spaCy tokens preserve more spacing info, use spaCy reconstruction
-                        try:
-                            self._ensure_nlp()
-                            # Re-tokenize the previous chunk with spaCy to get proper token objects
-                            prev_doc = self.nlp(chunks[i - 1])
-                            prev_spacy_tokens = [
-                                token for token in prev_doc if not token.is_space
-                            ]
-
-                            # Take the last N spaCy token objects for overlap
-                            if len(prev_spacy_tokens) >= actual_overlap:
-                                overlap_spacy_tokens = prev_spacy_tokens[
-                                    -actual_overlap:
-                                ]
-                                overlap_text = self._reconstruct_text_from_tokens(
-                                    overlap_spacy_tokens
-                                )
-                            else:
-                                # Fallback to simple join if not enough tokens
-                                overlap_text = " ".join(overlap_tokens)
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Failed to reconstruct spaCy tokens: {e}"
-                            )
-                            overlap_text = " ".join(overlap_tokens)
-                        overlapped_chunk = overlap_text + " " + chunk
-
-                        # Safety check: verify we didn't exceed target token limit
-                        final_token_count = len(self._tokenize_text(overlapped_chunk))
-                        if final_token_count > self.target_chunk_size:
-                            self.logger.warning(
-                                f"Overlap would exceed target token limit ({final_token_count} > {self.target_chunk_size}), using original chunk"
-                            )
-                            overlapped_chunk = chunk
-                    else:
-                        self.logger.warning(
-                            f"Chunk already at target token limit ({chunk_tokens} tokens), skipping overlap"
-                        )
-
-                overlapped_chunks.append(overlapped_chunk)
-
-            if show_overlap_progress:
-                overlap_progress.close()
-            return overlapped_chunks
 
         overlapped_chunks = []
 
