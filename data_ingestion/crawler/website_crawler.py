@@ -1449,7 +1449,7 @@ def _handle_crawl_loop_iteration(
 def run_crawl_loop(
     crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace
 ):
-    """Run the main crawling loop."""
+    """Run the main crawling loop with graceful exception handling."""
     setup_result = _initialize_crawl_loop(args, crawler)
     if setup_result[0] is None:  # index_name is None, error occurred
         return
@@ -1498,9 +1498,16 @@ def run_crawl_loop(
 
             crawler.current_processing_url = None
 
+        except SystemExit:
+            logging.info("Received exit signal, shutting down crawler loop.")
         except Exception as e:
-            logging.error(f"Browser or main loop error: {e}")
-            logging.error(traceback.format_exc())
+            if is_exiting():
+                logging.info(
+                    "Exit signal received during operation, shutting down without detailed error reporting."
+                )
+            else:
+                logging.error(f"Browser or main loop error: {e}")
+                logging.error(traceback.format_exc())
         finally:
             _cleanup_browser(page, browser)
 
@@ -1642,8 +1649,11 @@ def main():
     except SystemExit:
         logging.info("Exiting due to SystemExit signal.")
     except Exception as e:
-        logging.error(f"Unexpected error in main execution: {e}")
-        logging.error(traceback.format_exc())
+        if is_exiting():
+            logging.info("Exit signal received, suppressing detailed error output.")
+        else:
+            logging.error(f"Unexpected error in main execution: {e}")
+            logging.error(traceback.format_exc())
     finally:
         cleanup_and_exit(crawler)
 
