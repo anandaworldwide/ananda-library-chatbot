@@ -902,7 +902,7 @@ class WebsiteCrawler:
     def should_process_content(self, url: str, current_hash: str) -> bool:
         """Check if content has changed and should be processed"""
         self.cursor.execute(
-            "SELECT content_hash FROM crawl_queue WHERE url = ? AND status = 'visited'",
+            "SELECT content_hash FROM crawl_queue WHERE url = ?",
             (self.normalize_url(url),),
         )
         result = self.cursor.fetchone()
@@ -1364,8 +1364,9 @@ def _handle_crawl_loop_iteration(
         logging.info("No URLs ready for processing. Sleeping for four hours...")
         exit_requested = _graceful_sleep(
             60 * 60 * 4
-        )  # 4 hours with 30-second intervals
+        )  # 4 hours with 10-second intervals
         if exit_requested:
+            logging.info("Exit was requested during sleep")
             return (
                 pages_processed,
                 pages_since_restart,
@@ -1373,6 +1374,8 @@ def _handle_crawl_loop_iteration(
                 False,
                 (browser, page, batch_start_time, batch_results),
             )
+
+        logging.info("Sleep completed normally, continuing loop...")
         return (
             pages_processed,
             pages_since_restart,
