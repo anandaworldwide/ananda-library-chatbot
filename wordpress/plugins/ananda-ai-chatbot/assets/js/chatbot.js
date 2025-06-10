@@ -19,33 +19,30 @@
  * - Dynamic Intercom integration via special [any text](GETHUMAN) links
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
   // API endpoint paths
   const API_PATHS = {
-    CHAT: '/api/chat/v1',
-    VOTE: '/api/vote',
-    NPS: '/api/submitNpsSurvey',
+    CHAT: "/api/chat/v1",
+    VOTE: "/api/vote",
+    NPS: "/api/submitNpsSurvey",
   };
 
   // Default base URL
-  const DEFAULT_BASE_URL = 'https://vivek.ananda.org';
+  const DEFAULT_BASE_URL = "https://vivek.ananda.org";
 
   // Clean the base URL by removing trailing slashes
   function getBaseUrl() {
     const configuredUrl = aichatbotData.vercelUrl || DEFAULT_BASE_URL;
-    return configuredUrl.replace(/\/+$/, '');
+    return configuredUrl.replace(/\/+$/, "");
   }
 
   // Simple UUID generator (needed by original script and NPS)
   function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
-      /[xy]/g,
-      function (c) {
-        var r = (Math.random() * 16) | 0,
-          v = c == 'x' ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      },
-    );
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0,
+        v = c == "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
   }
 
   // --- NPS Survey Logic Start ---
@@ -59,11 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Attempt to parse if it looks like JSON, otherwise return raw
       try {
         // Be careful with primitive strings that are valid JSON ('"string"')
-        if (
-          typeof defaultValue !== 'string' ||
-          item.startsWith('{') ||
-          item.startsWith('[')
-        ) {
+        if (typeof defaultValue !== "string" || item.startsWith("{") || item.startsWith("[")) {
           return JSON.parse(item);
         }
       } catch (e) {
@@ -71,10 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       return item;
     } catch (error) {
-      console.error(
-        `Error reading localStorage key \u201C${key}\u201D:`,
-        error,
-      );
+      console.error(`Error reading localStorage key \u201C${key}\u201D:`, error);
       return defaultValue;
     }
   }
@@ -82,40 +72,30 @@ document.addEventListener('DOMContentLoaded', () => {
   // Helper to set item in localStorage
   function setLocalStorageItem(key, value) {
     try {
-      const stringValue =
-        typeof value === 'string' ? value : JSON.stringify(value);
+      const stringValue = typeof value === "string" ? value : JSON.stringify(value);
       localStorage.setItem(key, stringValue);
     } catch (error) {
-      console.error(
-        `Error setting localStorage key \u201C${key}\u201D:`,
-        error,
-      );
+      console.error(`Error setting localStorage key \u201C${key}\u201D:`, error);
     }
   }
 
   // Initialize NPS state variables from localStorage
-  let npsQueryCount = getLocalStorageItem('npsQueryCount', 0);
-  let npsLastSurveyTimestamp = getLocalStorageItem(
-    'npsLastSurveyTimestamp',
-    null,
-  );
-  let npsLastSurveyQueryCount = getLocalStorageItem(
-    'npsLastSurveyQueryCount',
-    0,
-  );
-  let npsUserUuid = getLocalStorageItem('npsUserUuid', null);
-  let npsDismissReason = getLocalStorageItem('npsDismissReason', null);
+  let npsQueryCount = getLocalStorageItem("npsQueryCount", 0);
+  let npsLastSurveyTimestamp = getLocalStorageItem("npsLastSurveyTimestamp", null);
+  let npsLastSurveyQueryCount = getLocalStorageItem("npsLastSurveyQueryCount", 0);
+  let npsUserUuid = getLocalStorageItem("npsUserUuid", null);
+  let npsDismissReason = getLocalStorageItem("npsDismissReason", null);
 
   // Generate and save UUID if it doesn't exist
   if (!npsUserUuid) {
     npsUserUuid = generateUUID(); // Use the globally available function
-    setLocalStorageItem('npsUserUuid', npsUserUuid);
+    setLocalStorageItem("npsUserUuid", npsUserUuid);
   }
 
   // Function to increment query count and check NPS trigger conditions
   function handleNpsSurveyCheck() {
     npsQueryCount++;
-    setLocalStorageItem('npsQueryCount', npsQueryCount);
+    setLocalStorageItem("npsQueryCount", npsQueryCount);
 
     // --- Trigger Logic Start ---
     const NPS_QUERY_THRESHOLD = 5;
@@ -125,9 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Track current session exchanges - using chatHistory length
     // This variable needs to be incremented only once we've completed a full Q&A exchange
-    const currentSessionExchanges = chatHistory.filter(
-      (pair) => pair[0] && pair[1],
-    ).length;
+    const currentSessionExchanges = chatHistory.filter((pair) => pair[0] && pair[1]).length;
 
     // Don't show NPS survey if there are no completed exchanges in the current session
     if (currentSessionExchanges < 1) {
@@ -136,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Determine the required delay based on the dismiss reason
     let requiredDelay = THREE_MONTHS_IN_MS; // Default to 3 months
-    if (npsDismissReason === 'later' || npsDismissReason === 'no_thanks') {
+    if (npsDismissReason === "later" || npsDismissReason === "no_thanks") {
       requiredDelay = THREE_DAYS_IN_MS;
     }
 
@@ -149,30 +127,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Condition 2: Recurrence trigger
     else if (npsLastSurveyTimestamp) {
       const timeSinceLastInteraction = now - npsLastSurveyTimestamp;
-      const queriesSinceLastSubmission =
-        npsQueryCount - npsLastSurveyQueryCount;
+      const queriesSinceLastSubmission = npsQueryCount - npsLastSurveyQueryCount;
 
       // Check if enough time has passed based on the reason
       if (timeSinceLastInteraction >= requiredDelay) {
         // If it was dismissed ('later' or 'no_thanks'), show immediately after 3 days (ignore query threshold)
-        if (npsDismissReason === 'later' || npsDismissReason === 'no_thanks') {
+        if (npsDismissReason === "later" || npsDismissReason === "no_thanks") {
           shouldShow = true;
         }
         // If it was submitted, also check the query threshold
-        else if (
-          npsDismissReason === 'submitted' &&
-          queriesSinceLastSubmission >= NPS_QUERY_THRESHOLD
-        ) {
+        else if (npsDismissReason === "submitted" && queriesSinceLastSubmission >= NPS_QUERY_THRESHOLD) {
           shouldShow = true;
         }
         // Handle cases where dismissReason might be null/unexpected (treat as submitted/default)
-        else if (
-          !npsDismissReason &&
-          queriesSinceLastSubmission >= NPS_QUERY_THRESHOLD
-        ) {
-          console.warn(
-            'NPS check: dismissReason missing, applying default 3-month/5-query rule.',
-          );
+        else if (!npsDismissReason && queriesSinceLastSubmission >= NPS_QUERY_THRESHOLD) {
+          console.warn("NPS check: dismissReason missing, applying default 3-month/5-query rule.");
           shouldShow = true;
         }
       }
@@ -188,51 +157,51 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize variables
   let isStreaming = false;
   let currentAbortController = null;
-  let defaultCollection = 'whole_library';
+  let defaultCollection = "whole_library";
   let privateSession = false;
   let mediaTypes = { text: true, audio: false, youtube: false };
   let sourceCount = 6;
   let intercomEnabled = false;
 
   // Get DOM elements
-  const bubble = document.getElementById('aichatbot-bubble');
-  const chatWindow = document.getElementById('aichatbot-window');
-  const input = document.getElementById('aichatbot-input');
-  const sendButton = document.getElementById('aichatbot-send');
-  const messages = document.getElementById('aichatbot-messages');
+  const bubble = document.getElementById("aichatbot-bubble");
+  const chatWindow = document.getElementById("aichatbot-window");
+  const input = document.getElementById("aichatbot-input");
+  const sendButton = document.getElementById("aichatbot-send");
+  const messages = document.getElementById("aichatbot-messages");
 
   // Initialize language hint functionality
-  const hint = document.querySelector('.aichatbot-language-hint');
-  const modal = document.querySelector('.aichatbot-language-modal');
+  const hint = document.querySelector(".aichatbot-language-hint");
+  const modal = document.querySelector(".aichatbot-language-modal");
 
   if (hint && modal) {
-    hint.addEventListener('click', () => {
-      modal.style.display = 'flex';
+    hint.addEventListener("click", () => {
+      modal.style.display = "flex";
     });
 
-    const closeButton = modal.querySelector('.modal-close');
+    const closeButton = modal.querySelector(".modal-close");
     if (closeButton) {
-      closeButton.addEventListener('click', () => {
-        modal.style.display = 'none';
+      closeButton.addEventListener("click", () => {
+        modal.style.display = "none";
       });
     }
 
     // Close modal when clicking outside
-    modal.addEventListener('click', (e) => {
+    modal.addEventListener("click", (e) => {
       if (e.target === modal) {
-        modal.style.display = 'none';
+        modal.style.display = "none";
       }
     });
   }
 
   // Create controls container (to hold both buttons)
-  const controlsContainer = document.createElement('div');
-  controlsContainer.id = 'aichatbot-controls';
+  const controlsContainer = document.createElement("div");
+  controlsContainer.id = "aichatbot-controls";
   chatWindow.appendChild(controlsContainer);
 
   // Add full page chat button
-  const fullPageButton = document.createElement('div');
-  fullPageButton.id = 'aichatbot-fullpage';
+  const fullPageButton = document.createElement("div");
+  fullPageButton.id = "aichatbot-fullpage";
   fullPageButton.innerHTML = `<i class="fas fa-expand-alt"></i>Full page chat`;
 
   // Initialize chat history
@@ -240,59 +209,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Add event listeners after all elements are created
   // Close button functionality
-  document.getElementById('aichatbot-close').addEventListener('click', () => {
-    chatWindow.style.display = 'none';
-    document.body.classList.remove('aichatbot-window-open');
+  document.getElementById("aichatbot-close").addEventListener("click", () => {
+    chatWindow.style.display = "none";
+    document.body.classList.remove("aichatbot-window-open");
     saveChatState();
   });
 
   // Full page chat button functionality
-  fullPageButton.addEventListener('click', () => {
-    let fullPageUrl = '/chat';
-    if (typeof aichatbotData !== 'undefined' && aichatbotData.fullPageUrl) {
+  fullPageButton.addEventListener("click", () => {
+    let fullPageUrl = "/chat";
+    if (typeof aichatbotData !== "undefined" && aichatbotData.fullPageUrl) {
       fullPageUrl = aichatbotData.fullPageUrl;
     }
-    window.open(fullPageUrl, '_blank');
+    window.open(fullPageUrl, "_blank");
   });
 
   // Bubble click functionality
-  bubble.addEventListener('click', (e) => {
-    chatWindow.style.display =
-      chatWindow.style.display === 'none' ? 'flex' : 'none';
+  bubble.addEventListener("click", (e) => {
+    chatWindow.style.display = chatWindow.style.display === "none" ? "flex" : "none";
 
-    if (chatWindow.style.display === 'flex') {
-      document.body.classList.add('aichatbot-window-open');
+    if (chatWindow.style.display === "flex") {
+      document.body.classList.add("aichatbot-window-open");
       setTimeout(() => input.focus(), 0);
       setTimeout(() => {
         messages.scrollTop = messages.scrollHeight;
       }, 0);
       addWelcomeMessage();
       if (chatHistory.length > 0) {
-        input.placeholder = '';
+        input.placeholder = "";
       } else {
         input.placeholder = getRandomPlaceholder();
       }
     } else {
-      document.body.classList.remove('aichatbot-window-open');
+      document.body.classList.remove("aichatbot-window-open");
     }
     saveChatState();
     e.stopPropagation();
   });
 
   // Send button functionality
-  sendButton.addEventListener('click', sendMessage);
+  sendButton.addEventListener("click", sendMessage);
 
   // Enter key functionality
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
   });
 
   // Add click event delegation for Intercom trigger text
-  messages.addEventListener('click', (e) => {
-    const trigger = e.target.closest('.aichatbot-intercom-trigger');
+  messages.addEventListener("click", (e) => {
+    const trigger = e.target.closest(".aichatbot-intercom-trigger");
     if (trigger) {
       e.preventDefault();
       showIntercom();
@@ -307,29 +275,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Check if the wand-magic-sparkles icon is available, use fallback if not
   setTimeout(() => {
-    const wandIcon = document.querySelector('.fa-wand-magic-sparkles');
+    const wandIcon = document.querySelector(".fa-wand-magic-sparkles");
     if (wandIcon) {
       // Check if the icon is rendered properly
-      const computedStyle = window.getComputedStyle(wandIcon, ':before');
-      const contentValue = computedStyle.getPropertyValue('content');
+      const computedStyle = window.getComputedStyle(wandIcon, ":before");
+      const contentValue = computedStyle.getPropertyValue("content");
 
       // If the icon isn't rendering properly (empty or "none"), show the fallback
-      if (contentValue === 'none' || contentValue === '') {
-        wandIcon.style.display = 'none';
-        const fallbackIcon = document.querySelector('.fa-magic');
+      if (contentValue === "none" || contentValue === "") {
+        wandIcon.style.display = "none";
+        const fallbackIcon = document.querySelector(".fa-magic");
         if (fallbackIcon) {
-          fallbackIcon.style.display = 'inline-block';
+          fallbackIcon.style.display = "inline-block";
         }
       }
     }
   }, 500);
 
   // Define initial height constant
-  const INITIAL_HEIGHT = '40px';
+  const INITIAL_HEIGHT = "40px";
 
   // Initialize textarea to exact height
   input.style.height = INITIAL_HEIGHT;
-  input.style.overflowY = 'hidden';
+  input.style.overflowY = "hidden";
 
   // Set up textarea auto-expand functionality
   function autoResizeTextarea() {
@@ -340,26 +308,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Reset height to auto to properly calculate the new height
-    input.style.height = 'auto';
+    input.style.height = "auto";
 
     // Set the height to scrollHeight to fit all content (up to max-height in CSS)
-    input.style.height = `${Math.min(
-      input.scrollHeight,
-      window.innerHeight * 0.4,
-    )}px`;
+    input.style.height = `${Math.min(input.scrollHeight, window.innerHeight * 0.4)}px`;
 
     // If content is longer than max height, keep the scrollbar
     if (input.scrollHeight > window.innerHeight * 0.4) {
-      input.style.overflowY = 'auto';
+      input.style.overflowY = "auto";
     } else {
-      input.style.overflowY = 'hidden';
+      input.style.overflowY = "hidden";
     }
   }
 
   // Function to completely reset textarea height
   function resetTextareaHeight() {
-    input.style.height = 'auto'; // First reset to auto
-    input.style.overflowY = 'hidden';
+    input.style.height = "auto"; // First reset to auto
+    input.style.overflowY = "hidden";
     input.style.height = INITIAL_HEIGHT; // Then set to initial height
 
     // Force a reflow to ensure the height is applied
@@ -370,14 +335,14 @@ document.addEventListener('DOMContentLoaded', () => {
   autoResizeTextarea();
 
   // Auto-resize when typing
-  input.addEventListener('input', autoResizeTextarea);
+  input.addEventListener("input", autoResizeTextarea);
 
   // Reset height when window is resized
-  window.addEventListener('resize', autoResizeTextarea);
+  window.addEventListener("resize", autoResizeTextarea);
 
   // Handle Intercom integration if enabled
-  if (typeof aichatbotData !== 'undefined') {
-    intercomEnabled = aichatbotData.enableIntercom === '1';
+  if (typeof aichatbotData !== "undefined") {
+    intercomEnabled = aichatbotData.enableIntercom === "1";
 
     // If the intercom integration is enabled, we need to wait for the Intercom object to be available
     // So we check every 500ms if the Intercom object is available
@@ -387,27 +352,27 @@ document.addEventListener('DOMContentLoaded', () => {
       const checkInterval = 500; // 500ms = half second
 
       const setupIntercom = () => {
-        if (typeof window.Intercom !== 'undefined') {
+        if (typeof window.Intercom !== "undefined") {
           // Add a class to the body for CSS targeting when Intercom is active
-          document.body.classList.add('intercom-enabled');
-          document.body.classList.add('hide-intercom');
-          console.log('Added CSS class to body to hide Intercom container.');
+          document.body.classList.add("intercom-enabled");
+          document.body.classList.add("hide-intercom");
+          console.log("Added CSS class to body to hide Intercom container.");
 
           // Add listener for when Intercom messenger is hidden by the user
-          window.Intercom('onHide', function () {
-            console.log('Intercom messenger hidden (onHide event).');
+          window.Intercom("onHide", function () {
+            console.log("Intercom messenger hidden (onHide event).");
 
             // Re-hide the Intercom container/launcher using our CSS rule
-            if (!document.body.classList.contains('hide-intercom')) {
-              document.body.classList.add('hide-intercom');
-              console.log('Re-added CSS class to body to hide Intercom container.');
+            if (!document.body.classList.contains("hide-intercom")) {
+              document.body.classList.add("hide-intercom");
+              console.log("Re-added CSS class to body to hide Intercom container.");
             }
 
             // Show the chatbot bubble (if it exists)
-            const bubble = document.getElementById('aichatbot-bubble');
+            const bubble = document.getElementById("aichatbot-bubble");
             if (bubble) {
-              bubble.style.display = 'flex'; // Assuming flex is the default visible state
-              console.log('Chatbot bubble shown.');
+              bubble.style.display = "flex"; // Assuming flex is the default visible state
+              console.log("Chatbot bubble shown.");
             }
           });
           return true; // Successfully set up Intercom
@@ -430,52 +395,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Function to show Intercom and hide chatbot
   function showIntercom() {
-    if (intercomEnabled && typeof window.Intercom !== 'undefined') {
+    if (intercomEnabled && typeof window.Intercom !== "undefined") {
       // Remove the 'hide-intercom' class from the body to show Intercom
-      if (document.body.classList.contains('hide-intercom')) {
-        document.body.classList.remove('hide-intercom');
-        console.log('Removed CSS class from body to show Intercom container.');
+      if (document.body.classList.contains("hide-intercom")) {
+        document.body.classList.remove("hide-intercom");
+        console.log("Removed CSS class from body to show Intercom container.");
       } else {
-        console.log('hide-intercom class not found on body, proceeding anyway.');
-      } 
+        console.log("hide-intercom class not found on body, proceeding anyway.");
+      }
 
       // Hide chatbot window
-      chatWindow.style.display = 'none';
-      document.body.classList.remove('aichatbot-window-open'); // Ensure body class is removed
+      chatWindow.style.display = "none";
+      document.body.classList.remove("aichatbot-window-open"); // Ensure body class is removed
       saveChatState(); // Save closed state
 
       // Show Intercom - use the proper method to both show and open the messenger
       try {
         // Explicitly show and open the messenger
-        window.Intercom('show');
-        window.Intercom('showNewMessage'); // Optionally opens composer directly
+        window.Intercom("show");
+        window.Intercom("showNewMessage"); // Optionally opens composer directly
 
-        console.log('Intercom triggered successfully via show/showNewMessage');
+        console.log("Intercom triggered successfully via show/showNewMessage");
         return true;
       } catch (e) {
-        console.error('Error showing Intercom:', e);
+        console.error("Error showing Intercom:", e);
         return false;
       }
     }
     // Log if Intercom isn't enabled or ready
-    console.log('Intercom not enabled or not ready.');
+    console.log("Intercom not enabled or not ready.");
     return false;
   }
 
   // Default placeholder questions in case WordPress settings are not available
-  let placeholderQuestions = ['Ask me anything about this website'];
+  let placeholderQuestions = ["Ask me anything about this website"];
 
   // Override with questions from WordPress if available
   if (
-    typeof aichatbotData !== 'undefined' &&
+    typeof aichatbotData !== "undefined" &&
     aichatbotData.placeholderQuestionsText &&
-    aichatbotData.placeholderQuestionsText.trim() !== ''
+    aichatbotData.placeholderQuestionsText.trim() !== ""
   ) {
     // Split the text into lines and filter out empty lines
     const questions = aichatbotData.placeholderQuestionsText
-      .split('\n')
+      .split("\n")
       .map((question) => question.trim())
-      .filter((question) => question !== '');
+      .filter((question) => question !== "");
 
     if (questions.length > 0) {
       placeholderQuestions = questions;
@@ -489,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Apply customization settings from WordPress if available
-  if (typeof aichatbotData !== 'undefined') {
+  if (typeof aichatbotData !== "undefined") {
     // Apply font size setting if provided
     if (aichatbotData.fontSizePx) {
       const fontSize = parseInt(aichatbotData.fontSizePx);
@@ -518,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Track accumulated response for streaming
-  let accumulatedResponse = '';
+  let accumulatedResponse = "";
   let currentBotMessage = null;
 
   /**
@@ -535,7 +500,7 @@ document.addEventListener('DOMContentLoaded', () => {
    * @returns {string} The rendered HTML
    */
   function renderMarkdown(text) {
-    if (!text) return '';
+    if (!text) return "";
 
     // Normalize line endings and clean up excessive whitespace:
     // - Convert Windows line endings to Unix
@@ -543,70 +508,70 @@ document.addEventListener('DOMContentLoaded', () => {
     // - Ensure consistent spacing before lists (add extra newline if needed)
     text = text
       .trim()
-      .replace(/\r\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
+      .replace(/\r\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
       // Add extra newline before first list item if there isn't already a blank line
-      .replace(/([^\n])\n([*-] .*\n)(?!\n[*-] )/g, '$1\n\n$2')
-      .replace(/([^\n])\n([*-] .*)$/g, '$1\n\n$2')
+      .replace(/([^\n])\n([*-] .*\n)(?!\n[*-] )/g, "$1\n\n$2")
+      .replace(/([^\n])\n([*-] .*)$/g, "$1\n\n$2")
       // Add extra newline before first ordered list item
-      .replace(/([^\n])\n(\d+\. .*\n)(?!\n\d+\. )/g, '$1\n\n$2')
-      .replace(/([^\n])\n(\d+\. .*)$/g, '$1\n\n$2');
+      .replace(/([^\n])\n(\d+\. .*\n)(?!\n\d+\. )/g, "$1\n\n$2")
+      .replace(/([^\n])\n(\d+\. .*)$/g, "$1\n\n$2");
 
     // Split text into logical blocks (paragraphs and lists)
-    const blocks = text.split('\n\n');
-    let html = '';
+    const blocks = text.split("\n\n");
+    let html = "";
     let inList = false; // Tracks whether we're currently processing a list
     let inOrderedList = false; // Track whether we're in an ordered list
 
     for (let i = 0; i < blocks.length; i++) {
       let block = blocks[i].trim();
-      let nextBlock = i < blocks.length - 1 ? blocks[i + 1].trim() : '';
+      let nextBlock = i < blocks.length - 1 ? blocks[i + 1].trim() : "";
 
       // Check if this block starts with a list marker
       if (block.match(/^[*-]\s/m)) {
         // Start a new unordered list if we're not already in one
         if (!inList) {
-          html += '<ul>';
+          html += "<ul>";
           inList = true;
         }
         // Close ordered list if we were in one
         if (inOrderedList) {
-          html += '</ol>';
+          html += "</ol>";
           inOrderedList = false;
         }
         // Process unordered list items
-        const items = block.split('\n');
+        const items = block.split("\n");
         for (let item of items) {
           if (item.trim()) {
             if (item.match(/^[*-]\s/)) {
               const listContent = item
-                .replace(/^[*-]\s+/, '')
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/__(.*?)__/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/_(.*?)_/g, '<em>$1</em>')
-                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/^[*-]\s+/, "")
+                .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                .replace(/__(.*?)__/g, "<strong>$1</strong>")
+                .replace(/\*(.*?)\*/g, "<em>$1</em>")
+                .replace(/_(.*?)_/g, "<em>$1</em>")
+                .replace(/`(.*?)`/g, "<code>$1</code>")
                 .replace(
                   /\[(.*?)\]\(GETHUMAN\)/g,
-                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
 
               html += `<li>${listContent}</li>`;
             } else {
               if (inList) {
-                html += '</ul>';
+                html += "</ul>";
                 inList = false;
               }
               let paragraph = item
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/__(.*?)__/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/_(.*?)_/g, '<em>$1</em>')
-                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                .replace(/__(.*?)__/g, "<strong>$1</strong>")
+                .replace(/\*(.*?)\*/g, "<em>$1</em>")
+                .replace(/_(.*?)_/g, "<em>$1</em>")
+                .replace(/`(.*?)`/g, "<code>$1</code>")
                 .replace(
                   /\[(.*?)\]\(GETHUMAN\)/g,
-                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
 
@@ -617,47 +582,47 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (block.match(/^\d+\.\s/m)) {
         // Start a new ordered list if we're not already in one
         if (!inOrderedList) {
-          html += '<ol>';
+          html += "<ol>";
           inOrderedList = true;
         }
         // Close unordered list if we were in one
         if (inList) {
-          html += '</ul>';
+          html += "</ul>";
           inList = false;
         }
         // Process ordered list items
-        const items = block.split('\n');
+        const items = block.split("\n");
         for (let item of items) {
           if (item.trim()) {
             if (item.match(/^\d+\.\s/)) {
               const listContent = item
-                .replace(/^\d+\.\s+/, '')
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/__(.*?)__/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/_(.*?)_/g, '<em>$1</em>')
-                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/^\d+\.\s+/, "")
+                .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                .replace(/__(.*?)__/g, "<strong>$1</strong>")
+                .replace(/\*(.*?)\*/g, "<em>$1</em>")
+                .replace(/_(.*?)_/g, "<em>$1</em>")
+                .replace(/`(.*?)`/g, "<code>$1</code>")
                 .replace(
                   /\[(.*?)\]\(GETHUMAN\)/g,
-                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
 
               html += `<li>${listContent}</li>`;
             } else {
               if (inOrderedList) {
-                html += '</ol>';
+                html += "</ol>";
                 inOrderedList = false;
               }
               let paragraph = item
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/__(.*?)__/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/_(.*?)_/g, '<em>$1</em>')
-                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                .replace(/__(.*?)__/g, "<strong>$1</strong>")
+                .replace(/\*(.*?)\*/g, "<em>$1</em>")
+                .replace(/_(.*?)_/g, "<em>$1</em>")
+                .replace(/`(.*?)`/g, "<code>$1</code>")
                 .replace(
                   /\[(.*?)\]\(GETHUMAN\)/g,
-                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+                  '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
 
@@ -669,27 +634,27 @@ document.addEventListener('DOMContentLoaded', () => {
         // This is a regular paragraph block
         // Close any open lists
         if (inList) {
-          html += '</ul>';
+          html += "</ul>";
           inList = false;
         }
         if (inOrderedList) {
-          html += '</ol>';
+          html += "</ol>";
           inOrderedList = false;
         }
 
         // Process the paragraph block
         let paragraph = block
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/__(.*?)__/g, '<strong>$1</strong>')
-          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-          .replace(/_(.*?)_/g, '<em>$1</em>')
-          .replace(/`(.*?)`/g, '<code>$1</code>')
+          .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+          .replace(/__(.*?)__/g, "<strong>$1</strong>")
+          .replace(/\*(.*?)\*/g, "<em>$1</em>")
+          .replace(/_(.*?)_/g, "<em>$1</em>")
+          .replace(/`(.*?)`/g, "<code>$1</code>")
           .replace(
             /\[(.*?)\]\(GETHUMAN\)/g,
-            '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>',
+            '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
           )
           .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')
-          .replace(/\n/g, '<br />');
+          .replace(/\n/g, "<br />");
 
         html += `<p>${paragraph}</p>`;
       }
@@ -697,10 +662,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Ensure any open lists are properly closed
     if (inList) {
-      html += '</ul>';
+      html += "</ul>";
     }
     if (inOrderedList) {
-      html += '</ol>';
+      html += "</ol>";
     }
 
     return html;
@@ -711,7 +676,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!message) return;
 
     // Always clear placeholder immediately on sending a message
-    input.placeholder = '';
+    input.placeholder = "";
 
     // If already streaming, stop it
     if (stopStreaming()) {
@@ -722,80 +687,77 @@ document.addEventListener('DOMContentLoaded', () => {
     // (NPS Survey check moved to the completion handler below)
 
     // Reset accumulated response
-    accumulatedResponse = '';
+    accumulatedResponse = "";
 
     // Show user message
-    const userMessage = document.createElement('div');
-    userMessage.className = 'aichatbot-user-message';
+    const userMessage = document.createElement("div");
+    userMessage.className = "aichatbot-user-message";
     userMessage.textContent = message;
     messages.appendChild(userMessage);
 
     // Clear input and completely reset height
-    input.value = '';
+    input.value = "";
     resetTextareaHeight();
 
     // Create bot message container but don't add to DOM yet
     currentBotMessage = createBotMessage(message);
 
     // Show typing indicator
-    const typingIndicator = document.createElement('div');
-    typingIndicator.className = 'aichatbot-typing';
-    const typingSpan = document.createElement('span');
-    typingSpan.className = 'typing-dots';
-    typingSpan.textContent = '.';
+    const typingIndicator = document.createElement("div");
+    typingIndicator.className = "aichatbot-typing";
+    const typingSpan = document.createElement("span");
+    typingSpan.className = "typing-dots";
+    typingSpan.textContent = ".";
     typingIndicator.appendChild(typingSpan);
     messages.appendChild(typingIndicator);
     messages.scrollTop = messages.scrollHeight;
 
     // Toggle buttons
-    sendButton.style.display = 'none';
-    stopButton.style.display = 'inline-block';
+    sendButton.style.display = "none";
+    stopButton.style.display = "inline-block";
 
     isStreaming = true;
 
     // Update chat history with user message
-    chatHistory.push([message, '']);
+    chatHistory.push([message, ""]);
 
     try {
       // Get token for API call
       const token = await getToken();
       if (!token) {
-        throw new Error('Failed to get authentication token');
+        throw new Error("Failed to get authentication token");
       }
 
       // Create new abort controller for this request
       currentAbortController = new AbortController();
 
       // Make API call
-      const response = await window.aichatbotAuth.fetchWithAuth(
-        `${getBaseUrl()}${API_PATHS.CHAT}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            question: message,
-            history: chatHistory
-              .slice(0, -1)
-              .map(([userMsg, botMsg]) => [
-                { role: 'user', content: userMsg },
-                { role: 'assistant', content: botMsg },
-              ])
-              .flat(),
-            collection: defaultCollection,
-            privateSession: privateSession,
-            mediaTypes: mediaTypes,
-            sourceCount: sourceCount,
-          }),
-          signal: currentAbortController.signal,
+      const response = await window.aichatbotAuth.fetchWithAuth(`${getBaseUrl()}${API_PATHS.CHAT}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          question: message,
+          history: chatHistory
+            .slice(0, -1)
+            .map(([userMsg, botMsg]) => [
+              { role: "user", content: userMsg },
+              { role: "assistant", content: botMsg },
+            ])
+            .flat(),
+          collection: defaultCollection,
+          privateSession: privateSession,
+          mediaTypes: mediaTypes,
+          sourceCount: sourceCount,
+        }),
+        signal: currentAbortController.signal,
+      });
 
       if (!response.ok) {
         try {
           const errorData = await response.json();
-          console.error('API Error:', errorData);
+          console.error("API Error:", errorData);
           const errorMessage = errorData.error || JSON.stringify(errorData);
           throw new Error(`${errorMessage}`); // This will show the actual API error
         } catch (e) {
@@ -804,13 +766,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Check if the response is a stream
-      if (response.headers.get('content-type')?.includes('text/event-stream')) {
+      if (response.headers.get("content-type")?.includes("text/event-stream")) {
         // Handle streaming response
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        const messageContent = currentBotMessage.querySelector(
-          '.aichatbot-message-content',
-        );
+        const messageContent = currentBotMessage.querySelector(".aichatbot-message-content");
         let firstTokenReceived = false;
         let hasContent = false;
 
@@ -819,36 +779,31 @@ document.addEventListener('DOMContentLoaded', () => {
           if (done) break;
 
           const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+          const lines = chunk.split("\n");
 
           // Check if user is near the bottom BEFORE adding the new chunk
-          const wasScrolledToBottom =
-            messages.scrollHeight - messages.clientHeight <=
-            messages.scrollTop + 10;
+          const wasScrolledToBottom = messages.scrollHeight - messages.clientHeight <= messages.scrollTop + 10;
 
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
+            if (line.startsWith("data: ")) {
               try {
                 const jsonData = JSON.parse(line.slice(5));
 
                 // Check site ID and source count
-                if (jsonData.siteId && jsonData.siteId !== 'ananda-public') {
+                if (jsonData.siteId && jsonData.siteId !== "ananda-public") {
                   console.error(
-                    '[Ananda-AI-Chatbot]: Backend is using incorrect site ID:',
+                    "[Ananda-AI-Chatbot]: Backend is using incorrect site ID:",
                     jsonData.siteId,
-                    'Expected: ananda-public',
+                    "Expected: ananda-public"
                   );
                 }
-                if (
-                  jsonData.sourceDocs &&
-                  jsonData.sourceDocs.length < sourceCount
-                ) {
+                if (jsonData.sourceDocs && jsonData.sourceDocs.length < sourceCount) {
                   console.error(
-                    '[Ananda-AI-Chatbot]: Received',
+                    "[Ananda-AI-Chatbot]: Received",
                     jsonData.sourceDocs.length,
-                    'sources, but',
+                    "sources, but",
                     sourceCount,
-                    'were requested.',
+                    "were requested."
                   );
                 }
 
@@ -862,8 +817,7 @@ document.addEventListener('DOMContentLoaded', () => {
                   // Only add bot message to DOM and remove typing indicator if we have actual visible content
                   if (hasContent && !firstTokenReceived) {
                     // Make sure we're not just receiving metadata or whitespace
-                    const actualContent =
-                      accumulatedResponse.replace(/\s+/g, '').length > 0;
+                    const actualContent = accumulatedResponse.replace(/\s+/g, "").length > 0;
                     if (actualContent) {
                       // Add the bot message to DOM now that we have content
                       messages.appendChild(currentBotMessage);
@@ -876,21 +830,16 @@ document.addEventListener('DOMContentLoaded', () => {
                   }
 
                   // Log the raw response before markdown rendering
-                  console.log('Streaming response before markdown:', accumulatedResponse);
+                  console.log("Streaming response before markdown:", accumulatedResponse);
 
                   // Render markdown for the accumulated response
-                  messageContent.innerHTML =
-                    renderMarkdown(accumulatedResponse);
+                  messageContent.innerHTML = renderMarkdown(accumulatedResponse);
 
                   // Update the last history item with the current accumulated response
                   if (chatHistory.length > 0) {
-                    chatHistory[chatHistory.length - 1][1] =
-                      accumulatedResponse;
+                    chatHistory[chatHistory.length - 1][1] = accumulatedResponse;
                     // Save state periodically as content streams in
-                    if (
-                      chatHistory[chatHistory.length - 1][1].length % 100 ===
-                      0
-                    ) {
+                    if (chatHistory[chatHistory.length - 1][1].length % 100 === 0) {
                       saveChatState();
                     }
                   }
@@ -905,8 +854,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     messages.removeChild(typingIndicator);
                   }
                   currentAbortController = null;
-                  sendButton.style.display = 'inline-block';
-                  stopButton.style.display = 'none';
+                  sendButton.style.display = "inline-block";
+                  stopButton.style.display = "none";
 
                   // A complete Q&A exchange has happened
                   // Only check if we received a non-empty response
@@ -928,26 +877,19 @@ document.addEventListener('DOMContentLoaded', () => {
                   updateClearHistoryButton();
 
                   // Now that streaming is COMPLETELY done, show the vote buttons immediately
-                  if (currentBotMessage.hasAttribute('data-doc-id')) {
-                    const voteButtons = currentBotMessage.querySelector(
-                      '.aichatbot-vote-buttons',
-                    );
+                  if (currentBotMessage.hasAttribute("data-doc-id")) {
+                    const voteButtons = currentBotMessage.querySelector(".aichatbot-vote-buttons");
                     if (voteButtons) {
-                      voteButtons.style.visibility = 'visible';
-                      console.log(
-                        'Making preemptively added vote buttons visible',
-                      );
+                      voteButtons.style.visibility = "visible";
+                      console.log("Making preemptively added vote buttons visible");
                     } else {
                       // As a fallback, create vote buttons if they don't exist
-                      const docId =
-                        currentBotMessage.getAttribute('data-doc-id');
-                      console.log(
-                        `Adding vote buttons for docId: ${docId} now that ALL streaming is DONE`,
-                      );
+                      const docId = currentBotMessage.getAttribute("data-doc-id");
+                      console.log(`Adding vote buttons for docId: ${docId} now that ALL streaming is DONE`);
                       addVoteButtons(currentBotMessage, docId);
                     }
                   } else {
-                    console.error('No docId available when stream completed');
+                    console.error("No docId available when stream completed");
                   }
                 }
 
@@ -961,26 +903,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Handle docId - ONLY store it, don't add vote buttons yet
                 if (jsonData.docId) {
-                  console.log(
-                    `Received valid docId from server: ${jsonData.docId}`,
-                  );
-                  currentBotMessage.setAttribute('data-doc-id', jsonData.docId);
+                  console.log(`Received valid docId from server: ${jsonData.docId}`);
+                  currentBotMessage.setAttribute("data-doc-id", jsonData.docId);
 
                   // Preemptively add vote buttons but keep them hidden
                   // This eliminates the delay between streaming completion and button display
-                  const voteButtons = currentBotMessage.querySelector(
-                    '.aichatbot-vote-buttons',
-                  );
+                  const voteButtons = currentBotMessage.querySelector(".aichatbot-vote-buttons");
                   if (!voteButtons) {
                     const docId = jsonData.docId;
                     addVoteButtons(currentBotMessage, docId, true); // true = hidden initially
-                    console.log(
-                      'Vote buttons preemptively added but hidden until streaming completes',
-                    );
+                    console.log("Vote buttons preemptively added but hidden until streaming completes");
                   }
                 }
               } catch (parseError) {
-                console.error('Error parsing JSON:', parseError);
+                console.error("Error parsing JSON:", parseError);
               }
             }
           }
@@ -993,17 +929,13 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         // Handle non-streaming response
         const data = await response.json();
-        const messageContent = currentBotMessage.querySelector(
-          '.aichatbot-message-content',
-        );
+        const messageContent = currentBotMessage.querySelector(".aichatbot-message-content");
 
         // Log the raw response before markdown rendering
-        console.log('Non-streaming response before markdown:', data.reply || 'No response received.');
+        console.log("Non-streaming response before markdown:", data.reply || "No response received.");
 
         // Render markdown for the response
-        const renderedContent = renderMarkdown(
-          data.reply || 'No response received.',
-        );
+        const renderedContent = renderMarkdown(data.reply || "No response received.");
         messageContent.innerHTML = renderedContent;
 
         // Add the bot message to DOM now that we have content
@@ -1016,7 +948,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update chat history with the complete response
         if (chatHistory.length > 0) {
-          chatHistory[chatHistory.length - 1][1] = data.reply || '';
+          chatHistory[chatHistory.length - 1][1] = data.reply || "";
           // Save state after receiving complete response
           saveChatState();
 
@@ -1027,19 +959,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set docId if provided
         if (data.docId) {
           console.log(`Received valid docId from server: ${data.docId}`);
-          currentBotMessage.setAttribute('data-doc-id', data.docId);
+          currentBotMessage.setAttribute("data-doc-id", data.docId);
         } else {
-          console.warn(
-            'No docId received from server - vote functionality will be disabled for this message',
-          );
+          console.warn("No docId received from server - vote functionality will be disabled for this message");
         }
 
         // Non-streaming processing is complete, now we can add vote buttons
-        if (currentBotMessage.hasAttribute('data-doc-id')) {
-          const docId = currentBotMessage.getAttribute('data-doc-id');
-          console.log(
-            `Adding vote buttons for non-streaming response with docId: ${docId}`,
-          );
+        if (currentBotMessage.hasAttribute("data-doc-id")) {
+          const docId = currentBotMessage.getAttribute("data-doc-id");
+          console.log(`Adding vote buttons for non-streaming response with docId: ${docId}`);
           addVoteButtons(currentBotMessage, docId);
         }
       }
@@ -1050,38 +978,30 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Show error message
-      const errorMessage = document.createElement('div');
-      errorMessage.className = 'aichatbot-error-message';
+      const errorMessage = document.createElement("div");
+      errorMessage.className = "aichatbot-error-message";
 
-      if (error.name === 'AbortError') {
-        errorMessage.textContent = 'Request was canceled.';
-      } else if (
-        error.name === 'TypeError' &&
-        error.message.includes('Failed to fetch')
-      ) {
+      if (error.name === "AbortError") {
+        errorMessage.textContent = "Request was canceled.";
+      } else if (error.name === "TypeError" && error.message.includes("Failed to fetch")) {
         // This typically happens when the server is completely down/unreachable
-        errorMessage.textContent =
-          'Chatbot server is unavailable. Please try again later.';
-      } else if (
-        error.message.includes('NetworkError') ||
-        error.message.includes('CORS')
-      ) {
-        errorMessage.textContent =
-          'Connection to chatbot server failed. Please try again later.';
-      } else if (error.message.includes('Site mismatch')) {
+        errorMessage.textContent = "Chatbot server is unavailable. Please try again later.";
+      } else if (error.message.includes("NetworkError") || error.message.includes("CORS")) {
+        errorMessage.textContent = "Connection to chatbot server failed. Please try again later.";
+      } else if (error.message.includes("Site mismatch")) {
         // Handle site mismatch errors specifically
         errorMessage.innerHTML = `
           <strong>Configuration Error:</strong> ${error.message}<br>
           <small>Please contact the site administrator to update the chatbot settings.</small>
         `;
-      } else if (error.message.includes('Invalid token')) {
+      } else if (error.message.includes("Invalid token")) {
         // Handle authentication errors
         errorMessage.innerHTML = `
           <strong>Authentication Error:</strong> Unable to connect to the chat backend.<br>
           <small>Please check your internet connection and try again, or contact the site administrator.</small>
         `;
-        console.error('Token error details:', error.message);
-      } else if (error.message.includes('session has expired')) {
+        console.error("Token error details:", error.message);
+      } else if (error.message.includes("session has expired")) {
         // Handle session expiration with reload button
         errorMessage.innerHTML = `
           <strong>Session Expired:</strong> Your authentication has expired.<br>
@@ -1091,11 +1011,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Add reload functionality after the message is added to DOM
         setTimeout(() => {
-          const reloadButton = document.getElementById(
-            'aichatbot-reload-button',
-          );
+          const reloadButton = document.getElementById("aichatbot-reload-button");
           if (reloadButton) {
-            reloadButton.addEventListener('click', () => {
+            reloadButton.addEventListener("click", () => {
               window.location.reload();
             });
           }
@@ -1103,8 +1021,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         // Format other errors to be more readable
         const cleanErrorMessage = error.message
-          .replace(/Server error \((.*)\)/, '$1') // Remove "Server error" wrapper
-          .replace(/Error: /, ''); // Remove "Error:" prefix if present
+          .replace(/Server error \((.*)\)/, "$1") // Remove "Server error" wrapper
+          .replace(/Error: /, ""); // Remove "Error:" prefix if present
 
         errorMessage.innerHTML = `
           <strong>Error:</strong> ${cleanErrorMessage}<br>
@@ -1115,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', () => {
       messages.appendChild(errorMessage);
 
       // Additional error logging for site administrators
-      console.error('Chatbot error details:', {
+      console.error("Chatbot error details:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -1124,8 +1042,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     } finally {
       // Reset UI state
-      sendButton.style.display = 'inline-block';
-      stopButton.style.display = 'none';
+      sendButton.style.display = "inline-block";
+      stopButton.style.display = "none";
       currentAbortController = null;
 
       // Set streaming flag to false in finally block to ensure it's reset
@@ -1135,9 +1053,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateClearHistoryButton();
 
       // Check if user WAS near the bottom before the final processing
-      const wasScrolledToBottomFinal =
-        messages.scrollHeight - messages.clientHeight <=
-        messages.scrollTop + 10; // 10px tolerance
+      const wasScrolledToBottomFinal = messages.scrollHeight - messages.clientHeight <= messages.scrollTop + 10; // 10px tolerance
       // Scroll to bottom AFTER final processing ONLY if user WAS near the bottom before
       if (wasScrolledToBottomFinal) {
         messages.scrollTop = messages.scrollHeight;
@@ -1175,32 +1091,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }); */
 
   // Save chat state when user leaves the page
-  window.addEventListener('beforeunload', saveChatState);
+  window.addEventListener("beforeunload", saveChatState);
 
   // Function to update the clear history button visibility
   function updateClearHistoryButton() {
     // Get the controls container
-    const controlsContainer = document.getElementById('aichatbot-controls');
+    const controlsContainer = document.getElementById("aichatbot-controls");
 
     // Clear the controls container
     if (controlsContainer) {
-      controlsContainer.innerHTML = '';
+      controlsContainer.innerHTML = "";
     }
 
     // Create clear history button only if there's chat history
     if (chatHistory.length > 0) {
-      const clearButton = document.createElement('div');
-      clearButton.id = 'aichatbot-clear-history';
-      clearButton.innerHTML =
-        '<i class="fas fa-trash-alt"></i> Clear chat history';
+      const clearButton = document.createElement("div");
+      clearButton.id = "aichatbot-clear-history";
+      clearButton.innerHTML = '<i class="fas fa-trash-alt"></i> Clear chat history';
 
       // Disable the button visually and functionally during streaming
       if (isStreaming) {
-        clearButton.classList.add('disabled');
-        clearButton.style.opacity = '0.5';
-        clearButton.style.cursor = 'not-allowed';
+        clearButton.classList.add("disabled");
+        clearButton.style.opacity = "0.5";
+        clearButton.style.cursor = "not-allowed";
       } else {
-        clearButton.addEventListener('click', clearChatHistory);
+        clearButton.addEventListener("click", clearChatHistory);
       }
 
       // Add to the controls container
@@ -1211,10 +1126,10 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsContainer.appendChild(fullPageButton);
 
     // Add Contact a Human button
-    const contactHumanButton = document.createElement('div');
-    contactHumanButton.id = 'aichatbot-contact-human';
+    const contactHumanButton = document.createElement("div");
+    contactHumanButton.id = "aichatbot-contact-human";
     contactHumanButton.innerHTML = `<i class="fas fa-user"></i> Contact a human`;
-    contactHumanButton.addEventListener('click', showIntercom);
+    contactHumanButton.addEventListener("click", showIntercom);
 
     // Add to the controls container
     controlsContainer.appendChild(contactHumanButton);
@@ -1223,13 +1138,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Function to clear chat history
   function clearChatHistory() {
     // Store current window state
-    const wasWindowOpen = chatWindow.style.display === 'flex';
+    const wasWindowOpen = chatWindow.style.display === "flex";
 
     // Clear history array
     chatHistory = [];
 
     // Clear the UI
-    messages.innerHTML = '';
+    messages.innerHTML = "";
 
     // Add welcome message back
     addWelcomeMessage();
@@ -1244,9 +1159,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (wasWindowOpen) {
       // Use setTimeout to ensure this happens after any other operations
       setTimeout(() => {
-        chatWindow.style.display = 'flex';
+        chatWindow.style.display = "flex";
         // Extra safety - explicitly set the session storage value
-        sessionStorage.setItem('aichatbot_window_visible', 'true');
+        sessionStorage.setItem("aichatbot_window_visible", "true");
         // Set focus back to the input field
         input.focus();
       }, 0);
@@ -1260,7 +1175,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function loadChatState() {
     try {
       // Load chat history
-      const savedHistory = sessionStorage.getItem('aichatbot_history');
+      const savedHistory = sessionStorage.getItem("aichatbot_history");
       if (savedHistory) {
         chatHistory = JSON.parse(savedHistory);
 
@@ -1268,8 +1183,8 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory.forEach(([userMsg, botMsg]) => {
           // Add user message
           if (userMsg) {
-            const userMessage = document.createElement('div');
-            userMessage.className = 'aichatbot-user-message';
+            const userMessage = document.createElement("div");
+            userMessage.className = "aichatbot-user-message";
             userMessage.textContent = userMsg;
             messages.appendChild(userMessage);
           }
@@ -1288,27 +1203,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Load UI state (window open/closed)
-      const windowVisible = sessionStorage.getItem('aichatbot_window_visible');
+      const windowVisible = sessionStorage.getItem("aichatbot_window_visible");
 
       // Check screen width - only auto-open on larger screens
       const isLargeScreen = window.innerWidth >= 768; // Typical tablet/desktop breakpoint
 
-      if (windowVisible === 'true') {
+      if (windowVisible === "true") {
         // If it was visible and screen is large enough, show it
         // Otherwise leave it minimized on mobile
-        chatWindow.style.display = isLargeScreen ? 'flex' : 'none';
+        chatWindow.style.display = isLargeScreen ? "flex" : "none";
       } else {
         // Default to hiding chat window if it was previously closed
-        chatWindow.style.display = 'none';
+        chatWindow.style.display = "none";
       }
     } catch (e) {
-      console.error('Error loading chat state:', e);
+      console.error("Error loading chat state:", e);
       // Default to hiding chat window
-      chatWindow.style.display = 'none';
+      chatWindow.style.display = "none";
     }
 
     // Focus on input field when chat window is shown
-    if (chatWindow.style.display === 'flex') {
+    if (chatWindow.style.display === "flex") {
       setTimeout(() => input.focus(), 0);
     }
 
@@ -1319,18 +1234,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // Save chat history and UI state to sessionStorage
   function saveChatState() {
     try {
-      sessionStorage.setItem('aichatbot_history', JSON.stringify(chatHistory));
-      sessionStorage.setItem(
-        'aichatbot_window_visible',
-        chatWindow.style.display === 'flex',
-      );
+      sessionStorage.setItem("aichatbot_history", JSON.stringify(chatHistory));
+      sessionStorage.setItem("aichatbot_window_visible", chatWindow.style.display === "flex");
 
       // Update placeholder whenever chat history is saved
       if (chatHistory.length > 0) {
-        input.placeholder = '';
+        input.placeholder = "";
       }
     } catch (e) {
-      console.error('Error saving chat state:', e);
+      console.error("Error saving chat state:", e);
     }
   }
 
@@ -1340,11 +1252,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Add initial welcome message if chat is empty
   function addWelcomeMessage() {
     if (chatHistory.length === 0 && messages.children.length === 0) {
-      const welcomeMessage = document.createElement('div');
-      welcomeMessage.className = 'aichatbot-bot-message';
+      const welcomeMessage = document.createElement("div");
+      welcomeMessage.className = "aichatbot-bot-message";
 
-      const messageContent = document.createElement('div');
-      messageContent.className = 'aichatbot-message-content';
+      const messageContent = document.createElement("div");
+      messageContent.className = "aichatbot-message-content";
       messageContent.innerHTML = "<p>Hi, I'm Vivek. Ask me anything.</p>";
 
       welcomeMessage.appendChild(messageContent);
@@ -1380,16 +1292,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Add stop button to UI
-  const stopButton = document.createElement('button');
-  stopButton.id = 'aichatbot-stop';
+  const stopButton = document.createElement("button");
+  stopButton.id = "aichatbot-stop";
   stopButton.innerHTML = '<i class="fas fa-stop"></i>';
-  stopButton.style.backgroundColor = '#FFF9C4'; // Pale yellow background
-  stopButton.style.color = '#555'; // Darker text for better contrast
-  stopButton.style.display = 'none';
-  stopButton.addEventListener('click', () => {
+  stopButton.style.backgroundColor = "#FFF9C4"; // Pale yellow background
+  stopButton.style.color = "#555"; // Darker text for better contrast
+  stopButton.style.display = "none";
+  stopButton.addEventListener("click", () => {
     stopStreaming();
-    stopButton.style.display = 'none';
-    sendButton.style.display = 'inline-block';
+    stopButton.style.display = "none";
+    sendButton.style.display = "inline-block";
   });
   sendButton.parentNode.insertBefore(stopButton, sendButton.nextSibling);
 
@@ -1397,32 +1309,30 @@ document.addEventListener('DOMContentLoaded', () => {
   let npsModalElement = null; // Reference to the modal DOM element
 
   function createNpsModalHtml() {
-    if (document.getElementById('nps-survey-modal')) return; // Avoid creating duplicates
+    if (document.getElementById("nps-survey-modal")) return; // Avoid creating duplicates
 
-    const chatWindowElement = document.getElementById('aichatbot-window');
+    const chatWindowElement = document.getElementById("aichatbot-window");
     if (!chatWindowElement) {
-      console.error(
-        'Chat window element #aichatbot-window not found. Cannot create NPS modal.',
-      );
+      console.error("Chat window element #aichatbot-window not found. Cannot create NPS modal.");
       return;
     }
 
-    npsModalElement = document.createElement('div');
-    npsModalElement.id = 'nps-survey-modal';
-    npsModalElement.style.display = 'none'; // Initially hidden
-    npsModalElement.style.position = 'absolute'; // Position relative to chat window
-    npsModalElement.style.left = '50%';
-    npsModalElement.style.top = '50%';
-    npsModalElement.style.transform = 'translate(-50%, -50%)';
-    npsModalElement.style.zIndex = '10'; // Needs to be above content *within* chat window
-    npsModalElement.style.backgroundColor = 'white';
-    npsModalElement.style.padding = '25px';
-    npsModalElement.style.border = '1px solid #ccc';
-    npsModalElement.style.borderRadius = '8px';
-    npsModalElement.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
-    npsModalElement.style.maxWidth = '450px';
-    npsModalElement.style.width = '90%';
-    npsModalElement.style.textAlign = 'center';
+    npsModalElement = document.createElement("div");
+    npsModalElement.id = "nps-survey-modal";
+    npsModalElement.style.display = "none"; // Initially hidden
+    npsModalElement.style.position = "absolute"; // Position relative to chat window
+    npsModalElement.style.left = "50%";
+    npsModalElement.style.top = "50%";
+    npsModalElement.style.transform = "translate(-50%, -50%)";
+    npsModalElement.style.zIndex = "10"; // Needs to be above content *within* chat window
+    npsModalElement.style.backgroundColor = "white";
+    npsModalElement.style.padding = "25px";
+    npsModalElement.style.border = "1px solid #ccc";
+    npsModalElement.style.borderRadius = "8px";
+    npsModalElement.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
+    npsModalElement.style.maxWidth = "450px";
+    npsModalElement.style.width = "90%";
+    npsModalElement.style.textAlign = "center";
 
     npsModalElement.innerHTML = `
       <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 1.1em; color: #333;">Feedback Request</h3>
@@ -1433,9 +1343,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ${[...Array(11).keys()]
           .map(
             (score) =>
-              `<button class="nps-score-btn" data-score="${score}" style="border: 1px solid #ccc; background: #f9f9f9; padding: 8px 12px; border-radius: 4px; cursor: pointer; min-width: 40px; transition: background-color 0.2s, border-color 0.2s;">${score}</button>`,
+              `<button class="nps-score-btn" data-score="${score}" style="border: 1px solid #ccc; background: #f9f9f9; padding: 8px 12px; border-radius: 4px; cursor: pointer; min-width: 40px; transition: background-color 0.2s, border-color 0.2s;">${score}</button>`
           )
-          .join('')}
+          .join("")}
       </div>
       <p style="margin-top: 5px; margin-bottom: 15px; font-size: 0.8em; color: #999;">0 = Not at all likely, 10 = Extremely likely</p>
       <p style="margin-bottom: 5px; font-size: 0.9em; color: #555; text-align: left;">Optional: What's the main reason for your score?</p>
@@ -1460,41 +1370,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let selectedScore = -1;
 
-    const scoreButtons = npsModalElement.querySelectorAll('.nps-score-btn');
-    const submitButton = npsModalElement.querySelector('#nps-submit');
-    const askLaterButton = npsModalElement.querySelector('#nps-ask-later');
-    const noThanksButton = npsModalElement.querySelector('#nps-no-thanks');
-    const feedbackInput = npsModalElement.querySelector('#nps-feedback');
+    const scoreButtons = npsModalElement.querySelectorAll(".nps-score-btn");
+    const submitButton = npsModalElement.querySelector("#nps-submit");
+    const askLaterButton = npsModalElement.querySelector("#nps-ask-later");
+    const noThanksButton = npsModalElement.querySelector("#nps-no-thanks");
+    const feedbackInput = npsModalElement.querySelector("#nps-feedback");
 
     scoreButtons.forEach((button) => {
-      button.addEventListener('click', () => {
+      button.addEventListener("click", () => {
         selectedScore = parseInt(button.dataset.score, 10);
         scoreButtons.forEach((btn) => {
-          btn.style.backgroundColor = '#f9f9f9';
-          btn.style.borderColor = '#ccc';
-          btn.style.fontWeight = 'normal';
+          btn.style.backgroundColor = "#f9f9f9";
+          btn.style.borderColor = "#ccc";
+          btn.style.fontWeight = "normal";
         });
-        button.style.backgroundColor = '#e0e0e0';
-        button.style.borderColor = '#aaa';
-        button.style.fontWeight = 'bold';
-        submitButton.style.opacity = '1';
-        submitButton.style.pointerEvents = 'auto';
+        button.style.backgroundColor = "#e0e0e0";
+        button.style.borderColor = "#aaa";
+        button.style.fontWeight = "bold";
+        submitButton.style.opacity = "1";
+        submitButton.style.pointerEvents = "auto";
       });
     });
 
-    submitButton.addEventListener('click', async () => {
+    submitButton.addEventListener("click", async () => {
       if (selectedScore >= 0) {
         await handleNpsSubmit(selectedScore, feedbackInput.value);
       }
     });
 
-    askLaterButton.addEventListener('click', () => {
-      handleNpsDismiss('later');
+    askLaterButton.addEventListener("click", () => {
+      handleNpsDismiss("later");
       hideNpsSurveyModal();
     });
 
-    noThanksButton.addEventListener('click', () => {
-      handleNpsDismiss('no_thanks');
+    noThanksButton.addEventListener("click", () => {
+      handleNpsDismiss("no_thanks");
       hideNpsSurveyModal();
     });
   }
@@ -1502,35 +1412,33 @@ document.addEventListener('DOMContentLoaded', () => {
   function showNpsSurveyModal() {
     if (npsModalElement) {
       // Reset state before showing
-      const formContent = npsModalElement.querySelectorAll(
-        'h3, p, #nps-score-options, #nps-feedback, #nps-buttons',
-      );
-      const scoreButtons = npsModalElement.querySelectorAll('.nps-score-btn');
-      const submitButton = npsModalElement.querySelector('#nps-submit');
-      const feedbackInput = npsModalElement.querySelector('#nps-feedback');
-      const messageArea = npsModalElement.querySelector('#nps-message-area');
+      const formContent = npsModalElement.querySelectorAll("h3, p, #nps-score-options, #nps-feedback, #nps-buttons");
+      const scoreButtons = npsModalElement.querySelectorAll(".nps-score-btn");
+      const submitButton = npsModalElement.querySelector("#nps-submit");
+      const feedbackInput = npsModalElement.querySelector("#nps-feedback");
+      const messageArea = npsModalElement.querySelector("#nps-message-area");
 
       // Ensure form content is visible and message area is hidden
-      formContent.forEach((el) => (el.style.display = '')); // Reset display
-      messageArea.style.display = 'none';
-      messageArea.textContent = '';
+      formContent.forEach((el) => (el.style.display = "")); // Reset display
+      messageArea.style.display = "none";
+      messageArea.textContent = "";
 
       scoreButtons.forEach((btn) => {
-        btn.style.backgroundColor = '#f9f9f9';
-        btn.style.borderColor = '#ccc';
-        btn.style.fontWeight = 'normal';
+        btn.style.backgroundColor = "#f9f9f9";
+        btn.style.borderColor = "#ccc";
+        btn.style.fontWeight = "normal";
       });
-      submitButton.style.opacity = '0.5';
-      submitButton.style.pointerEvents = 'none';
-      feedbackInput.value = '';
+      submitButton.style.opacity = "0.5";
+      submitButton.style.pointerEvents = "none";
+      feedbackInput.value = "";
 
-      npsModalElement.style.display = 'block';
+      npsModalElement.style.display = "block";
     }
   }
 
   function hideNpsSurveyModal() {
     if (npsModalElement) {
-      npsModalElement.style.display = 'none';
+      npsModalElement.style.display = "none";
     }
   }
 
@@ -1540,24 +1448,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const payload = {
       uuid: npsUserUuid,
       score: score,
-      feedback: feedback || '', // Ensure feedback is at least an empty string
-      additionalComments: '', // Add if needed later
+      feedback: feedback || "", // Ensure feedback is at least an empty string
+      additionalComments: "", // Add if needed later
       timestamp: timestamp,
     };
 
-    const messageArea = npsModalElement?.querySelector('#nps-message-area');
-    const formContent = npsModalElement?.querySelectorAll(
-      'h3, p, #nps-score-options, #nps-feedback, #nps-buttons',
-    );
+    const messageArea = npsModalElement?.querySelector("#nps-message-area");
+    const formContent = npsModalElement?.querySelectorAll("h3, p, #nps-score-options, #nps-feedback, #nps-buttons");
 
     // Disable buttons during submission
-    const buttons = npsModalElement?.querySelectorAll('button');
+    const buttons = npsModalElement?.querySelectorAll("button");
     if (buttons) buttons.forEach((btn) => (btn.disabled = true));
 
     try {
       // Ensure aichatbotData and vercelUrl are available
       if (!window.aichatbotData || !window.aichatbotData.vercelUrl) {
-        throw new Error('Chatbot configuration (vercelUrl) is missing.');
+        throw new Error("Chatbot configuration (vercelUrl) is missing.");
       }
       // Construct the full API endpoint URL for NPS
       // Assumes NPS API route is at the same origin as the main chat URL
@@ -1566,48 +1472,41 @@ document.addEventListener('DOMContentLoaded', () => {
         const baseUrl = new URL(window.aichatbotData.vercelUrl).origin;
         npsApiUrl = `${baseUrl}${API_PATHS.NPS}`;
       } catch (urlError) {
-        console.error(
-          'Invalid vercelUrl format:',
-          window.aichatbotData.vercelUrl,
-        );
-        throw new Error('Could not construct API URL from configuration.');
+        console.error("Invalid vercelUrl format:", window.aichatbotData.vercelUrl);
+        throw new Error("Could not construct API URL from configuration.");
       }
 
       const response = await window.aichatbotAuth.fetchWithAuth(
         npsApiUrl, // Use the constructed full URL for NPS submission
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        },
+        }
       );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({})); // Try to get JSON error
-        throw new Error(
-          `API Error (${response.status}): ${
-            errorData.message || response.statusText
-          }`,
-        );
+        throw new Error(`API Error (${response.status}): ${errorData.message || response.statusText}`);
       }
 
       // Success: Update state and localStorage
       const now = Date.now();
       npsLastSurveyTimestamp = now;
       npsLastSurveyQueryCount = npsQueryCount; // Record count *at time of submission*
-      setLocalStorageItem('npsLastSurveyTimestamp', npsLastSurveyTimestamp);
-      setLocalStorageItem('npsLastSurveyQueryCount', npsLastSurveyQueryCount);
+      setLocalStorageItem("npsLastSurveyTimestamp", npsLastSurveyTimestamp);
+      setLocalStorageItem("npsLastSurveyQueryCount", npsLastSurveyQueryCount);
       // Set dismiss reason to 'submitted'
-      npsDismissReason = 'submitted';
-      setLocalStorageItem('npsDismissReason', npsDismissReason);
+      npsDismissReason = "submitted";
+      setLocalStorageItem("npsDismissReason", npsDismissReason);
 
       // Show success message and hide form
       if (messageArea && formContent) {
-        messageArea.textContent = 'Thank you for your feedback!';
-        messageArea.style.backgroundColor = '#d4edda'; // Light green
-        messageArea.style.color = '#155724'; // Dark green
-        messageArea.style.display = 'block';
-        formContent.forEach((el) => (el.style.display = 'none'));
+        messageArea.textContent = "Thank you for your feedback!";
+        messageArea.style.backgroundColor = "#d4edda"; // Light green
+        messageArea.style.color = "#155724"; // Dark green
+        messageArea.style.display = "block";
+        formContent.forEach((el) => (el.style.display = "none"));
         // Automatically hide modal after a delay
         setTimeout(() => {
           hideNpsSurveyModal();
@@ -1616,53 +1515,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 2500); // Hide after 2.5 seconds
       }
     } catch (error) {
-      console.error('Error submitting NPS survey:', error);
+      console.error("Error submitting NPS survey:", error);
       // Show error message
       if (messageArea) {
         // Check for the specific "one survey per month" rate limit error
-        if (
-          error.message &&
-          error.message.includes('You can only submit one survey per month')
-        ) {
-          messageArea.textContent = 'You can only submit one survey per month.';
+        if (error.message && error.message.includes("You can only submit one survey per month")) {
+          messageArea.textContent = "You can only submit one survey per month.";
 
           // Treat this rate limit error as a completed survey for tracking purposes
           const now = Date.now();
           npsLastSurveyTimestamp = now;
           npsLastSurveyQueryCount = npsQueryCount;
-          setLocalStorageItem('npsLastSurveyTimestamp', npsLastSurveyTimestamp);
-          setLocalStorageItem(
-            'npsLastSurveyQueryCount',
-            npsLastSurveyQueryCount,
-          );
+          setLocalStorageItem("npsLastSurveyTimestamp", npsLastSurveyTimestamp);
+          setLocalStorageItem("npsLastSurveyQueryCount", npsLastSurveyQueryCount);
           // Also mark as 'submitted' if rate limited
-          npsDismissReason = 'submitted';
-          setLocalStorageItem('npsDismissReason', npsDismissReason);
+          npsDismissReason = "submitted";
+          setLocalStorageItem("npsDismissReason", npsDismissReason);
         } else {
-          messageArea.textContent =
-            'Error submitting survey. Please try again later.';
+          messageArea.textContent = "Error submitting survey. Please try again later.";
         }
-        messageArea.style.backgroundColor = '#f8d7da'; // Light red
-        messageArea.style.color = '#721c24'; // Dark red
-        messageArea.style.display = 'block';
+        messageArea.style.backgroundColor = "#f8d7da"; // Light red
+        messageArea.style.color = "#721c24"; // Dark red
+        messageArea.style.display = "block";
 
         // Add acknowledge button
-        const acknowledgeButton = document.createElement('button');
-        acknowledgeButton.textContent = 'OK';
-        acknowledgeButton.style.marginTop = '10px';
-        acknowledgeButton.style.padding = '5px 15px';
-        acknowledgeButton.style.backgroundColor = '#f0f0f0';
-        acknowledgeButton.style.border = '1px solid #ccc';
-        acknowledgeButton.style.borderRadius = '4px';
-        acknowledgeButton.style.cursor = 'pointer';
+        const acknowledgeButton = document.createElement("button");
+        acknowledgeButton.textContent = "OK";
+        acknowledgeButton.style.marginTop = "10px";
+        acknowledgeButton.style.padding = "5px 15px";
+        acknowledgeButton.style.backgroundColor = "#f0f0f0";
+        acknowledgeButton.style.border = "1px solid #ccc";
+        acknowledgeButton.style.borderRadius = "4px";
+        acknowledgeButton.style.cursor = "pointer";
 
         // Add click handler to close modal when button is clicked
-        acknowledgeButton.addEventListener('click', () => {
+        acknowledgeButton.addEventListener("click", () => {
           hideNpsSurveyModal();
         });
 
         // Append button to message area
-        messageArea.appendChild(document.createElement('br'));
+        messageArea.appendChild(document.createElement("br"));
         messageArea.appendChild(acknowledgeButton);
       }
 
@@ -1670,7 +1562,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (buttons) {
         buttons.forEach((btn) => {
           // Keep submit button disabled to prevent multiple submissions
-          if (btn.id !== 'nps-submit') {
+          if (btn.id !== "nps-submit") {
             btn.disabled = false;
           }
         });
@@ -1680,15 +1572,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function handleNpsDismiss(reason) {
     console.log(`NPS Dismissed: Reason=${reason}`);
-    if (reason === 'later' || reason === 'no_thanks') {
+    if (reason === "later" || reason === "no_thanks") {
       // Set timestamp to now for the 3-day cooldown start
       const now = Date.now();
       npsLastSurveyTimestamp = now;
-      setLocalStorageItem('npsLastSurveyTimestamp', npsLastSurveyTimestamp);
+      setLocalStorageItem("npsLastSurveyTimestamp", npsLastSurveyTimestamp);
 
       // Set the dismiss reason
       npsDismissReason = reason;
-      setLocalStorageItem('npsDismissReason', npsDismissReason);
+      setLocalStorageItem("npsDismissReason", npsDismissReason);
 
       // IMPORTANT: Do NOT update npsLastSurveyQueryCount here.
       // This ensures the 5-query threshold only applies after a 'submitted' event.
@@ -1709,27 +1601,25 @@ document.addEventListener('DOMContentLoaded', () => {
   function addVoteButtons(botMessage, messageId, hidden = false) {
     console.log(`addVoteButtons called with messageId: ${messageId}`);
 
-    const voteButtons = document.createElement('div');
-    voteButtons.className = 'aichatbot-vote-buttons';
+    const voteButtons = document.createElement("div");
+    voteButtons.className = "aichatbot-vote-buttons";
 
     // If hidden is true, hide buttons until streaming is complete
     if (hidden) {
-      voteButtons.style.visibility = 'hidden';
+      voteButtons.style.visibility = "hidden";
     }
 
-    const upvoteButton = document.createElement('button');
-    upvoteButton.className = 'aichatbot-vote-button';
+    const upvoteButton = document.createElement("button");
+    upvoteButton.className = "aichatbot-vote-button";
     upvoteButton.innerHTML = '<i class="fas fa-thumbs-up"></i>';
 
-    const downvoteButton = document.createElement('button');
-    downvoteButton.className = 'aichatbot-vote-button';
+    const downvoteButton = document.createElement("button");
+    downvoteButton.className = "aichatbot-vote-button";
     downvoteButton.innerHTML = '<i class="fas fa-thumbs-down"></i>';
 
     // Add event listeners
-    upvoteButton.addEventListener('click', () => handleVote(messageId, true));
-    downvoteButton.addEventListener('click', () =>
-      handleVote(messageId, false),
-    );
+    upvoteButton.addEventListener("click", () => handleVote(messageId, true));
+    downvoteButton.addEventListener("click", () => handleVote(messageId, false));
 
     voteButtons.appendChild(upvoteButton);
     voteButtons.appendChild(downvoteButton);
@@ -1769,30 +1659,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Find the specific bot message UI element
       const botMessage = document.querySelector(`[data-doc-id="${messageId}"]`);
-      const upvoteButton = botMessage?.querySelector(
-        '.aichatbot-vote-button:first-child',
-      );
-      const downvoteButton = botMessage?.querySelector(
-        '.aichatbot-vote-button:last-child',
-      );
+      const upvoteButton = botMessage?.querySelector(".aichatbot-vote-button:first-child");
+      const downvoteButton = botMessage?.querySelector(".aichatbot-vote-button:last-child");
 
       // Make API call to record vote using the auth helper
-      const response = await window.aichatbotAuth.fetchWithAuth(
-        `${getBaseUrl()}${API_PATHS.VOTE}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            docId: messageId,
-            vote: newVote,
-          }),
+      const response = await window.aichatbotAuth.fetchWithAuth(`${getBaseUrl()}${API_PATHS.VOTE}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          docId: messageId,
+          vote: newVote,
+        }),
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to record vote');
+        throw new Error("Failed to record vote");
       }
 
       // Update local state
@@ -1805,18 +1688,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Trigger animation ONLY on successful upvote (transition to voted state)
       if (isUpvoteAction && upvoteButton) {
-        upvoteButton.classList.add('upvote-success-animation');
+        upvoteButton.classList.add("upvote-success-animation");
         // Remove the class after the animation duration (500ms)
         setTimeout(() => {
-          upvoteButton.classList.remove('upvote-success-animation');
+          upvoteButton.classList.remove("upvote-success-animation");
         }, 500);
       }
     } catch (error) {
-      console.error('Error handling vote:', error);
+      console.error("Error handling vote:", error);
       // Show error message to user
-      const errorMessage = document.createElement('div');
-      errorMessage.className = 'aichatbot-error-message';
-      errorMessage.textContent = 'Failed to record vote. Please try again.';
+      const errorMessage = document.createElement("div");
+      errorMessage.className = "aichatbot-error-message";
+      errorMessage.textContent = "Failed to record vote. Please try again.";
       messages.appendChild(errorMessage);
       setTimeout(() => {
         if (messages.contains(errorMessage)) {
@@ -1830,17 +1713,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateVoteButtonStates(messageId, upvoteButton, downvoteButton) {
     const currentVote = votes[messageId] || 0;
 
-    upvoteButton.classList.toggle('voted', currentVote === 1);
-    downvoteButton.classList.toggle('downvoted', currentVote === -1);
+    upvoteButton.classList.toggle("voted", currentVote === 1);
+    downvoteButton.classList.toggle("downvoted", currentVote === -1);
   }
 
   // Show feedback modal
   function showFeedbackModal(messageId) {
     // Create modal if it doesn't exist
-    let modal = document.querySelector('.aichatbot-feedback-modal');
+    let modal = document.querySelector(".aichatbot-feedback-modal");
     if (!modal) {
-      modal = document.createElement('div');
-      modal.className = 'aichatbot-feedback-modal';
+      modal = document.createElement("div");
+      modal.className = "aichatbot-feedback-modal";
       modal.innerHTML = `
         <div class="modal-content">
           <h3>Help us improve</h3>
@@ -1884,85 +1767,76 @@ document.addEventListener('DOMContentLoaded', () => {
           </form>
         </div>
       `;
-      const chatWindowElement = document.getElementById('aichatbot-window');
+      const chatWindowElement = document.getElementById("aichatbot-window");
       if (chatWindowElement) {
         chatWindowElement.appendChild(modal);
       } else {
-        console.error(
-          'Chat window element #aichatbot-window not found. Cannot append feedback modal.',
-        );
+        console.error("Chat window element #aichatbot-window not found. Cannot append feedback modal.");
         return;
       }
 
       // Add event listeners
-      const form = modal.querySelector('.feedback-form');
-      const cancelButton = modal.querySelector('.cancel-button');
+      const form = modal.querySelector(".feedback-form");
+      const cancelButton = modal.querySelector(".cancel-button");
 
-      form.addEventListener('submit', async (e) => {
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
         await submitFeedback(messageId, modal);
       });
 
-      cancelButton.addEventListener('click', () => {
-        modal.style.display = 'none';
+      cancelButton.addEventListener("click", () => {
+        modal.style.display = "none";
       });
     }
 
     // Reset form
-    const form = modal.querySelector('.feedback-form');
+    const form = modal.querySelector(".feedback-form");
     form.reset();
-    modal.querySelector('.error-message').style.display = 'none';
+    modal.querySelector(".error-message").style.display = "none";
 
     // Show modal
-    modal.style.display = 'flex';
+    modal.style.display = "flex";
   }
 
   // Submit feedback
   async function submitFeedback(messageId, modal) {
-    const form = modal.querySelector('.feedback-form');
-    const errorMessage = modal.querySelector('.error-message');
+    const form = modal.querySelector(".feedback-form");
+    const errorMessage = modal.querySelector(".error-message");
     const selectedReason = form.querySelector('input[name="reason"]:checked');
-    const comment = form.querySelector('textarea').value.trim();
-    const submitButton = form.querySelector('.submit-button');
-    const cancelButton = form.querySelector('.cancel-button');
-    const formElements = modal.querySelectorAll(
-      '.feedback-reason, textarea, .feedback-buttons',
-    );
-    const modalTitle = modal.querySelector('h3'); // Get the title element
+    const comment = form.querySelector("textarea").value.trim();
+    const submitButton = form.querySelector(".submit-button");
+    const cancelButton = form.querySelector(".cancel-button");
+    const formElements = modal.querySelectorAll(".feedback-reason, textarea, .feedback-buttons");
+    const modalTitle = modal.querySelector("h3"); // Get the title element
 
     // Disable buttons during submission
     submitButton.disabled = true;
     cancelButton.disabled = true;
-    errorMessage.style.display = 'none'; // Clear previous error messages
-    errorMessage.classList.remove('success'); // Ensure success class is removed initially
+    errorMessage.style.display = "none"; // Clear previous error messages
+    errorMessage.classList.remove("success"); // Ensure success class is removed initially
 
     try {
       if (!selectedReason) {
-        throw new Error('Please select a reason for your feedback');
+        throw new Error("Please select a reason for your feedback");
       }
 
       // Make API call to submit feedback using the auth helper
-      const response = await window.aichatbotAuth.fetchWithAuth(
-        `${getBaseUrl()}${API_PATHS.VOTE}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            docId: messageId,
-            vote: -1, // Downvote
-            reason: selectedReason.value,
-            comment: comment,
-          }),
+      const response = await window.aichatbotAuth.fetchWithAuth(`${getBaseUrl()}${API_PATHS.VOTE}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          docId: messageId,
+          vote: -1, // Downvote
+          reason: selectedReason.value,
+          comment: comment,
+        }),
+      });
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ message: 'Failed to submit feedback' }));
-        throw new Error(errorData.message || 'Failed to submit feedback');
+        const errorData = await response.json().catch(() => ({ message: "Failed to submit feedback" }));
+        throw new Error(errorData.message || "Failed to submit feedback");
       }
 
       // Update local state
@@ -1971,40 +1845,36 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update UI (vote buttons)
       const botMessage = document.querySelector(`[data-doc-id="${messageId}"]`);
       if (botMessage) {
-        const upvoteButton = botMessage.querySelector(
-          '.aichatbot-vote-button:first-child',
-        );
-        const downvoteButton = botMessage.querySelector(
-          '.aichatbot-vote-button:last-child',
-        );
+        const upvoteButton = botMessage.querySelector(".aichatbot-vote-button:first-child");
+        const downvoteButton = botMessage.querySelector(".aichatbot-vote-button:last-child");
         updateVoteButtonStates(messageId, upvoteButton, downvoteButton);
       }
 
       // Show success message and hide form
-      errorMessage.textContent = 'Thanks for your feedback!';
-      errorMessage.classList.add('success');
-      errorMessage.style.display = 'block';
-      formElements.forEach((el) => (el.style.display = 'none'));
-      if (modalTitle) modalTitle.style.display = 'none'; // Hide the title on success
+      errorMessage.textContent = "Thanks for your feedback!";
+      errorMessage.classList.add("success");
+      errorMessage.style.display = "block";
+      formElements.forEach((el) => (el.style.display = "none"));
+      if (modalTitle) modalTitle.style.display = "none"; // Hide the title on success
 
       // Close modal automatically after 2 seconds
       setTimeout(() => {
-        modal.style.display = 'none';
+        modal.style.display = "none";
         // Reset modal for next use (show form, hide message, re-enable buttons)
-        formElements.forEach((el) => (el.style.display = '')); // Use empty string to reset to default display
-        errorMessage.style.display = 'none';
-        errorMessage.classList.remove('success');
-        if (modalTitle) modalTitle.style.display = ''; // Restore the title display
+        formElements.forEach((el) => (el.style.display = "")); // Use empty string to reset to default display
+        errorMessage.style.display = "none";
+        errorMessage.classList.remove("success");
+        if (modalTitle) modalTitle.style.display = ""; // Restore the title display
         submitButton.disabled = false;
         cancelButton.disabled = false;
       }, 2000);
     } catch (error) {
-      console.error('Error submitting feedback:', error);
+      console.error("Error submitting feedback:", error);
       errorMessage.textContent = error.message;
-      errorMessage.classList.remove('success'); // Ensure no success style on error
-      errorMessage.style.display = 'block';
+      errorMessage.classList.remove("success"); // Ensure no success style on error
+      errorMessage.style.display = "block";
       // Re-enable buttons on error
-      if (modalTitle) modalTitle.style.display = ''; // Ensure title is visible on error too
+      if (modalTitle) modalTitle.style.display = ""; // Ensure title is visible on error too
       submitButton.disabled = false;
       cancelButton.disabled = false;
     }
@@ -2012,18 +1882,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Modify the bot message creation to include vote buttons with the right ID
   function createBotMessage(message) {
-    const botMessage = document.createElement('div');
-    botMessage.className = 'aichatbot-bot-message';
+    const botMessage = document.createElement("div");
+    botMessage.className = "aichatbot-bot-message";
 
     // We'll use a message-id attribute for local tracking
     const localMessageId = generateUUID();
-    botMessage.setAttribute('data-message-id', localMessageId);
+    botMessage.setAttribute("data-message-id", localMessageId);
 
     // But we don't set data-doc-id yet - that will come from the server response
     // botMessage.setAttribute('data-doc-id', ''); // Don't set this yet
 
-    const messageContent = document.createElement('div');
-    messageContent.className = 'aichatbot-message-content';
+    const messageContent = document.createElement("div");
+    messageContent.className = "aichatbot-message-content";
     messageContent.innerHTML = renderMarkdown(message);
 
     botMessage.appendChild(messageContent);
@@ -2033,15 +1903,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Add global keyboard listeners
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener("keydown", (e) => {
     const target = e.target;
-    const isInputFocused =
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement;
+    const isInputFocused = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 
     // Handle '/' key to open chat
-    if (e.key === '/' && !isInputFocused) {
-      if (chatWindow.style.display === 'none') {
+    if (e.key === "/" && !isInputFocused) {
+      if (chatWindow.style.display === "none") {
         e.preventDefault(); // Prevent default browser behavior (e.g., quick find)
         bubble.click(); // Simulate clicking the bubble to open
         // Focus the input after opening
@@ -2050,29 +1918,106 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Handle 'Escape' key to close chat
-    if (e.key === 'Escape') {
-      if (chatWindow.style.display === 'flex') {
+    if (e.key === "Escape") {
+      if (chatWindow.style.display === "flex") {
         // Check if any modal is open within the chat window
-        const feedbackModal = chatWindow.querySelector(
-          '.aichatbot-feedback-modal',
-        );
-        const npsModal = chatWindow.querySelector('#nps-survey-modal');
-        const languageModal = chatWindow.querySelector(
-          '.aichatbot-language-modal',
-        );
+        const feedbackModal = chatWindow.querySelector(".aichatbot-feedback-modal");
+        const npsModal = chatWindow.querySelector("#nps-survey-modal");
+        const languageModal = chatWindow.querySelector(".aichatbot-language-modal");
 
         // Close modals first if they are open
-        if (feedbackModal && feedbackModal.style.display === 'flex') {
-          feedbackModal.style.display = 'none';
-        } else if (npsModal && npsModal.style.display === 'block') {
+        if (feedbackModal && feedbackModal.style.display === "flex") {
+          feedbackModal.style.display = "none";
+        } else if (npsModal && npsModal.style.display === "block") {
           hideNpsSurveyModal(); // Use existing function for NPS modal
-        } else if (languageModal && languageModal.style.display === 'flex') {
-          languageModal.style.display = 'none';
+        } else if (languageModal && languageModal.style.display === "flex") {
+          languageModal.style.display = "none";
         } else {
           // If no modals are open, close the chat window
-          document.getElementById('aichatbot-close').click(); // Simulate clicking the close button
+          document.getElementById("aichatbot-close").click(); // Simulate clicking the close button
         }
       }
     }
   });
+
+  // Function to trigger recurring attention animation
+  function startAttentionAnimation() {
+    const bubble = document.getElementById("aichatbot-bubble");
+    if (!bubble) return;
+
+    // Start the recurring animation after initial animations complete (roughly 12 seconds)
+    setTimeout(() => {
+      // Disable initial animations by adding a class
+      bubble.classList.add("initial-animations-complete");
+      // Function to play animation
+      const playAnimation = () => {
+        // Only play if window is not visible
+        if (
+          !document.getElementById("aichatbot-window") ||
+          document.getElementById("aichatbot-window").style.display === "none"
+        ) {
+          bubble.classList.add("magnetic-ripple-animation");
+          // Remove the class after animation completes to allow replay
+          setTimeout(() => {
+            bubble.classList.remove("magnetic-ripple-animation");
+          }, 2000); // Matches the 2s animation duration
+        }
+      };
+
+      // Play first instance
+      playAnimation();
+      // Set interval for every 60 seconds
+      const animationInterval = setInterval(playAnimation, 60000);
+
+      // Store the interval ID on the bubble element so we can clear it later if needed
+      bubble.dataset.animationIntervalId = animationInterval;
+    }, 60000); // First animation after 60 seconds
+  }
+
+  // Function to stop the attention animation if needed
+  function stopAttentionAnimation() {
+    const bubble = document.getElementById("aichatbot-bubble");
+    if (!bubble) return;
+
+    const intervalId = bubble.dataset.animationIntervalId;
+    if (intervalId) {
+      clearInterval(parseInt(intervalId));
+      delete bubble.dataset.animationIntervalId;
+    }
+    // Also remove the animation class in case it's currently running
+    bubble.classList.remove("magnetic-ripple-animation");
+  }
+
+  // Call startAttentionAnimation when the page loads, after bubble is created
+  window.addEventListener("load", () => {
+    setTimeout(startAttentionAnimation, 1000); // Small delay to ensure bubble is rendered
+  });
+
+  // Stop animation when window is opened, restart when closed
+  function setupAnimationToggle() {
+    const bubble = document.getElementById("aichatbot-bubble");
+    const chatbotWindow = document.getElementById("aichatbot-window");
+    if (!bubble || !chatbotWindow) return;
+
+    // Stop animation when window opens
+    chatbotWindow.addEventListener("transitionstart", () => {
+      if (chatbotWindow.style.display !== "none" && !chatbotWindow.classList.contains("hidden")) {
+        stopAttentionAnimation();
+      }
+    });
+
+    // Restart animation when window closes
+    chatbotWindow.addEventListener("transitionend", () => {
+      if (chatbotWindow.classList.contains("hidden")) {
+        startAttentionAnimation();
+      }
+    });
+  }
+
+  // Call setup function after DOM is ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setupAnimationToggle);
+  } else {
+    setupAnimationToggle();
+  }
 });

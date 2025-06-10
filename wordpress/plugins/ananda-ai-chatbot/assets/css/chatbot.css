@@ -13,9 +13,7 @@
   cursor: pointer;
   font-weight: bold;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  transition:
-    transform 0.3s ease,
-    box-shadow 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
   z-index: 9998;
   padding: 0;
   overflow: visible;
@@ -37,14 +35,12 @@
   border-radius: 4px;
   opacity: 0;
   visibility: hidden;
-  transition:
-    opacity 0.3s ease,
-    visibility 0.3s ease;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
   pointer-events: none;
 }
 
 .aichatbot-tooltip::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 100%;
   right: 20px;
@@ -111,15 +107,12 @@
   flex-direction: column;
   overflow: hidden;
   z-index: 10000;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
-    Cantarell, 'Helvetica Neue', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue",
+    sans-serif;
   font-size: 16px;
   line-height: 1.5;
   position: relative; /* Ensure proper positioning context for modal */
-  transition:
-    transform 0.3s ease,
-    opacity 0.3s ease;
+  transition: transform 0.3s ease, opacity 0.3s ease;
   transform-origin: bottom right;
 }
 
@@ -162,9 +155,8 @@
   max-height: calc(100% - 125px); /* Adjusted for single row of controls */
   scrollbar-width: thin; /* For Firefox */
   scrollbar-color: #c1c1c1 #f5f8fb; /* For Firefox */
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
-    Cantarell, 'Helvetica Neue', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue",
+    sans-serif;
   font-size: 16px;
   line-height: 1.5;
 }
@@ -203,9 +195,8 @@
   border-radius: 20px;
   outline: none;
   font-size: 16px;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
-    Cantarell, 'Helvetica Neue', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue",
+    sans-serif;
   resize: none; /* Disable manual resizing */
   overflow-y: auto; /* Add scrollbar when content overflow */
   min-height: 40px; /* Initial height */
@@ -479,7 +470,7 @@
 }
 
 .aichatbot-message-content code {
-  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
   background-color: #f5f5f5;
   padding: 2px 4px;
   border-radius: 3px;
@@ -551,22 +542,22 @@
 
 /* Animated typing dots */
 .typing-dots::after {
-  content: '';
+  content: "";
   animation: dots 1.5s infinite;
 }
 
 @keyframes dots {
   0% {
-    content: '.';
+    content: ".";
   }
   33% {
-    content: '..';
+    content: "..";
   }
   66% {
-    content: '...';
+    content: "...";
   }
   100% {
-    content: '.';
+    content: ".";
   }
 }
 
@@ -765,9 +756,8 @@
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.3;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu,
-    Cantarell, 'Helvetica Neue', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue",
+    sans-serif;
 }
 
 .aichatbot-language-modal p {
@@ -808,7 +798,7 @@
 
 #aichatbot-bubble::before {
   /* Use ::before or ::after */
-  content: '';
+  content: "";
   position: absolute;
   inset: 0; /* Cover the entire bubble */
   border-radius: 50%;
@@ -819,9 +809,7 @@
     rgba(173, 216, 230, 0.8) 10%,
     transparent 30%
   ); /* Adjust gradient stops for desired effect */
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude; /* Punch hole in the middle */
   animation: rotate-gradient 3s linear 4;
   pointer-events: none;
@@ -883,4 +871,49 @@
   #aichatbot-input-container {
     border-radius: 0;
   }
+}
+
+@keyframes magnetic-ripple-pull {
+  0% {
+    transform: translateX(0) scale(1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  40% {
+    transform: translateX(-15px) scale(1.08);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+  }
+  60% {
+    transform: translateX(5px) scale(1.02);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+  }
+  80% {
+    transform: translateX(-3px) scale(1.03);
+    box-shadow: 0 5px 10px rgba(0, 0, 0.25);
+  }
+  100% {
+    transform: translateX(0) scale(1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+}
+
+#aichatbot-bubble.magnetic-ripple-animation {
+  animation: magnetic-ripple-pull 2s ease-out forwards;
+}
+
+/* Class to disable initial animations after page load */
+#aichatbot-bubble.initial-animations-complete {
+  animation-name: none !important;
+}
+
+#aichatbot-bubble.initial-animations-complete::before {
+  animation-name: none !important;
+}
+
+/* Ensure the magnetic ripple animation can still play */
+#aichatbot-bubble.initial-animations-complete.magnetic-ripple-animation {
+  animation-name: magnetic-ripple-pull !important;
+  animation-duration: 2s !important;
+  animation-timing-function: ease-out !important;
+  animation-iteration-count: 1 !important;
+  animation-fill-mode: forwards !important;
 }
