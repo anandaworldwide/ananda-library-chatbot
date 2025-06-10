@@ -16,7 +16,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://vivek.ananda.org');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.31');
+define('AICHATBOT_VERSION', '1.0.32');
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -109,6 +109,13 @@ function aichatbot_register_options() {
         'type' => 'boolean',
         'default' => false,
     ));
+    
+    // Register setting for Google Analytics/GTM ID
+    register_setting('aichatbot_settings_group', 'aichatbot_google_analytics_id', array(
+        'type' => 'string',
+        'default' => '',
+        'sanitize_callback' => 'aichatbot_sanitize_ga_id',
+    ));
 }
 add_action('admin_init', 'aichatbot_register_options');
 
@@ -126,6 +133,24 @@ function aichatbot_validate_window_width($input) {
 function aichatbot_validate_window_height($input) {
     $input = intval($input);
     return max(400, min(800, $input)); // Limit height between 400px and 800px
+}
+
+// Sanitize Google Analytics/GTM ID
+function aichatbot_sanitize_ga_id($input) {
+    if (empty($input)) {
+        return '';
+    }
+    
+    // Remove whitespace and normalize
+    $input = trim($input);
+    
+    // Validate GTM ID format (GTM-XXXXXXX) or GA4 format (G-XXXXXXXXXX)
+    if (preg_match('/^(GTM-[A-Z0-9]+|G-[A-Z0-9]+)$/i', $input)) {
+        return strtoupper($input);
+    }
+    
+    // If it doesn't match the expected format, return empty string
+    return '';
 }
 
 // Sanitize the base URL by removing trailing slashes and paths
@@ -275,6 +300,23 @@ function aichatbot_settings_page() {
                     </td>
                 </tr>
                 
+                <!-- Google Analytics Settings -->
+                <tr>
+                    <th colspan="2"><h2 class="title">Google Analytics / Tag Manager</h2></th>
+                </tr>
+                
+                <tr>
+                    <th><label for="aichatbot_google_analytics_id">Google Analytics / GTM ID</label></th>
+                    <td>
+                        <input type="text" id="aichatbot_google_analytics_id" name="aichatbot_google_analytics_id" 
+                               value="<?php echo esc_attr(get_option('aichatbot_google_analytics_id', '')); ?>" size="30" />
+                        <p class="description">
+                            Enter your Google Analytics 4 ID (e.g., "G-XXXXXXXXXX") or Google Tag Manager ID (e.g., "GTM-XXXXXXX").
+                            This will enable event tracking for chatbot interactions. Leave empty to disable analytics tracking.
+                        </p>
+                    </td>
+                </tr>
+                
             </table>
             <?php submit_button(); ?>
         </form>
@@ -338,6 +380,9 @@ function aichatbot_enqueue_assets() {
     // Get Intercom integration settings
     $enable_intercom = get_option('aichatbot_enable_intercom', false);
     
+    // Get Google Analytics settings
+    $google_analytics_id = get_option('aichatbot_google_analytics_id', '');
+    
     // Pass data to JavaScript - make sure it's available to BOTH scripts
     $data_array = array(
         'vercelUrl' => $vercel_url,
@@ -347,6 +392,7 @@ function aichatbot_enqueue_assets() {
         'fullPageUrl' => $fullpage_url,
         'placeholderQuestionsText' => get_option('aichatbot_placeholder_questions', 'How can I learn to meditate?'),
         'enableIntercom' => $enable_intercom ? '1' : '0',
+        'googleAnalyticsId' => $google_analytics_id,
         'ajaxUrl' => admin_url('admin-ajax.php')
     );
     

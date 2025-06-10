@@ -162,6 +162,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let mediaTypes = { text: true, audio: false, youtube: false };
   let sourceCount = 6;
   let intercomEnabled = false;
+  let googleAnalyticsId = "";
+  let sessionQuestionCount = 0; // Track questions in current session
 
   // Get DOM elements
   const bubble = document.getElementById("aichatbot-bubble");
@@ -176,6 +178,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (hint && modal) {
     hint.addEventListener("click", () => {
+      trackLanguageButtonClick();
       modal.style.display = "flex";
     });
 
@@ -207,11 +210,186 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize chat history
   let chatHistory = [];
 
+  // --- Google Analytics Integration Start ---
+
+  // Initialize Google Analytics settings from WordPress
+  if (typeof aichatbotData !== "undefined" && aichatbotData.googleAnalyticsId) {
+    googleAnalyticsId = aichatbotData.googleAnalyticsId;
+  }
+
+  /**
+   * Send Google Analytics event
+   * Supports both Google Analytics 4 (gtag) and Google Tag Manager (dataLayer)
+   *
+   * @param {string} action - The action being tracked (e.g., 'open_popup', 'submit_question')
+   * @param {Object} parameters - Additional event parameters
+   */
+  function sendGoogleAnalyticsEvent(action, parameters = {}) {
+    if (!googleAnalyticsId) {
+      return; // Analytics not configured
+    }
+
+    // Default event parameters
+    const eventData = {
+      event_category: "chatbot",
+      event_label: "ananda_ai_chatbot",
+      ...parameters,
+    };
+
+    try {
+      // Try Google Analytics 4 (gtag) first
+      if (typeof gtag !== "undefined") {
+        gtag("event", action, eventData);
+        console.log(`GA4 Event: ${action}`, eventData);
+      }
+      // Fallback to Google Tag Manager dataLayer
+      else if (typeof dataLayer !== "undefined") {
+        dataLayer.push({
+          event: action,
+          event_category: eventData.event_category,
+          event_label: eventData.event_label,
+          ...parameters,
+        });
+        console.log(`GTM Event: ${action}`, eventData);
+      }
+      // Manual gtag initialization if neither is available but ID is GTM
+      else if (googleAnalyticsId.startsWith("GTM-")) {
+        // Initialize dataLayer if it doesn't exist
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+          event: action,
+          event_category: eventData.event_category,
+          event_label: eventData.event_label,
+          ...parameters,
+        });
+        console.log(`GTM Event (manual): ${action}`, eventData);
+      } else {
+        console.warn("Google Analytics not initialized, but tracking ID provided:", googleAnalyticsId);
+      }
+    } catch (error) {
+      console.error("Error sending Google Analytics event:", error);
+    }
+  }
+
+  /**
+   * Track chatbot popup open event
+   */
+  function trackPopupOpen() {
+    sendGoogleAnalyticsEvent("chatbot_popup_open", {
+      event_category: "chatbot_interaction",
+      method: "bubble_click",
+    });
+  }
+
+  /**
+   * Track chatbot popup close event
+   * @param {string} method - How the popup was closed ('close_button', 'click_away', 'escape_key')
+   */
+  function trackPopupClose(method) {
+    sendGoogleAnalyticsEvent("chatbot_popup_close", {
+      event_category: "chatbot_interaction",
+      method: method,
+    });
+  }
+
+  /**
+   * Track question submission
+   * @param {number} questionNumber - The sequence number of the question in the session
+   * @param {string} question - The question text (first 100 chars for privacy)
+   */
+  function trackQuestionSubmit(questionNumber, question) {
+    sendGoogleAnalyticsEvent("chatbot_question_submit", {
+      event_category: "chatbot_engagement",
+      question_number: questionNumber,
+      question_preview: question.substring(0, 100), // First 100 chars for analysis
+      session_questions_total: questionNumber,
+    });
+  }
+
+  /**
+   * Track full page chat link click
+   */
+  function trackFullPageChatClick() {
+    sendGoogleAnalyticsEvent("chatbot_fullpage_click", {
+      event_category: "chatbot_navigation",
+      destination: "fullpage_chat",
+    });
+  }
+
+  /**
+   * Track contact human link click
+   */
+  function trackContactHumanClick() {
+    sendGoogleAnalyticsEvent("chatbot_contact_human", {
+      event_category: "chatbot_support",
+      method: "intercom_trigger",
+    });
+  }
+
+  /**
+   * Track language button click
+   */
+  function trackLanguageButtonClick() {
+    sendGoogleAnalyticsEvent("chatbot_language_click", {
+      event_category: "chatbot_utility",
+      feature: "language_help",
+    });
+  }
+
+  /**
+   * Track NPS survey completion
+   * @param {number} score - The NPS score (0-10)
+   * @param {string} feedback - Whether feedback was provided
+   */
+  function trackNPSSurveySubmit(score, feedback) {
+    sendGoogleAnalyticsEvent("chatbot_nps_submit", {
+      event_category: "chatbot_feedback",
+      nps_score: score,
+      has_feedback: feedback && feedback.trim().length > 0 ? "yes" : "no",
+      value: score,
+    });
+  }
+
+  /**
+   * Track NPS survey dismissal
+   * @param {string} reason - 'later' or 'no_thanks'
+   */
+  function trackNPSSurveyDismiss(reason) {
+    sendGoogleAnalyticsEvent("chatbot_nps_dismiss", {
+      event_category: "chatbot_feedback",
+      dismiss_reason: reason,
+    });
+  }
+
+  /**
+   * Track clear chat history button click
+   */
+  function trackClearChatHistory() {
+    sendGoogleAnalyticsEvent("chatbot_clear_history", {
+      event_category: "chatbot_interaction",
+      chat_messages_cleared: chatHistory.length,
+    });
+  }
+
+  /**
+   * Track popup open via keyboard shortcut
+   */
+  function trackKeyboardShortcutOpen() {
+    sendGoogleAnalyticsEvent("chatbot_popup_open", {
+      event_category: "chatbot_interaction",
+      method: "keyboard_shortcut",
+      shortcut_key: "slash",
+    });
+  }
+
+  // --- Google Analytics Integration End ---
+
   // Add event listeners after all elements are created
   // Close button functionality
   document.getElementById("aichatbot-close").addEventListener("click", () => {
     chatWindow.style.display = "none";
     document.body.classList.remove("aichatbot-window-open");
+    trackPopupClose("close_button");
     saveChatState();
   });
 
@@ -221,11 +399,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof aichatbotData !== "undefined" && aichatbotData.fullPageUrl) {
       fullPageUrl = aichatbotData.fullPageUrl;
     }
+    trackFullPageChatClick();
     window.open(fullPageUrl, "_blank");
   });
 
   // Bubble click functionality
   bubble.addEventListener("click", (e) => {
+    const wasOpen = chatWindow.style.display === "flex";
     chatWindow.style.display = chatWindow.style.display === "none" ? "flex" : "none";
 
     if (chatWindow.style.display === "flex") {
@@ -240,8 +420,12 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         input.placeholder = getRandomPlaceholder();
       }
+      if (!wasOpen) {
+        trackPopupOpen();
+      }
     } else {
       document.body.classList.remove("aichatbot-window-open");
+      trackPopupClose("bubble_click");
     }
     saveChatState();
     e.stopPropagation();
@@ -686,6 +870,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Don't check for NPS survey yet - we'll check after receiving an answer
     // (NPS Survey check moved to the completion handler below)
 
+    // Increment question count and track analytics
+    sessionQuestionCount++;
+    trackQuestionSubmit(sessionQuestionCount, message);
+
     // Reset accumulated response
     accumulatedResponse = "";
 
@@ -1129,7 +1317,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const contactHumanButton = document.createElement("div");
     contactHumanButton.id = "aichatbot-contact-human";
     contactHumanButton.innerHTML = `<i class="fas fa-user"></i> Contact a human`;
-    contactHumanButton.addEventListener("click", showIntercom);
+    contactHumanButton.addEventListener("click", () => {
+      trackContactHumanClick();
+      showIntercom();
+    });
 
     // Add to the controls container
     controlsContainer.appendChild(contactHumanButton);
@@ -1137,6 +1328,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Function to clear chat history
   function clearChatHistory() {
+    // Track the clear history action before clearing
+    trackClearChatHistory();
+
     // Store current window state
     const wasWindowOpen = chatWindow.style.display === "flex";
 
@@ -1500,6 +1694,9 @@ document.addEventListener("DOMContentLoaded", () => {
       npsDismissReason = "submitted";
       setLocalStorageItem("npsDismissReason", npsDismissReason);
 
+      // Track the NPS survey submission
+      trackNPSSurveySubmit(score, feedback);
+
       // Show success message and hide form
       if (messageArea && formContent) {
         messageArea.textContent = "Thank you for your feedback!";
@@ -1584,6 +1781,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // IMPORTANT: Do NOT update npsLastSurveyQueryCount here.
       // This ensures the 5-query threshold only applies after a 'submitted' event.
+
+      // Track the NPS survey dismissal
+      trackNPSSurveyDismiss(reason);
     }
     // Hide modal (already handled by listener calling this).
   }
@@ -1911,9 +2111,22 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "/" && !isInputFocused) {
       if (chatWindow.style.display === "none") {
         e.preventDefault(); // Prevent default browser behavior (e.g., quick find)
-        bubble.click(); // Simulate clicking the bubble to open
-        // Focus the input after opening
+        trackKeyboardShortcutOpen(); // Track the keyboard shortcut usage
+
+        // Open the chatbot window directly (don't simulate bubble click to avoid double tracking)
+        chatWindow.style.display = "flex";
+        document.body.classList.add("aichatbot-window-open");
         setTimeout(() => input.focus(), 0);
+        setTimeout(() => {
+          messages.scrollTop = messages.scrollHeight;
+        }, 0);
+        addWelcomeMessage();
+        if (chatHistory.length > 0) {
+          input.placeholder = "";
+        } else {
+          input.placeholder = getRandomPlaceholder();
+        }
+        saveChatState();
       }
     }
 
@@ -1934,7 +2147,10 @@ document.addEventListener("DOMContentLoaded", () => {
           languageModal.style.display = "none";
         } else {
           // If no modals are open, close the chat window
-          document.getElementById("aichatbot-close").click(); // Simulate clicking the close button
+          chatWindow.style.display = "none";
+          document.body.classList.remove("aichatbot-window-open");
+          trackPopupClose("escape_key");
+          saveChatState();
         }
       }
     }
