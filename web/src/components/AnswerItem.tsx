@@ -1,22 +1,22 @@
 // This component renders an individual answer item, including the question, answer content,
 // related questions, and interactive elements like likes and copy buttons.
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
-import TruncatedMarkdown from '@/components/TruncatedMarkdown';
-import SourcesList from '@/components/SourcesList';
-import CopyButton from '@/components/CopyButton';
-import LikeButton from '@/components/LikeButton';
-import { Answer } from '@/types/answer';
-import { collectionsConfig } from '@/utils/client/collectionsConfig';
-import { useMultipleCollections } from '@/hooks/useMultipleCollections';
-import { SiteConfig } from '@/types/siteConfig';
-import markdownStyles from '@/styles/MarkdownStyles.module.css';
-import { DocMetadata } from '@/types/DocMetadata';
-import { Document } from 'langchain/document';
-import { logEvent } from '@/utils/client/analytics';
-import { RelatedQuestion } from '@/types/RelatedQuestion';
+import React, { useState } from "react";
+import Link from "next/link";
+import TruncatedMarkdown from "@/components/TruncatedMarkdown";
+import SourcesList from "@/components/SourcesList";
+import CopyButton from "@/components/CopyButton";
+import LikeButton from "@/components/LikeButton";
+import { Answer } from "@/types/answer";
+import { collectionsConfig } from "@/utils/client/collectionsConfig";
+import { useMultipleCollections } from "@/hooks/useMultipleCollections";
+import { SiteConfig } from "@/types/siteConfig";
+import markdownStyles from "@/styles/MarkdownStyles.module.css";
+import { DocMetadata } from "@/types/DocMetadata";
+import { Document } from "langchain/document";
+import { logEvent } from "@/utils/client/analytics";
+import { RelatedQuestion } from "@/types/RelatedQuestion";
+import { formatAnswerTimestamp } from "@/utils/client/dateUtils";
 
 export interface AnswerItemProps {
   answer: Answer;
@@ -75,9 +75,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
   siteConfig,
   showRelatedQuestions = true,
 }) => {
-  const hasMultipleCollections = useMultipleCollections(
-    siteConfig || undefined,
-  );
+  const hasMultipleCollections = useMultipleCollections(siteConfig || undefined);
   const [expanded, setExpanded] = useState(isFullPage);
   const [likeError, setLikeError] = useState<string | null>(null);
   const [forceShowRelated, setForceShowRelated] = useState(false);
@@ -86,18 +84,16 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
   // Renders a truncated version of the question with line breaks
   const renderTruncatedQuestion = (question: string, maxLength: number) => {
     if (!question) {
-      console.error('renderTruncatedQuestion called with undefined question');
+      console.error("renderTruncatedQuestion called with undefined question");
       return null;
     }
     const truncated = question.slice(0, maxLength);
-    return truncated
-      .split('\n')
-      .map((line: string, i: number, arr: string[]) => (
-        <React.Fragment key={i}>
-          {line}
-          {i < arr.length - 1 && <br />}
-        </React.Fragment>
-      ));
+    return truncated.split("\n").map((line: string, i: number, arr: string[]) => (
+      <React.Fragment key={i}>
+        {line}
+        {i < arr.length - 1 && <br />}
+      </React.Fragment>
+    ));
   };
 
   // Truncates a title to a specified maximum length
@@ -114,42 +110,34 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
       }
 
       // Log the event
-      logEvent('like_answer', 'Engagement', answerId);
+      logEvent("like_answer", "Engagement", answerId);
     } catch (error) {
-      setLikeError(
-        error instanceof Error ? error.message : 'An error occurred',
-      );
+      setLikeError(error instanceof Error ? error.message : "An error occurred");
       // Clear the error message after 3 seconds
       setTimeout(() => setLikeError(null), 3000);
     }
   };
 
   return (
-    <div
-      className={`bg-white p-2 sm:p-2.5 ${
-        isFullPage ? '' : 'mb-4'
-      } rounded-lg shadow`}
-    >
+    <div className={`bg-white p-2 sm:p-2.5 ${isFullPage ? "" : "mb-4"} rounded-lg shadow`}>
       {/* Question section */}
       <div className="flex items-start">
-        <span className="material-icons mt-1 mr-2 flex-shrink-0">
-          question_answer
-        </span>
+        <span className="material-icons mt-1 mr-2 flex-shrink-0">question_answer</span>
         <div className="flex-grow min-w-0">
           <div className="mb-2">
             {isFullPage ? (
               <b className="block break-words">
                 {expanded ? (
-                  answer.question.split('\n').map((line: string, i: number) => (
+                  answer.question.split("\n").map((line: string, i: number) => (
                     <React.Fragment key={i}>
                       {line}
-                      {i < answer.question.split('\n').length - 1 && <br />}
+                      {i < answer.question.split("\n").length - 1 && <br />}
                     </React.Fragment>
                   ))
                 ) : (
                   <>
                     {renderTruncatedQuestion(answer.question, 600)}
-                    {answer.question.length > 600 && '...'}
+                    {answer.question.length > 600 && "..."}
                   </>
                 )}
               </b>
@@ -158,59 +146,43 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
                 <a className="text-black-600 hover:underline cursor-pointer">
                   <b className="block break-words">
                     {expanded ? (
-                      answer.question
-                        .split('\n')
-                        .map((line: string, i: number) => (
-                          <React.Fragment key={i}>
-                            {line}
-                            {i < answer.question.split('\n').length - 1 && (
-                              <br />
-                            )}
-                          </React.Fragment>
-                        ))
+                      answer.question.split("\n").map((line: string, i: number) => (
+                        <React.Fragment key={i}>
+                          {line}
+                          {i < answer.question.split("\n").length - 1 && <br />}
+                        </React.Fragment>
+                      ))
                     ) : (
                       <>
                         {renderTruncatedQuestion(answer.question, 200)}
-                        {answer.question.length > 200 && '...'}
+                        {answer.question.length > 200 && "..."}
                       </>
                     )}
                   </b>
                 </a>
               </Link>
             )}
-            {((isFullPage && answer.question.length > 600) ||
-              (!isFullPage && answer.question.length > 200)) &&
+            {((isFullPage && answer.question.length > 600) || (!isFullPage && answer.question.length > 200)) &&
               !expanded && (
-                <button
-                  onClick={() => setExpanded(true)}
-                  className="text-black hover:underline ml-2"
-                >
+                <button onClick={() => setExpanded(true)} className="text-black hover:underline ml-2">
                   <b>See More</b>
                 </button>
               )}
           </div>
           <div className="text-sm text-gray-500 flex flex-wrap items-center">
-            <span className="mr-4">
-              {formatDistanceToNow(new Date(answer.timestamp._seconds * 1000), {
-                addSuffix: true,
-              })}
-            </span>
+            <span className="mr-4">{formatAnswerTimestamp(answer.timestamp)}</span>
             {/* Conditionally render history icon */}
             {answer.history && answer.history.length > 0 && (
-              <span
-                className="material-icons text-base mr-4"
-                title={`${answer.history.length} messages in history`}
-              >
+              <span className="material-icons text-base mr-4" title={`${answer.history.length} messages in history`}>
                 chat_bubble_outline
               </span>
             )}
             {hasMultipleCollections && (
               <span>
                 {answer.collection
-                  ? collectionsConfig[
-                      answer.collection as keyof typeof collectionsConfig
-                    ]?.replace(/ /g, '\u00a0') || 'Unknown\u00a0Collection'
-                  : 'Unknown\u00a0Collection'}
+                  ? collectionsConfig[answer.collection as keyof typeof collectionsConfig]?.replace(/ /g, "\u00a0") ||
+                    "Unknown\u00a0Collection"
+                  : "Unknown\u00a0Collection"}
               </span>
             )}
           </div>
@@ -222,7 +194,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
         <div className={`${markdownStyles.markdownanswer} overflow-x-auto`}>
           {/* Render the answer content */}
           <TruncatedMarkdown
-            markdown={answer.answer || ''}
+            markdown={answer.answer || ""}
             maxCharacters={isFullPage ? 4000 : 600}
             siteConfig={siteConfig}
           />
@@ -243,33 +215,23 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
               onClick={() => setForceShowRelated(!forceShowRelated)}
               className="text-sm text-blue-600 hover:underline mt-1 block"
             >
-              Admin: {forceShowRelated ? 'hide' : 'show'} related Questions
+              Admin: {forceShowRelated ? "hide" : "show"} related Questions
             </button>
           )}
 
           {/* Related Questions Section (Conditional Display) */}
           {answer.relatedQuestionsV2 &&
-            answer.relatedQuestionsV2.filter(
-              (q: { similarity: number }) =>
-                q.similarity >= SIMILARITY_THRESHOLD,
-            ).length > 0 &&
+            answer.relatedQuestionsV2.filter((q: { similarity: number }) => q.similarity >= SIMILARITY_THRESHOLD)
+              .length > 0 &&
             (showRelatedQuestions || forceShowRelated) && (
               <div className="mt-4">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">
-                  Related Questions
-                </h3>
+                <h3 className="text-sm font-medium text-gray-500 mb-2">Related Questions</h3>
                 <div className="space-y-2">
                   {answer.relatedQuestionsV2
-                    .filter(
-                      (q: { similarity: number }) =>
-                        q.similarity >= SIMILARITY_THRESHOLD,
-                    )
+                    .filter((q: { similarity: number }) => q.similarity >= SIMILARITY_THRESHOLD)
                     .map((relatedQuestion: RelatedQuestion, index: number) => (
                       <div key={index} className="text-sm">
-                        <Link
-                          href={`/answers/${relatedQuestion.id}`}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
+                        <Link href={`/answers/${relatedQuestion.id}`} className="text-blue-600 hover:text-blue-800">
                           {truncateTitle(relatedQuestion.title, 150)}
                         </Link>
                       </div>
@@ -285,7 +247,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
               markdown={answer.answer}
               answerId={answer.id}
               sources={answer.sources as Document<DocMetadata>[] | undefined}
-              question={answer.question ?? ''}
+              question={answer.question ?? ""}
               siteConfig={siteConfig}
             />
             {/* Copy Link Button (Icon only, next to Copy Content) */}
@@ -295,9 +257,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
                 className="text-gray-600 hover:text-gray-900 flex items-center p-1 rounded hover:bg-gray-200"
                 title="Copy link to clipboard"
               >
-                <span className="material-icons">
-                  {linkCopied === answer.id ? 'check' : 'link'}
-                </span>
+                <span className="material-icons">{linkCopied === answer.id ? "check" : "link"}</span>
               </button>
             )}
             {/* Like Button */}
@@ -322,23 +282,15 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
               </button>
             )}
             {/* Like Error */}
-            {likeError && (
-              <span className="text-red-500 text-xs">{likeError}</span>
-            )}
+            {likeError && <span className="text-red-500 text-xs">{likeError}</span>}
             {/* IP Address (Aligned Right) */}
-            {isSudoUser && answer.ip && (
-              <span className="text-base text-gray-400 ml-auto">
-                IP: {answer.ip}
-              </span>
-            )}
+            {isSudoUser && answer.ip && <span className="text-base text-gray-400 ml-auto">IP: {answer.ip}</span>}
           </div>
 
           {/* Sudo Feedback Display Section */}
           {isSudoUser && answer.vote === -1 && answer.feedbackReason && (
             <div className="mt-3 pt-3 border-t border-gray-200 flex items-center space-x-2 text-sm text-gray-600 bg-yellow-50 p-2 rounded">
-              <span className="material-icons text-red-600 text-base">
-                thumb_down
-              </span>
+              <span className="material-icons text-red-600 text-base">thumb_down</span>
               <span className="font-medium">Reason:</span>
               <span>{answer.feedbackReason}</span>
               {answer.feedbackComment && (
@@ -347,9 +299,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
                   className="text-blue-600 hover:text-blue-800 ml-2"
                   title="View Comment"
                 >
-                  <span className="material-icons text-base align-middle">
-                    chat_bubble_outline
-                  </span>
+                  <span className="material-icons text-base align-middle">chat_bubble_outline</span>
                 </button>
               )}
             </div>
@@ -359,10 +309,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
 
       {/* Render Comment Modal */}
       {isCommentModalOpen && answer.feedbackComment && (
-        <CommentModal
-          comment={answer.feedbackComment}
-          onClose={() => setIsCommentModalOpen(false)}
-        />
+        <CommentModal comment={answer.feedbackComment} onClose={() => setIsCommentModalOpen(false)} />
       )}
     </div>
   );
