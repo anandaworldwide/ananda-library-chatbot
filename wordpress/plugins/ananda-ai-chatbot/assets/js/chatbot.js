@@ -2172,22 +2172,22 @@ document.addEventListener("DOMContentLoaded", () => {
           !document.getElementById("aichatbot-window") ||
           document.getElementById("aichatbot-window").style.display === "none"
         ) {
-          bubble.classList.add("magnetic-ripple-animation");
+          bubble.classList.add("magnetic-ripple-animation-big");
           // Remove the class after animation completes to allow replay
           setTimeout(() => {
-            bubble.classList.remove("magnetic-ripple-animation");
+            bubble.classList.remove("magnetic-ripple-animation-big");
           }, 2000); // Matches the 2s animation duration
         }
       };
 
       // Play first instance
       playAnimation();
-      // Set interval for every 60 seconds
+      // Set interval for every 60 seconds (production)
       const animationInterval = setInterval(playAnimation, 60000);
 
       // Store the interval ID on the bubble element so we can clear it later if needed
       bubble.dataset.animationIntervalId = animationInterval;
-    }, 60000); // First animation after 60 seconds
+    }, 60000); // First animation after 60 seconds (production)
   }
 
   // Function to stop the attention animation if needed
@@ -2201,7 +2201,7 @@ document.addEventListener("DOMContentLoaded", () => {
       delete bubble.dataset.animationIntervalId;
     }
     // Also remove the animation class in case it's currently running
-    bubble.classList.remove("magnetic-ripple-animation");
+    bubble.classList.remove("magnetic-ripple-animation-big");
   }
 
   // Call startAttentionAnimation when the page loads, after bubble is created

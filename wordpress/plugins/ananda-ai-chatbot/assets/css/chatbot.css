@@ -873,31 +873,36 @@
   }
 }
 
-@keyframes magnetic-ripple-pull {
+@keyframes magnetic-ripple-pull-big {
   0% {
     transform: translateX(0) scale(1);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
   }
   40% {
-    transform: translateX(-15px) scale(1.08);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+    transform: translateX(-25px) scale(1.15);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
+    filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.3));
   }
   60% {
-    transform: translateX(5px) scale(1.02);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+    transform: translateX(8px) scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.25));
   }
   80% {
-    transform: translateX(-3px) scale(1.03);
-    box-shadow: 0 5px 10px rgba(0, 0, 0.25);
+    transform: translateX(-5px) scale(1.08);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
+    filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.35));
   }
   100% {
     transform: translateX(0) scale(1);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
   }
 }
 
-#aichatbot-bubble.magnetic-ripple-animation {
-  animation: magnetic-ripple-pull 2s ease-out forwards;
+#aichatbot-bubble.magnetic-ripple-animation-big {
+  animation: magnetic-ripple-pull-big 2s ease-out forwards;
 }
 
 /* Class to disable initial animations after page load */
@@ -909,9 +914,9 @@
   animation-name: none !important;
 }
 
-/* Ensure the magnetic ripple animation can still play */
-#aichatbot-bubble.initial-animations-complete.magnetic-ripple-animation {
-  animation-name: magnetic-ripple-pull !important;
+/* Ensure the bigger magnetic ripple animation can still play */
+#aichatbot-bubble.initial-animations-complete.magnetic-ripple-animation-big {
+  animation-name: magnetic-ripple-pull-big !important;
   animation-duration: 2s !important;
   animation-timing-function: ease-out !important;
   animation-iteration-count: 1 !important;
