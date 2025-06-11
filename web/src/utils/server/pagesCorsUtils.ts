@@ -11,17 +11,17 @@
  * `Access-Control-Max-Age` based on the request origin and method.
  */
 
-import { NextApiRequest, NextApiResponse } from 'next';
-import { isDevelopment } from '@/utils/env'; // Assuming isDevelopment is available
+import { NextApiRequest, NextApiResponse } from "next";
+import { isDevelopment } from "@/utils/env"; // Assuming isDevelopment is available
 
 // Define allowed origins - Mirroring middleware.ts logic
 const allowedOrigins = [
   process.env.NEXT_PUBLIC_BASE_URL, // Base URL of this Next.js app
-  'http://localhost:3000', // Local Next.js dev
-  'http://chatbot-test.local', // Local WordPress dev origin
-  'http://localhost', // Add more variants
-  'https://vayudev.ananda.org', // staging Ananda domain
-  'https://ananda.org', // Ananda main domain
+  "http://localhost:3000", // Local Next.js dev
+  "http://chatbot-test.local", // Local WordPress dev origin
+  "http://localhost", // Add more variants
+  "https://vayudev.ananda.org", // staging Ananda domain
+  "https://ananda.org", // Ananda main domain
 ].filter(Boolean) as string[]; // Filter out undefined/null values
 
 /**
@@ -33,10 +33,7 @@ function isOriginAllowed(origin: string | undefined): boolean {
   // In development, be more permissive
   if (isDevelopment()) {
     // Allow all localhost origins regardless of port
-    if (
-      origin.startsWith('http://localhost:') ||
-      origin === 'http://localhost'
-    ) {
+    if (origin.startsWith("http://localhost:") || origin === "http://localhost") {
       return true;
     }
     // Allow all *.local domains
@@ -56,41 +53,26 @@ function isOriginAllowed(origin: string | undefined): boolean {
 function addPagesCorsHeaders(req: NextApiRequest, res: NextApiResponse): void {
   const origin = req.headers.origin as string | undefined;
 
-  // Log origins in development for debugging
-  if (isDevelopment()) {
-    console.log(`[CORS] Request from origin: ${origin || 'none'}`);
-    console.log(`[CORS] Allowed origins: ${allowedOrigins.join(', ')}`);
-  }
-
   if (origin && isOriginAllowed(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
 
     // Add more standard headers for all responses
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization',
-    );
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   } else if (!origin && isDevelopment()) {
     // For local testing without origin header (like Postman)
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization',
-    );
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   } else if (origin && isDevelopment()) {
     // In development, log denied origins but still set a permissive policy
     console.warn(`[CORS] Origin not in allowed list: ${origin}`);
 
     // More permissive in development - set headers anyway with * (may limit cookies)
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization',
-    );
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   }
 }
 
@@ -98,27 +80,21 @@ function addPagesCorsHeaders(req: NextApiRequest, res: NextApiResponse): void {
  * Handles OPTIONS preflight requests.
  * Returns true if the request was handled (was OPTIONS), false otherwise.
  */
-function handlePagesCorsOptions(
-  req: NextApiRequest,
-  res: NextApiResponse,
-): boolean {
-  if (req.method === 'OPTIONS') {
+function handlePagesCorsOptions(req: NextApiRequest, res: NextApiResponse): boolean {
+  if (req.method === "OPTIONS") {
     // Always set headers for OPTIONS
     const origin = req.headers.origin as string | undefined;
 
     // In development, be permissive
     if (isDevelopment()) {
-      const effectiveOrigin = origin || '*';
-      res.setHeader('Access-Control-Allow-Origin', effectiveOrigin);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization',
-      );
-      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+      const effectiveOrigin = origin || "*";
+      res.setHeader("Access-Control-Allow-Origin", effectiveOrigin);
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.setHeader("Access-Control-Max-Age", "86400"); // 24 hours
 
       if (origin) {
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader("Access-Control-Allow-Credentials", "true");
       }
 
       res.status(204).end();
@@ -127,14 +103,11 @@ function handlePagesCorsOptions(
 
     // In production, be more strict but still respond to OPTIONS
     if (origin && isOriginAllowed(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization',
-      );
-      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.setHeader("Access-Control-Max-Age", "86400"); // 24 hours
 
       res.status(204).end();
       return true;
@@ -146,9 +119,9 @@ function handlePagesCorsOptions(
       }
 
       // Use the site's base URL if we have one, otherwise use a wildcard
-      const safeOrigin = process.env.NEXT_PUBLIC_BASE_URL || '*';
-      res.setHeader('Access-Control-Allow-Origin', safeOrigin);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      const safeOrigin = process.env.NEXT_PUBLIC_BASE_URL || "*";
+      res.setHeader("Access-Control-Allow-Origin", safeOrigin);
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 
       // We don't set credentials for disallowed origins
 
@@ -162,9 +135,7 @@ function handlePagesCorsOptions(
 /**
  * Higher-order function to wrap a Pages API handler with CORS logic.
  */
-export function withPagesCors(
-  handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void,
-) {
+export function withPagesCors(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return async (req: NextApiRequest, res: NextApiResponse) => {
     // Add CORS headers to all potential responses from this route
     // Needs to happen before OPTIONS check or subsequent handlers might return early
