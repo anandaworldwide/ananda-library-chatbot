@@ -1,5 +1,51 @@
 # Project.md
 
+## Smart Timestamp Formatting Implementation - COMPLETED
+
+**Status**: Successfully implemented intelligent timestamp formatting that switches from relative to absolute time
+display based on age.
+
+**Implementation Details**:
+
+- **Utility File**: `web/src/utils/client/dateUtils.ts`
+- **Core Function**: `formatSmartTimestamp()` with configurable cutoff days
+- **Answer-Specific Function**: `formatAnswerTimestamp()` using 2-day cutoff
+- **Standard Function**: `formatStandardTimestamp()` using 7-day cutoff (most consumer apps)
+
+**User Experience Enhancement**:
+
+- **Recent content (< 2 days)**: Shows relative time ("5 minutes ago", "1 day ago")
+- **Older content (≥ 2 days)**: Shows compact absolute time ("Dec. 2, 2024 at 1:34pm")
+- **Same year optimization**: Omits year for current year dates ("Dec. 2 at 1:34pm")
+- **Industry standard**: Most consumer apps use 7-day cutoff, but user preferred 2-day for answers
+
+**Technical Features**:
+
+- **Multiple timestamp formats**: Handles Firestore timestamps, Date objects, and Unix seconds
+- **Configurable cutoffs**: `TIME_CUTOFFS` constants for different use cases (2, 3, 7, 14, 30 days)
+- **Error handling**: Returns "Unknown date" for invalid timestamps
+- **Graceful formatting**: Lowercase "am/pm" for compact display
+
+**Files Modified**:
+
+- **Created**: `web/src/utils/client/dateUtils.ts` - Smart timestamp utility functions
+- **Updated**: `web/src/components/AnswerItem.tsx` - Uses `formatAnswerTimestamp()` instead of `formatDistanceToNow`
+- **Removed dependency**: Eliminated direct `date-fns` `formatDistanceToNow` usage in components
+
+**Benefits**:
+
+- **Better UX**: Older answers show clear dates instead of confusing "2 weeks ago"
+- **Consistency**: Standardized timestamp formatting across the application
+- **Flexibility**: Easy to adjust cutoffs for different content types
+- **Maintainability**: Centralized date formatting logic
+
+**Cutoff Rationale**:
+
+- **2-day cutoff chosen**: User preference for answers page (shorter than typical 7-day standard)
+- **Consumer app standard**: Most apps (Twitter, GitHub, etc.) use 7-day cutoff
+- **High-frequency content**: 2-day cutoff appropriate for active discussion platforms
+- **Future flexibility**: Easy to adjust via `TIME_CUTOFFS` constants
+
 ## Current project
 
 See @crawler-TODO.md

@@ -1100,3 +1100,71 @@ def _process_crawl_iteration(...):
 
 **Status**: ✅ **COMPLETE** - Website crawler now processes each URL exactly once per iteration, correctly respecting
 permanent vs temporary failure classifications.
+
+### Google Analytics Integration for WordPress Chatbot Plugin - ✅ COMPLETED
+
+**Implementation**: Successfully added comprehensive Google Analytics/GTM event tracking to the WordPress chatbot plugin
+with configurable tracking ID through WordPress admin settings.
+
+**Features Added**:
+
+1. **WordPress Admin Configuration**:
+
+   - Added `aichatbot_google_analytics_id` setting field
+   - Sanitization function validates GTM (GTM-XXXXXXX) and GA4 (G-XXXXXXXXXX) formats
+   - Setting passed to frontend JavaScript via `wp_localize_script`
+
+2. **Frontend Google Analytics Integration**:
+
+   - Comprehensive event tracking system supporting both GA4 (gtag) and GTM (dataLayer)
+   - Fallback support for manual GTM initialization
+   - Proper error handling and console logging for debugging
+
+3. **Tracked Events** (all with descriptive metadata):
+   - **Popup interactions**: `chatbot_popup_open`, `chatbot_popup_close` (with method: bubble_click, close_button,
+     escape_key, keyboard_shortcut)
+   - **User engagement**: `chatbot_question_submit` (with question_number, session_questions_total, question_preview)
+   - **Navigation**: `chatbot_fullpage_click`, `chatbot_contact_human`
+   - **Utility features**: `chatbot_language_click`, `chatbot_clear_history` (with chat_messages_cleared count)
+   - **NPS feedback**: `chatbot_nps_submit` (with score, has_feedback), `chatbot_nps_dismiss` (with reason)
+
+**Key Technical Implementation**:
+
+```javascript
+// WordPress PHP - Admin Settings
+register_setting('aichatbot_settings_group', 'aichatbot_google_analytics_id', array(
+    'type' => 'string',
+    'default' => '',
+    'sanitize_callback' => 'aichatbot_sanitize_ga_id',
+));
+
+// JavaScript - Event Tracking System
+function sendGoogleAnalyticsEvent(action, parameters = {}) {
+    // Support gtag, dataLayer, and manual GTM initialization
+    // Proper error handling and fallback support
+}
+
+// Usage Examples
+trackQuestionSubmit(sessionQuestionCount, message);
+trackPopupClose("escape_key");
+trackNPSSurveySubmit(score, feedback);
+trackClearChatHistory(); // Includes message count
+trackKeyboardShortcutOpen(); // Slash key usage
+```
+
+**Benefits**:
+
+- **Configurable**: GTM/GA4 ID set through WordPress admin, no code changes needed
+- **Comprehensive**: Tracks all major user interactions with detailed metadata
+- **Robust**: Supports multiple GA implementations with proper fallbacks
+- **Privacy-aware**: Only tracks first 100 chars of questions for analysis
+- **Session tracking**: Question sequence numbers for follow-up analysis
+
+**WordPress Integration Points**:
+
+- Admin settings page with input validation
+- Data passed to frontend via `aichatbotData` object
+- Version bumped to 1.0.32 for cache-busting
+
+**Status**: ✅ **COMPLETE** - All requested features implemented with comprehensive event tracking and WordPress admin
+configuration.

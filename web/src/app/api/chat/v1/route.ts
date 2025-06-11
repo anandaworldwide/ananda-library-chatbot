@@ -42,35 +42,31 @@
 //
 // TODO: wrap this in apiMiddleware
 //
-import { NextRequest, NextResponse } from 'next/server';
-import { Document } from 'langchain/document';
-import { OpenAIEmbeddings } from '@langchain/openai';
-import { PineconeStore } from '@langchain/pinecone';
-import {
-  makeChain,
-  setupAndExecuteLanguageModelChain,
-} from '@/utils/server/makechain';
-import { getCachedPineconeIndex } from '@/utils/server/pinecone-client';
-import { getPineconeIndexName } from '@/utils/server/pinecone-config';
-import * as fbadmin from 'firebase-admin';
-import { db } from '@/services/firebase';
-import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
-import { Index, RecordMetadata } from '@pinecone-database/pinecone';
-import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
-import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
-import validator from 'validator';
-import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
-import { SiteConfig } from '@/types/siteConfig';
-import { StreamingResponseData } from '@/types/StreamingResponseData';
-import { getClientIp } from '@/utils/server/ipUtils';
-import { isDevelopment } from '@/utils/env';
-import { withAppRouterJwtAuth } from '@/utils/server/appRouterJwtUtils';
-import { JwtPayload } from '@/utils/server/jwtUtils';
-import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
-import * as corsMiddleware from '@/utils/server/corsMiddleware';
-import { determineActiveMediaTypes } from '@/utils/determineActiveMediaTypes';
+import { NextRequest, NextResponse } from "next/server";
+import { Document } from "langchain/document";
+import { OpenAIEmbeddings } from "@langchain/openai";
+import { PineconeStore } from "@langchain/pinecone";
+import { makeChain, setupAndExecuteLanguageModelChain } from "@/utils/server/makechain";
+import { getCachedPineconeIndex } from "@/utils/server/pinecone-client";
+import { getPineconeIndexName } from "@/utils/server/pinecone-config";
+import * as fbadmin from "firebase-admin";
+import { db } from "@/services/firebase";
+import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
+import { Index, RecordMetadata } from "@pinecone-database/pinecone";
+import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
+import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
+import validator from "validator";
+import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
+import { SiteConfig } from "@/types/siteConfig";
+import { StreamingResponseData } from "@/types/StreamingResponseData";
+import { getClientIp } from "@/utils/server/ipUtils";
+import { isDevelopment } from "@/utils/env";
+import { withAppRouterJwtAuth } from "@/utils/server/appRouterJwtUtils";
+import { ChatMessage, convertChatHistory } from "@/utils/shared/chatHistory";
+import * as corsMiddleware from "@/utils/server/corsMiddleware";
+import { determineActiveMediaTypes } from "@/utils/determineActiveMediaTypes";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 export const maxDuration = 240;
 
 // Add OPTIONS handler for CORS preflight requests
@@ -78,10 +74,7 @@ export const OPTIONS = async (req: NextRequest) => {
   const siteConfig = loadSiteConfigSync();
 
   if (!siteConfig) {
-    return NextResponse.json(
-      { error: 'Failed to load site configuration' },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to load site configuration" }, { status: 500 });
   }
 
   // Create a response with proper CORS headers for preflight request
@@ -150,7 +143,7 @@ type PineconeFilter = {
 
 async function validateAndPreprocessInput(
   req: NextRequest,
-  siteConfig: SiteConfig,
+  siteConfig: SiteConfig
 ): Promise<
   | {
       sanitizedInput: ChatRequestBody;
@@ -163,23 +156,15 @@ async function validateAndPreprocessInput(
   try {
     requestBody = await req.json();
   } catch (error) {
-    console.error('Error parsing request body:', error);
-    console.log('Raw request body:', await req.text());
-    const response = NextResponse.json(
-      { error: 'Invalid JSON in request body' },
-      { status: 400 },
-    );
+    const response = NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 });
     return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
   const { collection, question } = requestBody;
 
   // Validate collection first - it's expected by tests
-  if (typeof collection !== 'string') {
-    const response = NextResponse.json(
-      { error: 'Collection must be a string value' },
-      { status: 400 },
-    );
+  if (typeof collection !== "string") {
+    const response = NextResponse.json({ error: "Collection must be a string value" }, { status: 400 });
     return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
@@ -189,35 +174,28 @@ async function validateAndPreprocessInput(
     Object.keys(siteConfig.collectionConfig).length > 1 &&
     !Object.keys(siteConfig.collectionConfig).includes(collection)
   ) {
-    const availableCollections = Object.keys(siteConfig.collectionConfig).join(
-      ', ',
-    );
+    const availableCollections = Object.keys(siteConfig.collectionConfig).join(", ");
     const response = NextResponse.json(
       {
         error: `Invalid collection provided. Available collections: ${availableCollections}`,
       },
-      { status: 400 },
+      { status: 400 }
     );
     return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
   // Validate question length last - tests expect collection errors to take precedence
-  if (
-    typeof question !== 'string' ||
-    !validator.isLength(question, { min: 1, max: 4000 })
-  ) {
+  if (typeof question !== "string" || !validator.isLength(question, { min: 1, max: 4000 })) {
     const response = NextResponse.json(
-      { error: 'Invalid question. Must be between 1 and 4000 characters.' },
-      { status: 400 },
+      { error: "Invalid question. Must be between 1 and 4000 characters." },
+      { status: 400 }
     );
     return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
 
   const originalQuestion = question;
   // Sanitize the input to prevent XSS attacks
-  const sanitizedQuestion = validator
-    .escape(question.trim())
-    .replaceAll('\n', ' ');
+  const sanitizedQuestion = validator.escape(question.trim()).replaceAll("\n", " ");
 
   return {
     sanitizedInput: {
@@ -228,27 +206,22 @@ async function validateAndPreprocessInput(
   };
 }
 
-async function applyRateLimiting(
-  req: NextRequest,
-  siteConfig: SiteConfig,
-): Promise<NextResponse | null> {
+async function applyRateLimiting(req: NextRequest, siteConfig: SiteConfig): Promise<NextResponse | null> {
   const isAllowed = await genericRateLimiter(
     req,
     null,
     {
       windowMs: 24 * 60 * 60 * 1000, // 24 hours
-      max: isDevelopment()
-        ? siteConfig.queriesPerUserPerDay * 10
-        : siteConfig.queriesPerUserPerDay,
-      name: 'query',
+      max: isDevelopment() ? siteConfig.queriesPerUserPerDay * 10 : siteConfig.queriesPerUserPerDay,
+      name: "query",
     },
-    req.ip,
+    req.ip
   );
 
   if (!isAllowed) {
     const response = NextResponse.json(
-      { error: 'Daily query limit reached. Please try again tomorrow.' },
-      { status: 429 },
+      { error: "Daily query limit reached. Please try again tomorrow." },
+      { status: 429 }
     );
     return corsMiddleware.addCorsHeaders(response, req, siteConfig);
   }
@@ -259,21 +232,14 @@ async function applyRateLimiting(
 async function setupPineconeAndFilter(
   collection: string,
   mediaTypes: Partial<MediaTypes> | undefined,
-  siteConfig: SiteConfig,
+  siteConfig: SiteConfig
 ): Promise<{ index: Index<RecordMetadata>; filter: PineconeFilter }> {
-  const startTime = Date.now();
-
   // Use cached Pinecone index instead of creating a new one each time
-  const indexName = getPineconeIndexName() || '';
-  const index = (await getCachedPineconeIndex(
-    indexName,
-  )) as Index<RecordMetadata>;
+  const indexName = getPineconeIndexName() || "";
+  const index = (await getCachedPineconeIndex(indexName)) as Index<RecordMetadata>;
 
   // Determine active types using the helper function
-  const activeTypes = determineActiveMediaTypes(
-    mediaTypes,
-    siteConfig.enabledMediaTypes,
-  );
+  const activeTypes = determineActiveMediaTypes(mediaTypes, siteConfig.enabledMediaTypes);
 
   // Create a cleaner filter structure - initialize with empty $and array
   const filter: PineconeFilter = {
@@ -286,21 +252,15 @@ async function setupPineconeAndFilter(
   // Apply collection-specific filters only if the collection exists in siteConfig
   if (siteConfig.collectionConfig && siteConfig.collectionConfig[collection]) {
     // Apply collection-specific filters based on the collection name
-    if (collection === 'master_swami') {
+    if (collection === "master_swami") {
       filter.$and.push({
-        author: { $in: ['Paramhansa Yogananda', 'Swami Kriyananda'] },
+        author: { $in: ["Paramhansa Yogananda", "Swami Kriyananda"] },
       });
     }
   }
 
   // If you need to pass filter to makeChain in the future, you might need to add library filters here
   // But don't add redundant library filters if makeChain is already handling it
-
-  const setupTime = Date.now() - startTime;
-  if (setupTime > 50) {
-    // Only log if it takes longer than 50ms
-    console.log(`Pinecone setup completed in ${setupTime}ms`);
-  }
 
   return { index, filter };
 }
@@ -309,10 +269,10 @@ async function setupVectorStoreAndRetriever(
   index: Index<RecordMetadata>,
   filter: PineconeFilter | undefined,
   sendData: (data: StreamingResponseData) => void,
-  requestedSourceCount: number = 4, // Final number of sources needed
+  requestedSourceCount: number = 4 // Final number of sources needed
 ): Promise<{
   vectorStore: PineconeStore;
-  retriever: ReturnType<PineconeStore['asRetriever']>;
+  retriever: ReturnType<PineconeStore["asRetriever"]>;
   documentPromise: Promise<Document[]>;
   resolveWithDocuments: (docs: Document[]) => void;
 }> {
@@ -324,7 +284,7 @@ async function setupVectorStoreAndRetriever(
 
   const vectorStoreOptions: PineconeStoreOptions = {
     pineconeIndex: index,
-    textKey: 'text',
+    textKey: "text",
   };
 
   const vectorStore = await PineconeStore.fromExistingIndex(
@@ -332,41 +292,21 @@ async function setupVectorStoreAndRetriever(
       model:
         process.env.OPENAI_EMBEDDINGS_MODEL ||
         (() => {
-          console.warn(
-            'OPENAI_EMBEDDINGS_MODEL not set, using default text-embedding-ada-002',
-          );
-          return 'text-embedding-ada-002';
+          console.warn("OPENAI_EMBEDDINGS_MODEL not set, using default text-embedding-ada-002");
+          return "text-embedding-ada-002";
         })(),
     }),
-    vectorStoreOptions,
+    vectorStoreOptions
   );
 
-  // DEBUG: Wrap the similarity search method to add logging
-  const originalSimilaritySearch =
-    vectorStore.similaritySearch.bind(vectorStore);
-  vectorStore.similaritySearch = async (
-    query: string,
-    k: number,
-    filter?: any,
-  ) => {
-    // Call the original method
-    const startTime = Date.now();
-    const results = await originalSimilaritySearch(query, k, filter);
-    const duration = Date.now() - startTime;
-    console.log(
-      `Search completed in ${duration}ms, returned ${results.length} results`,
-    );
-    // pineconeDebug.logPineconeResults(results, 'WEBSITE');
-
-    return results;
-  };
+  // Use the vector store as-is without debug logging
 
   // Configure retriever to fetch the expanded number of documents
   const retriever = vectorStore.asRetriever({
     callbacks: [
       {
         handleRetrieverError(error) {
-          console.error('Retriever error:', error);
+          console.error("Retriever error:", error);
           resolveWithDocuments([]); // Resolve with empty array on error
         },
         handleRetrieverEnd(docs: Document[]) {
@@ -389,57 +329,10 @@ async function saveOrUpdateDocument(
   finalDocuments: Document[], // Use the final documents
   collection: string,
   history: ChatMessage[],
-  clientIP: string,
+  clientIP: string
 ): Promise<string | null> {
   if (!db) {
-    console.warn(
-      '[DEBUG saveOrUpdateDocument] Firestore db not initialized, skipping document save/update',
-    );
     return null;
-  }
-
-  console.log(
-    `[DEBUG saveOrUpdateDocument] Called with docId: ${docId || 'NULL/UNDEFINED -> EXPECTING CREATION'}, collection: ${collection}`,
-  );
-  console.log(
-    `[DEBUG saveOrUpdateDocument] Question length: ${originalQuestion.length}, Answer length: ${fullResponse.length}`,
-  );
-  console.log(
-    `[DEBUG saveOrUpdateDocument] Sources count: ${finalDocuments.length}, History items: ${history.length}`,
-  );
-
-  // Validate answer data
-  if (!fullResponse || fullResponse.trim() === '') {
-    console.error(
-      '[DEBUG saveOrUpdateDocument] ERROR - fullResponse is empty or null!',
-    );
-    console.log(
-      '[DEBUG saveOrUpdateDocument] DUMP - Raw fullResponse:',
-      JSON.stringify(fullResponse),
-    );
-    // Continue anyway since we might want to persist other fields
-  } else if (fullResponse.length < 5) {
-    console.warn(
-      `[DEBUG saveOrUpdateDocument] WARNING - fullResponse is suspiciously short: "${fullResponse}"`,
-    );
-  } else {
-    console.log(
-      `[DEBUG saveOrUpdateDocument] Answer data validation passed, length: ${fullResponse.length}`,
-    );
-  }
-
-  // Validate sources
-  try {
-    console.log(
-      `[DEBUG saveOrUpdateDocument] First source page content length: ${
-        finalDocuments.length > 0 ? finalDocuments[0].pageContent.length : 0
-      }`,
-    );
-  } catch (sourceError) {
-    console.error(
-      '[DEBUG saveOrUpdateDocument] Error accessing source documents:',
-      sourceError,
-    );
   }
 
   // Create data object to save
@@ -455,110 +348,25 @@ async function saveOrUpdateDocument(
     relatedQuestionsV2: [], // Reset or handle related questions as needed
   };
 
-  console.log(
-    `[DEBUG saveOrUpdateDocument] Data prepared for saving. Answer field type: ${typeof dataToSave.answer}`,
-  );
-
   try {
     const answerRef = db.collection(getAnswersCollectionName());
     if (docId) {
       // Update existing document
-      console.log(
-        `[DEBUG saveOrUpdateDocument] Updating existing document with ID: ${docId}`,
-      );
-
-      try {
-        // First check if document exists
-        const docSnapshot = await answerRef.doc(docId).get();
-        if (!docSnapshot.exists) {
-          console.warn(
-            `[DEBUG saveOrUpdateDocument] Document with ID ${docId} doesn't exist, will create new`,
-          );
-        } else {
-          console.log(
-            `[DEBUG saveOrUpdateDocument] Document exists, current data:`,
-            JSON.stringify({
-              question: docSnapshot.data()?.question?.substring(0, 50) + '...',
-              answer: docSnapshot.data()?.answer
-                ? docSnapshot.data()?.answer?.substring(0, 50) + '...'
-                : 'EMPTY',
-              collection: docSnapshot.data()?.collection,
-            }),
-          );
-        }
-      } catch (checkError) {
-        console.error(
-          `[DEBUG saveOrUpdateDocument] Error checking document existence:`,
-          checkError,
-        );
-      }
-
       try {
         await answerRef.doc(docId).set(dataToSave, { merge: true }); // Use set with merge for update or create
-        console.log(
-          `[DEBUG saveOrUpdateDocument] Successfully updated document with ID: ${docId}`,
-        );
-
-        // Add verification check after update
-        try {
-          const verifyDoc = await answerRef.doc(docId).get();
-          if (verifyDoc.exists) {
-            const data = verifyDoc.data();
-            console.log(
-              `[DEBUG saveOrUpdateDocument] VERIFICATION - Updated document exists. Answer length: ${
-                data?.answer ? data.answer.length : 0
-              }, Question length: ${data?.question ? data.question.length : 0}`,
-            );
-            // Check if the answer was actually saved
-            if (data?.answer && data.answer.length > 0) {
-              console.log(
-                `[DEBUG saveOrUpdateDocument] VERIFICATION - Answer successfully saved (first 50 chars): "${data.answer.substring(0, 50)}..."`,
-              );
-            } else {
-              console.warn(
-                `[DEBUG saveOrUpdateDocument] VERIFICATION - Answer missing or empty after update!`,
-              );
-            }
-          } else {
-            console.warn(
-              `[DEBUG saveOrUpdateDocument] VERIFICATION - Document not found after successful update!`,
-            );
-          }
-        } catch (verifyError) {
-          console.error(
-            `[DEBUG saveOrUpdateDocument] Error during verification after update:`,
-            verifyError,
-          );
-        }
-
         return docId;
       } catch (updateError) {
-        console.error(
-          `[DEBUG saveOrUpdateDocument] Error updating document with ID ${docId}:`,
-          updateError,
-        );
         // Fall through to creation as a fallback
-        console.log(
-          `[DEBUG saveOrUpdateDocument] Falling back to document creation after update failure`,
-        );
         docId = null; // Force creation path below
       }
     }
 
     if (!docId) {
       // Create new document if docId was not provided or creation failed initially
-      console.log(`[DEBUG saveOrUpdateDocument] Creating new document`);
       try {
         const newDocRef = await answerRef.add(dataToSave);
-        console.log(
-          `[DEBUG saveOrUpdateDocument] Successfully created new document with ID: ${newDocRef.id}`,
-        );
         return newDocRef.id;
       } catch (createError) {
-        console.error(
-          `[DEBUG saveOrUpdateDocument] Error creating new document:`,
-          createError,
-        );
         return null;
       }
     }
@@ -566,95 +374,66 @@ async function saveOrUpdateDocument(
     // This should never be reached, but just in case
     return docId || null;
   } catch (error) {
-    console.error(
-      `[DEBUG saveOrUpdateDocument] Unexpected error during save/update for ${docId || '(new)'}:`,
-      error,
-    );
     return null;
   }
 }
 
 // Function for handling errors and sending appropriate error messages
-function handleError(
-  error: unknown,
-  sendData: (data: StreamingResponseData) => void,
-) {
-  console.error('Error in chat route:', error);
+function handleError(error: unknown, sendData: (data: StreamingResponseData) => void) {
   if (error instanceof Error) {
     // Handle specific error cases
-    if (error.name === 'PineconeNotFoundError') {
-      console.error('Pinecone index not found:', getPineconeIndexName());
+    if (error.name === "PineconeNotFoundError") {
+      sendData({
+        error: "The specified Pinecone index does not exist. Please notify your administrator.",
+      });
+    } else if (error.message.includes("429")) {
       sendData({
         error:
-          'The specified Pinecone index does not exist. Please notify your administrator.',
+          "The site has exceeded its current quota with OpenAI, please tell an admin to check the plan and billing details.",
       });
-    } else if (error.message.includes('429')) {
-      // Log the first 10 characters of the API key for debugging purposes
-      console.log(
-        'First 10 chars of OPENAI_API_KEY:',
-        process.env.OPENAI_API_KEY?.substring(0, 10),
-      );
-      sendData({
-        error:
-          'The site has exceeded its current quota with OpenAI, please tell an admin to check the plan and billing details.',
-      });
-    } else if (error.message.includes('Pinecone')) {
+    } else if (error.message.includes("Pinecone")) {
       sendData({
         error: `Error connecting to Pinecone: ${error.message}`,
       });
     } else {
-      sendData({ error: error.message || 'Something went wrong' });
+      sendData({ error: error.message || "Something went wrong" });
     }
   } else {
-    sendData({ error: 'An unknown error occurred' });
+    sendData({ error: "An unknown error occurred" });
   }
 }
 
 // Add new function near other handlers
-async function handleComparisonRequest(
-  req: NextRequest,
-  requestBody: ComparisonRequestBody,
-  siteConfig: SiteConfig,
-) {
+async function handleComparisonRequest(req: NextRequest, requestBody: ComparisonRequestBody, siteConfig: SiteConfig) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        console.log('Comparison request starting');
-
         // Send site ID first
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ siteId: siteConfig.siteId })}\n\n`,
-          ),
-        );
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ siteId: siteConfig.siteId })}\n\n`));
 
         // Set up Pinecone and filter
         const { index } = await setupPineconeAndFilter(
-          requestBody.collection || 'whole_library',
+          requestBody.collection || "whole_library",
           requestBody.mediaTypes,
-          siteConfig,
+          siteConfig
         );
 
         // Set up a manual tracking function to signal "done" to the client
         const signalDone = () => {
           try {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`),
-            );
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
           } catch (e) {
-            console.error('Error sending done event:', e);
+            console.error("Error sending done event:", e);
           }
         };
 
         // Set up function to send data to the client
         const sendToClient = (data: any) => {
           try {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
-            );
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
           } catch (e) {
-            console.error('Error sending data to client:', e);
+            console.error("Error sending data to client:", e);
           }
         };
 
@@ -664,7 +443,7 @@ async function handleComparisonRequest(
         // Create a completely fresh vector store and retriever for this request
         const vectorStoreOptions = {
           pineconeIndex: index,
-          textKey: 'text',
+          textKey: "text",
         };
 
         const vectorStore = await PineconeStore.fromExistingIndex(
@@ -672,13 +451,11 @@ async function handleComparisonRequest(
             model:
               process.env.OPENAI_EMBEDDINGS_MODEL ||
               (() => {
-                console.warn(
-                  'OPENAI_EMBEDDINGS_MODEL not set, using default text-embedding-ada-002',
-                );
-                return 'text-embedding-ada-002';
+                console.warn("OPENAI_EMBEDDINGS_MODEL not set, using default text-embedding-ada-002");
+                return "text-embedding-ada-002";
               })(),
           }),
-          vectorStoreOptions,
+          vectorStoreOptions
         );
 
         const retriever = vectorStore.asRetriever({
@@ -691,9 +468,9 @@ async function handleComparisonRequest(
           {
             model: requestBody.modelA,
             temperature: requestBody.temperatureA,
-            label: 'A',
+            label: "A",
           },
-          sourceCount,
+          sourceCount
         );
 
         const chainB = await makeChain(
@@ -701,19 +478,16 @@ async function handleComparisonRequest(
           {
             model: requestBody.modelB,
             temperature: requestBody.temperatureB,
-            label: 'B',
+            label: "B",
           },
-          sourceCount,
+          sourceCount
         );
 
         // Format chat history for each model
         const pastMessagesA = convertChatHistory(requestBody.historyA || []);
         const pastMessagesB = convertChatHistory(requestBody.historyB || []);
 
-        // Log history sizes for debugging
-        console.log(
-          `Model A history size: ${pastMessagesA.length}, Model B history size: ${pastMessagesB.length}`,
-        );
+        // Set up concurrent execution for both models
 
         // Set up a timeout to ensure done is sent even if models hang
         const doneTimeout = setTimeout(() => {
@@ -736,12 +510,12 @@ async function handleComparisonRequest(
                   {
                     handleLLMNewToken(token: string) {
                       if (token.trim()) {
-                        sendToClient({ token, model: 'A' });
+                        sendToClient({ token, model: "A" });
                       }
                     },
                   } as Partial<BaseCallbackHandler>,
                 ],
-              },
+              }
             ),
             chainB.invoke(
               {
@@ -753,12 +527,12 @@ async function handleComparisonRequest(
                   {
                     handleLLMNewToken(token: string) {
                       if (token.trim()) {
-                        sendToClient({ token, model: 'B' });
+                        sendToClient({ token, model: "B" });
                       }
                     },
                   } as Partial<BaseCallbackHandler>,
                 ],
-              },
+              }
             ),
           ]);
 
@@ -775,19 +549,16 @@ async function handleComparisonRequest(
           await new Promise((resolve) => setTimeout(resolve, 500));
 
           // Now we can close the controller
-          console.log('Closing controller after both models completed');
           controller.close();
         } catch (error) {
-          console.error('Error running model chains:', error);
+          console.error("Error running model chains:", error);
 
           // Clear the timeout as we're handling the error
           clearTimeout(doneTimeout);
 
           // Send error to client
           sendToClient({
-            error:
-              'Error running model comparison: ' +
-              (error instanceof Error ? error.message : String(error)),
+            error: "Error running model comparison: " + (error instanceof Error ? error.message : String(error)),
           });
 
           // Send done signal if we haven't already
@@ -803,26 +574,20 @@ async function handleComparisonRequest(
           controller.close();
         }
       } catch (error) {
-        console.error('Error in comparison handler:', error);
-
         try {
           // Try to send error to client
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
-                error:
-                  'Error in comparison handler: ' +
-                  (error instanceof Error ? error.message : String(error)),
-              })}\n\n`,
-            ),
+                error: "Error in comparison handler: " + (error instanceof Error ? error.message : String(error)),
+              })}\n\n`
+            )
           );
 
           // Signal done
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`),
-          );
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
         } catch (e) {
-          console.error('Error sending error to client:', e);
+          // Silently handle encoding errors
         }
 
         // Close the controller
@@ -834,9 +599,9 @@ async function handleComparisonRequest(
   // Return response with CORS headers
   const response = new NextResponse(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
     },
   });
 
@@ -844,15 +609,11 @@ async function handleComparisonRequest(
 }
 
 // Apply JWT authentication to the POST handler
-export const POST = withAppRouterJwtAuth(
-  async (req: NextRequest, context: any, token: JwtPayload) => {
-    // The token has been verified at this point
-    console.log(`Authenticated request from client: ${token.client}`);
-
-    // Original POST handler implementation starts here
-    return handleChatRequest(req);
-  },
-);
+export const POST = withAppRouterJwtAuth(async (req: NextRequest) => {
+  // The token has been verified at this point
+  // Original POST handler implementation starts here
+  return handleChatRequest(req);
+});
 
 /**
  * Main handler for chat requests
@@ -873,16 +634,13 @@ async function handleChatRequest(req: NextRequest) {
   const siteConfig = loadSiteConfigSync();
 
   if (!siteConfig) {
-    const response = NextResponse.json(
-      { error: 'Failed to load site configuration' },
-      { status: 500 },
-    );
+    const response = NextResponse.json({ error: "Failed to load site configuration" }, { status: 500 });
     // Return without CORS headers since we don't have site config
     return response;
   }
 
   // Store the model name for logging
-  const modelName = siteConfig.modelName || 'unknown';
+  const modelName = siteConfig.modelName || "unknown";
 
   // Check CORS restrictions
   const corsCheckResult = corsMiddleware.handleCors(req, siteConfig);
@@ -905,14 +663,10 @@ async function handleChatRequest(req: NextRequest) {
   const { sanitizedInput, originalQuestion } = validationResult;
 
   // Check if this is a comparison request
-  const isComparison = 'modelA' in sanitizedInput;
+  const isComparison = "modelA" in sanitizedInput;
 
   if (isComparison) {
-    return handleComparisonRequest(
-      req,
-      sanitizedInput as ComparisonRequestBody,
-      siteConfig,
-    );
+    return handleComparisonRequest(req, sanitizedInput as ComparisonRequestBody, siteConfig);
   }
 
   const sourceCount = sanitizedInput.sourceCount || 4;
@@ -930,12 +684,8 @@ async function handleChatRequest(req: NextRequest) {
       const sendData = (data: StreamingResponseData) => {
         if (!isControllerClosed) {
           try {
-            if (
-              data.timing?.firstTokenGenerated &&
-              !timingMetrics.firstTokenGenerated
-            ) {
-              timingMetrics.firstTokenGenerated =
-                data.timing.firstTokenGenerated;
+            if (data.timing?.firstTokenGenerated && !timingMetrics.firstTokenGenerated) {
+              timingMetrics.firstTokenGenerated = data.timing.firstTokenGenerated;
             }
             if (!firstTokenSent && data.token) {
               firstTokenSent = true;
@@ -951,37 +701,25 @@ async function handleChatRequest(req: NextRequest) {
             if (data.done && !performanceLogged) {
               performanceLogged = true;
               timingMetrics.totalTime = Date.now() - timingMetrics.startTime;
-              const streamingTime = timingMetrics.firstByteTime
-                ? Date.now() - timingMetrics.firstByteTime
-                : 0;
+              const streamingTime = timingMetrics.firstByteTime ? Date.now() - timingMetrics.firstByteTime : 0;
               timingMetrics.totalTokens = tokensStreamed;
               if (streamingTime > 0) {
-                timingMetrics.tokensPerSecond = Math.round(
-                  (tokensStreamed / streamingTime) * 1000,
-                );
+                timingMetrics.tokensPerSecond = Math.round((tokensStreamed / streamingTime) * 1000);
               }
               logPerformanceMetrics(timingMetrics, stages, modelName);
               data.timing = {
-                ttfb: timingMetrics.firstByteTime
-                  ? timingMetrics.firstByteTime - timingMetrics.startTime
-                  : 0,
+                ttfb: timingMetrics.firstByteTime ? timingMetrics.firstByteTime - timingMetrics.startTime : 0,
                 total: timingMetrics.totalTime,
                 tokensPerSecond: timingMetrics.tokensPerSecond || 0,
                 totalTokens: tokensStreamed,
                 firstTokenGenerated: timingMetrics.firstTokenGenerated,
               };
             }
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
-            );
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
           } catch (error) {
-            if (
-              error instanceof TypeError &&
-              error.message.includes('Controller is already closed')
-            ) {
+            if (error instanceof TypeError && error.message.includes("Controller is already closed")) {
               isControllerClosed = true;
             } else {
-              console.error('Error in sendData:', error);
               // Re-throwing might close the stream prematurely if not caught elsewhere
               throw error;
             }
@@ -994,40 +732,35 @@ async function handleChatRequest(req: NextRequest) {
         sendData({ siteId: siteConfig.siteId });
 
         const { index, filter } = await setupPineconeAndFilter(
-          sanitizedInput.collection || 'whole_library',
+          sanitizedInput.collection || "whole_library",
           sanitizedInput.mediaTypes,
-          siteConfig,
+          siteConfig
         );
         stages.pineconeComplete = Date.now();
 
         // --- Call the Encapsulated RAG Chain Function ---
-        const { retriever /*, documentPromise, resolveWithDocuments*/ } =
-          await setupVectorStoreAndRetriever(
-            index,
-            filter,
-            sendData, // Pass sendData for internal progress updates
-            sourceCount,
-          );
+        const { retriever /*, documentPromise, resolveWithDocuments*/ } = await setupVectorStoreAndRetriever(
+          index,
+          filter,
+          sendData, // Pass sendData for internal progress updates
+          sourceCount
+        );
 
         // Execute the full chain
-        const { fullResponse, finalDocs } =
-          await setupAndExecuteLanguageModelChain(
-            retriever,
-            sanitizedInput.question,
-            sanitizedInput.history || [],
-            sendData,
-            sourceCount,
-            filter,
-            siteConfig,
-            timingMetrics.startTime,
-          );
+        const { fullResponse, finalDocs } = await setupAndExecuteLanguageModelChain(
+          retriever,
+          sanitizedInput.question,
+          sanitizedInput.history || [],
+          sendData,
+          sourceCount,
+          filter,
+          siteConfig,
+          timingMetrics.startTime
+        );
         // --- End of Encapsulated Call ---
 
         // SAVE DOCUMENT AFTER RESPONSE IS READY
         if (!sanitizedInput.privateSession) {
-          console.log(
-            '[DEBUG DocID] Starting document save process (post-response)',
-          );
           try {
             // Always create a new document; pass null as docId
             const savedDocId = await saveOrUpdateDocument(
@@ -1035,83 +768,55 @@ async function handleChatRequest(req: NextRequest) {
               originalQuestion,
               fullResponse,
               finalDocs,
-              sanitizedInput.collection || 'whole_library',
+              sanitizedInput.collection || "whole_library",
               sanitizedInput.history || [],
-              clientIP,
+              clientIP
             );
 
             if (savedDocId) {
-              console.log(
-                `[DEBUG DocID] Document successfully saved with new ID: ${savedDocId}`,
-              );
               sendData({ docId: savedDocId }); // Send the new docId to the client
-            } else {
-              console.error(
-                '[DEBUG DocID] Document saving failed, saveOrUpdateDocument returned null/empty.',
-              );
             }
           } catch (saveError) {
-            console.error(
-              '[DEBUG DocID] CRITICAL ERROR during document save process:',
-              saveError,
-            );
-            // Optionally send an error to the client if saving is critical for UX
-            // sendData({ error: 'Failed to save chat log.' });
+            // Silently handle save errors to avoid breaking the chat flow
           }
         }
       } catch (error: unknown) {
-        console.error('Error in stream handler:', error);
         handleError(error, sendData);
       } finally {
         if (!isControllerClosed) {
           controller.close();
           isControllerClosed = true;
         }
-        console.log('Stream processing ended');
       }
     },
   });
 
   const response = new NextResponse(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
     },
   });
   return corsMiddleware.addCorsHeaders(response, req, siteConfig);
 }
 
 // Consolidated logging function for better summary messages
-function logPerformanceMetrics(
-  metrics: TimingMetrics,
-  stages: Record<string, number>,
-  modelName: string = 'unknown',
-) {
+function logPerformanceMetrics(metrics: TimingMetrics, stages: Record<string, number>, modelName: string = "unknown") {
   // Use setTimeout to log metrics asynchronously
   setTimeout(() => {
     const summaryMetrics = {
-      setup: stages.pineconeComplete
-        ? stages.pineconeComplete - stages.startTime
-        : 0,
-      retrieval: stages.retrievalComplete
-        ? stages.retrievalComplete - stages.pineconeComplete
-        : 0,
+      setup: stages.pineconeComplete ? stages.pineconeComplete - stages.startTime : 0,
+      retrieval: stages.retrievalComplete ? stages.retrievalComplete - stages.pineconeComplete : 0,
       llmThinkTime:
         metrics.firstTokenGenerated && stages.retrievalComplete
           ? metrics.firstTokenGenerated - stages.retrievalComplete
           : 0,
       tokenDelivery:
-        metrics.firstByteTime && metrics.firstTokenGenerated
-          ? metrics.firstByteTime - metrics.firstTokenGenerated
-          : 0,
-      ttfb: metrics.firstByteTime
-        ? metrics.firstByteTime - stages.startTime
-        : 0,
+        metrics.firstByteTime && metrics.firstTokenGenerated ? metrics.firstByteTime - metrics.firstTokenGenerated : 0,
+      ttfb: metrics.firstByteTime ? metrics.firstByteTime - stages.startTime : 0,
       streaming:
-        metrics.firstByteTime && metrics.totalTime
-          ? metrics.totalTime - (metrics.firstByteTime - stages.startTime)
-          : 0,
+        metrics.firstByteTime && metrics.totalTime ? metrics.totalTime - (metrics.firstByteTime - stages.startTime) : 0,
       total: metrics.totalTime || 0,
       tokensPerSecond: metrics.tokensPerSecond || 0,
       totalTokens: metrics.totalTokens || 0,

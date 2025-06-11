@@ -26,29 +26,26 @@
  * - Model parameters (temperature, etc)
  */
 
-import { ChatOpenAI } from '@langchain/openai';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import {
-  RunnableSequence,
-  RunnablePassthrough,
-} from '@langchain/core/runnables';
-import { StringOutputParser } from '@langchain/core/output_parsers';
-import type { Document } from 'langchain/document';
-import { VectorStoreRetriever } from '@langchain/core/vectorstores';
-import fs from 'fs/promises';
-import path from 'path';
-import { BaseLanguageModel } from '@langchain/core/language_models/base';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { Readable } from 'stream';
-import { StreamingResponseData } from '@/types/StreamingResponseData';
-import { PineconeStore } from '@langchain/pinecone';
-import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
-import { SiteConfig as AppSiteConfig } from '@/types/siteConfig';
-import { ChatMessage, convertChatHistory } from '@/utils/shared/chatHistory';
+import { ChatOpenAI } from "@langchain/openai";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
+import { RunnableSequence, RunnablePassthrough } from "@langchain/core/runnables";
+import { StringOutputParser } from "@langchain/core/output_parsers";
+import type { Document } from "langchain/document";
+import { VectorStoreRetriever } from "@langchain/core/vectorstores";
+import fs from "fs/promises";
+import path from "path";
+import { BaseLanguageModel } from "@langchain/core/language_models/base";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { Readable } from "stream";
+import { StreamingResponseData } from "@/types/StreamingResponseData";
+import { PineconeStore } from "@langchain/pinecone";
+import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
+import { SiteConfig as AppSiteConfig } from "@/types/siteConfig";
+import { ChatMessage, convertChatHistory } from "@/utils/shared/chatHistory";
 
 // S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'us-west-1',
+  region: process.env.AWS_REGION || "us-west-1",
 });
 
 // Define types and interfaces for the chain input and configuration
@@ -57,7 +54,7 @@ type AnswerChainInput = {
   chat_history: string;
 };
 
-export type CollectionKey = 'master_swami' | 'whole_library';
+export type CollectionKey = "master_swami" | "whole_library";
 
 interface TemplateContent {
   content?: string;
@@ -95,12 +92,10 @@ interface TimingMetrics {
 // Loads text content from local filesystem with error handling
 async function loadTextFile(filePath: string): Promise<string> {
   try {
-    return await fs.readFile(filePath, 'utf8');
+    return await fs.readFile(filePath, "utf8");
   } catch (error) {
-    console.warn(
-      `Failed to load file: ${filePath}. Using empty string. (Error: ${error})`,
-    );
-    return '';
+    console.warn(`Failed to load file: ${filePath}. Using empty string. (Error: ${error})`);
+    return "";
   }
 }
 
@@ -108,33 +103,30 @@ async function loadTextFile(filePath: string): Promise<string> {
 async function streamToString(stream: Readable): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    stream.on('data', (chunk) => chunks.push(chunk));
-    stream.on('error', reject);
-    stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    stream.on("data", (chunk) => chunks.push(chunk));
+    stream.on("error", reject);
+    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
   });
 }
 
 // Retrieves template content from S3 bucket with error handling
-async function loadTextFileFromS3(
-  bucket: string,
-  key: string,
-): Promise<string> {
+async function loadTextFileFromS3(bucket: string, key: string): Promise<string> {
   try {
     const response = await s3Client.send(
       new GetObjectCommand({
         Bucket: bucket,
         Key: key,
-      }),
+      })
     );
 
     if (!response.Body) {
-      throw new Error('Empty response body');
+      throw new Error("Empty response body");
     }
 
     return await streamToString(response.Body as Readable);
   } catch (error) {
     console.error(`Failed to load from S3: ${bucket}/${key}`, error);
-    return '';
+    return "";
   }
 }
 
@@ -143,23 +135,18 @@ async function loadTextFileFromS3(
 async function processTemplate(
   template: TemplateContent,
   variables: Record<string, string>,
-  basePath: string,
+  basePath: string
 ): Promise<string> {
-  let content = template.content || '';
+  let content = template.content || "";
   if (template.file) {
-    if (template.file.toLowerCase().startsWith('s3:'.toLowerCase())) {
+    if (template.file.toLowerCase().startsWith("s3:".toLowerCase())) {
       // Load from S3
       if (!process.env.S3_BUCKET_NAME) {
-        throw new Error(
-          'S3_BUCKET_NAME not configured but s3: file path specified',
-        );
+        throw new Error("S3_BUCKET_NAME not configured but s3: file path specified");
       }
       const startTime = Date.now();
       const s3Path = template.file.slice(3); // Remove 's3:' prefix
-      content = await loadTextFileFromS3(
-        process.env.S3_BUCKET_NAME,
-        `site-config/prompts/${s3Path}`,
-      );
+      content = await loadTextFileFromS3(process.env.S3_BUCKET_NAME, `site-config/prompts/${s3Path}`);
       console.log(`Loading S3 file took ${Date.now() - startTime}ms`);
     } else {
       // Load from local filesystem
@@ -170,42 +157,29 @@ async function processTemplate(
 }
 
 // Replaces ${variable} syntax in templates with actual values from variables map
-function substituteVariables(
-  template: string,
-  variables: Record<string, string>,
-): string {
-  return template.replace(
-    /\${(\w+)}/g,
-    (_, key) => variables[key] || `\${${key}}`,
-  );
+function substituteVariables(template: string, variables: Record<string, string>): string {
+  return template.replace(/\${(\w+)}/g, (_, key) => variables[key] || `\${${key}}`);
 }
 
 // Loads site-specific configuration with fallback to default config
 // Configurations control prompt templates, variables, and model behavior
 async function loadSiteConfig(siteId: string): Promise<SiteConfig> {
-  const promptsDir =
-    process.env.SITE_PROMPTS_DIR ||
-    path.join(process.cwd(), 'site-config/prompts');
+  const promptsDir = process.env.SITE_PROMPTS_DIR || path.join(process.cwd(), "site-config/prompts");
   const configPath = path.join(promptsDir, `${siteId}.json`);
 
   try {
-    const data = await fs.readFile(configPath, 'utf8');
+    const data = await fs.readFile(configPath, "utf8");
     return JSON.parse(data);
   } catch (error) {
-    console.warn(
-      `ERROR: Failed to load site-specific config for ${siteId}. Using default. (Error: ${error})`,
-    );
-    const defaultPath = path.join(promptsDir, 'default.json');
-    const defaultData = await fs.readFile(defaultPath, 'utf8');
+    console.warn(`ERROR: Failed to load site-specific config for ${siteId}. Using default. (Error: ${error})`);
+    const defaultPath = path.join(promptsDir, "default.json");
+    const defaultData = await fs.readFile(defaultPath, "utf8");
     return JSON.parse(defaultData);
   }
 }
 
 // Processes the entire site configuration, loading all templates and applying variables
-async function processSiteConfig(
-  config: SiteConfig,
-  basePath: string,
-): Promise<Record<string, string>> {
+async function processSiteConfig(config: SiteConfig, basePath: string): Promise<Record<string, string>> {
   const result: Record<string, string> = {
     ...config.variables,
     date: new Date().toLocaleDateString(),
@@ -221,19 +195,17 @@ async function processSiteConfig(
 // Builds the complete chat prompt template for a specific site, incorporating
 // site-specific variables and configurations
 const getFullTemplate = async (siteId: string) => {
-  const promptsDir =
-    process.env.SITE_PROMPTS_DIR ||
-    path.join(process.cwd(), 'site-config/prompts');
+  const promptsDir = process.env.SITE_PROMPTS_DIR || path.join(process.cwd(), "site-config/prompts");
   const config = await loadSiteConfig(siteId);
   const processedConfig = await processSiteConfig(config, promptsDir);
 
   // Get the base template
-  let fullTemplate = processedConfig.baseTemplate || '';
+  let fullTemplate = processedConfig.baseTemplate || "";
 
   // Replace variables from the 'variables' object
   if (config.variables) {
     for (const [key, value] of Object.entries(config.variables)) {
-      const placeholder = new RegExp(`\\{${key}\\}`, 'g');
+      const placeholder = new RegExp(`\\{${key}\\}`, "g");
       fullTemplate = fullTemplate.replace(placeholder, value);
     }
   }
@@ -287,18 +259,12 @@ const combineDocumentsFn = (docs: Document[]) => {
 
 // Calculates how many sources to retrieve from each library based on configured weights
 // This enables proportional document retrieval across multiple slices of the knowledge base
-const calculateSources = (
-  totalSources: number,
-  libraries: { name: string; weight?: number }[],
-) => {
+const calculateSources = (totalSources: number, libraries: { name: string; weight?: number }[]) => {
   if (!libraries || libraries.length === 0) {
     return [];
   }
 
-  const totalWeight = libraries.reduce(
-    (sum, lib) => sum + (lib.weight !== undefined ? lib.weight : 1),
-    0,
-  );
+  const totalWeight = libraries.reduce((sum, lib) => sum + (lib.weight !== undefined ? lib.weight : 1), 0);
   return libraries.map((lib) => ({
     name: lib.name,
     sources:
@@ -315,21 +281,18 @@ async function retrieveDocumentsByLibrary(
   libraryName: string,
   k: number,
   query: string,
-  baseFilter?: Record<string, unknown>,
+  baseFilter?: Record<string, unknown>
 ): Promise<Document[]> {
   const libraryFilter = { library: libraryName };
 
   let finalFilter: Record<string, unknown>;
   if (baseFilter) {
     // Cleaner approach to merge filters with $and
-    if ('$and' in baseFilter) {
+    if ("$and" in baseFilter) {
       // If baseFilter already has $and, just add our library filter to it
       finalFilter = {
         ...baseFilter,
-        $and: [
-          ...(baseFilter.$and as Array<Record<string, unknown>>),
-          libraryFilter,
-        ],
+        $and: [...(baseFilter.$and as Array<Record<string, unknown>>), libraryFilter],
       };
     } else {
       // Otherwise create a new $and array with both filters
@@ -341,11 +304,7 @@ async function retrieveDocumentsByLibrary(
     finalFilter = libraryFilter;
   }
 
-  const documents = await retriever.vectorStore.similaritySearch(
-    query,
-    k,
-    finalFilter,
-  );
+  const documents = await retriever.vectorStore.similaritySearch(query, k, finalFilter);
 
   return documents;
 }
@@ -360,13 +319,13 @@ export const makeChain = async (
   sendData?: (data: StreamingResponseData) => void,
   resolveDocs?: (docs: Document[]) => void,
   rephraseModelConfig: ModelConfig = {
-    model: 'gpt-3.5-turbo',
+    model: "gpt-3.5-turbo",
     temperature: 0.1,
-  },
+  }
 ) => {
-  const siteId = process.env.SITE_ID || 'default';
-  const configPath = path.join(process.cwd(), 'site-config/config.json');
-  const siteConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  const siteId = process.env.SITE_ID || "default";
+  const configPath = path.join(process.cwd(), "site-config/config.json");
+  const siteConfig = JSON.parse(await fs.readFile(configPath, "utf8"));
 
   const { model, temperature, label } = modelConfig;
   let answerModel: BaseLanguageModel; // Renamed for clarity
@@ -396,16 +355,13 @@ export const makeChain = async (
     throw new Error(`Model initialization failed for ${label || model}`);
   }
 
-  const condenseQuestionPrompt =
-    ChatPromptTemplate.fromTemplate(CONDENSE_TEMPLATE);
+  const condenseQuestionPrompt = ChatPromptTemplate.fromTemplate(CONDENSE_TEMPLATE);
   const fullTemplate = await getFullTemplate(siteId);
   const templateWithReplacedVars = fullTemplate.replace(
     /\${(context|chat_history|question)}/g,
-    (match, key) => `{${key}}`,
+    (match, key) => `{${key}}`
   );
-  const answerPrompt = ChatPromptTemplate.fromTemplate(
-    templateWithReplacedVars,
-  );
+  const answerPrompt = ChatPromptTemplate.fromTemplate(templateWithReplacedVars);
 
   // Rephrase the initial question into a dereferenced standalone question based on
   // the chat history to allow effective vectorstore querying.
@@ -422,51 +378,32 @@ export const makeChain = async (
   // Runnable sequence for retrieving documents
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
-      console.log(
-        'Performing standard retrieval within makeChain...', // Updated log
-      );
-      const retrievalStartTime = Date.now();
+      // Performing standard retrieval within makeChain
       const allDocuments: Document[] = [];
 
       // If no libraries specified or they don't have weights, use a single query
       if (!includedLibraries || includedLibraries.length === 0) {
-        const docs = await retriever.vectorStore.similaritySearch(
-          input.question,
-          sourceCount,
-          baseFilter,
-        );
+        const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, baseFilter);
         allDocuments.push(...docs);
       } else {
         // Check if we have weights
-        const hasWeights = includedLibraries.some(
-          (lib) => typeof lib === 'object' && lib !== null,
-        );
+        const hasWeights = includedLibraries.some((lib) => typeof lib === "object" && lib !== null);
 
         if (hasWeights) {
           // Use the weighted distribution with parallel queries only when we have weights
           // Create an array of retrieval promises to execute in parallel
           const sourcesDistribution = calculateSources(
             sourceCount,
-            includedLibraries as { name: string; weight?: number }[],
+            includedLibraries as { name: string; weight?: number }[]
           );
           const retrievalPromises = sourcesDistribution
             .filter(({ sources }) => sources > 0)
             .map(async ({ name, sources }) => {
-              const libraryStartTime = Date.now();
-              const docs = await retrieveDocumentsByLibrary(
-                retriever,
-                name,
-                sources,
-                input.question,
-                baseFilter,
-              );
+              const docs = await retrieveDocumentsByLibrary(retriever, name, sources, input.question, baseFilter);
 
-              // Only log each library once to prevent duplication
+              // Track logged libraries to prevent duplication
               if (!loggedLibraries.has(name)) {
                 loggedLibraries.add(name);
-                console.log(
-                  `Library ${name} retrieval took ${Date.now() - libraryStartTime}ms for ${docs.length} documents`,
-                );
               }
               return docs;
             });
@@ -483,9 +420,7 @@ export const makeChain = async (
           // This avoids multiple parallel queries when not needed
 
           // Extract library names for filtering
-          const libraryNames = includedLibraries.map((lib) =>
-            typeof lib === 'string' ? lib : lib.name,
-          );
+          const libraryNames = includedLibraries.map((lib) => (typeof lib === "string" ? lib : lib.name));
 
           let finalFilter: Record<string, unknown>;
 
@@ -494,14 +429,11 @@ export const makeChain = async (
 
           // Combine with baseFilter if it exists
           if (baseFilter) {
-            if ('$and' in baseFilter) {
+            if ("$and" in baseFilter) {
               // If baseFilter already has $and, add our library filter to it
               finalFilter = {
                 ...baseFilter,
-                $and: [
-                  ...(baseFilter.$and as Array<Record<string, unknown>>),
-                  libraryFilter,
-                ],
+                $and: [...(baseFilter.$and as Array<Record<string, unknown>>), libraryFilter],
               };
             } else {
               // Otherwise create a new $and array with both filters
@@ -514,11 +446,7 @@ export const makeChain = async (
             finalFilter = libraryFilter;
           }
 
-          const docs = await retriever.vectorStore.similaritySearch(
-            input.question,
-            sourceCount,
-            finalFilter,
-          );
+          const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, finalFilter);
           allDocuments.push(...docs);
         }
       }
@@ -533,15 +461,9 @@ export const makeChain = async (
         resolveDocs(allDocuments);
       }
 
-      console.log(
-        `Standard retrieval took ${Date.now() - retrievalStartTime}ms for ${allDocuments.length} documents`,
-      );
       return allDocuments;
     },
     (docs: Document[]) => {
-      if (docs.length === 0) {
-        console.warn(`Warning: makeChain: No sources returned for query`);
-      }
       return {
         documents: docs,
         combinedContent: combineDocumentsFn(docs),
@@ -610,35 +532,15 @@ export const makeChain = async (
         const simpleSocialPattern =
           /^(thanks|thank you|gracias|merci|danke|thank|thx|ty|thank u|muchas gracias|vielen dank|great|awesome|perfect|good|nice|ok|okay|got it|perfect|clear)[\s!.]*$/i;
         if (simpleSocialPattern.test(input.question.trim())) {
-          console.log(
-            `🔍 SOCIAL MESSAGE DETECTED: "${input.question}" - bypassing reformulation`,
-          );
           return input.question; // Don't reformulate social messages
         }
 
-        if (input.chat_history.trim() === '') {
+        if (input.chat_history.trim() === "") {
           return input.question;
         }
 
-        // Debug: Show the question is being sent for reformulation
-        console.log(
-          `🔍 REFORMULATING QUESTION with chat history of ${input.chat_history.length} characters`,
-        );
-
-        // Measure time for the reformulation process
-        const reformulationStartTime = Date.now();
-
         // Get the reformulated standalone question
         const standaloneQuestion = await standaloneQuestionChain.invoke(input);
-
-        // Calculate and log the time taken
-        const reformulationTime = Date.now() - reformulationStartTime;
-        console.log(
-          `⏱️ PERFORMANCE METRIC - Question Reformulation took: ${reformulationTime}ms`,
-        );
-        console.log(
-          `🔧 Using ${rephraseModelConfig.model} for rephrasing (faster model)`,
-        );
 
         // Debug: Show the result of reformulation
         console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
@@ -661,52 +563,36 @@ export const makeComparisonChains = async (
   modelA: ModelConfig,
   modelB: ModelConfig,
   rephraseModelConfig: ModelConfig = {
-    model: 'gpt-3.5-turbo',
+    model: "gpt-3.5-turbo",
     temperature: 0.1,
-  },
+  }
 ) => {
   try {
     const [chainA, chainB] = await Promise.all([
-      makeChain(
-        retriever,
-        { ...modelA, label: 'A' },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        rephraseModelConfig,
-      ),
-      makeChain(
-        retriever,
-        { ...modelB, label: 'B' },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        rephraseModelConfig,
-      ),
+      makeChain(retriever, { ...modelA, label: "A" }, undefined, undefined, undefined, undefined, rephraseModelConfig),
+      makeChain(retriever, { ...modelB, label: "B" }, undefined, undefined, undefined, undefined, rephraseModelConfig),
     ]);
 
     return { chainA, chainB };
   } catch (error) {
-    console.error('Failed to create comparison chains:', error);
-    throw new Error('Failed to initialize one or both models for comparison');
+    console.error("Failed to create comparison chains:", error);
+    throw new Error("Failed to initialize one or both models for comparison");
   }
 };
 
 // Export the setupAndExecuteLanguageModelChain function
 export async function setupAndExecuteLanguageModelChain(
-  retriever: ReturnType<PineconeStore['asRetriever']>,
+  retriever: ReturnType<PineconeStore["asRetriever"]>,
   sanitizedQuestion: string,
   history: ChatMessage[],
   sendData: (data: StreamingResponseData) => void,
   sourceCount: number = 4,
   filter?: Record<string, unknown>,
   siteConfig?: AppSiteConfig | null,
-  startTime?: number,
+  startTime?: number
 ): Promise<{ fullResponse: string; finalDocs: Document[] }> {
-  const TIMEOUT_MS = process.env.NODE_ENV === 'test' ? 1000 : 30000;
-  const RETRY_DELAY_MS = process.env.NODE_ENV === 'test' ? 10 : 1000;
+  const TIMEOUT_MS = process.env.NODE_ENV === "test" ? 1000 : 30000;
+  const RETRY_DELAY_MS = process.env.NODE_ENV === "test" ? 10 : 1000;
   const MAX_RETRIES = 3;
 
   let retryCount = 0;
@@ -715,14 +601,14 @@ export async function setupAndExecuteLanguageModelChain(
 
   while (retryCount < MAX_RETRIES) {
     try {
-      const modelName = siteConfig?.modelName || 'gpt-4o';
+      const modelName = siteConfig?.modelName || "gpt-4o";
       const temperature = siteConfig?.temperature || 0.3;
-      const rephraseModelName = 'gpt-3.5-turbo';
+      const rephraseModelName = "gpt-3.5-turbo";
       const rephraseTemperature = 0.1;
 
       // Send site ID immediately
       if (siteConfig?.siteId) {
-        const expectedSiteId = process.env.SITE_ID || 'default';
+        const expectedSiteId = process.env.SITE_ID || "default";
 
         if (siteConfig.siteId !== expectedSiteId) {
           const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ${expectedSiteId}`;
@@ -731,11 +617,6 @@ export async function setupAndExecuteLanguageModelChain(
         sendData({ siteId: siteConfig.siteId });
       }
 
-      console.log(
-        `🔧 Using ${modelName} for answer generation and ${rephraseModelName} for rephrasing`,
-      );
-
-      const chainCreationStartTime = Date.now();
       const chain = await makeChain(
         retriever,
         { model: modelName, temperature },
@@ -743,17 +624,14 @@ export async function setupAndExecuteLanguageModelChain(
         filter,
         sendData,
         undefined,
-        { model: rephraseModelName, temperature: rephraseTemperature },
-      );
-      console.log(
-        `Chain creation took ${Date.now() - chainCreationStartTime}ms`,
+        { model: rephraseModelName, temperature: rephraseTemperature }
       );
 
       // Format chat history for the language model
       const pastMessages = convertChatHistory(history);
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      let fullResponse = ''; // This will be populated by streaming tokens
+      let fullResponse = ""; // This will be populated by streaming tokens
       let firstTokenTime: number | null = null;
       let firstByteTime: number | null = null;
 
@@ -764,7 +642,6 @@ export async function setupAndExecuteLanguageModelChain(
         }, TIMEOUT_MS);
       });
 
-      const chainInvocationStartTime = Date.now();
       const chainPromise = chain.invoke(
         {
           question: sanitizedQuestion,
@@ -777,17 +654,11 @@ export async function setupAndExecuteLanguageModelChain(
                 if (!firstTokenTime) {
                   firstTokenTime = Date.now();
                   firstByteTime = Date.now();
-                  console.log(
-                    `Time to first token: ${firstTokenTime - chainInvocationStartTime}ms`,
-                  );
                   sendData({
                     token,
                     timing: {
                       firstTokenGenerated: firstTokenTime,
-                      ttfb:
-                        firstByteTime && startTime
-                          ? firstByteTime - startTime
-                          : undefined,
+                      ttfb: firstByteTime && startTime ? firstByteTime - startTime : undefined,
                     },
                   });
                 } else {
@@ -798,7 +669,7 @@ export async function setupAndExecuteLanguageModelChain(
               },
             } as Partial<BaseCallbackHandler>,
           ],
-        },
+        }
       );
 
       // The result from chain.invoke will now be an object { answer: string, sourceDocuments: Document[] }
@@ -809,10 +680,9 @@ export async function setupAndExecuteLanguageModelChain(
 
       // Add warning logic here, after streaming is complete and result is aggregated
       if (result.answer.includes("I don't have any specific information")) {
-        const modelInfoForWarning =
-          siteConfig?.modelName || modelName || 'unknown'; // Get model name
+        const modelInfoForWarning = siteConfig?.modelName || modelName || "unknown"; // Get model name
         console.warn(
-          `Warning: AI response from model ${modelInfoForWarning} indicates no relevant information was found for question: "${sanitizedQuestion.substring(0, 100)}..."`,
+          `Warning: AI response from model ${modelInfoForWarning} indicates no relevant information was found for question: "${sanitizedQuestion.substring(0, 100)}..."`
         );
         // Optionally, send a warning to the client if needed, though this is after `done:true` has been sent.
         // sendData({ warning: "AI response indicates no relevant information found." });
@@ -822,13 +692,10 @@ export async function setupAndExecuteLanguageModelChain(
       if (startTime) {
         finalTiming.totalTime = Date.now() - startTime;
         if (firstByteTime) {
-          const streamingTime =
-            finalTiming.totalTime - (firstByteTime - startTime);
+          const streamingTime = finalTiming.totalTime - (firstByteTime - startTime);
           finalTiming.ttfb = firstByteTime - startTime;
           if (streamingTime > 0 && tokensStreamed > 0) {
-            finalTiming.tokensPerSecond = Math.round(
-              (tokensStreamed / streamingTime) * 1000,
-            );
+            finalTiming.tokensPerSecond = Math.round((tokensStreamed / streamingTime) * 1000);
           }
         }
       }
@@ -846,17 +713,14 @@ export async function setupAndExecuteLanguageModelChain(
       lastError = error as Error;
       retryCount++;
       if (retryCount < MAX_RETRIES) {
-        console.warn(
-          `Attempt ${retryCount} failed. Retrying in ${RETRY_DELAY_MS}ms...`,
-          error,
-        );
+        console.warn(`Attempt ${retryCount} failed. Retrying in ${RETRY_DELAY_MS}ms...`, error);
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
       } else {
-        console.error('All retry attempts failed:', error);
+        console.error("All retry attempts failed:", error);
         throw lastError;
       }
     }
   }
 
-  throw lastError || new Error('Chain execution failed after retries');
+  throw lastError || new Error("Chain execution failed after retries");
 }
