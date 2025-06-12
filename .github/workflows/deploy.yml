@@ -20,4 +20,4 @@ jobs:
           password: ${{ secrets.ANANDA_ORG_PROD_SFTP_PASSWORD }}
           port: 22
           source: "wordpress/plugins/*"
-          target: "/public_html/plugins/"
+          target: "/public_html/wp-content/plugins/"
