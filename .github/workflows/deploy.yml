@@ -1,0 +1,24 @@
+name: Deploy via SFTP
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload wordpress/plugins to server via SFTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.ANANDA_ORG_PROD_SFTP_SERVER }}
+          username: ${{ secrets.ANANDA_ORG_PROD_SFTP_USER }}
+          password: ${{ secrets.ANANDA_ORG_PROD_SFTP_PASSWORD }}
+          port: 22
+          protocol: sftp
+          local-dir: ./wordpress/plugins
+          server-dir: /public_html/plugins/ 
