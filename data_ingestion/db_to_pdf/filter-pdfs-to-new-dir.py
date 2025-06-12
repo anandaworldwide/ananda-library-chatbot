@@ -1,9 +1,11 @@
 import argparse
 import os
 import shutil
+
 import PyPDF2
-from tqdm import tqdm
 from PyPDF2.errors import EmptyFileError
+from tqdm import tqdm
+
 
 def duplicate_pdf_files(source_dir, dest_dir, authors):
     if not os.path.exists(dest_dir):

@@ -1,5 +1,5 @@
 import tempfile
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pdf_to_vector_db as pdf_ingestion
 import pytest
@@ -69,9 +69,6 @@ async def test_process_document(mock_env):
     # Mock the shared utilities and ensure is_exiting returns False
     with (
         patch(
-            "data_ingestion.utils.embeddings_utils.requests.post"
-        ) as mock_requests_post,
-        patch(
             "data_ingestion.utils.text_splitter_utils.SpacyTextSplitter.split_documents"
         ) as mock_split_documents,
         patch("data_ingestion.utils.progress_utils.is_exiting", return_value=False),
@@ -99,13 +96,8 @@ async def test_process_document(mock_env):
             ),
         ]
 
-        # Mock OpenAI API response
-        mock_openai_response = MagicMock()
-        mock_openai_response.json.return_value = {
-            "data": [{"embedding": [0.1, 0.2, 0.3]}]
-        }
-        mock_openai_response.raise_for_status = MagicMock()
-        mock_requests_post.return_value = mock_openai_response
+        # Note: OpenAI embeddings are now mocked at process_chunk level
+        # The actual OpenAI client calls are handled by the mocked process_chunk function
 
         mock_pinecone_index = AsyncMock()
         mock_embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")

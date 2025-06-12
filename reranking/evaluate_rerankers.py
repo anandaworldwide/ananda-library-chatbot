@@ -4,13 +4,14 @@ Evaluate the performance of the fine-tuned ONNX model against the pretrained mod
 """
 
 import json
+import time
+from collections import defaultdict
+
 import numpy as np
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
 from optimum.onnxruntime import ORTModelForSequenceClassification
 from sklearn.metrics import ndcg_score
-import torch
-from collections import defaultdict
-import time
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 # --- Configuration ---
 PRETRAINED_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-4-v2"
@@ -24,7 +25,7 @@ def load_evaluation_data(filepath):
     """Loads evaluation data grouped by query."""
     data_by_query = defaultdict(list)
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             for line in f:
                 item = json.loads(line)
                 # Ensure relevance is treated as float/numeric for scoring
@@ -101,7 +102,7 @@ def rerank_documents(model, tokenizer, query, documents, is_onnx=False):
          # Returning empty list and 0 time for now to avoid crashing the whole evaluation
          return [], 0
     else:
-        for doc_data, score in zip(documents, scores):
+        for doc_data, score in zip(documents, scores, strict=False):
             new_doc_data = doc_data.copy()
             # Convert score to standard Python float, handle potential NaNs
             new_doc_data['score'] = float(np.nan_to_num(score))

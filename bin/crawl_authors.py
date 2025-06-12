@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
-import os
-from mutagen.mp3 import MP3
-from mutagen.id3 import ID3NoHeaderError
-from mutagen.wave import WAVE
 import logging
+import os
+
+from mutagen.mp3 import MP3
+from mutagen.wave import WAVE
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,8 @@
-import os
-from dotenv import load_dotenv
 import argparse
+import os
+
+from dotenv import load_dotenv
+
 
 def load_env(site_id):
     # Start from the current working directory

@@ -19,11 +19,12 @@ Usage:
 Note: This script creates a new directory structure. Use with caution.
 """
 
-import os
-import sys
-import shutil
 import argparse
 import logging
+import os
+import shutil
+import sys
+
 from tqdm import tqdm
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')

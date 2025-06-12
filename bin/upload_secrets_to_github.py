@@ -34,13 +34,13 @@ Notes:
 Author: Michael Olivier
 """
 
-import os
-import sys
-import subprocess
 import argparse
-import tempfile
-import re
 import json
+import os
+import re
+import subprocess
+import sys
+
 
 def check_gh_cli():
     """Check if GitHub CLI is installed and authenticated."""
@@ -67,7 +67,7 @@ def parse_env_file(file_path):
         print(f"Environment file {file_path} not found!")
         sys.exit(1)
     
-    with open(file_path, 'r') as f:
+    with open(file_path) as f:
         # Initialize variables for multiline parsing
         in_multiline = False
         current_key = ""
@@ -183,7 +183,7 @@ def upload_to_environment(env_name, site_name, env_vars, repo, dry_run=False):
 def upload_to_repo_level(env_vars, dry_run=False):
     """Upload secrets at the repository level."""
     repo = 'anandaworldwide/ananda-library-chatbot'  # Hardcoded repository
-    print(f"📤 Uploading to repository-level secrets...")
+    print("📤 Uploading to repository-level secrets...")
     
     for key, value in env_vars.items():
         if key and value:
@@ -202,7 +202,7 @@ def upload_to_repo_level(env_vars, dry_run=False):
                 except subprocess.CalledProcessError as e:
                     print(f"Error setting {key}: {e.stderr.decode() if e.stderr else str(e)}")
     
-    print(f"✅ Completed uploading repository-level secrets")
+    print("✅ Completed uploading repository-level secrets")
 
 def main():
     parser = argparse.ArgumentParser(description='Upload environment variables to GitHub environments.')

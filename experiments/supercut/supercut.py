@@ -1,31 +1,31 @@
-import os
-import sys
-import yt_dlp
-import subprocess
-from tqdm import tqdm
-from pinecone import Pinecone
-from openai import OpenAI
-from pathlib import Path
 import argparse
-import json
-import random
-import time
-import nltk
 import gzip
+import json
+import os
+import random
+import subprocess
+import sys
 import tempfile
+import time
 import uuid
+from pathlib import Path
+
+import nltk
+import yt_dlp
+from openai import OpenAI
+from pinecone import Pinecone
+from tqdm import tqdm
 
 # Add the project root to Python path for imports
 project_root = str(Path(__file__).parent.parent.parent)
 sys.path.append(project_root)
 
-from pyutil.env_utils import load_env
-from data_ingestion.audio_video.youtube_utils import extract_youtube_id
 from data_ingestion.audio_video.media_utils import get_file_hash
 from data_ingestion.audio_video.transcription_utils import (
-    TRANSCRIPTIONS_DIR, 
-    get_saved_transcription
+    get_saved_transcription,
 )
+from data_ingestion.audio_video.youtube_utils import extract_youtube_id
+from pyutil.env_utils import load_env
 
 
 def parse_args():
@@ -200,7 +200,7 @@ class SupercutGenerator:
         new_start = max(0, new_start - padding)  # Don't go below 0
         new_end = new_end + padding
         
-        print(f"\nSegment analysis:")
+        print("\nSegment analysis:")
         print(f"Original: {start_time:.1f}s - {end_time:.1f}s ({end_time-start_time:.1f}s)")
         print(f"New: {new_start:.1f}s - {new_end:.1f}s ({new_end-new_start:.1f}s)")
         if target_duration:
@@ -243,7 +243,7 @@ class SupercutGenerator:
                 )
                 
                 if new_start is None:  # Skip this segment
-                    print(f"Skipping segment due to poor cut points")
+                    print("Skipping segment due to poor cut points")
                     continue
                     
                 segment = {
@@ -547,7 +547,7 @@ class SupercutGenerator:
             # Create temp output path for this clip
             temp_output = Path(tempfile.mkdtemp()) / f"clip_{uuid.uuid4()}.mp4"
             
-            print(f"\nDEBUG: Processing clip:")
+            print("\nDEBUG: Processing clip:")
             print(f"DEBUG: Video path: {video_path}")
             print(f"DEBUG: Time range: {start_time:.2f}s - {end_time:.2f}s")
             

@@ -6,30 +6,30 @@ checkpoint integration, and both sync and async versions with comprehensive
 mocking to avoid side effects and external dependencies.
 """
 
-import pytest
+import asyncio
 import signal
 import time
-import asyncio
-from unittest.mock import Mock, patch, MagicMock, call
-from typing import Dict, Any, List
+from unittest.mock import Mock, call, patch
+
+import pytest
 
 from data_ingestion.utils.progress_utils import (
-    is_exiting,
-    set_exiting,
-    signal_handler,
-    setup_signal_handlers,
-    reset_shutdown_state,
-    create_progress_bar,
-    ProgressTracker,
+    PROGRESS_PRESETS,
     AsyncProgressTracker,
     ProgressConfig,
     ProgressState,
+    ProgressTracker,
     check_shutdown_requested,
-    with_progress_bar,
     create_batch_progress_bar,
-    monitor_async_tasks,
+    create_progress_bar,
     get_progress_preset,
-    PROGRESS_PRESETS
+    is_exiting,
+    monitor_async_tasks,
+    reset_shutdown_state,
+    set_exiting,
+    setup_signal_handlers,
+    signal_handler,
+    with_progress_bar,
 )
 
 
