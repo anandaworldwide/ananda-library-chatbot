@@ -1168,3 +1168,29 @@ trackKeyboardShortcutOpen(); // Slash key usage
 
 **Status**: ✅ **COMPLETE** - All requested features implemented with comprehensive event tracking and WordPress admin
 configuration.
+
+### Mistake: Missing `--site` CLI argument and environment loading in new maintenance scripts
+
+**Wrong**: Created scripts (e.g. `delete_small_vectors.py`) without a `--site` command-line option and did not call
+`load_env(site)` before accessing environment variables, causing failures when PINECONE\_\* vars weren't present.
+
+```python
+# Missing site arg and env load
+args = parser.parse_args()
+# ... directly uses get_pinecone_client() → env vars not loaded
+```
+
+**Correct**: Always follow ingestion-script pattern:
+
+1. Add `--site` argument (required).
+2. Call `load_env(args.site)` at the beginning of `main()`.
+
+```python
+from pyutil.env_utils import load_env
+
+args = parser.parse_args()
+load_env(args.site)  # loads .env.<site>
+# now safe to access Pinecone/OpenAI env vars
+```
+
+Add this checklist whenever authoring a new data-ingestion or maintenance utility.

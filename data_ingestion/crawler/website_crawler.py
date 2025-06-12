@@ -925,8 +925,9 @@ def sanitize_for_id(text: str) -> str:
 def create_chunks_from_page(page_content, text_splitter=None) -> list[str]:
     """Create text chunks from page content using spaCy with built-in dynamic sizing."""
 
-    # Combine title and content
-    full_text = f"{page_content.title}\n\n{page_content.content}"
+    # Combine title and content with a single newline so the title remains in the
+    # same paragraph as the opening content, preventing header-only chunks.
+    full_text = f"{page_content.title}\n{page_content.content}"
 
     # Create text splitter using built-in dynamic sizing
     if text_splitter is None:
