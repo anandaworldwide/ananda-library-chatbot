@@ -922,3 +922,92 @@
   animation-iteration-count: 1 !important;
   animation-fill-mode: forwards !important;
 }
+
+/* Search Results Bubble Styles */
+.aichatbot-search-bubble {
+  position: fixed;
+  bottom: 95px; /* Position above the chatbot bubble */
+  right: 20px;
+  z-index: 9997; /* Just below the chatbot bubble */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(20px) scale(0.8);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+  max-width: 280px;
+}
+
+.aichatbot-search-bubble.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.aichatbot-search-bubble-content {
+  position: relative;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 16px 20px;
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: gentle-bounce 2s ease-in-out infinite;
+}
+
+.aichatbot-search-bubble-content:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.aichatbot-search-bubble-text {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue",
+    sans-serif;
+}
+
+.aichatbot-search-bubble-arrow {
+  position: absolute;
+  bottom: -8px;
+  right: 30px;
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 8px solid #764ba2;
+}
+
+@keyframes gentle-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Mobile adjustments for search bubble */
+@media (max-width: 480px) {
+  .aichatbot-search-bubble {
+    right: 15px;
+    bottom: 85px;
+    max-width: 250px;
+  }
+
+  .aichatbot-search-bubble-content {
+    padding: 14px 16px;
+  }
+
+  .aichatbot-search-bubble-text {
+    font-size: 13px;
+  }
+
+  .aichatbot-search-bubble-arrow {
+    right: 25px;
+  }
+}

@@ -16,7 +16,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://vivek.ananda.org');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.32');
+define('AICHATBOT_VERSION', '1.0.33');
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -383,6 +383,22 @@ function aichatbot_enqueue_assets() {
     // Get Google Analytics settings
     $google_analytics_id = get_option('aichatbot_google_analytics_id', '');
     
+    // Custom function to detect search pages (both WordPress and custom search)
+    function aichatbot_is_search_page() {
+        // Check standard WordPress search
+        if (is_search()) {
+            return true;
+        }
+        
+        // Check for custom search page URL pattern like /search/
+        $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+        if (strpos($request_uri, '/search') !== false) {
+            return true;
+        }
+                
+        return false;
+    }
+
     // Pass data to JavaScript - make sure it's available to BOTH scripts
     $data_array = array(
         'vercelUrl' => $vercel_url,
@@ -393,7 +409,8 @@ function aichatbot_enqueue_assets() {
         'placeholderQuestionsText' => get_option('aichatbot_placeholder_questions', 'How can I learn to meditate?'),
         'enableIntercom' => $enable_intercom ? '1' : '0',
         'googleAnalyticsId' => $google_analytics_id,
-        'ajaxUrl' => admin_url('admin-ajax.php')
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+        'isSearchPage' => aichatbot_is_search_page() ? '1' : '0'
     );
     
     // Localize for both scripts to ensure data is available

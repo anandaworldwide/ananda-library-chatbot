@@ -164,6 +164,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let intercomEnabled = false;
   let googleAnalyticsId = "";
   let sessionQuestionCount = 0; // Track questions in current session
+  let searchBubbleVisible = false; // Track search bubble visibility
 
   // Get DOM elements
   const bubble = document.getElementById("aichatbot-bubble");
@@ -2242,4 +2243,121 @@ document.addEventListener("DOMContentLoaded", () => {
   } else {
     setupAnimationToggle();
   }
+
+  // Search Results Bubble Functionality
+  function createSearchBubble() {
+    const existingBubble = document.getElementById("aichatbot-search-bubble");
+    if (existingBubble) {
+      return existingBubble;
+    }
+
+    const searchBubble = document.createElement("div");
+    searchBubble.id = "aichatbot-search-bubble";
+    searchBubble.className = "aichatbot-search-bubble";
+    searchBubble.innerHTML = `
+      <div class="aichatbot-search-bubble-content">
+        <div class="aichatbot-search-bubble-text">
+          You can also talk to Vivek to get your question answered!
+        </div>
+        <div class="aichatbot-search-bubble-arrow"></div>
+      </div>
+    `;
+
+    // Add click handler to open chatbot
+    searchBubble.addEventListener("click", () => {
+      if (chatWindow.style.display === "none") {
+        bubble.click(); // Trigger the existing bubble click handler
+      }
+      hideSearchBubble();
+    });
+
+    document.body.appendChild(searchBubble);
+    return searchBubble;
+  }
+
+  function showSearchBubble() {
+    if (searchBubbleVisible) return;
+
+    const searchBubble = createSearchBubble();
+    searchBubble.classList.add("visible");
+    searchBubbleVisible = true;
+
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+      hideSearchBubble();
+    }, 10000);
+  }
+
+  function hideSearchBubble() {
+    const searchBubble = document.getElementById("aichatbot-search-bubble");
+    if (searchBubble) {
+      searchBubble.classList.remove("visible");
+      searchBubbleVisible = false;
+    }
+  }
+
+  function checkScrollPosition() {
+    // Check if we're 50% down the page (to account for large footer)
+    const scrollPosition = window.scrollY;
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.body.scrollHeight;
+    const scrollPercentage = (scrollPosition + windowHeight) / documentHeight;
+
+    if (scrollPercentage >= 0.5) {
+      // 50% of the way down
+      if (!searchBubbleVisible) {
+        showSearchBubble();
+      }
+    } else {
+      if (searchBubbleVisible) {
+        hideSearchBubble();
+      }
+    }
+  }
+
+  // Enhanced search page detection
+  function isSearchPage() {
+    // Check server-side detection first
+    if (aichatbotData.isSearchPage === "1") {
+      return true;
+    }
+
+    // Client-side detection for hash-based search pages
+    const currentUrl = window.location.href;
+    const currentPath = window.location.pathname;
+    const currentHash = window.location.hash;
+
+    // Check for /search/ in path
+    if (currentPath.includes("/search")) {
+      return true;
+    }
+
+    // Check for search parameters in hash (like #stq=searchterm)
+    if (currentHash.includes("stq=") || currentHash.includes("search")) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // Initialize search results bubble functionality
+  function initSearchBubble() {
+    // Only run on search pages (enhanced detection)
+    if (!isSearchPage()) {
+      return;
+    }
+
+    // Add scroll listener with throttling
+    let scrollTimeout;
+    window.addEventListener("scroll", () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(checkScrollPosition, 100);
+    });
+
+    // Check initial position
+    setTimeout(checkScrollPosition, 1000); // Wait for page to fully load
+  }
+
+  // Initialize search bubble functionality
+  initSearchBubble();
 });
