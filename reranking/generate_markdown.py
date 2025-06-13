@@ -28,7 +28,6 @@ from pyutil.env_utils import load_env
 # Constants
 DEFAULT_RETRIEVAL_COUNT = 20
 MARKDOWN_TEMPLATE = """Judge: 
-Done? (y/yes): 
 
 # Query: {query}
 

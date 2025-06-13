@@ -40,7 +40,6 @@ import shutil
 from typing import Any
 
 # Constants
-DONE_PATTERN = r"Done\? \(y/yes\): *(y|yes)\s"
 QUERY_PATTERN = r"# Query: (.*?)\n"
 JUDGE_PATTERN = r"Judge: *(.*?)\n"
 DEFAULT_RETRIEVAL_COUNT = 20
@@ -57,8 +56,9 @@ class MarkdownProcessor:
 
         # Set up directories relative to script location
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.markdown_dir = os.path.join(script_dir, "markdown_files", self.site_id)
-        self.done_dir = os.path.join(self.markdown_dir, "done")
+        self.base_dir = os.path.join(script_dir, "markdown_files", self.site_id)
+        self.todo_dir = os.path.join(self.base_dir, "todo")
+        self.done_dir = os.path.join(self.base_dir, "done")
         self.evaluation_output = os.path.join(
             script_dir, f"evaluation_dataset_{self.site_id}.jsonl"
         )
@@ -71,15 +71,15 @@ class MarkdownProcessor:
         if self.debug_mode:
             print("Debug mode enabled - verbose logging active")
             print(f"Working with site: {self.site_id}")
-            print(f"Markdown directory: {self.markdown_dir}")
+            print(f"Todo directory: {self.todo_dir}")
             print(f"Done directory: {self.done_dir}")
 
     def _check_directories(self):
         """Check if necessary directories exist and prompt user to create them if missing."""
         missing_dirs = []
 
-        if not os.path.exists(self.markdown_dir):
-            missing_dirs.append(self.markdown_dir)
+        if not os.path.exists(self.todo_dir):
+            missing_dirs.append(self.todo_dir)
 
         if not os.path.exists(self.done_dir):
             missing_dirs.append(self.done_dir)
@@ -103,34 +103,38 @@ class MarkdownProcessor:
                 print("Exiting: Required directories do not exist.")
                 exit(1)
 
-    def find_completed_files(self) -> list[str]:
-        """Find markdown files that are marked as done."""
+    def find_completed_files(self) -> list[tuple[str, str]]:
+        """Find markdown and docx files in the todo directory. Returns list of (filepath, type) where type is 'md' or 'docx'."""
         completed_files = []
 
-        if not os.path.exists(self.markdown_dir):
-            print(f"Warning: Markdown directory not found: {self.markdown_dir}")
+        if not os.path.exists(self.todo_dir):
+            print(f"Warning: Todo directory not found: {self.todo_dir}")
             return []
 
-        for filename in os.listdir(self.markdown_dir):
-            if not filename.endswith(".md"):
+        for filename in os.listdir(self.todo_dir):
+            filepath = os.path.join(self.todo_dir, filename)
+            if not os.path.isfile(filepath):
                 continue
-
-            filepath = os.path.join(self.markdown_dir, filename)
-            if os.path.isfile(filepath):
-                try:
-                    with open(filepath) as f:
-                        content = f.read()
-
-                    # Check if file is marked as done
-                    if re.search(DONE_PATTERN, content, re.IGNORECASE):
-                        completed_files.append(filepath)
-                    else:
-                        print(f"File {filename} is not marked as done")
-
-                except Exception as e:
-                    print(f"Error reading file {filename}: {e}")
-
+            if filename.endswith(".md"):
+                completed_files.append((filepath, "md"))
+            elif filename.endswith(".docx"):
+                completed_files.append((filepath, "docx"))
         return completed_files
+
+    def convert_docx_to_md(self, docx_path: str) -> str:
+        """Convert a .docx file to .md using pandoc. Returns the path to the new .md file. Never overwrites the .docx."""
+        md_path = docx_path[:-5] + ".md"
+        import subprocess
+
+        try:
+            # Pandoc will create md_path, never overwriting the .docx
+            subprocess.run(["pandoc", docx_path, "-o", md_path], check=True)
+            if self.debug_mode:
+                print(f"Converted {docx_path} to {md_path}")
+            return md_path
+        except Exception as e:
+            print(f"Error converting {docx_path} to markdown: {e}")
+            return None
 
     def _clean_string(self, text: str) -> str:
         """Clean a string by removing extra quotes and whitespace."""
@@ -170,7 +174,7 @@ class MarkdownProcessor:
             print(f"Warning: No judge name found in {filepath}")
             return None, None
 
-        judge = self._clean_string(judge_match.group(1))
+        judge = self._clean_string(judge_match.group(1)).title()
 
         # Extract query
         query_match = re.search(QUERY_PATTERN, content)
@@ -229,6 +233,75 @@ class MarkdownProcessor:
 
         return labeled_docs
 
+    def _find_doc_sections(self, content: str) -> list:
+        """Extract document sections from content using various patterns."""
+        doc_pattern = r"### Document (\d+)\s*\n+(.*?)(?=\s*\*Scoring:)"
+        doc_sections = re.findall(doc_pattern, content, re.DOTALL)
+        if not doc_sections:
+            alt_patterns = [
+                r"###\s*Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
+                r"##\s*Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
+                r"Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
+            ]
+            for pattern in alt_patterns:
+                doc_sections = re.findall(pattern, content, re.DOTALL)
+                if doc_sections:
+                    if self.debug_mode:
+                        print(f"Found documents using alternative pattern: {pattern}")
+                    break
+        return doc_sections
+
+    def _find_score_matches(self, content: str) -> list:
+        """Extract score matches from content using various patterns."""
+        score_pattern = SCORE_PATTERN
+        score_matches = re.findall(score_pattern, content, re.DOTALL | re.IGNORECASE)
+        if not score_matches:
+            alt_score_patterns = [
+                r"Document (\d+).*?[Ss]coring:.*?[Rr]elevance [Ss]core.*?:\s*(\d|ignore)",
+                r"Document (\d+).*?[Ss]core.*?:\s*(\d|ignore)",
+                r"Document (\d+).*?\[Enter 0-3\]:\s*(\d|ignore)",
+            ]
+            for pattern in alt_score_patterns:
+                score_matches = re.findall(pattern, content, re.DOTALL | re.IGNORECASE)
+                if score_matches:
+                    if self.debug_mode:
+                        print(f"Found scores using alternative pattern: {pattern}")
+                    break
+        return score_matches
+
+    def _check_addressed_docs(
+        self, total_docs, addressed_docs, filename, scores, ignored_docs
+    ) -> bool:
+        if addressed_docs < total_docs:
+            print(
+                f"Warning: Only {addressed_docs}/{total_docs} documents have been addressed in {os.path.basename(filename)}"
+                f" ({len(scores)} scored, {len(ignored_docs)} ignored)"
+            )
+            if not self.args.force:
+                user_input = input("Process this file anyway? (y/n): ").lower()
+                if user_input != "y":
+                    return False
+        elif self.debug_mode:
+            print(
+                f"All {total_docs} documents addressed: {len(scores)} scored, {len(ignored_docs)} ignored"
+            )
+        return True
+
+    def _parse_scores_and_ignored(
+        self, score_matches
+    ) -> tuple[dict[int, int], set[int]]:
+        scores = {}
+        ignored_docs = set()
+        for doc_idx, score_value in score_matches:
+            doc_idx = int(doc_idx)
+            if score_value.lower() == "ignore":
+                ignored_docs.add(doc_idx)
+                if self.debug_mode:
+                    print(f"Document {doc_idx} marked as ignored")
+            else:
+                scores[doc_idx] = int(score_value)
+        return scores, ignored_docs
+
     def parse_labeled_markdown(
         self, filepath: str
     ) -> tuple[str | None, str | None, list[dict[str, Any]]]:
@@ -236,71 +309,22 @@ class MarkdownProcessor:
         try:
             with open(filepath, encoding="utf-8") as f:
                 content = f.read()
-
-            # Normalize line endings and clean up potential Word conversion artifacts
             content = content.replace("\r\n", "\n").replace("\r", "\n")
-            # Remove potential zero-width spaces or other invisible characters
             content = re.sub(r"[\u200b-\u200d\ufeff]", "", content)
-
             query, judge = self._extract_query_and_judge(content, filepath)
             if not query or not judge:
                 return None, None, []
-
-            # Find all document sections - more flexible with whitespace and formatting
-            doc_pattern = r"### Document (\d+)\s*\n+(.*?)(?=\s*\*Scoring:)"
-            doc_sections = re.findall(doc_pattern, content, re.DOTALL)
-
-            # If no documents found with first pattern, try alternative patterns
-            if not doc_sections:
-                # Try with markdown headers that might have different formatting
-                alt_patterns = [
-                    r"###\s*Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
-                    r"##\s*Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
-                    r"Document\s+(\d+)\s*\n+(.*?)(?=\s*\*Scoring:)",
-                ]
-                for pattern in alt_patterns:
-                    doc_sections = re.findall(pattern, content, re.DOTALL)
-                    if doc_sections:
-                        if self.debug_mode:
-                            print(
-                                f"Found documents using alternative pattern: {pattern}"
-                            )
-                        break
-
-            # Extract scores - handle escaped brackets and flexible whitespace
-            score_pattern = SCORE_PATTERN
-            score_matches = re.findall(
-                score_pattern, content, re.DOTALL | re.IGNORECASE
-            )
-
-            # If no scores found, try alternative score patterns
-            if not score_matches:
-                alt_score_patterns = [
-                    r"Document (\d+).*?[Ss]coring:.*?[Rr]elevance [Ss]core.*?:\s*(\d|ignore)",
-                    r"Document (\d+).*?[Ss]core.*?:\s*(\d|ignore)",
-                    r"Document (\d+).*?\[Enter 0-3\]:\s*(\d|ignore)",
-                ]
-                for pattern in alt_score_patterns:
-                    score_matches = re.findall(
-                        pattern, content, re.DOTALL | re.IGNORECASE
-                    )
-                    if score_matches:
-                        if self.debug_mode:
-                            print(f"Found scores using alternative pattern: {pattern}")
-                        break
-
+            doc_sections = self._find_doc_sections(content)
+            score_matches = self._find_score_matches(content)
             if self.debug_mode:
                 print(f"Found {len(doc_sections)} document sections")
                 print(f"Found {len(score_matches)} score matches")
-
-            # Provide helpful debugging if sections or scores are missing
             if not doc_sections:
                 print(
                     f"Warning: No document sections found in {os.path.basename(filepath)}"
                 )
                 print("Expected format: '### Document 1' followed by content")
                 return None, None, []
-
             if not score_matches:
                 print(
                     f"Warning: No relevance scores found in {os.path.basename(filepath)}"
@@ -309,42 +333,15 @@ class MarkdownProcessor:
                     "Expected format: '**Relevance Score** [Enter 0-3]: 2' or similar"
                 )
                 return None, None, []
-
-            # Convert scores to dictionary, separating numeric scores from ignored documents
-            scores = {}
-            ignored_docs = set()
-
-            for doc_idx, score_value in score_matches:
-                doc_idx = int(doc_idx)
-                # Handle "ignore" case-insensitively
-                if score_value.lower() == "ignore":
-                    ignored_docs.add(doc_idx)
-                    if self.debug_mode:
-                        print(f"Document {doc_idx} marked as ignored")
-                else:
-                    scores[doc_idx] = int(score_value)
-
-            # Check if all documents have been addressed (either scored or ignored)
+            scores, ignored_docs = self._parse_scores_and_ignored(score_matches)
             total_docs = len(doc_sections)
             addressed_docs = len(scores) + len(ignored_docs)
-
-            if addressed_docs < total_docs:
-                print(
-                    f"Warning: Only {addressed_docs}/{total_docs} documents have been addressed in {os.path.basename(filepath)}"
-                    f" ({len(scores)} scored, {len(ignored_docs)} ignored)"
-                )
-                if not self.args.force:
-                    user_input = input("Process this file anyway? (y/n): ").lower()
-                    if user_input != "y":
-                        return None, None, []
-            elif self.debug_mode:
-                print(
-                    f"All {total_docs} documents addressed: {len(scores)} scored, {len(ignored_docs)} ignored"
-                )
-
+            if not self._check_addressed_docs(
+                total_docs, addressed_docs, filepath, scores, ignored_docs
+            ):
+                return None, None, []
             labeled_docs = self._process_document_sections(doc_sections, scores)
             return query, judge, labeled_docs
-
         except re.error as e:
             print(f"Regex error parsing file {filepath}: {e}")
             print("This may be due to special characters in the markdown content.")
@@ -457,11 +454,11 @@ class MarkdownProcessor:
             print(f"Saved {len(data)} items to {output_file}")
 
     def move_to_done(self, filepath: str) -> None:
-        """Move processed file to the done directory."""
+        """Move processed file to the done directory. Never deletes the original file, always uses a unique name if needed."""
         filename = os.path.basename(filepath)
         done_path = os.path.join(self.done_dir, filename)
 
-        # If file exists in done directory, create unique name
+        # If file exists in done directory, create unique name (timestamped)
         if os.path.exists(done_path):
             base, ext = os.path.splitext(filename)
             import time
@@ -470,9 +467,12 @@ class MarkdownProcessor:
             done_path = os.path.join(self.done_dir, f"{base}_{timestamp}{ext}")
 
         try:
+            # Move (not delete) the file, preserving the original in done
             shutil.move(filepath, done_path)
             if self.debug_mode:
-                print(f"Moved {filename} to done directory")
+                print(
+                    f"Moved {filename} to done directory as {os.path.basename(done_path)}"
+                )
         except Exception as e:
             print(f"Error moving file to done directory: {e}")
 
@@ -485,7 +485,7 @@ class MarkdownProcessor:
             return 0
 
     def process_files(self):
-        """Process all completed markdown files."""
+        """Process all completed markdown and docx files from the todo directory."""
         completed_files = self.find_completed_files()
 
         if not completed_files:
@@ -497,31 +497,45 @@ class MarkdownProcessor:
         evaluation_added = 0
         fine_tuning_added = 0
 
-        for filepath in completed_files:
+        for filepath, ftype in completed_files:
             filename = os.path.basename(filepath)
             print(f"\nProcessing {filename}...")
-
-            query, judge, labeled_docs = self.parse_labeled_markdown(filepath)
+            md_path = filepath
+            docx_to_move = None
+            # If docx, convert to md first
+            if ftype == "docx":
+                md_path = self.convert_docx_to_md(filepath)
+                docx_to_move = filepath
+                if not md_path or not os.path.exists(md_path):
+                    print(f"Skipping {filename} due to conversion error")
+                    continue
+            # Now process the markdown file as normal
+            query, judge, labeled_docs = self.parse_labeled_markdown(md_path)
             if not query or not judge or not labeled_docs:
                 print(f"Skipping {filename} due to parsing errors")
+                # Move both files to done if docx, just md if md
+                if ftype == "docx":
+                    self.move_to_done(md_path)
+                    self.move_to_done(docx_to_move)
+                else:
+                    self.move_to_done(md_path)
                 continue
-
             evaluation_docs, fine_tuning_docs = self.allocate_documents(
                 query, judge, labeled_docs
             )
-
             self.save_to_jsonl(evaluation_docs, self.evaluation_output)
             self.save_to_jsonl(fine_tuning_docs, self.fine_tuning_output)
-
             evaluation_added += len(evaluation_docs)
             fine_tuning_added += len(fine_tuning_docs)
-
-            self.move_to_done(filepath)
-
+            # Move both files to done if docx, just md if md
+            if ftype == "docx":
+                self.move_to_done(md_path)
+                self.move_to_done(docx_to_move)
+            else:
+                self.move_to_done(md_path)
         # Get total counts from files
         total_evaluation = self._count_lines(self.evaluation_output)
         total_fine_tuning = self._count_lines(self.fine_tuning_output)
-
         print("\nProcessing complete!")
         print(f"Added {evaluation_added} evaluation examples")
         print(f"Added {fine_tuning_added} fine-tuning examples")
