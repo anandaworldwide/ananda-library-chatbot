@@ -701,6 +701,12 @@ document.addEventListener("DOMContentLoaded", () => {
       .replace(/([^\n])\n(\d+\. .*\n)(?!\n\d+\. )/g, "$1\n\n$2")
       .replace(/([^\n])\n(\d+\. .*)$/g, "$1\n\n$2");
 
+    // Process headings first
+    text = text.replace(/^(#{1,6})\s+(.+)$/gm, (match, hashes, content) => {
+      const level = hashes.length;
+      return `<h${level}>${content}</h${level}>`;
+    });
+
     // Split text into logical blocks (paragraphs and lists)
     const blocks = text.split("\n\n");
     let html = "";
