@@ -15,7 +15,7 @@ jobs:
       - name: Upload wordpress/plugins to server via SFTP
         uses: easingthemes/ssh-deploy@main
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.ANANDA_ORG_PROD_SFTP_PASSWORD }}
+          SSH_PASSWORD: ${{ secrets.ANANDA_ORG_PROD_SFTP_PASSWORD }}
           ARGS: "-rlgoDzvc -i"
           SOURCE: "wordpress/plugins/"
           REMOTE_HOST: ${{ secrets.ANANDA_ORG_PROD_SFTP_SERVER }}
