@@ -13,12 +13,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Upload wordpress/plugins to server via SFTP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.ANANDA_ORG_PROD_SFTP_SERVER }}
-          username: ${{ secrets.ANANDA_ORG_PROD_SFTP_USER }}
-          password: ${{ secrets.ANANDA_ORG_PROD_SFTP_PASSWORD }}
-          port: 22
-          source: "wordpress/plugins/."
-          target: "/home/master/applications/ananda/public_html/wp-content/plugins/"
-          debug: true
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.ANANDA_ORG_PROD_SFTP_PASSWORD }}
+          ARGS: "-rlgoDzvc -i"
+          SOURCE: "wordpress/plugins/"
+          REMOTE_HOST: ${{ secrets.ANANDA_ORG_PROD_SFTP_SERVER }}
+          REMOTE_USER: ${{ secrets.ANANDA_ORG_PROD_SFTP_USER }}
+          TARGET: "/home/master/applications/ananda/public_html/wp-content/plugins/"
+          EXCLUDE: "/node_modules/"
