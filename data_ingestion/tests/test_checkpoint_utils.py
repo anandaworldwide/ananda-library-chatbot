@@ -5,29 +5,27 @@ Tests the unified checkpoint functionality including file-based, ID-based,
 and progress-based checkpointing strategies as well as integration functions.
 """
 
-import os
 import json
-import tempfile
+import os
 import shutil
+import tempfile
+from unittest.mock import patch
+
 import pytest
-from datetime import datetime
-from pathlib import Path
-from unittest.mock import Mock, patch
-from typing import Set
 
 from data_ingestion.utils.checkpoint_utils import (
     CheckpointConfig,
-    CheckpointManager,
     CheckpointError,
+    CheckpointManager,
     FileCheckpointData,
     IDCheckpointData,
     ProgressCheckpointData,
-    create_folder_signature,
-    create_file_checkpoint_manager,
-    create_id_checkpoint_manager,
     checkpoint_context,
+    create_file_checkpoint_manager,
+    create_folder_signature,
+    create_id_checkpoint_manager,
     pdf_checkpoint_integration,
-    sql_checkpoint_integration
+    sql_checkpoint_integration,
 )
 
 
@@ -284,7 +282,7 @@ class TestCheckpointManager:
         assert os.path.exists(backup_path)
         
         # Verify backup contains first data
-        with open(backup_path, 'r') as f:
+        with open(backup_path) as f:
             backup_data = json.load(f)
         assert backup_data['processed_files'] == 10
     

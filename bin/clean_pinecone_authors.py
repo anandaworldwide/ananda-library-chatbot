@@ -37,12 +37,13 @@ Usage:
 """
 
 import argparse
-from typing import List, Dict
 import json
-from tqdm import tqdm
 import os
+
 from dotenv import load_dotenv
 from pinecone import Pinecone
+from tqdm import tqdm
+
 
 def load_env(site_id: str) -> None:
     """
@@ -88,11 +89,11 @@ def get_index(pc: Pinecone, index_name: str = None):
 
 def find_and_replace_authors(
     index,
-    alternative_names: List[str],
+    alternative_names: list[str],
     canonical_name: str,
     dry_run: bool = True,
     batch_size: int = 100
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """
     Find and replace author names in Pinecone metadata.
     

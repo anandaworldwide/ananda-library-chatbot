@@ -2,8 +2,10 @@
 
 import json
 import os
+
 from google.cloud import firestore
 from google.oauth2 import service_account
+
 
 def initialize_firestore(env_prefix):
     """Initialize Firestore client using service account credentials.

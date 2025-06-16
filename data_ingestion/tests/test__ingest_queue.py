@@ -1,8 +1,9 @@
-import unittest
-import os
-import sys
 import json
+import os
 import shutil
+import sys
+import unittest
+
 from data_ingestion.audio_video.IngestQueue import IngestQueue
 
 # Add the parent directory (audio_video/) to the Python path
@@ -43,7 +44,7 @@ class TestIngestQueue(unittest.TestCase):
             os.path.exists(os.path.join(self.test_queue_dir, f"{item_id}.json"))
         )
 
-        with open(os.path.join(self.test_queue_dir, f"{item_id}.json"), "r") as f:
+        with open(os.path.join(self.test_queue_dir, f"{item_id}.json")) as f:
             stored_item = json.load(f)
 
         self.assertEqual(stored_item["type"], item_type)
@@ -119,7 +120,7 @@ class TestIngestQueue(unittest.TestCase):
         )
         self.queue.update_item_status(item_id, "completed")
 
-        with open(os.path.join(self.test_queue_dir, f"{item_id}.json"), "r") as f:
+        with open(os.path.join(self.test_queue_dir, f"{item_id}.json")) as f:
             stored_item = json.load(f)
         self.assertEqual(stored_item["status"], "completed")
 

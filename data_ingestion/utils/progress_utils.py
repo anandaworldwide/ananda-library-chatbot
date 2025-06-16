@@ -13,16 +13,17 @@ Key features:
 - Thread-safe progress tracking and shutdown handling
 """
 
+import asyncio
+import logging
 import signal
 import sys
 import time
-import asyncio
-from typing import Optional, Callable, Any, Dict, List, Union
-from contextlib import contextmanager
-import logging
-from tqdm import tqdm
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from threading import Lock
+from typing import Any
+
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -36,19 +37,19 @@ class ProgressConfig:
     """Configuration for progress tracking operations."""
     description: str = "Processing"
     unit: str = "item"
-    total: Optional[int] = None
+    total: int | None = None
     show_progress: bool = True
     checkpoint_interval: int = 1  # Save checkpoint every N items
     enable_eta: bool = True
-    bar_format: Optional[str] = None
-    ncols: Optional[int] = None
+    bar_format: str | None = None
+    ncols: int | None = None
 
 
 @dataclass
 class ProgressState:
     """Current state of progress tracking operation."""
     current: int = 0
-    total: Optional[int] = None
+    total: int | None = None
     start_time: float = field(default_factory=time.time)
     last_checkpoint: int = 0
     last_checkpoint_time: float = field(default_factory=time.time)
@@ -105,8 +106,8 @@ def signal_handler(sig: int, frame: Any) -> None:
 
 
 def setup_signal_handlers(
-    custom_handler: Optional[Callable[[int, Any], None]] = None,
-    signals_to_handle: List[int] = None
+    custom_handler: Callable[[int, Any], None] | None = None,
+    signals_to_handle: list[int] = None
 ) -> None:
     """
     Set up signal handlers for graceful shutdown.
@@ -137,7 +138,7 @@ def reset_shutdown_state() -> None:
 
 def create_progress_bar(
     config: ProgressConfig,
-    iterable: Optional[Any] = None
+    iterable: Any | None = None
 ) -> tqdm:
     """
     Create a standardized TQDM progress bar.
@@ -182,9 +183,9 @@ class ProgressTracker:
     def __init__(
         self,
         config: ProgressConfig,
-        checkpoint_callback: Optional[Callable[[int, Any], None]] = None,
-        cleanup_callback: Optional[Callable[[], None]] = None,
-        checkpoint_data: Optional[Dict[str, Any]] = None
+        checkpoint_callback: Callable[[int, Any], None] | None = None,
+        cleanup_callback: Callable[[], None] | None = None,
+        checkpoint_data: dict[str, Any] | None = None
     ):
         """
         Initialize progress tracker.
@@ -200,7 +201,7 @@ class ProgressTracker:
         self.checkpoint_callback = checkpoint_callback
         self.cleanup_callback = cleanup_callback
         self.checkpoint_data = checkpoint_data or {}
-        self.progress_bar: Optional[tqdm] = None
+        self.progress_bar: tqdm | None = None
         self._setup_complete = False
     
     def __enter__(self) -> 'ProgressTracker':
@@ -313,7 +314,7 @@ class ProgressTracker:
         if self.progress_bar:
             self.progress_bar.set_description(description)
     
-    def _save_checkpoint(self, checkpoint_type: str, additional_data: Optional[Dict[str, Any]] = None) -> None:
+    def _save_checkpoint(self, checkpoint_type: str, additional_data: dict[str, Any] | None = None) -> None:
         """Save a checkpoint with current progress."""
         try:
             data = {
@@ -348,8 +349,8 @@ def check_shutdown_requested() -> bool:
 
 def with_progress_bar(
     config: ProgressConfig,
-    checkpoint_callback: Optional[Callable[[int, Any], None]] = None,
-    cleanup_callback: Optional[Callable[[], None]] = None
+    checkpoint_callback: Callable[[int, Any], None] | None = None,
+    cleanup_callback: Callable[[], None] | None = None
 ):
     """
     Decorator for functions that need progress tracking.
@@ -421,7 +422,7 @@ class AsyncProgressTracker(ProgressTracker):
         except Exception as e:
             logger.error(f"Error during async progress tracking cleanup: {e}")
     
-    async def save_checkpoint_async(self, checkpoint_type: str, additional_data: Optional[Dict[str, Any]] = None) -> None:
+    async def save_checkpoint_async(self, checkpoint_type: str, additional_data: dict[str, Any] | None = None) -> None:
         """Async version of checkpoint saving."""
         try:
             data = {
@@ -450,7 +451,7 @@ class AsyncProgressTracker(ProgressTracker):
 
 # Utility functions for batch operations
 def create_batch_progress_bar(
-    items: List[Any],
+    items: list[Any],
     description: str = "Processing items",
     batch_size: int = 1,
     unit: str = "item"
@@ -478,7 +479,7 @@ def create_batch_progress_bar(
 
 
 def monitor_async_tasks(
-    tasks: List[Any],
+    tasks: list[Any],
     description: str = "Processing tasks",
     check_interval: float = 0.1
 ) -> tqdm:

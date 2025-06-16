@@ -19,18 +19,18 @@ Key features:
 - Backward compatibility with current implementations
 """
 
-import os
-import json
 import hashlib
-import sqlite3
+import json
 import logging
-from typing import Any, Dict, List, Optional, Set, Union, Tuple, Callable
+import os
+import shutil
+import tempfile
+from collections.abc import Callable
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, field
-from contextlib import contextmanager
-import tempfile
-import shutil
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 class CheckpointConfig:
     """Configuration for checkpoint operations."""
     checkpoint_dir: str = "ingestion_checkpoints"
-    checkpoint_file: Optional[str] = None
+    checkpoint_file: str | None = None
     auto_create_dir: bool = True
     backup_count: int = 3  # Number of checkpoint backups to keep
     atomic_writes: bool = True  # Use atomic writes for safety
@@ -49,18 +49,18 @@ class CheckpointConfig:
 class FileCheckpointData:
     """Data structure for file-based checkpointing."""
     processed_files: int = 0
-    folder_signature: Optional[str] = None
-    total_files: Optional[int] = None
-    last_processed_file: Optional[str] = None
+    folder_signature: str | None = None
+    total_files: int | None = None
+    last_processed_file: str | None = None
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
 @dataclass
 class IDCheckpointData:
     """Data structure for ID-based checkpointing."""
-    processed_ids: Set[Union[int, str]] = field(default_factory=set)
-    last_processed_id: Optional[Union[int, str]] = None
-    total_count: Optional[int] = None
+    processed_ids: set[int | str] = field(default_factory=set)
+    last_processed_id: int | str | None = None
+    total_count: int | None = None
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -68,10 +68,10 @@ class IDCheckpointData:
 class ProgressCheckpointData:
     """Data structure for progress-based checkpointing."""
     current_progress: int = 0
-    total_items: Optional[int] = None
+    total_items: int | None = None
     success_count: int = 0
     error_count: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -103,7 +103,7 @@ class CheckpointManager:
         if self.config.auto_create_dir and self.config.checkpoint_dir:
             os.makedirs(self.config.checkpoint_dir, exist_ok=True)
     
-    def _get_checkpoint_path(self, identifier: Optional[str] = None) -> str:
+    def _get_checkpoint_path(self, identifier: str | None = None) -> str:
         """
         Get the full path to a checkpoint file.
         
@@ -124,7 +124,7 @@ class CheckpointManager:
         filename = f"checkpoint_{identifier}.json" if identifier else "checkpoint.json"
         return os.path.join(self.config.checkpoint_dir, filename)
     
-    def _atomic_write(self, filepath: str, data: Dict[str, Any]) -> None:
+    def _atomic_write(self, filepath: str, data: dict[str, Any]) -> None:
         """
         Atomically write checkpoint data to file.
         
@@ -212,9 +212,9 @@ class CheckpointManager:
     
     def load_checkpoint(
         self, 
-        identifier: Optional[str] = None,
+        identifier: str | None = None,
         checkpoint_type: str = "generic"
-    ) -> Optional[Union[FileCheckpointData, IDCheckpointData, ProgressCheckpointData, Dict[str, Any]]]:
+    ) -> FileCheckpointData | IDCheckpointData | ProgressCheckpointData | dict[str, Any] | None:
         """
         Load checkpoint data from file.
         
@@ -232,7 +232,7 @@ class CheckpointManager:
             return None
         
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, encoding='utf-8') as f:
                 raw_data = json.load(f)
             
             logger.info(f"Loaded checkpoint from {filepath}")
@@ -266,14 +266,14 @@ class CheckpointManager:
                 # Return raw data for custom types
                 return raw_data
                 
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.error(f"Failed to load checkpoint from {filepath}: {e}")
             return None
     
     def save_checkpoint(
         self,
-        data: Union[FileCheckpointData, IDCheckpointData, ProgressCheckpointData, Dict[str, Any]],
-        identifier: Optional[str] = None
+        data: FileCheckpointData | IDCheckpointData | ProgressCheckpointData | dict[str, Any],
+        identifier: str | None = None
     ) -> bool:
         """
         Save checkpoint data to file.
@@ -317,7 +317,7 @@ class CheckpointManager:
             logger.error(f"Failed to save checkpoint to {filepath}: {e}")
             return False
     
-    def clear_checkpoint(self, identifier: Optional[str] = None) -> bool:
+    def clear_checkpoint(self, identifier: str | None = None) -> bool:
         """
         Remove checkpoint file.
         
@@ -352,7 +352,6 @@ def create_folder_signature(directory: str, pattern: str = "*.pdf") -> str:
     Returns:
         str: MD5 hash of folder contents
     """
-    import glob
     
     file_paths = []
     
@@ -375,7 +374,7 @@ def create_folder_signature(directory: str, pattern: str = "*.pdf") -> str:
     return hashlib.md5(signature_string.encode()).hexdigest()
 
 
-def create_file_checkpoint_manager(checkpoint_dir: str, site_id: Optional[str] = None) -> CheckpointManager:
+def create_file_checkpoint_manager(checkpoint_dir: str, site_id: str | None = None) -> CheckpointManager:
     """
     Create a checkpoint manager configured for file-based checkpointing.
     
@@ -426,7 +425,7 @@ def create_id_checkpoint_manager(checkpoint_dir: str, site_id: str) -> Checkpoin
 @contextmanager
 def checkpoint_context(
     manager: CheckpointManager,
-    identifier: Optional[str] = None,
+    identifier: str | None = None,
     checkpoint_type: str = "generic",
     auto_save: bool = True
 ):
@@ -457,7 +456,7 @@ def checkpoint_context(
             checkpoint_data = {}
     
     # Create save function
-    def save_checkpoint(data: Optional[Any] = None) -> bool:
+    def save_checkpoint(data: Any | None = None) -> bool:
         """Save current checkpoint data."""
         save_data = data if data is not None else checkpoint_data
         return manager.save_checkpoint(save_data, identifier)
@@ -476,7 +475,7 @@ def pdf_checkpoint_integration(
     folder_path: str,
     library_name: str,
     keep_data: bool = True
-) -> Tuple[int, str, Callable]:
+) -> tuple[int, str, Callable]:
     """
     Integration function for PDF ingestion checkpointing.
     
@@ -520,7 +519,7 @@ def sql_checkpoint_integration(
     checkpoint_dir: str,
     site_id: str,
     keep_data: bool = True
-) -> Tuple[Set[int], int, Callable]:
+) -> tuple[set[int], int, Callable]:
     """
     Integration function for SQL ingestion checkpointing.
     
@@ -544,7 +543,7 @@ def sql_checkpoint_integration(
             last_processed_id = checkpoint.last_processed_id or 0
             logger.info(f"Resuming SQL ingestion with {len(processed_ids)} processed IDs")
     
-    def save_checkpoint(doc_ids: Set[int], last_id: int) -> bool:
+    def save_checkpoint(doc_ids: set[int], last_id: int) -> bool:
         """Save current progress."""
         data = IDCheckpointData(
             processed_ids=doc_ids,

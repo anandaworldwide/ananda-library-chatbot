@@ -27,18 +27,17 @@ Usage:
     vectors = await embeddings.embed_texts(["Text 1", "Text 2"])
 """
 
-import os
 import asyncio
 import logging
+import os
 import time
-from typing import List, Dict, Any, Optional, Union
-import requests
+
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
 
-def validate_embedding_config() -> Dict[str, str]:
+def validate_embedding_config() -> dict[str, str]:
     """
     Validate that all required OpenAI embeddings configuration is available.
     
@@ -133,8 +132,8 @@ class OpenAIEmbeddings:
     
     def __init__(
         self, 
-        model: Optional[str] = None, 
-        api_key: Optional[str] = None,
+        model: str | None = None, 
+        api_key: str | None = None,
         chunk_size: int = 1000,
         max_retries: int = 3,
         retry_delay: float = 1.0
@@ -168,7 +167,7 @@ class OpenAIEmbeddings:
         
         logger.info(f"Initialized OpenAI embeddings with model: {self.model}")
     
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, text: str) -> list[float]:
         """
         Generate an embedding for a single text string (synchronous).
         
@@ -188,7 +187,7 @@ class OpenAIEmbeddings:
         """
         return self.embed_texts([text])[0]
     
-    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for multiple texts (synchronous).
         
@@ -225,7 +224,7 @@ class OpenAIEmbeddings:
         
         return all_embeddings
     
-    async def embed_query_async(self, text: str) -> List[float]:
+    async def embed_query_async(self, text: str) -> list[float]:
         """
         Generate an embedding for a single text string (asynchronous).
         
@@ -245,7 +244,7 @@ class OpenAIEmbeddings:
         results = await self.embed_texts_async([text])
         return results[0]
     
-    async def embed_texts_async(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts_async(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for multiple texts (asynchronous).
         
@@ -281,7 +280,7 @@ class OpenAIEmbeddings:
         
         return all_embeddings
     
-    def _embed_batch_sync(self, texts: List[str]) -> List[List[float]]:
+    def _embed_batch_sync(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for a batch of texts (synchronous implementation).
         
@@ -317,7 +316,7 @@ class OpenAIEmbeddings:
                     logger.error(f"Embedding generation failed after {self.max_retries} attempts: {e}")
                     raise
     
-    async def _embed_batch_async(self, texts: List[str]) -> List[List[float]]:
+    async def _embed_batch_async(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for a batch of texts (asynchronous implementation).
         
@@ -370,22 +369,22 @@ class LegacyOpenAIEmbeddings:
         >>> vector = await embeddings.embed_query("Hello world")
     """
     
-    def __init__(self, model: str, api_key: Optional[str] = None):
+    def __init__(self, model: str, api_key: str | None = None):
         """Initialize legacy embeddings wrapper."""
         self._embeddings = OpenAIEmbeddings(model=model, api_key=api_key)
     
-    async def embed_query(self, text: str) -> List[float]:
+    async def embed_query(self, text: str) -> list[float]:
         """Generate embedding for a single text (async-only for legacy compatibility)."""
         return await self._embeddings.embed_query_async(text)
     
-    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts (async-only for legacy compatibility)."""
         return await self._embeddings.embed_texts_async(texts)
 
 
 def create_embeddings_client(
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
+    model: str | None = None,
+    api_key: str | None = None,
     **kwargs
 ) -> OpenAIEmbeddings:
     """
@@ -416,7 +415,7 @@ def create_embeddings_client(
 
 
 # Utility functions for batch processing
-def estimate_batch_size(texts: List[str], max_tokens_per_batch: int = 8000) -> int:
+def estimate_batch_size(texts: list[str], max_tokens_per_batch: int = 8000) -> int:
     """
     Estimate optimal batch size based on text lengths and token limits.
     
@@ -446,9 +445,9 @@ def estimate_batch_size(texts: List[str], max_tokens_per_batch: int = 8000) -> i
 
 
 def chunk_texts_for_processing(
-    texts: List[str], 
-    batch_size: Optional[int] = None
-) -> List[List[str]]:
+    texts: list[str], 
+    batch_size: int | None = None
+) -> list[list[str]]:
     """
     Split texts into optimal batches for processing.
     

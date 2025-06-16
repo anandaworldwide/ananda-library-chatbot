@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 
-from google.cloud import firestore
-from google.oauth2 import service_account
-import os
 import argparse
 import json
+import os
+
+from google.cloud import firestore
+from google.oauth2 import service_account
+
 from pyutil.env_utils import load_env
+
 
 def initialize_firestore(env_prefix):
     # Load the service account credentials from the JSON string

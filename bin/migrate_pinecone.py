@@ -20,19 +20,20 @@ Requirements:
     - pinecone-client>=4.1.2
 """
 
-import os
+import argparse
 import sys
 import time
-import argparse
+from typing import Any
+
+from pinecone import NotFoundException, Pinecone, PodSpec, ServerlessSpec
 from tqdm import tqdm
-from pinecone import Pinecone, ServerlessSpec, PodSpec, NotFoundException
-from typing import List, Dict, Any
+
 
 def get_pinecone_client(api_key: str) -> Pinecone:
     """Initialize and return Pinecone client."""
     return Pinecone(api_key=api_key)
 
-def process_batch(vectors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def process_batch(vectors: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Process a batch of vectors (currently a no-op, can be extended)."""
     # Placeholder for potential future batch processing logic such as fixing metadata. 
     # For now, it just returns the vectors as is.

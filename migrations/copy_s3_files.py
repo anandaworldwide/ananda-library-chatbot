@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import os
 import argparse
+import os
+
 import boto3
 from botocore.exceptions import ClientError
 from util.env_utils import load_env

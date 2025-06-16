@@ -10,13 +10,14 @@ tool. It is intended as an optional preparatory step before ingesting WordPress
 content into the main application's vector store using other scripts.
 """
 
-import sys
-import os
-from datetime import datetime
-import subprocess
-import tempfile
-import re
 import argparse
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from datetime import datetime
+
 
 def print_usage():
     """Prints usage instructions and exits."""
@@ -53,17 +54,17 @@ def process_sql_file(input_file: str, new_db_name: str) -> str:
         temp_filename = temp_file.name
 
         # Add header configurations to ensure UTF8 compatibility and set SQL mode
-        header = """-- turn off strict dates and switch to UTF8
+        header = f"""-- turn off strict dates and switch to UTF8
 SET sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
-ALTER DATABASE {} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER DATABASE {new_db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-use {};
+use {new_db_name};
 
-""".format(new_db_name, new_db_name)
+"""
         temp_file.write(header)
 
         # Process the input file line by line
-        with open(input_file, 'r', encoding='utf-8') as infile:
+        with open(input_file, encoding='utf-8') as infile:
             for line in infile:
                 # Replace old database name references (USE and CREATE DATABASE)
                 line = re.sub(r'USE `anandalib[^`]*`', f'USE `{new_db_name}`', line)

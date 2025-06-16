@@ -17,11 +17,11 @@ Usage:
 Note: This script modifies the directory structure. Use with caution.
 """
 
-import os
-import sys
-import shutil
 import argparse
 import logging
+import os
+import shutil
+import sys
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

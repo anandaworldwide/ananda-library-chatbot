@@ -11,17 +11,21 @@ Covers various formats, encodings, and edge cases including:
 - Empty and corrupted files
 """
 
-import unittest
-import os
-import tempfile
-import shutil
-from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, APIC, COMM, ID3NoHeaderError
-from data_ingestion.audio_video.media_utils import get_media_metadata, get_mp3_metadata, get_wav_metadata
-import wave
-import numpy as np
 import logging
+import os
+import shutil
 import subprocess
+import tempfile
+import unittest
+import wave
+
+import numpy as np
+from mutagen.id3 import APIC, COMM, ID3
+
+from data_ingestion.audio_video.media_utils import (
+    get_media_metadata,
+    get_mp3_metadata,
+)
 
 logger = logging.getLogger(__name__)
 

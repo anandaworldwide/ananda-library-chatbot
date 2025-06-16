@@ -1,8 +1,9 @@
 import logging
-from pydub import AudioSegment
 import tempfile
+
+from mutagen.id3 import COMM, ID3, ID3NoHeaderError
 from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, ID3NoHeaderError, COMM
+from pydub import AudioSegment
 
 logger = logging.getLogger(__name__)
 
