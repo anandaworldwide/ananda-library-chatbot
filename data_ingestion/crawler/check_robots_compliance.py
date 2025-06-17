@@ -179,13 +179,12 @@ def check_url_allowed(
 def get_crawled_urls(site_id: str) -> list:
     """Get all URLs that have been successfully crawled from the database."""
     script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
-    db_dir = project_root / "data_ingestion" / "crawler" / "db"
+    db_dir = script_dir / "db"
     db_file = db_dir / f"crawler_queue_{site_id}.db"
 
     if not db_file.exists():
         logger.error(f"Database file not found: {db_file}")
-        return []
+        sys.exit(1)
 
     urls = []
     with sqlite3.connect(db_file) as conn:
@@ -319,6 +318,66 @@ def check_robots_compliance(
     return violations, checked_count
 
 
+def clean_disallowed_urls(site_id: str, violations: list) -> None:
+    """Remove disallowed URLs from the SQLite database."""
+    script_dir = Path(__file__).resolve().parent
+    db_dir = script_dir / "db"
+    db_file = db_dir / f"crawler_queue_{site_id}.db"
+
+    if not db_file.exists():
+        logger.error(f"Database file not found: {db_file}")
+        return
+
+    try:
+        with sqlite3.connect(db_file) as conn:
+            cursor = conn.cursor()
+            removed_count = 0
+
+            for url in violations:
+                # Try to delete the URL as-is first
+                cursor.execute("DELETE FROM crawl_queue WHERE url = ?", (url,))
+                deleted_rows = cursor.rowcount
+
+                # If no rows were deleted, try without the scheme
+                if deleted_rows == 0:
+                    parsed_url = urlparse(url)
+                    url_without_scheme = f"{parsed_url.netloc}{parsed_url.path}"
+                    if parsed_url.query:
+                        url_without_scheme += f"?{parsed_url.query}"
+                    if parsed_url.fragment:
+                        url_without_scheme += f"#{parsed_url.fragment}"
+
+                    cursor.execute(
+                        "DELETE FROM crawl_queue WHERE url = ?", (url_without_scheme,)
+                    )
+                    deleted_rows = cursor.rowcount
+
+                if deleted_rows > 0:
+                    removed_count += deleted_rows
+                    logger.info(f"Removed URL from database: {url}")
+                else:
+                    logger.warning(f"Could not find URL in database to delete: {url}")
+                    # Debug: Let's see what URLs are actually in the database that might match
+                    parsed_url = urlparse(url)
+                    path_pattern = f"%{parsed_url.path}%"
+                    cursor.execute(
+                        "SELECT url FROM crawl_queue WHERE url LIKE ?", (path_pattern,)
+                    )
+                    similar_urls = cursor.fetchall()
+                    if similar_urls:
+                        logger.debug(
+                            f"Similar URLs found in database: {[row[0] for row in similar_urls[:5]]}"
+                        )
+
+            conn.commit()
+            logger.info(
+                f"Successfully removed {removed_count} disallowed URLs from the database"
+            )
+
+    except sqlite3.Error as e:
+        logger.error(f"Error removing URLs from database: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Check robots.txt compliance for crawled URLs"
@@ -340,8 +399,22 @@ def main():
         default=10,
         help="Show sample of violations (default: 10)",
     )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Remove disallowed URLs from the SQLite database",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging",
+    )
 
     args = parser.parse_args()
+
+    # Set debug logging level if requested
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
 
     logger.info(f"Checking robots.txt compliance for site: {args.site}")
     logger.info(f"Base URL: {args.base_url}")
@@ -370,6 +443,20 @@ def main():
 
         if len(violations) > args.show_sample:
             print(f"  ... and {len(violations) - args.show_sample} more")
+
+        if args.clean:
+            clean_disallowed_urls(args.site, violations)
+            print(
+                "\n⚠️ WARNING: The URLs listed above have been removed from the SQLite database."
+            )
+            print(
+                "   However, any crawled content associated with these URLs must be manually removed from the Pinecone database."
+            )
+        else:
+            print(
+                f"\n💡 TIP: Run with --clean to automatically remove these {len(violations)} disallowed URLs from the database:"
+            )
+            print(f"   python {Path(__file__).name} --site {args.site} --clean")
 
         return 1
     else:
