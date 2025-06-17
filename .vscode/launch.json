@@ -18,19 +18,15 @@
       "request": "launch",
       "program": "${workspaceFolder}/bin/process_anandalib_dump.py",
       "console": "integratedTerminal",
-      "args": [
-        "-u",
-        "michael",
-        "/Volumes/ExtData/Ananda Library Chatbot/anandalib_wp_20250306.sql"
-      ]
+      "args": ["-u", "michael", "/Volumes/ExtData/Ananda Library Chatbot/anandalib_wp_20250306.sql"]
     },
     {
-      "name": "Python: ananda_crawler.py",
+      "name": "Python: website_crawler.py",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/data_ingestion/audio_video/ananda_crawler.py",
+      "program": "${workspaceFolder}/data_ingestion/crawler/website_crawler.py",
       "console": "integratedTerminal",
-      "args": ["--site", "ananda-public", "--active-hours", "10:34am-10:35am"]
+      "args": ["--site", "ananda-public"]
     },
     {
       "name": "Python: supercut.py",
@@ -63,6 +59,7 @@
       "runtimeExecutable": "${env:HOME}/.nvm/versions/node/v20.17.0/bin/npm",
       "skipFiles": ["<node_internals>/**"],
       "type": "node",
+      "cwd": "${workspaceFolder}/web",
       "env": {
         "PATH": "${env:HOME}/.nvm/versions/node/v20.17.0/bin:${env:PATH}"
       }
@@ -74,6 +71,7 @@
       "runtimeExecutable": "${env:HOME}/.nvm/versions/node/v20.17.0/bin/npm",
       "skipFiles": ["<node_internals>/**"],
       "type": "node",
+      "cwd": "${workspaceFolder}/web",
       "env": {
         "PATH": "${env:HOME}/.nvm/versions/node/v20.17.0/bin:${env:PATH}"
       }
