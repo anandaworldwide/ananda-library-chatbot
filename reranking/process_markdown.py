@@ -171,7 +171,7 @@ class MarkdownProcessor:
         # Extract judge
         judge_match = re.search(JUDGE_PATTERN, content)
         if not judge_match or not judge_match.group(1).strip():
-            print(f"Warning: No judge name found in {filepath}")
+            print(f"Error: No judge name found in {filepath}")
             return None, None
 
         judge = self._clean_string(judge_match.group(1)).title()
@@ -179,7 +179,7 @@ class MarkdownProcessor:
         # Extract query
         query_match = re.search(QUERY_PATTERN, content)
         if not query_match:
-            print(f"Warning: No query found in {filepath}")
+            print(f"Error: No query found in {filepath}")
             return None, None
 
         query = self._clean_string(query_match.group(1))
@@ -321,13 +321,13 @@ class MarkdownProcessor:
                 print(f"Found {len(score_matches)} score matches")
             if not doc_sections:
                 print(
-                    f"Warning: No document sections found in {os.path.basename(filepath)}"
+                    f"Error: No document sections found in {os.path.basename(filepath)}"
                 )
                 print("Expected format: '### Document 1' followed by content")
                 return None, None, []
             if not score_matches:
                 print(
-                    f"Warning: No relevance scores found in {os.path.basename(filepath)}"
+                    f"Error: No relevance scores found in {os.path.basename(filepath)}"
                 )
                 print(
                     "Expected format: '**Relevance Score** [Enter 0-3]: 2' or similar"
@@ -512,13 +512,23 @@ class MarkdownProcessor:
             # Now process the markdown file as normal
             query, judge, labeled_docs = self.parse_labeled_markdown(md_path)
             if not query or not judge or not labeled_docs:
-                print(f"Skipping {filename} due to parsing errors")
-                # Move both files to done if docx, just md if md
-                if ftype == "docx":
-                    self.move_to_done(md_path)
-                    self.move_to_done(docx_to_move)
-                else:
-                    self.move_to_done(md_path)
+                print(
+                    f"Skipping {filename} due to parsing errors - file remains in todo directory"
+                )
+                # Files with parsing errors should NOT be moved to done directory
+                # They should remain in todo directory for correction
+                # If we converted docx to md, clean up the temporary md file
+                if ftype == "docx" and md_path != filepath:
+                    try:
+                        os.remove(md_path)
+                        if self.debug_mode:
+                            print(
+                                f"Cleaned up temporary md file: {os.path.basename(md_path)}"
+                            )
+                    except Exception as e:
+                        print(
+                            f"Warning: Could not clean up temporary file {md_path}: {e}"
+                        )
                 continue
             evaluation_docs, fine_tuning_docs = self.allocate_documents(
                 query, judge, labeled_docs
