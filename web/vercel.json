@@ -5,11 +5,6 @@
       "schedule": "0 */2 * * *"
     }
   ],
-  "functions": {
-    "src/pages/api/stats.ts": {
-      "maxDuration": 60
-    }
-  },
   "buildCommand": "npm install dotenv && npm install --include=dev && npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
