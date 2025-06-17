@@ -2,14 +2,14 @@
 // checking like statuses, and fetching like counts. It uses Firebase for data storage and implements
 // rate limiting and caching for improved performance.
 
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { db } from '@/services/firebase';
-import firebase from 'firebase-admin';
-import { getAnswersCollectionName } from '@/utils/server/firestoreUtils';
-import { getEnvName, isDevelopment } from '@/utils/env';
-import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
-import { withApiMiddleware } from '@/utils/server/apiMiddleware';
-import { withJwtAuth } from '@/utils/server/jwtUtils';
+import type { NextApiRequest, NextApiResponse } from "next";
+import { db } from "@/services/firebase";
+import firebase from "firebase-admin";
+import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
+import { getEnvName, isDevelopment } from "@/utils/env";
+import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
+import { withApiMiddleware } from "@/utils/server/apiMiddleware";
+import { withJwtAuth } from "@/utils/server/jwtUtils";
 
 // Cache to store like statuses, improving response times for frequent requests
 const likeStatusCache: Record<string, Record<string, boolean>> = {};
@@ -19,7 +19,7 @@ const envName = getEnvName();
 // Check if db is available
 function checkDbAvailable(res: NextApiResponse): boolean {
   if (!db) {
-    res.status(503).json({ error: 'Database not available' });
+    res.status(503).json({ error: "Database not available" });
     return false;
   }
   return true;
@@ -32,7 +32,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
 
   // Validate UUID
   if (!uuid) {
-    return res.status(400).json({ error: 'Missing UUID' });
+    return res.status(400).json({ error: "Missing UUID" });
   }
 
   // Check if db is available
@@ -44,9 +44,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
 
     // If no answerIds are provided, return all liked answer IDs for this user
     if (!answerIds) {
-      const likesSnapshot = await likesCollection
-        .where('uuid', '==', uuid)
-        .get();
+      const likesSnapshot = await likesCollection.where("uuid", "==", uuid).get();
 
       // Create an array of answer IDs that this user has liked
       const likedAnswerIds: string[] = [];
@@ -59,17 +57,14 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
 
     // Otherwise, handle the normal case with specific answer IDs
     // Ensure answerIds is an array
-    if (typeof answerIds === 'string') {
+    if (typeof answerIds === "string") {
       answerIds = [answerIds];
     } else if (!Array.isArray(answerIds)) {
-      return res.status(400).json({ error: 'Invalid answerIds format' });
+      return res.status(400).json({ error: "Invalid answerIds format" });
     }
 
     console.log(`Likes GET: Answer IDs: ${answerIds}`);
-    const likesSnapshot = await likesCollection
-      .where('uuid', '==', uuid)
-      .where('answerId', 'in', answerIds)
-      .get();
+    const likesSnapshot = await likesCollection.where("uuid", "==", uuid).where("answerId", "in", answerIds).get();
 
     // Create an object to store the like statuses
     const likeStatuses: Record<string, boolean> = {};
@@ -86,8 +81,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
 
     res.status(200).json(likeStatuses);
   } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Something went wrong';
+    const errorMessage = error instanceof Error ? error.message : "Something went wrong";
     res.status(500).json({ error: errorMessage });
   }
 }
@@ -98,7 +92,7 @@ async function handlePostCheck(req: NextApiRequest, res: NextApiResponse) {
 
   // Validate the input
   if (!Array.isArray(answerIds) || !uuid) {
-    return res.status(400).json({ error: 'Invalid request body' });
+    return res.status(400).json({ error: "Invalid request body" });
   }
 
   // Check if db is available
@@ -127,10 +121,7 @@ async function handlePostCheck(req: NextApiRequest, res: NextApiResponse) {
     }
 
     const likesCollection = db!.collection(`${envName}_likes`);
-    const likesSnapshot = await likesCollection
-      .where('uuid', '==', uuid)
-      .where('answerId', 'in', answerIds)
-      .get();
+    const likesSnapshot = await likesCollection.where("uuid", "==", uuid).where("answerId", "in", answerIds).get();
 
     // Create an object to store the like statuses
     const likeStatuses: Record<string, boolean> = {};
@@ -153,8 +144,7 @@ async function handlePostCheck(req: NextApiRequest, res: NextApiResponse) {
 
     res.status(200).json(likeStatuses);
   } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Something went wrong';
+    const errorMessage = error instanceof Error ? error.message : "Something went wrong";
     res.status(500).json({ error: errorMessage });
   }
 }
@@ -164,10 +154,10 @@ async function handlePostLikeCounts(req: NextApiRequest, res: NextApiResponse) {
   let answerIds = req.body.answerIds;
 
   // Ensure answerIds is an array
-  if (typeof answerIds === 'string') {
+  if (typeof answerIds === "string") {
     answerIds = [answerIds];
   } else if (!Array.isArray(answerIds)) {
-    return res.status(400).json({ error: 'Invalid answerIds format' });
+    return res.status(400).json({ error: "Invalid answerIds format" });
   }
 
   // Check if db is available
@@ -175,9 +165,7 @@ async function handlePostLikeCounts(req: NextApiRequest, res: NextApiResponse) {
 
   try {
     const likesCollection = db!.collection(`${envName}_likes`);
-    const likesSnapshot = await likesCollection
-      .where('answerId', 'in', answerIds)
-      .get();
+    const likesSnapshot = await likesCollection.where("answerId", "in", answerIds).get();
 
     // Initialize an object to store the like counts
     const likeCounts: Record<string, number> = {};
@@ -193,8 +181,7 @@ async function handlePostLikeCounts(req: NextApiRequest, res: NextApiResponse) {
 
     res.status(200).json(likeCounts);
   } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Something went wrong';
+    const errorMessage = error instanceof Error ? error.message : "Something went wrong";
     res.status(500).json({ error: errorMessage });
   }
 }
@@ -205,34 +192,30 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const isAllowed = await genericRateLimiter(req, res, {
     windowMs: 60 * 1000 * 10, // 10 minutes
     max: isDevelopment() ? 3000 : 30, // 3000 likes per 10 minutes in dev, 30 in prod
-    name: 'like',
+    name: "like",
   });
 
   if (!isAllowed) {
-    return res
-      .status(429)
-      .json({ error: 'Too many likes. Please try again later.' });
+    return res.status(429).json({ error: "Too many likes. Please try again later." });
   }
 
   const action = req.query.action;
 
   // Route requests to appropriate handlers based on method and action
-  if (req.method === 'GET') {
+  if (req.method === "GET") {
     return handleGet(req, res);
-  } else if (req.method === 'POST' && action === 'check') {
+  } else if (req.method === "POST" && action === "check") {
     return handlePostCheck(req, res);
-  } else if (req.method === 'POST' && action === 'counts') {
+  } else if (req.method === "POST" && action === "counts") {
     return handlePostLikeCounts(req, res);
-  } else if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  } else if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   // Handle adding or removing a like
   const { answerId, like, uuid } = req.body;
-  if (!answerId || typeof like !== 'boolean' || !uuid) {
-    return res
-      .status(400)
-      .json({ error: 'Missing answer ID, UUID or invalid like status' });
+  if (!answerId || typeof like !== "boolean" || !uuid) {
+    return res.status(400).json({ error: "Missing answer ID, UUID or invalid like status" });
   }
 
   // Check if db is available
@@ -250,9 +233,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
 
       // Increment the like count in the chat logs
-      const chatLogRef = db!
-        .collection(getAnswersCollectionName())
-        .doc(answerId);
+      const chatLogRef = db!.collection(getAnswersCollectionName()).doc(answerId);
       await chatLogRef.update({
         likeCount: firebase.firestore.FieldValue.increment(1),
       });
@@ -260,12 +241,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       // Invalidate the cache for the user
       delete likeStatusCache[`user_${uuid}`];
 
-      res.status(200).json({ message: 'Like added' });
+      res.status(200).json({ message: "Like added" });
     } else {
       // Remove the like document if it exists
       const querySnapshot = await likesCollection
-        .where('uuid', '==', uuid)
-        .where('answerId', '==', answerId)
+        .where("uuid", "==", uuid)
+        .where("answerId", "==", answerId)
         .limit(1)
         .get();
 
@@ -275,9 +256,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         await docRef.delete();
 
         // Decrement the like count in the chat logs
-        const chatLogRef = db!
-          .collection(getAnswersCollectionName())
-          .doc(answerId);
+        const chatLogRef = db!.collection(getAnswersCollectionName()).doc(answerId);
         await chatLogRef.update({
           likeCount: firebase.firestore.FieldValue.increment(-1),
         });
@@ -285,14 +264,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         // Invalidate the cache for the user
         delete likeStatusCache[`user_${uuid}`];
 
-        res.status(200).json({ message: 'Like removed' });
+        res.status(200).json({ message: "Like removed" });
       } else {
-        res.status(404).json({ error: 'Like not found' });
+        res.status(404).json({ error: "Like not found" });
       }
     }
   } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Something went wrong';
+    const errorMessage = error instanceof Error ? error.message : "Something went wrong";
     res.status(500).json({ error: errorMessage });
   }
 }
