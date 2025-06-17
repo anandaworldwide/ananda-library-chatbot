@@ -410,7 +410,8 @@ function aichatbot_enqueue_assets() {
         'enableIntercom' => $enable_intercom ? '1' : '0',
         'googleAnalyticsId' => $google_analytics_id,
         'ajaxUrl' => admin_url('admin-ajax.php'),
-        'isSearchPage' => aichatbot_is_search_page() ? '1' : '0'
+        'isSearchPage' => aichatbot_is_search_page() ? '1' : '0',
+        'version' => AICHATBOT_VERSION
     );
     
     // Localize for both scripts to ensure data is available
