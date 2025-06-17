@@ -45,11 +45,11 @@ safely applying each batch.
 
 #### To test manually
 
-- [ ] Add an answer.
-- [ ] Admin actions on answers - Fixed, ignore, etc.
-- [ ] Answers page.
-- [ ] Rate limiting data handling in Firestore.
-- [ ] Related questions: single entry handling and batch handling.
+- [x] Add an answer.
+- [x] Admin actions on answers - Fixed, ignore, etc.
+- [x] Answers page.
+- [x] Rate limiting data handling in Firestore.
+- [x] Related questions: single entry handling and batch handling.
 
 ---
 
