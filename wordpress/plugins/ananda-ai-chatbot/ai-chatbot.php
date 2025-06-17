@@ -16,7 +16,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://vivek.ananda.org');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.33');
+define('AICHATBOT_VERSION', '1.0.34');
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
