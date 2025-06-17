@@ -76,8 +76,8 @@ def content_data(request):
     return request.param
 
 
-def test_chunker_on_content(content_data):
-    """Test the chunker on the specified content type from the given path."""
+def process_content_for_testing(content_data):
+    """Process content for testing the chunker on the specified content type from the given path."""
     content_type, content_path = content_data
 
     if not content_path.exists():
@@ -137,7 +137,32 @@ def test_chunker_on_content(content_data):
         )
         summary += f"    Chunks within target range ({target_word_range[0]}-{target_word_range[1]}): {res['within_target_range']}/{res['chunk_count']}\n"
 
-    return summary
+    return summary, results, files_processed, total_chunks
+
+
+def test_chunker_on_content(content_data):
+    """Test the chunker on the specified content type from the given path using assertions."""
+    summary, results, files_processed, total_chunks = process_content_for_testing(
+        content_data
+    )
+    content_type, _ = content_data
+    assert isinstance(summary, str), (
+        f"Expected summary to be a string, got {type(summary)}"
+    )
+    assert f"Summary for {content_type}:" in summary, (
+        f"Expected summary to mention {content_type}"
+    )
+    assert "Files processed:" in summary, "Expected 'Files processed' in summary"
+    assert files_processed <= 3, (
+        f"Expected no more than 3 files processed, got {files_processed}"
+    )
+    if files_processed > 0:
+        assert total_chunks > 0, (
+            "Expected chunks to be created when files are processed"
+        )
+        assert len(results) == files_processed, (
+            f"Expected {files_processed} results, got {len(results)}"
+        )
 
 
 def main():

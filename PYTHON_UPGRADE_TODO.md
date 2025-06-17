@@ -131,6 +131,37 @@ safely applying each batch.
 
 ---
 
+### ✅ Batch 8 — Major Version Upgrades
+
+| Package | Current | Target     | Breaking Changes                             |
+| ------- | ------- | ---------- | -------------------------------------------- |
+| `numpy` | <2.0    | >=2.0,<3.0 | ABI break, type promotion rules, API cleanup |
+| `torch` | auto    | >=2.2.2    | NumPy 2.0 compatibility                      |
+
+**Major Breaking Changes**:
+
+- **NumPy 2.0**: First major release since 2006
+  - ABI break requiring C extension recompilation
+  - Type promotion rule changes (NEP 50)
+  - ~10% reduction in main namespace
+  - Windows default integer now 64-bit
+  - Significant performance improvements
+
+**Migration Steps**:
+
+1. ✅ Use Ruff NPY201 rule for automated code fixes: `ruff check --fix --select NPY201`
+2. ✅ Test chunking algorithms with new type promotion rules
+3. ✅ Validate embedding operations and vector math
+4. ⚠️ PyTorch compatibility: Working with warnings (PyTorch 2.2.2 + NumPy 2.3.0)
+
+**Notes**:
+
+- PyTorch 2.2.2 shows `_ARRAY_API not found` warning but all operations work correctly
+- Warning will be resolved when PyTorch releases NumPy 2.0 compatible version
+- All 387/387 core tests pass
+
+---
+
 ## Validation Checklist (run after _each_ batch)
 
 - [ ] **Import sweep**: `python bin/import_sweep.py` (imports every top-level module).
