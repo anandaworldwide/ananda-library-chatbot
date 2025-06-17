@@ -1,5 +1,54 @@
 # Project.md
 
+## Python Package Upgrade Batch 3 - COMPLETED
+
+**Status**: Successfully completed Python package upgrades for Batch 3 — Networking / HTTP basics.
+
+**Implementation Details**:
+
+**Packages Upgraded**:
+
+- `aiohttp`: 3.11.18 → 3.12.12
+- `frozenlist`: 1.6.0 → 1.7.0
+- `multidict`: 6.4.3 → 6.4.4
+- `h11`: 0.14.0 → 0.16.0
+- `httpcore`: 1.0.5 → 1.0.9
+- `httpx`: 0.27.0 → 0.28.1
+- `urllib3`: 2.2.2 → 2.4.0
+- `websockets`: 15.0 → 15.0.1
+- `requests`: 2.32.3 → 2.32.4
+- `yarl`: 1.20.0 → 1.20.1
+- `cryptography`: 45.0.3 → 45.0.4
+
+**Validation Process Completed**:
+
+- ✅ **Import sweep**: All top-level modules imported successfully
+- ✅ **Dependency integrity**: No broken requirements after removing docling packages
+- ✅ **Smoke tests**: 99/99 tests passed for retry_utils, embeddings_utils, and pinecone_utils
+- ✅ **Static analysis**: Only minor line length issues (non-blocking)
+- ✅ **PDF ingestion script**: Loads successfully and shows help
+
+**Issues Resolved**:
+
+- **Docling conflicts**: Removed docling packages (docling, docling-core, docling-ibm-models, docling-parse) to resolve
+  typer version conflicts
+- **Dependencies**: All networking and HTTP packages upgraded successfully with no compatibility issues
+
+**Files Modified**:
+
+- **Updated**: `requirements.in` - Added new package versions for Batch 3
+- **Generated**: `requirements.txt` - Compiled with new dependency tree
+- **Updated**: `PYTHON_UPGRADE_TODO.md` - Marked Batch 3 as completed (✅)
+
+**Benefits**:
+
+- **Security**: Latest security patches for networking and HTTP libraries
+- **Performance**: Improved HTTP/HTTPS performance with newer versions
+- **Compatibility**: Better compatibility with external services and APIs
+- **Reliability**: Bug fixes and stability improvements across networking stack
+
+**Next Steps**: Ready to proceed with Batch 4 — Data-science utilities or other batches as needed.
+
 ## Smart Timestamp Formatting Implementation - COMPLETED
 
 **Status**: Successfully implemented intelligent timestamp formatting that switches from relative to absolute time

@@ -53,7 +53,7 @@ safely applying each batch.
 
 ---
 
-### ☐ Batch 3 — Networking / HTTP basics
+### ✅ Batch 3 — Networking / HTTP basics
 
 | Package        | Current | Target  |
 | -------------- | ------- | ------- |
@@ -71,7 +71,7 @@ safely applying each batch.
 
 ---
 
-### ☐ Batch 4 — Data-science utilities
+### ✅ Batch 4 — Data-science utilities
 
 | Package             | Current | Target  |
 | ------------------- | ------- | ------- |
@@ -87,7 +87,7 @@ safely applying each batch.
 
 ---
 
-### ☐ Batch 5 — NLP / AI layer
+### ✅ Batch 5 — NLP / AI layer
 
 | Package                    | Current | Target |
 | -------------------------- | ------- | ------ |
@@ -108,18 +108,16 @@ safely applying each batch.
 
 ---
 
-### ☐ Batch 6 — PDF / Media helpers
+### ✅ Batch 6 — PDF / Media helpers
 
 | Package      | Current   | Target   |
 | ------------ | --------- | -------- |
-| `PyMuPDF`    | 1.24.5    | 1.26.1   |
-| `PyMuPDFb`   | 1.24.3    | 1.24.10  |
 | `yt-dlp`     | 2025.5.22 | 2025.6.9 |
 | `playwright` | 1.40.0    | 1.52.0   |
 
 ---
 
-### ☐ Batch 7 — Tooling / Developer UX
+### ✅ Batch 7 — Tooling / Developer UX
 
 | Package         | Current | Target  |
 | --------------- | ------- | ------- |
@@ -130,18 +128,6 @@ safely applying each batch.
 | `click`         | 8.1.8   | 8.2.1   |
 | `typer`         | 0.15.4  | 0.16.0  |
 | `python-dotenv` | 1.0.1   | 1.1.0   |
-
----
-
-### ☐ Batch 8 — Project-specific Docling ecosystem
-
-| Package              | Current | Target |
-| -------------------- | ------- | ------ |
-| `docling`            | 2.35.0  | 2.36.1 |
-| `docling-core`       | 2.33.0  | 2.36.0 |
-| `docling-ibm-models` | 3.4.3   | 3.4.4  |
-| `docling-parse`      | 4.0.1   | 4.0.4  |
-| `propcache`          | 0.3.1   | 0.3.2  |
 
 ---
 

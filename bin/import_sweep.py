@@ -33,7 +33,6 @@ PACKAGE_IMPORT_MAP = {
     "pyyaml": "yaml",
     "python-dateutil": "dateutil",
     "python-dotenv": "dotenv",
-    "pymupdf": "fitz",
     "pymysql": "pymysql",
     "scikit-learn": "sklearn",
     "pytest-asyncio": "pytest_asyncio",

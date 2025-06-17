@@ -4,12 +4,20 @@
 #
 #    pip-compile --output-file=requirements.txt requirements.in
 #
+aiohappyeyeballs==2.6.1
+    # via aiohttp
+aiohttp==3.12.12
+    # via -r requirements.in
+aiosignal==1.3.2
+    # via aiohttp
 annotated-types==0.7.0
     # via pydantic
 anyio==4.9.0
     # via
     #   httpx
     #   openai
+attrs==25.3.0
+    # via aiohttp
 beautifulsoup4==4.12.2
     # via -r requirements.in
 blis==1.2.1
@@ -42,19 +50,22 @@ charset-normalizer==3.4.2
     # via requests
 click==8.2.1
     # via
+    #   -r requirements.in
     #   nltk
     #   typer
 cloudpathlib==0.21.1
     # via weasel
 colorama==0.4.6
     # via -r requirements.in
+coloredlogs==15.0.1
+    # via onnxruntime
 confection==0.1.5
     # via
     #   thinc
     #   weasel
 contourpy==1.3.2
     # via matplotlib
-cryptography==45.0.3
+cryptography==45.0.4
     # via -r requirements.in
 cssselect==1.3.0
     # via readability-lxml
@@ -67,18 +78,36 @@ cymem==2.0.11
     #   thinc
 decorator==4.4.2
     # via moviepy
+dill==0.4.0
+    # via
+    #   -r requirements.in
+    #   multiprocess
 distro==1.9.0
     # via openai
 et-xmlfile==2.0.0
     # via openpyxl
-filelock==3.15.4
-    # via -r requirements.in
+filelock==3.18.0
+    # via
+    #   -r requirements.in
+    #   huggingface-hub
+    #   torch
+    #   transformers
+flatbuffers==25.2.10
+    # via onnxruntime
 fonttools==4.58.1
     # via matplotlib
 fpdf==1.7.2
     # via -r requirements.in
+frozenlist==1.7.0
+    # via
+    #   -r requirements.in
+    #   aiohttp
+    #   aiosignal
 fsspec==2024.6.1
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   huggingface-hub
+    #   torch
 google-api-core[grpc]==2.25.0
     # via
     #   -r requirements.in
@@ -99,8 +128,10 @@ googleapis-common-protos==1.70.0
     #   -r requirements.in
     #   google-api-core
     #   grpcio-status
-greenlet==3.0.1
-    # via playwright
+greenlet==3.2.3
+    # via
+    #   -r requirements.in
+    #   playwright
 grpcio==1.73.0
     # via
     #   -r requirements.in
@@ -110,22 +141,35 @@ grpcio-status==1.73.0
     # via
     #   -r requirements.in
     #   google-api-core
-h11==0.14.0
-    # via httpcore
-httpcore==1.0.5
+h11==0.16.0
+    # via
+    #   -r requirements.in
+    #   httpcore
+hf-xet==1.1.4
+    # via huggingface-hub
+httpcore==1.0.9
     # via
     #   -r requirements.in
     #   httpx
-httpx==0.27.0
+httpx==0.28.1
     # via
     #   -r requirements.in
     #   langsmith
     #   openai
+huggingface-hub==0.33.0
+    # via
+    #   -r requirements.in
+    #   optimum
+    #   tokenizers
+    #   transformers
+humanfriendly==10.0
+    # via coloredlogs
 idna==3.10
     # via
     #   anyio
     #   httpx
     #   requests
+    #   yarl
 imageio==2.37.0
     # via moviepy
 imageio-ffmpeg==0.6.0
@@ -133,7 +177,9 @@ imageio-ffmpeg==0.6.0
 iniconfig==2.1.0
     # via pytest
 jinja2==3.1.6
-    # via spacy
+    # via
+    #   spacy
+    #   torch
 jiter==0.10.0
     # via openai
 jmespath==1.0.1
@@ -150,18 +196,21 @@ jsonpointer==3.0.0
     # via jsonpatch
 kiwisolver==1.4.8
     # via matplotlib
-langchain-core==0.3.63
+langchain-core==0.3.65
     # via
+    #   -r requirements.in
     #   langchain-openai
     #   langchain-text-splitters
-langchain-openai==0.3.6
+langchain-openai==0.3.22
     # via -r requirements.in
-langchain-text-splitters==0.3.6
+langchain-text-splitters==0.3.8
     # via -r requirements.in
 langcodes==3.5.0
     # via spacy
-langsmith==0.3.43
-    # via langchain-core
+langsmith==0.3.45
+    # via
+    #   -r requirements.in
+    #   langchain-core
 language-data==1.3.0
     # via langcodes
 lxml[html-clean,html_clean]==5.4.0
@@ -184,6 +233,15 @@ mdurl==0.1.2
     # via markdown-it-py
 moviepy==1.0.3
     # via -r requirements.in
+mpmath==1.3.0
+    # via sympy
+multidict==6.4.4
+    # via
+    #   -r requirements.in
+    #   aiohttp
+    #   yarl
+multiprocess==0.70.18
+    # via -r requirements.in
 murmurhash==1.0.13
     # via
     #   preshed
@@ -191,6 +249,10 @@ murmurhash==1.0.13
     #   thinc
 mutagen==1.47.0
     # via -r requirements.in
+networkx==3.5
+    # via
+    #   -r requirements.in
+    #   torch
 nltk==3.8.1
     # via -r requirements.in
 numpy==1.26.4
@@ -201,31 +263,48 @@ numpy==1.26.4
     #   imageio
     #   matplotlib
     #   moviepy
+    #   onnx
+    #   onnxruntime
+    #   optimum
     #   pandas
     #   scikit-learn
     #   scipy
     #   seaborn
     #   spacy
     #   thinc
-openai==1.63.2
+    #   transformers
+onnx==1.18.0
+    # via -r requirements.in
+onnxruntime==1.22.0
+    # via -r requirements.in
+openai==1.86.0
     # via
     #   -r requirements.in
     #   langchain-openai
 openpyxl==3.1.5
     # via -r requirements.in
+optimum==1.25.3
+    # via -r requirements.in
 orjson==3.10.18
     # via langsmith
 packaging==24.2
     # via
+    #   huggingface-hub
     #   langchain-core
     #   langsmith
     #   matplotlib
+    #   onnxruntime
+    #   optimum
+    #   pipdeptree
     #   pytest
     #   spacy
     #   thinc
+    #   transformers
     #   weasel
-pandas==2.2.3
-    # via seaborn
+pandas==2.3.0
+    # via
+    #   -r requirements.in
+    #   seaborn
 pillow==11.2.1
     # via
     #   imageio
@@ -239,7 +318,9 @@ pinecone-plugin-interface==0.0.7
     #   -r requirements.in
     #   pinecone-client
     #   pinecone-plugin-inference
-playwright==1.40.0
+pipdeptree==2.26.1
+    # via -r requirements.in
+playwright==1.52.0
     # via -r requirements.in
 pluggy==1.6.0
     # via pytest
@@ -249,6 +330,10 @@ preshed==3.0.10
     #   thinc
 proglog==0.1.12
     # via moviepy
+propcache==0.3.2
+    # via
+    #   aiohttp
+    #   yarl
 proto-plus==1.26.1
     # via
     #   google-api-core
@@ -259,6 +344,8 @@ protobuf==6.31.1
     #   google-cloud-firestore
     #   googleapis-common-protos
     #   grpcio-status
+    #   onnx
+    #   onnxruntime
     #   proto-plus
 psutil==7.0.0
     # via -r requirements.in
@@ -270,6 +357,8 @@ pyasn1-modules==0.4.2
     # via google-auth
 pycparser==2.22
     # via cffi
+pycryptodomex==3.23.0
+    # via -r requirements.in
 pydantic==2.11.5
     # via
     #   confection
@@ -283,20 +372,19 @@ pydantic-core==2.33.2
     # via pydantic
 pydub==0.25.1
     # via -r requirements.in
-pyee==11.0.1
+pyee==13.0.0
     # via playwright
 pygments==2.19.1
-    # via rich
-pymupdf==1.24.5
-    # via -r requirements.in
-pymupdfb==1.24.3
-    # via pymupdf
+    # via
+    #   pytest
+    #   rich
 pymysql==1.1.0
     # via -r requirements.in
 pyparsing==3.2.3
     # via matplotlib
-pytest==8.3.5
+pytest==8.4.0
     # via
+    #   -r requirements.in
     #   pytest-asyncio
     #   pytest-mock
 pytest-asyncio==0.26.0
@@ -309,28 +397,35 @@ python-dateutil==2.9.0.post0
     #   botocore
     #   matplotlib
     #   pandas
-python-dotenv==1.0.1
+python-dotenv==1.1.0
     # via -r requirements.in
 pytz==2024.1
     # via
     #   -r requirements.in
     #   pandas
 pyyaml==6.0.2
-    # via langchain-core
+    # via
+    #   huggingface-hub
+    #   langchain-core
+    #   transformers
 readability-lxml==0.8.4.1
     # via -r requirements.in
 regex==2024.11.6
     # via
     #   nltk
     #   tiktoken
-requests==2.32.3
+    #   transformers
+requests==2.32.4
     # via
+    #   -r requirements.in
     #   google-api-core
+    #   huggingface-hub
     #   langsmith
     #   moviepy
     #   requests-toolbelt
     #   spacy
     #   tiktoken
+    #   transformers
     #   weasel
 requests-toolbelt==1.0.0
     # via langsmith
@@ -340,12 +435,14 @@ rsa==4.9.1
     # via
     #   -r requirements.in
     #   google-auth
-ruff==0.11.12
+ruff==0.11.13
     # via -r requirements.in
 s3transfer==0.13.0
     # via
     #   -r requirements.in
     #   boto3
+safetensors==0.5.3
+    # via transformers
 scikit-learn==1.6.1
     # via -r requirements.in
 scipy==1.15.3
@@ -361,11 +458,10 @@ smart-open==7.1.0
 sniffio==1.3.1
     # via
     #   anyio
-    #   httpx
     #   openai
 soupsieve==2.7
     # via beautifulsoup4
-spacy==3.8.6
+spacy==3.8.7
     # via -r requirements.in
 spacy-legacy==3.0.12
     # via spacy
@@ -377,6 +473,10 @@ srsly==2.5.1
     #   spacy
     #   thinc
     #   weasel
+sympy==1.14.0
+    # via
+    #   onnxruntime
+    #   torch
 tenacity==8.2.2
     # via
     #   -r requirements.in
@@ -387,35 +487,52 @@ threadpoolctl==3.6.0
     # via scikit-learn
 tiktoken==0.9.0
     # via langchain-openai
-tqdm==4.66.4
+tokenizers==0.21.1
     # via
     #   -r requirements.in
+    #   transformers
+torch==2.2.2
+    # via optimum
+tqdm==4.67.1
+    # via
+    #   -r requirements.in
+    #   huggingface-hub
     #   moviepy
     #   nltk
     #   openai
     #   pinecone-client
     #   proglog
     #   spacy
+    #   transformers
+transformers==4.52.4
+    # via
+    #   -r requirements.in
+    #   optimum
 typer==0.16.0
     # via
+    #   -r requirements.in
     #   spacy
     #   weasel
-typing-extensions==4.13.2
+typing-extensions==4.14.0
     # via
+    #   -r requirements.in
     #   anyio
+    #   huggingface-hub
     #   langchain-core
+    #   onnx
     #   openai
     #   pinecone-client
     #   pydantic
     #   pydantic-core
     #   pyee
+    #   torch
     #   typer
     #   typing-inspection
 typing-inspection==0.4.1
     # via pydantic
 tzdata==2025.2
     # via pandas
-urllib3==2.2.2
+urllib3==2.4.0
     # via
     #   -r requirements.in
     #   botocore
@@ -428,12 +545,19 @@ wasabi==1.1.3
     #   weasel
 weasel==0.4.1
     # via spacy
+websockets==15.0.1
+    # via -r requirements.in
 wrapt==1.17.2
     # via smart-open
-yt-dlp==2025.5.22
+yarl==1.20.1
+    # via
+    #   -r requirements.in
+    #   aiohttp
+yt-dlp==2025.6.9
     # via -r requirements.in
 zstandard==0.23.0
     # via langsmith
 
 # The following packages are considered to be unsafe in a requirements file:
+# pip
 # setuptools
