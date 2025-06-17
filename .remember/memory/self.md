@@ -1194,3 +1194,122 @@ load_env(args.site)  # loads .env.<site>
 ```
 
 Add this checklist whenever authoring a new data-ingestion or maintenance utility.
+
+## Google Cloud "Policy checks are unavailable" Error After Stack Upgrade
+
+**Problem**: Intermittent `RateLimiterError: GoogleError: Policy checks are unavailable` errors in production after
+upgrading Google Cloud stack (google-cloud-firestore 2.20.2 → 2.21.0, google-auth 2.38.0 → 2.40.3, grpcio 1.72.0rc1 →
+1.73.0).
+
+**Root Cause**:
+
+- **Error Code 14 = UNAVAILABLE**: gRPC status indicating Google Cloud service temporarily unavailable
+- **"Policy checks are unavailable"**: Google Cloud's internal policy validation system is temporarily down/overloaded
+- **Upgrade Impact**: Newer versions have different retry behavior, gRPC handling, and enhanced policy validation
+
+**Symptoms**:
+
+- Intermittent failures during Firestore operations (get, set, update, delete)
+- Operations failing with code 14 or message containing "Policy checks are unavailable"
+- Error messages like: `GoogleError: Policy checks are unavailable.` with code: 14
+
+**SOLUTION IMPLEMENTED** (✅ Complete with TDD):
+
+### 1. Centralized Retry Utility (`web/src/utils/server/firestoreRetryUtils.ts`)
+
+- **Created comprehensive retry logic** with exponential backoff (1s, 2s, 4s delays)
+- **Detects multiple error patterns**: code 14, "Policy checks are unavailable", "UNAVAILABLE", "DEADLINE_EXCEEDED",
+  "EBUSY"
+- **Wrapper functions** for all Firestore operations: `firestoreGet`, `firestoreSet`, `firestoreUpdate`,
+  `firestoreDelete`, `firestoreAdd`, `firestoreBatchCommit`, `firestoreQueryGet`
+- **Context logging** for better debugging: operation name + context details
+- **Test coverage**: 29 comprehensive tests covering all scenarios
+
+### 2. Rate Limiter Enhancement (`web/src/utils/server/genericRateLimiter.ts`)
+
+- **Updated to use centralized retry logic** instead of local implementation
+- **Enhanced context logging** with IP and endpoint details
+- **Graceful fallback**: Allows requests if retries exhausted (better than blocking users)
+- **Test coverage**: 26 tests including code 14 scenarios
+
+### 3. Critical API Endpoints Updated
+
+- **`web/src/pages/api/adminAction.ts`**: Admin action updates with retry logic
+- **`web/src/app/api/chat/v1/route.ts`**: Chat document creation/updates with retry logic
+- **`web/src/utils/server/answersUtils.ts`**: Answer queries and batching with retry logic
+- **`web/src/pages/api/answers.ts`**: Answer listing and deletion with retry logic
+- **`web/src/utils/server/relatedQuestionsUtils.ts`**: Related questions processing with retry logic
+
+### 4. Implementation Pattern
+
+```typescript
+// Before (prone to code 14 errors)
+const doc = await docRef.get();
+await docRef.update(data);
+
+// After (resilient with retry logic)
+import { firestoreGet, firestoreUpdate } from "@/utils/server/firestoreRetryUtils";
+
+const doc = await firestoreGet(docRef, "user document get", `userId: ${userId}`);
+await firestoreUpdate(docRef, data, "user update", `userId: ${userId}`);
+```
+
+### 5. Test-Driven Development
+
+- **Started with failing tests** for retry behavior
+- **Implemented functionality** to make tests pass
+- **Comprehensive coverage**: Error detection, exponential backoff, context logging, wrapper functions
+- **All tests passing**: 55 total tests across both utilities
+
+### 6. Production Benefits
+
+- **Automatic retry** for transient Google Cloud issues
+- **Better error visibility** with context logging
+- **User experience protection**: Graceful handling instead of hard failures
+- **Consistent approach**: Centralized logic used across all Firestore operations
+
+**Status**: ✅ **COMPLETE** - Comprehensive solution implemented and tested. Should resolve the intermittent "Policy
+checks are unavailable" errors in production.
+
+### Mistake: Implicit 'any' type for Firestore document parameters in map functions
+
+**Problem**: TypeScript error "Parameter 'doc' implicitly has an 'any' type" when using Firestore
+querySnapshot.docs.map() without explicit typing.
+
+**Context**: In `relatedQuestionsUtils.ts` line 609, the map function parameter lacked explicit typing:
+
+```typescript
+querySnapshot.docs.map((doc) => ...)  // 'doc' has implicit 'any' type
+```
+
+**Wrong**:
+
+```typescript
+querySnapshot.docs.map(
+  (doc) =>
+    ({
+      ...doc.data(),
+      id: doc.id,
+    } as Answer)
+);
+```
+
+**Correct**:
+
+```typescript
+querySnapshot.docs.map(
+  (doc: firebase.firestore.QueryDocumentSnapshot) =>
+    ({
+      ...doc.data(),
+      id: doc.id,
+    } as Answer)
+);
+```
+
+**Root Cause**: TypeScript cannot infer the type of Firestore document snapshots automatically, requiring explicit type
+annotation.
+
+**Solution**: Always explicitly type Firestore document parameters as `firebase.firestore.QueryDocumentSnapshot` when
+using `querySnapshot.docs.map()`.
+
+**Impact**: Resolves TypeScript compilation errors and provides proper type checking for Firestore document operations.

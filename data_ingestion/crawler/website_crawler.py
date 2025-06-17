@@ -142,7 +142,7 @@ class WebsiteCrawler:
             self.robots_parser.read()
             logging.info(f"Successfully loaded robots.txt from {robots_url}")
         except Exception as e:
-            logging.warning(f"Could not load robots.txt from {robots_url}: {e}")
+            logging.error(f"Could not load robots.txt from {robots_url}: {e}")
             # Set to None to indicate robots.txt couldn't be loaded
             self.robots_parser = None
 

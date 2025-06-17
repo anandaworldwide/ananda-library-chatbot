@@ -43,6 +43,14 @@ safely applying each batch.
 | `grpcio`                   | 1.72.0rc1 | 1.73.0 |
 | `grpcio-status`            | 1.71.0    | 1.73.0 |
 
+#### To test manually
+
+- [ ] Add an answer.
+- [ ] Admin actions on answers - Fixed, ignore, etc.
+- [ ] Answers page.
+- [ ] Rate limiting data handling in Firestore.
+- [ ] Related questions: single entry handling and batch handling.
+
 ---
 
 ### ☐ Batch 3 — Networking / HTTP basics

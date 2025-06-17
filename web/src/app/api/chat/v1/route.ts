@@ -65,6 +65,7 @@ import { withAppRouterJwtAuth } from "@/utils/server/appRouterJwtUtils";
 import { ChatMessage, convertChatHistory } from "@/utils/shared/chatHistory";
 import * as corsMiddleware from "@/utils/server/corsMiddleware";
 import { determineActiveMediaTypes } from "@/utils/determineActiveMediaTypes";
+import { firestoreSet, firestoreAdd } from "@/utils/server/firestoreRetryUtils";
 
 export const runtime = "nodejs";
 export const maxDuration = 240;
@@ -353,7 +354,13 @@ async function saveOrUpdateDocument(
     if (docId) {
       // Update existing document
       try {
-        await answerRef.doc(docId).set(dataToSave, { merge: true }); // Use set with merge for update or create
+        await firestoreSet(
+          answerRef.doc(docId),
+          dataToSave,
+          { merge: true },
+          "chat document update",
+          `docId: ${docId}, question: ${originalQuestion.substring(0, 50)}...`
+        );
         return docId;
       } catch (updateError) {
         // Fall through to creation as a fallback
@@ -364,7 +371,12 @@ async function saveOrUpdateDocument(
     if (!docId) {
       // Create new document if docId was not provided or creation failed initially
       try {
-        const newDocRef = await answerRef.add(dataToSave);
+        const newDocRef = await firestoreAdd(
+          answerRef,
+          dataToSave,
+          "chat document creation",
+          `question: ${originalQuestion.substring(0, 50)}...`
+        );
         return newDocRef.id;
       } catch (createError) {
         return null;
