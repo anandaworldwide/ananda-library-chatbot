@@ -1136,6 +1136,7 @@ def _initialize_pinecone_services(library_name: str, keep_data: bool) -> tuple:
 
     # Get or create index
     index_name = get_pinecone_ingest_index_name()
+    logger.info(f"Using Pinecone ingest index: {index_name}")
     create_pinecone_index_if_not_exists(pinecone, index_name)
 
     # Get index
@@ -1167,8 +1168,9 @@ def _initialize_processing_components() -> tuple:
     Returns:
         tuple: (text_splitter, embeddings)
     """
-    # Initialize text splitter
-    text_splitter = SpacyTextSplitter()
+    # Initialize text splitter with historical parameters
+    # Historical PDF processing used 1000 chars (~250 tokens) with 200 chars (~50 tokens) overlap (20%)
+    text_splitter = SpacyTextSplitter(chunk_size=250, chunk_overlap=50)
 
     # Initialize OpenAI embeddings
     try:
