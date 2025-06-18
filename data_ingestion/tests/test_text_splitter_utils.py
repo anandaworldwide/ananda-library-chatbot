@@ -242,71 +242,71 @@ def test_ensure_nlp_called(mocker):
 
 def test_dynamic_chunk_size_very_short_text():
     splitter = SpacyTextSplitter()
-    # Dynamic chunking has been disabled in favor of fixed 600-token chunks
+    # Historical defaults: 250-token chunks for text sources (PDF, web, SQL)
     text = "Short text. " * 50  # Approx 100 words
     chunks = splitter.split_text(text)
     assert len(chunks) == 1, f"Expected 1 chunk for very short text, got {len(chunks)}"
-    # Fixed parameters should remain unchanged
-    # Implementation uses target_chunk_size=600 with base chunk_size=450 (75% buffer)
-    assert splitter.target_chunk_size == 600, (
-        f"Expected target_chunk_size=600 (fixed), got {splitter.target_chunk_size}"
+    # Historical parameters should be used
+    # Implementation uses target_chunk_size=250 with base chunk_size=188 (75% buffer)
+    assert splitter.target_chunk_size == 250, (
+        f"Expected target_chunk_size=250 (historical default), got {splitter.target_chunk_size}"
     )
-    assert splitter.chunk_size == 450, (
-        f"Expected chunk_size=450 (75% of target), got {splitter.chunk_size}"
+    assert splitter.chunk_size == 187, (
+        f"Expected chunk_size=187 (75% of target), got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 120, (
-        f"Expected overlap=120 (fixed), got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 50, (
+        f"Expected overlap=50 (historical default), got {splitter.chunk_overlap}"
     )
 
 
 def test_dynamic_chunk_size_short_text():
     splitter = SpacyTextSplitter()
-    # Dynamic chunking disabled - parameters remain fixed
+    # Historical defaults: 250-token chunks for text sources (PDF, web, SQL)
     text = "Short text. " * 300  # Approx 600 words
     splitter.split_text(text)
-    # Implementation uses target_chunk_size=600 with base chunk_size=450 (75% buffer)
-    assert splitter.target_chunk_size == 600, (
-        f"Expected target_chunk_size=600 (fixed), got {splitter.target_chunk_size}"
+    # Implementation uses target_chunk_size=250 with base chunk_size=187 (75% buffer)
+    assert splitter.target_chunk_size == 250, (
+        f"Expected target_chunk_size=250 (historical default), got {splitter.target_chunk_size}"
     )
-    assert splitter.chunk_size == 450, (
-        f"Expected chunk_size=450 (75% of target), got {splitter.chunk_size}"
+    assert splitter.chunk_size == 187, (
+        f"Expected chunk_size=187 (75% of target), got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 120, (
-        f"Expected overlap=120 (fixed), got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 50, (
+        f"Expected overlap=50 (historical default), got {splitter.chunk_overlap}"
     )
 
 
 def test_dynamic_chunk_size_medium_text():
     splitter = SpacyTextSplitter()
-    # Dynamic chunking disabled - parameters remain fixed
+    # Historical defaults: 250-token chunks for text sources (PDF, web, SQL)
     text = "Medium text. " * 1500  # Approx 3000 words
     splitter.split_text(text)
-    # Implementation uses target_chunk_size=600 with base chunk_size=450 (75% buffer)
-    assert splitter.target_chunk_size == 600, (
-        f"Expected target_chunk_size=600 (fixed), got {splitter.target_chunk_size}"
+    # Implementation uses target_chunk_size=250 with base chunk_size=187 (75% buffer)
+    assert splitter.target_chunk_size == 250, (
+        f"Expected target_chunk_size=250 (historical default), got {splitter.target_chunk_size}"
     )
-    assert splitter.chunk_size == 450, (
-        f"Expected chunk_size=450 (75% of target), got {splitter.chunk_size}"
+    assert splitter.chunk_size == 187, (
+        f"Expected chunk_size=187 (75% of target), got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 120, (
-        f"Expected overlap=120 (fixed), got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 50, (
+        f"Expected overlap=50 (historical default), got {splitter.chunk_overlap}"
     )
 
 
 def test_dynamic_chunk_size_long_text():
     splitter = SpacyTextSplitter()
-    # Dynamic chunking disabled - parameters remain fixed
+    # Historical defaults: 250-token chunks for text sources (PDF, web, SQL)
     text = "Long text. " * 3000  # Approx 6000 words
     splitter.split_text(text)
-    # Implementation uses target_chunk_size=600 with base chunk_size=450 (75% buffer)
-    assert splitter.target_chunk_size == 600, (
-        f"Expected target_chunk_size=600 (fixed), got {splitter.target_chunk_size}"
+    # Implementation uses target_chunk_size=250 with base chunk_size=187 (75% buffer)
+    assert splitter.target_chunk_size == 250, (
+        f"Expected target_chunk_size=250 (historical default), got {splitter.target_chunk_size}"
     )
-    assert splitter.chunk_size == 450, (
-        f"Expected chunk_size=450 (75% of target), got {splitter.chunk_size}"
+    assert splitter.chunk_size == 187, (
+        f"Expected chunk_size=187 (75% of target), got {splitter.chunk_size}"
     )
-    assert splitter.chunk_overlap == 120, (
-        f"Expected overlap=120 (fixed), got {splitter.chunk_overlap}"
+    assert splitter.chunk_overlap == 50, (
+        f"Expected overlap=50 (historical default), got {splitter.chunk_overlap}"
     )
 
 

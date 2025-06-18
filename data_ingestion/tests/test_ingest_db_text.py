@@ -655,22 +655,22 @@ class TestSQLChunkingStrategy(unittest.TestCase):
         # Initialize with default parameters (what the script should use)
         splitter = SpacyTextSplitter()
 
-        # Verify fixed parameters are used (from data ingestion rules)
-        # The implementation uses 75% of target_chunk_size as base chunk_size to provide buffer
+        # Verify fixed parameters are used (historical values from performance evaluation)
+        # Historical SQL/database processing used 1000 chars (~250 tokens) with 50 overlap
         self.assertEqual(
             splitter.target_chunk_size,
-            600,
-            f"Expected fixed target_chunk_size=600 tokens, got {splitter.target_chunk_size}",
+            250,
+            f"Expected historical target_chunk_size=250 tokens, got {splitter.target_chunk_size}",
         )
         self.assertEqual(
             splitter.chunk_size,
-            450,
-            f"Expected base chunk_size=450 tokens (75% of target), got {splitter.chunk_size}",
+            187,
+            f"Expected historical base chunk_size=187 tokens (75% of target), got {splitter.chunk_size}",
         )
         self.assertEqual(
             splitter.chunk_overlap,
-            120,
-            f"Expected fixed chunk_overlap=120 tokens (20%), got {splitter.chunk_overlap}",
+            50,
+            f"Expected historical chunk_overlap=50 tokens (20%), got {splitter.chunk_overlap}",
         )
         self.assertEqual(
             splitter.separator,
@@ -708,21 +708,21 @@ class TestSQLChunkingStrategy(unittest.TestCase):
         # Verify we get chunks
         self.assertGreater(len(chunks), 0, "Should produce at least one chunk")
 
-        # Verify chunk sizes are reasonable in tokens (600 token target)
+        # Verify chunk sizes are reasonable in tokens (250 token historical target)
         for i, chunk in enumerate(chunks):
             # Count tokens using the same method as the splitter
             token_count = len(splitter._tokenize_text(chunk))
 
-            # Tokens should be close to 600 target (allow some flexibility)
+            # Tokens should be close to 250 historical target (allow some flexibility)
             self.assertGreaterEqual(
                 token_count,
                 50,
-                f"Chunk {i} has {token_count} tokens, below minimum range [50-1200]",
+                f"Chunk {i} has {token_count} tokens, below minimum range [50-500]",
             )
             self.assertLessEqual(
                 token_count,
-                1200,
-                f"Chunk {i} has {token_count} tokens, above maximum range [50-1200]",
+                500,
+                f"Chunk {i} has {token_count} tokens, above maximum range [50-500]",
             )
 
     def test_reproduces_large_chunk_issue_with_token_validation(self):
@@ -748,21 +748,21 @@ class TestSQLChunkingStrategy(unittest.TestCase):
             token_count = len(splitter._tokenize_text(chunk))
             word_count = len(chunk.split())
 
-            # PRIMARY TEST: Token count should respect the 600-token target
+            # PRIMARY TEST: Token count should respect the 250-token historical target
             self.assertLessEqual(
                 token_count,
-                900,
-                f"Chunk {i} is too large: {token_count} tokens (target: 600 tokens). "
+                375,
+                f"Chunk {i} is too large: {token_count} tokens (target: 250 tokens). "
                 f"This exceeds reasonable bounds even with overlap.",
             )
 
             # SECONDARY: Word count should be reasonable based on token-to-word ratio
-            # With ~2:1 ratio, 600 tokens ≈ 300 words, so max should be ~450 words + overlap
+            # With ~2:1 ratio, 250 tokens ≈ 125 words, so max should be ~200 words + overlap
             self.assertLessEqual(
                 word_count,
-                600,
+                250,
                 f"Chunk {i} has {word_count} words, which suggests token counting isn't working properly. "
-                f"Expected roughly 300 words for 600 tokens.",
+                f"Expected roughly 125 words for 250 tokens.",
             )
 
     def test_token_counting_accuracy(self):
@@ -820,11 +820,11 @@ class TestSQLChunkingStrategy(unittest.TestCase):
         # it gets the correct fixed parameters for optimal RAG performance
         splitter = SpacyTextSplitter()  # Same as what the script does
 
-        # These should match the proven evaluation parameters
-        # The implementation uses target_chunk_size=600 with base chunk_size=450 (75% buffer)
-        self.assertEqual(splitter.target_chunk_size, 600)
-        self.assertEqual(splitter.chunk_size, 450)
-        self.assertEqual(splitter.chunk_overlap, 120)  # 20% of 600
+        # These should match the historical evaluation parameters for optimal RAG performance
+        # Historical SQL/database processing used 1000 chars (~250 tokens) with 50 overlap
+        self.assertEqual(splitter.target_chunk_size, 250)
+        self.assertEqual(splitter.chunk_size, 187)  # 75% of target (187 = 250 * 0.75)
+        self.assertEqual(splitter.chunk_overlap, 50)  # 20% of 250
         self.assertEqual(splitter.separator, "\n\n")  # Paragraph-based chunking
 
     def test_sql_chunking_matches_other_ingestion_methods(self):

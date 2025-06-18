@@ -32,10 +32,24 @@ The chunking-strategy.md document contains the authoritative and up-to-date info
 
 ### Core Chunking Strategy
 
-- **Target Size**: ~600 tokens (~300 words) per chunk
-- **Overlap**: 20% token-based overlap for context preservation
-- **Boundary Respect**: Word-based boundaries with sentence preservation
-- **Quality Target**: 70%+ of chunks in 225-450 word range
+**Historical Parameters (Empirical Reversion for Performance Recovery)**:
+
+- **Audio/Video Transcription**: 190 tokens (~95 words) with 95 token overlap (50%)
+- **Text Sources (PDF, Web, SQL)**: 250 tokens (~125 words) with 50 token overlap (20%)
+- **Boundary Respect**: spaCy sentence-based boundaries with token limits
+- **Approach**: Reverting to historically proven parameters while root causes of performance degradation remain unknown
+
+**Current Process**:
+
+1. **Parameter Reversion**: All ingestion methods updated to use historical chunk sizes
+2. **Database Regeneration**: Creating new Pinecone index with historical parameters
+3. **Performance Validation**: Measuring new system against current production to ensure same/better performance
+4. **Empirical Strategy**: Prioritizing proven results over investigating complex root causes
+
+**Content-Specific Historical Evidence**:
+
+- **Audio/Video**: Historical system used ~150 words with high overlap for speech patterns
+- **Text Sources**: Historical system used 1000-character chunks (~250 tokens) for written content
 
 ### Key Scripts
 

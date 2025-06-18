@@ -36,12 +36,12 @@ class ChunkingMetrics:
             "1000-4999": 0,
             "5000+": 0,
         }
-        # Updated to use token-based ranges aligned with 600-token target
+        # Updated to use token-based ranges aligned with 250-token target
         self.chunk_size_distribution = {
-            "<300": 0,  # Very small chunks (< 50% of target)
-            "300-449": 0,  # Small chunks (50-75% of target)
-            "450-750": 0,  # Target range (75-125% of target)
-            "750+": 0,  # Large chunks (> 125% of target)
+            "<125": 0,  # Very small chunks (< 50% of target)
+            "125-187": 0,  # Small chunks (50-75% of target)
+            "188-313": 0,  # Target range (75-125% of target)
+            "313+": 0,  # Large chunks (> 125% of target)
         }
         self.edge_cases = []
         self.anomalies = []
@@ -60,14 +60,14 @@ class ChunkingMetrics:
     def _update_chunk_size_distribution(self, chunk_token_counts: list[int]) -> None:
         """Update chunk size distribution tracking using token counts."""
         for token_count in chunk_token_counts:
-            if token_count < 300:
-                self.chunk_size_distribution["<300"] += 1
-            elif token_count < 450:
-                self.chunk_size_distribution["300-449"] += 1
-            elif token_count <= 750:
-                self.chunk_size_distribution["450-750"] += 1
+            if token_count < 125:
+                self.chunk_size_distribution["<125"] += 1
+            elif token_count < 188:
+                self.chunk_size_distribution["125-187"] += 1
+            elif token_count <= 313:
+                self.chunk_size_distribution["188-313"] += 1
             else:
-                self.chunk_size_distribution["750+"] += 1
+                self.chunk_size_distribution["313+"] += 1
 
     def _detect_edge_cases(
         self, word_count: int, chunk_count: int, document_id: str = None
@@ -77,7 +77,7 @@ class ChunkingMetrics:
             self.edge_cases.append(
                 f"Very short document: {word_count} words (ID: {document_id})"
             )
-        elif word_count > 50000:
+        elif word_count > 200000:
             self.edge_cases.append(
                 f"Very long document: {word_count} words (ID: {document_id})"
             )
@@ -96,12 +96,14 @@ class ChunkingMetrics:
 
         avg_chunk_tokens = sum(chunk_token_counts) / len(chunk_token_counts)
 
-        # Detect anomalies based on token counts (target is 600 tokens)
-        if avg_chunk_tokens < 150 and word_count > 500:  # Very small chunks
+        # Detect anomalies based on token counts (target is 250 tokens)
+        if (
+            avg_chunk_tokens < 62 and word_count > 500
+        ):  # Very small chunks (< 25% of target)
             self.anomalies.append(
                 f"Unexpectedly small chunks: avg {avg_chunk_tokens:.1f} tokens for {word_count} word document (ID: {document_id})"
             )
-        elif avg_chunk_tokens > 1200:  # Very large chunks (2x target)
+        elif avg_chunk_tokens > 500:  # Very large chunks (2x target)
             self.anomalies.append(
                 f"Unexpectedly large chunks: avg {avg_chunk_tokens:.1f} tokens (ID: {document_id})"
             )
@@ -211,28 +213,28 @@ class SpacyTextSplitter:
 
     def __init__(
         self,
-        chunk_size=600,  # Target size for final chunks (with overlap)
-        chunk_overlap=120,  # Fixed 20% overlap (120 tokens)
+        chunk_size=250,  # Historical target size for text sources (PDF, web, SQL)
+        chunk_overlap=50,  # Historical 20% overlap (50 tokens)
         separator="\n\n",
         pipeline="en_core_web_sm",
     ):
         """
-        Initialize the SpacyTextSplitter with fixed paragraph-based chunking parameters.
+        Initialize the SpacyTextSplitter with historical paragraph-based chunking parameters.
 
         Args:
-            chunk_size (int): Target size for final chunks including overlap (default: 600)
-            chunk_overlap (int): Fixed overlap in tokens (default: 120 = 20% of chunk_size)
+            chunk_size (int): Target size for final chunks including overlap (default: 250)
+            chunk_overlap (int): Fixed overlap in tokens (default: 50 = 20% of chunk_size)
             separator (str): Separator to use for splitting text
             pipeline (str): Name of spaCy pipeline/model to use
         """
         # Calculate base chunk size to account for overlap
-        # Target: final chunks of 600 tokens with 120 token overlap
+        # Target: final chunks of 250 tokens with 50 token overlap
         # Problem: Paragraph-based chunking can create chunks slightly larger than target
-        # Solution: Use 450 tokens base (75% of target) to provide buffer for overlap
-        self.target_chunk_size = chunk_size  # Final target size (600)
+        # Solution: Use 188 tokens base (75% of target) to provide buffer for overlap
+        self.target_chunk_size = chunk_size  # Final target size (250)
         self.chunk_overlap = chunk_overlap
         # Use 75% of target size as base to provide buffer for paragraph boundaries
-        self.chunk_size = int(chunk_size * 0.75)  # Base size for chunking (450)
+        self.chunk_size = int(chunk_size * 0.75)  # Base size for chunking (188)
 
         self.separator = separator
         self.pipeline = pipeline
@@ -422,12 +424,12 @@ class SpacyTextSplitter:
             )
 
             # Log edge cases for this document using token counts
-            if min_chunk_tokens < 150:  # Less than 25% of target
+            if min_chunk_tokens < 62:  # Less than 25% of target
                 self.logger.warning(
                     f"Very small chunks detected (ID: {document_id}): "
                     f"minimum {min_chunk_tokens} tokens"
                 )
-            if max_chunk_tokens > 1200:  # More than 200% of target
+            if max_chunk_tokens > 500:  # More than 200% of target
                 self.logger.warning(
                     f"Very large chunks detected (ID: {document_id}): "
                     f"maximum {max_chunk_tokens} tokens"
@@ -453,7 +455,7 @@ class SpacyTextSplitter:
     def _finalize_current_merge(
         self,
         current_merged: list[str],
-        current_word_count: int,
+        current_token_count: int,
         merged_chunks: list[str],
     ) -> tuple[list[str], int]:
         """Finalize the current merge group and add to merged chunks."""
@@ -461,39 +463,40 @@ class SpacyTextSplitter:
             merged_text = " ".join(current_merged)
             merged_chunks.append(merged_text)
             self.logger.debug(
-                f"Merged {len(current_merged)} chunks into {current_word_count} words"
+                f"Merged {len(current_merged)} chunks into {current_token_count} tokens"
             )
         return [], 0
 
     def _handle_target_sized_chunk(
         self,
         chunk: str,
-        chunk_words: int,
+        chunk_tokens: int,
         document_id: str,
         merged_chunks: list[str],
         current_merged: list[str],
-        current_word_count: int,
+        current_token_count: int,
     ) -> tuple[list[str], int]:
         """Handle chunks that are already in target range or too large."""
-        target_max_words = 450
+        target_max_tokens = int(self.target_chunk_size * 1.25)  # 313 tokens
 
         # First, finalize any accumulated chunks
         if current_merged:
             merged_text = " ".join(current_merged)
             merged_chunks.append(merged_text)
+            merged_tokens = len(self._tokenize_text(merged_text))
             self.logger.debug(
-                f"Merged {len(current_merged)} small chunks into {len(merged_text.split())} words"
+                f"Merged {len(current_merged)} small chunks into {merged_tokens} tokens"
             )
 
         # Add this chunk as-is (it's already good size or too large to merge)
         merged_chunks.append(chunk)
-        if chunk_words > target_max_words:
+        if chunk_tokens > target_max_tokens:
             self.logger.debug(
-                f"Kept oversized chunk: {chunk_words} words (ID: {document_id})"
+                f"Kept oversized chunk: {chunk_tokens} tokens (ID: {document_id})"
             )
         else:
             self.logger.debug(
-                f"Kept target-sized chunk: {chunk_words} words (ID: {document_id})"
+                f"Kept target-sized chunk: {chunk_tokens} tokens (ID: {document_id})"
             )
 
         return [], 0
@@ -502,58 +505,58 @@ class SpacyTextSplitter:
         self,
         merged_chunks: list[str],
         min_chunks_for_total: int,
-        current_word_count: int,
-        chunk_words: int,
+        current_token_count: int,
+        chunk_tokens: int,
     ) -> bool:
         """Determine if we should preserve chunk separation to maintain multiple chunks."""
-        target_min_words = 225
+        target_min_tokens = int(self.target_chunk_size * 0.75)  # 188 tokens
         return (
             len(merged_chunks) >= min_chunks_for_total
-            and current_word_count + chunk_words >= target_min_words * 0.7
+            and current_token_count + chunk_tokens >= target_min_tokens * 0.7
         )
 
     def _handle_small_chunk_merging(
         self,
         chunk: str,
-        chunk_words: int,
+        chunk_tokens: int,
         merged_chunks: list[str],
         current_merged: list[str],
-        current_word_count: int,
+        current_token_count: int,
         min_chunks_for_total: int,
     ) -> tuple[list[str], int]:
         """Handle merging of small chunks."""
-        target_min_words = 225
-        target_max_words = 450
+        target_min_tokens = int(self.target_chunk_size * 0.75)  # 188 tokens
+        target_max_tokens = int(self.target_chunk_size * 1.25)  # 313 tokens
 
         # If we already have enough chunks and this would create a reasonable chunk, preserve it
         if self._should_preserve_chunk_separation(
-            merged_chunks, min_chunks_for_total, current_word_count, chunk_words
+            merged_chunks, min_chunks_for_total, current_token_count, chunk_tokens
         ):
             # We have enough chunks, finalize current merge and preserve separation
             if current_merged:
                 merged_text = " ".join(current_merged)
                 merged_chunks.append(merged_text)
                 self.logger.debug(
-                    f"Merged {len(current_merged)} chunks into {current_word_count} words (preserving multiple chunks)"
+                    f"Merged {len(current_merged)} chunks into {current_token_count} tokens (preserving multiple chunks)"
                 )
 
             # Add this chunk separately to preserve multiple chunks
             merged_chunks.append(chunk)
             self.logger.debug(
-                f"Added small chunk separately to preserve multiple chunks: {chunk_words} words"
+                f"Added small chunk separately to preserve multiple chunks: {chunk_tokens} tokens"
             )
             return [], 0
-        elif current_word_count + chunk_words <= target_max_words:
+        elif current_token_count + chunk_tokens <= target_max_tokens:
             # Can add to current merge group
             current_merged.append(chunk)
-            current_word_count += chunk_words
+            current_token_count += chunk_tokens
 
             # If we've reached a good size, finalize this merge
-            if current_word_count >= target_min_words:
+            if current_token_count >= target_min_tokens:
                 merged_text = " ".join(current_merged)
                 merged_chunks.append(merged_text)
                 self.logger.debug(
-                    f"Merged {len(current_merged)} chunks into {current_word_count} words"
+                    f"Merged {len(current_merged)} chunks into {current_token_count} tokens"
                 )
                 return [], 0
         else:
@@ -562,19 +565,19 @@ class SpacyTextSplitter:
                 merged_text = " ".join(current_merged)
                 merged_chunks.append(merged_text)
                 self.logger.debug(
-                    f"Merged {len(current_merged)} chunks into {current_word_count} words (below target)"
+                    f"Merged {len(current_merged)} chunks into {current_token_count} tokens (below target)"
                 )
 
             # Start new merge group with this chunk
-            return [chunk], chunk_words
+            return [chunk], chunk_tokens
 
-        return current_merged, current_word_count
+        return current_merged, current_token_count
 
     def _merge_small_chunks(
         self, chunks: list[str], document_id: str = None
     ) -> list[str]:
         """
-        Merge small chunks to better meet the target word count range (225-450 words).
+        Merge small chunks to better meet the target token count range (188-313 tokens).
 
         This function is less aggressive to preserve multiple chunks for overlap.
 
@@ -583,49 +586,49 @@ class SpacyTextSplitter:
             document_id (str, optional): Identifier for the document
 
         Returns:
-            list[str]: Merged chunks that better meet target word count
+            list[str]: Merged chunks that better meet target token count
         """
         if not chunks:
             return chunks
 
-        target_min_words = 225
-        target_max_words = 450
+        target_min_tokens = int(self.target_chunk_size * 0.75)  # 188 tokens
+        target_max_tokens = int(self.target_chunk_size * 1.25)  # 313 tokens
 
-        # Calculate total word count to decide strategy
-        total_words = sum(len(chunk.split()) for chunk in chunks)
+        # Calculate total token count to decide strategy
+        total_tokens = sum(len(self._tokenize_text(chunk)) for chunk in chunks)
 
         # If total content is large enough for multiple chunks, be less aggressive about merging
-        min_chunks_for_total = max(2, total_words // target_max_words)
+        min_chunks_for_total = max(2, total_tokens // target_max_tokens)
 
         self.logger.debug(
-            f"Merge strategy: {total_words} total words, targeting {min_chunks_for_total} chunks minimum"
+            f"Merge strategy: {total_tokens} total tokens, targeting {min_chunks_for_total} chunks minimum"
         )
 
         merged_chunks = []
         current_merged = []
-        current_word_count = 0
+        current_token_count = 0
 
         for chunk in chunks:
-            chunk_words = len(chunk.split())
+            chunk_tokens = len(self._tokenize_text(chunk))
 
             # If this chunk alone is already in target range or too large, handle it separately
-            if chunk_words >= target_min_words:
-                current_merged, current_word_count = self._handle_target_sized_chunk(
+            if chunk_tokens >= target_min_tokens:
+                current_merged, current_token_count = self._handle_target_sized_chunk(
                     chunk,
-                    chunk_words,
+                    chunk_tokens,
                     document_id,
                     merged_chunks,
                     current_merged,
-                    current_word_count,
+                    current_token_count,
                 )
             else:
                 # This chunk is too small, try to merge it
-                current_merged, current_word_count = self._handle_small_chunk_merging(
+                current_merged, current_token_count = self._handle_small_chunk_merging(
                     chunk,
-                    chunk_words,
+                    chunk_tokens,
                     merged_chunks,
                     current_merged,
-                    current_word_count,
+                    current_token_count,
                     min_chunks_for_total,
                 )
 
@@ -634,19 +637,19 @@ class SpacyTextSplitter:
             merged_text = " ".join(current_merged)
             merged_chunks.append(merged_text)
             self.logger.debug(
-                f"Final merge: {len(current_merged)} chunks into {current_word_count} words"
+                f"Final merge: {len(current_merged)} chunks into {current_token_count} tokens"
             )
 
         # Log the improvement
         original_in_range = sum(
             1
             for chunk in chunks
-            if target_min_words <= len(chunk.split()) <= target_max_words
+            if target_min_tokens <= len(self._tokenize_text(chunk)) <= target_max_tokens
         )
         merged_in_range = sum(
             1
             for chunk in merged_chunks
-            if target_min_words <= len(chunk.split()) <= target_max_words
+            if target_min_tokens <= len(self._tokenize_text(chunk)) <= target_max_tokens
         )
 
         self.logger.info(
@@ -1106,10 +1109,10 @@ class SpacyTextSplitter:
         if chunk_sizes:
             avg_size = sum(chunk_sizes) / len(chunk_sizes)
             min_size, max_size = min(chunk_sizes), max(chunk_sizes)
-            # Target range should be around the target_chunk_size (600 tokens)
-            # Allow some variance: 450-750 tokens (75%-125% of target)
-            target_min = int(self.target_chunk_size * 0.75)  # 450 tokens
-            target_max = int(self.target_chunk_size * 1.25)  # 750 tokens
+            # Target range should be around the target_chunk_size (250 tokens)
+            # Allow some variance: 188-313 tokens (75%-125% of target)
+            target_min = int(self.target_chunk_size * 0.75)  # 188 tokens
+            target_max = int(self.target_chunk_size * 1.25)  # 313 tokens
             target_range_count = sum(
                 1 for size in chunk_sizes if target_min <= size <= target_max
             )
@@ -1146,11 +1149,36 @@ class SpacyTextSplitter:
         if not text.strip():
             return []
 
+        # Get paragraphs using hierarchical approach
+        paragraphs = self._extract_paragraphs(text)
+
+        # Group paragraphs into chunks
+        chunks = self._group_paragraphs_into_chunks(paragraphs)
+
+        # Final safety check: force split any remaining large chunks
+        final_chunks = self._force_split_large_chunks(chunks)
+
+        return final_chunks
+
+    def _extract_paragraphs(self, text: str) -> list[str]:
+        """Extract paragraphs using hierarchical approach: double newlines -> single newlines -> spaCy sentences."""
         # Split on double newlines to respect natural paragraph boundaries
         paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
 
-        # Check if we have sufficient paragraph structure with double newlines
-        # Use ratio-based approach: expect paragraphs based on document length
+        # Check if we have sufficient paragraph structure
+        if not self._has_sufficient_paragraph_structure(text, paragraphs):
+            paragraphs = self._fallback_to_single_newlines(text, paragraphs)
+
+        # Final fallback to spaCy sentences if no clear paragraphs exist
+        if not paragraphs:
+            paragraphs = self._fallback_to_spacy_sentences(text)
+
+        return paragraphs
+
+    def _has_sufficient_paragraph_structure(
+        self, text: str, paragraphs: list[str]
+    ) -> bool:
+        """Check if we have sufficient paragraph structure with double newlines."""
         word_count = len(text.split())
 
         # Assume average paragraph length of 85 words (reasonable for most content)
@@ -1167,128 +1195,112 @@ class SpacyTextSplitter:
             f"(need ≥{min_required_paragraphs}), found {len(paragraphs)} from double newlines"
         )
 
-        if not has_sufficient_paragraphs:
-            self.logger.debug(
-                f"Insufficient double newlines ({len(paragraphs)} paragraphs from {word_count} words), "
-                f"falling back to single newline splitting"
-            )
-            # Split on single newlines and filter out very short fragments
-            single_newline_paragraphs = [
-                p.strip() for p in text.split("\n") if p.strip()
-            ]
+        return has_sufficient_paragraphs
 
-            # Filter out fragments that are likely line wrapping rather than paragraphs
-            # Keep lines that: 1) Are substantial (>15 chars), 2) End with sentence punctuation,
-            # 3) Start with capital letter, or 4) Are the last line
-            filtered_paragraphs = []
-            for i, para in enumerate(single_newline_paragraphs):
-                if len(para) > 15:  # Substantial content
-                    # Keep if it ends with sentence punctuation or starts with capital
-                    ends_with_punct = para.endswith((".", "!", "?", ":", ";"))
-                    starts_with_capital = para[0].isupper() if para else False
-                    is_last = i == len(single_newline_paragraphs) - 1
+    def _fallback_to_single_newlines(
+        self, text: str, original_paragraphs: list[str]
+    ) -> list[str]:
+        """Fall back to single newline splitting with intelligent line filtering."""
+        self.logger.debug(
+            f"Insufficient double newlines ({len(original_paragraphs)} paragraphs), "
+            f"falling back to single newline splitting"
+        )
 
-                    if ends_with_punct or starts_with_capital or is_last:
-                        filtered_paragraphs.append(para)
-                    elif filtered_paragraphs:
-                        # Merge with previous paragraph (likely line wrapping)
-                        filtered_paragraphs[-1] += " " + para
-                    else:
-                        # First paragraph, keep it
-                        filtered_paragraphs.append(para)
+        # Split on single newlines and filter out very short fragments
+        single_newline_paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+
+        # Filter out fragments that are likely line wrapping rather than paragraphs
+        filtered_paragraphs = []
+        for i, para in enumerate(single_newline_paragraphs):
+            if len(para) > 15:  # Substantial content
+                if self._should_keep_paragraph(para, i, single_newline_paragraphs):
+                    filtered_paragraphs.append(para)
                 elif filtered_paragraphs:
-                    # Short fragment, merge with previous
+                    # Merge with previous paragraph (likely line wrapping)
                     filtered_paragraphs[-1] += " " + para
                 else:
-                    # Very short first fragment, keep it
+                    # First paragraph, keep it
                     filtered_paragraphs.append(para)
+            elif filtered_paragraphs:
+                # Short fragment, merge with previous
+                filtered_paragraphs[-1] += " " + para
+            else:
+                # Very short first fragment, keep it
+                filtered_paragraphs.append(para)
 
-            if len(filtered_paragraphs) > len(paragraphs):
-                paragraphs = filtered_paragraphs
-                double_newline_count = len(
-                    [p.strip() for p in text.split("\n\n") if p.strip()]
-                )
-                self.logger.debug(
-                    f"Single newline fallback produced {len(paragraphs)} paragraphs "
-                    f"(vs {double_newline_count} from double newlines)"
-                )
+        if len(filtered_paragraphs) > len(original_paragraphs):
+            double_newline_count = len(original_paragraphs)
+            self.logger.debug(
+                f"Single newline fallback produced {len(filtered_paragraphs)} paragraphs "
+                f"(vs {double_newline_count} from double newlines)"
+            )
+            return filtered_paragraphs
 
-        # Fallback to spaCy sentences if still no clear paragraphs exist
-        if not paragraphs:
-            try:
-                self._ensure_nlp()
-                doc = self.nlp(text)
-                paragraphs = [
-                    sent.text.strip() for sent in doc.sents if sent.text.strip()
-                ]
-                self.logger.debug(
-                    "No clear paragraphs found, fell back to spaCy sentence splitting"
-                )
-            except Exception as e:
-                self.logger.warning(
-                    f"spaCy processing failed, falling back to token-based splitting: {e}"
-                )
-                # Fall back to token-based splitting instead of using full text
-                try:
-                    self._ensure_nlp()
-                    doc = self.nlp(text)
-                    token_chunks = self._split_by_tokens(text, doc)
-                    self.logger.info(
-                        f"Token-based fallback produced {len(token_chunks)} chunks"
-                    )
-                    return token_chunks
-                except Exception as token_error:
-                    self.logger.error(
-                        f"Both spaCy and token-based splitting failed: {token_error}"
-                    )
-                    # Last resort: use full text but we'll force split it later
-                    if text.strip():
-                        paragraphs = [text.strip()]
-                    else:
-                        return []
+        return original_paragraphs
 
-        # Group paragraphs to reach target chunk size
+    def _should_keep_paragraph(
+        self, para: str, index: int, all_paragraphs: list[str]
+    ) -> bool:
+        """Determine if a paragraph should be kept as separate or merged with previous."""
+        # Keep lines that: 1) End with sentence punctuation, 2) Start with capital letter, 3) Are the last line
+        ends_with_punct = para.endswith((".", "!", "?", ":", ";"))
+        starts_with_capital = para[0].isupper() if para else False
+        is_last = index == len(all_paragraphs) - 1
+
+        return ends_with_punct or starts_with_capital or is_last
+
+    def _fallback_to_spacy_sentences(self, text: str) -> list[str]:
+        """Fall back to spaCy sentence splitting or token-based splitting."""
+        try:
+            self._ensure_nlp()
+            doc = self.nlp(text)
+            paragraphs = [sent.text.strip() for sent in doc.sents if sent.text.strip()]
+            self.logger.debug(
+                "No clear paragraphs found, fell back to spaCy sentence splitting"
+            )
+            return paragraphs
+        except Exception as e:
+            self.logger.warning(
+                f"spaCy processing failed, falling back to token-based splitting: {e}"
+            )
+            return self._fallback_to_token_based_splitting(text)
+
+    def _fallback_to_token_based_splitting(self, text: str) -> list[str]:
+        """Final fallback to token-based splitting."""
+        try:
+            self._ensure_nlp()
+            doc = self.nlp(text)
+            token_chunks = self._split_by_tokens(text, doc)
+            self.logger.info(
+                f"Token-based fallback produced {len(token_chunks)} chunks"
+            )
+            return token_chunks
+        except Exception as token_error:
+            self.logger.error(
+                f"Both spaCy and token-based splitting failed: {token_error}"
+            )
+            # Last resort: use full text but we'll force split it later
+            return [text.strip()] if text.strip() else []
+
+    def _group_paragraphs_into_chunks(self, paragraphs: list[str]) -> list[str]:
+        """Group paragraphs to reach target chunk size."""
         chunks = []
         current_chunk = []
         current_length = 0
 
         # Show progress for documents with many paragraphs (>100)
-        show_para_progress = len(paragraphs) > 100
-        if show_para_progress:
-            from tqdm import tqdm
-
-            para_progress = tqdm(
-                paragraphs, desc="Processing paragraphs", unit="para", leave=False
-            )
-            paragraphs_iter = para_progress
-        else:
-            paragraphs_iter = paragraphs
+        paragraphs_iter = self._get_paragraphs_iterator(paragraphs)
 
         for para in paragraphs_iter:
             para_tokens = len(self._tokenize_text(para))
 
             # If this single paragraph is larger than chunk size, split it immediately
             if para_tokens > self.chunk_size:
-                # First, finalize any current chunk
-                if current_chunk:
-                    chunks.append(" ".join(current_chunk))
-                    current_chunk = []
-                    current_length = 0
-
-                # Split the large paragraph using token-based approach
-                try:
-                    self._ensure_nlp()
-                    doc = self.nlp(para)
-                    para_chunks = self._split_by_tokens(para, doc)
-                    chunks.extend(para_chunks)
-                    self.logger.debug(
-                        f"Split large paragraph ({para_tokens} tokens) into {len(para_chunks)} chunks"
-                    )
-                except Exception as e:
-                    self.logger.warning(
-                        f"Failed to split large paragraph, keeping as single chunk: {e}"
-                    )
-                    chunks.append(para)
+                chunks = self._handle_large_paragraph(
+                    para, para_tokens, chunks, current_chunk
+                )
+                current_chunk = []
+                current_length = 0
                 continue
 
             # If adding this paragraph would exceed chunk size, finalize current chunk
@@ -1300,14 +1312,55 @@ class SpacyTextSplitter:
                 current_chunk.append(para)
                 current_length += para_tokens
 
-        if show_para_progress:
-            para_progress.close()
+        # Close progress bar if it was opened
+        if hasattr(paragraphs_iter, "close"):
+            paragraphs_iter.close()
 
         # Add the final chunk if it exists
         if current_chunk:
             chunks.append(" ".join(current_chunk))
 
-        # Final safety check: force split any remaining large chunks
+        return chunks
+
+    def _get_paragraphs_iterator(self, paragraphs: list[str]):
+        """Get an iterator for paragraphs, with progress bar for large documents."""
+        show_para_progress = len(paragraphs) > 100
+        if show_para_progress:
+            from tqdm import tqdm
+
+            return tqdm(
+                paragraphs, desc="Processing paragraphs", unit="para", leave=False
+            )
+        else:
+            return paragraphs
+
+    def _handle_large_paragraph(
+        self, para: str, para_tokens: int, chunks: list[str], current_chunk: list[str]
+    ) -> list[str]:
+        """Handle paragraphs that exceed chunk size by splitting them."""
+        # First, finalize any current chunk
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+
+        # Split the large paragraph using token-based approach
+        try:
+            self._ensure_nlp()
+            doc = self.nlp(para)
+            para_chunks = self._split_by_tokens(para, doc)
+            chunks.extend(para_chunks)
+            self.logger.debug(
+                f"Split large paragraph ({para_tokens} tokens) into {len(para_chunks)} chunks"
+            )
+        except Exception as e:
+            self.logger.warning(
+                f"Failed to split large paragraph, keeping as single chunk: {e}"
+            )
+            chunks.append(para)
+
+        return chunks
+
+    def _force_split_large_chunks(self, chunks: list[str]) -> list[str]:
+        """Final safety check: force split any remaining large chunks."""
         final_chunks = []
         for chunk in chunks:
             chunk_tokens = len(self._tokenize_text(chunk))

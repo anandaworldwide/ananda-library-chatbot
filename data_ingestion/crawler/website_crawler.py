@@ -13,12 +13,14 @@
 #   --fresh-start: Delete the existing SQLite database and start from a clean slate.
 #   -c, --clear-vectors: Clear existing web content vectors for this site before crawling.
 #   --stop-after: Stop crawling after processing this many pages (useful for testing).
+#   --debug: Enable debug mode with detailed logging and page screenshots.
 #
 # Example usage:
 #   website_crawler.py --site ananda-public
 #   website_crawler.py --site ananda-public --retry-failed
 #   website_crawler.py --site ananda-public --clear-vectors
 #   website_crawler.py --site ananda-public --stop-after 5
+#   website_crawler.py --site ananda-public --debug
 
 # Standard library imports
 import argparse
@@ -58,7 +60,7 @@ from utils.pinecone_utils import (
 from utils.progress_utils import is_exiting, setup_signal_handlers
 from utils.text_splitter_utils import SpacyTextSplitter
 
-# Configure logging with timestamps
+# Configure logging with timestamps (will be updated in main() if debug mode)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -125,14 +127,26 @@ def ensure_scheme(url: str, default_scheme: str = "https") -> str:
 
 
 class WebsiteCrawler:
-    def __init__(self, site_id: str, site_config: dict, retry_failed: bool = False):
+    def __init__(
+        self,
+        site_id: str,
+        site_config: dict,
+        retry_failed: bool = False,
+        debug: bool = False,
+    ):
         self.site_id = site_id
         self.config = site_config
+        self.debug = debug
         self.domain = self.config["domain"]
         self.start_url = ensure_scheme(self.domain)  # Start URL is now just the domain
         self.skip_patterns = self.config.get("skip_patterns", [])
         self.crawl_frequency_days = self.config.get("crawl_frequency_days", 14)
         self.crawl_delay_seconds = self.config.get("crawl_delay_seconds", 1)
+
+        if self.debug:
+            logging.info(
+                "Debug mode enabled - detailed logging and screenshots will be saved"
+            )
 
         # Initialize robots.txt parser
         self.robots_parser = RobotFileParser()
@@ -146,8 +160,12 @@ class WebsiteCrawler:
             # Set to None to indicate robots.txt couldn't be loaded
             self.robots_parser = None
 
-        # Initialize shared text splitter with consistent configuration
-        self.text_splitter = SpacyTextSplitter()
+        # Initialize shared text splitter with historical configuration for web content
+        # Historical: 1000 chars (~250 tokens) with 200 chars (~50 tokens, 20% overlap)
+        self.text_splitter = SpacyTextSplitter(
+            chunk_size=250,  # Historical web content chunk size
+            chunk_overlap=50,  # Historical 20% overlap
+        )
 
         # Initialize shared embeddings instance (reused for all pages)
         model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
@@ -629,44 +647,116 @@ class WebsiteCrawler:
 
     def clean_content(self, html_content: str) -> str:
         logging.debug(f"Cleaning HTML content (length: {len(html_content)})")
+        logging.debug(f"HTML content preview (first 500 chars): {html_content[:500]}")
+
         soup = BeautifulSoup(html_content, "html.parser")
 
-        for element in soup.select(
+        # Debug: Check what elements we're removing
+        elements_to_remove = soup.select(
             "header, footer, nav, script, style, iframe, .sidebar"
-        ):
+        )
+        logging.debug(
+            f"Found {len(elements_to_remove)} elements to remove: {[elem.name for elem in elements_to_remove[:10]]}"
+        )
+
+        for element in elements_to_remove:
             element.decompose()
+
+        # Debug: Check for specific content selectors
+        content_selectors = [
+            "main",
+            "article",
+            ".content",
+            "#content",
+            ".entry-content",
+            ".main-content",
+            ".post-content",
+        ]
+
+        if self.debug:
+            for selector in content_selectors:
+                found_elements = soup.select(selector)
+                if found_elements:
+                    logging.debug(
+                        f"Found {len(found_elements)} elements with selector '{selector}'"
+                    )
+                    for i, elem in enumerate(found_elements[:3]):  # Show first 3
+                        preview_text = elem.get_text(separator=" ", strip=True)[:100]
+                        logging.debug(f"  Element {i + 1} preview: {preview_text}")
 
         main_content = soup.select_one(
             "main, article, .content, #content, .entry-content, .main-content, .post-content"
         )
+
         text = ""
         if main_content:
             text = main_content.get_text(separator=" ", strip=True)
+            logging.debug(
+                f"Extracted text from main content area (length: {len(text)})"
+            )
         elif (
             html_content
         ):  # Only try readability if we couldn't find a specific area AND have html
             logging.warning(
                 "No specific content area found, attempting readability fallback"
             )
+
+            # Check what the page structure looks like
+            body = soup.body
+            if body:
+                all_text = body.get_text(separator=" ", strip=True)
+                logging.debug(f"Raw body text length: {len(all_text)}")
+                logging.debug(f"Raw body text preview: {all_text[:200]}")
+
+                # Check for common content containers
+                common_containers = [
+                    "div",
+                    ".container",
+                    ".wrapper",
+                    "#main",
+                    ".site-content",
+                ]
+                for container in common_containers:
+                    elements = soup.select(container)
+                    if elements:
+                        logging.debug(f"Found {len(elements)} '{container}' elements")
+
             try:
                 doc = Document(html_content)
                 # Use the cleaned summary HTML from readability
                 summary_html = doc.summary()
+
+                logging.debug(f"Readability summary HTML length: {len(summary_html)}")
+                logging.debug(f"Readability summary preview: {summary_html[:300]}")
+
                 # Parse the summary HTML back into BeautifulSoup to extract text
                 summary_soup = BeautifulSoup(summary_html, "html.parser")
                 text = summary_soup.get_text(separator=" ", strip=True)
+
+                logging.debug(f"Readability extracted text length: {len(text)}")
+
             except Exception as e:
                 logging.error(f"Readability fallback failed: {e}")
                 # Fallback to body text if readability fails
                 body_content = soup.body
                 if body_content:
                     text = body_content.get_text(separator=" ", strip=True)
+                    logging.debug(f"Body fallback text length: {len(text)}")
 
         text = re.sub(r"\s+", " ", text).strip()
+
         if not text:
             logging.warning("No content extracted after fallback attempts")
+            # Final debug: show the raw HTML structure - only in debug mode since this is expensive
+            if self.debug and soup.body:
+                logging.debug("HTML body structure (tags only):")
+                for elem in soup.body.find_all(True)[:20]:  # First 20 elements
+                    attrs = dict(elem.attrs) if elem.attrs else {}
+                    logging.debug(f"  <{elem.name} {attrs}>")
         else:
             logging.debug(f"Extracted text length: {len(text)}")
+            logging.debug(f"Final text preview: {text[:200]}")
+
         return text
 
     async def reveal_nav_items(self, page):
@@ -717,10 +807,21 @@ class WebsiteCrawler:
         self, page, url: str
     ) -> tuple[PageContent | None, list[str]]:
         """Extract content and links from page."""
+        logging.debug(f"Starting content extraction for {url}")
+
         page.wait_for_selector("body", timeout=15000)
+        logging.debug(f"Body selector found for {url}")
 
         # Handle menu expansion
         try:
+            # Count menu items before expansion
+            menu_count = page.evaluate(
+                "() => document.querySelectorAll('.menu-item-has-children').length"
+            )
+            logging.debug(
+                f"Found {menu_count} menu items with children before expansion"
+            )
+
             page.evaluate("""() => {
                 document.querySelectorAll('.menu-item-has-children:not(.active)').forEach((item) => {
                     if (!item.closest('.sub-menu')) { 
@@ -734,14 +835,38 @@ class WebsiteCrawler:
                     }
                 });
             }""")
+
+            active_count = page.evaluate(
+                "() => document.querySelectorAll('.menu-item-has-children.active').length"
+            )
+            logging.debug(f"Activated {active_count} menu items")
+
         except Exception as menu_e:
             logging.debug(f"Non-critical menu handling failed for {url}: {menu_e}")
 
         # Extract links and content
+        # Debug link extraction step by step
+        logging.debug("Starting link extraction...")
+        total_links = page.evaluate("() => document.querySelectorAll('a').length")
+        href_links = page.evaluate("() => document.querySelectorAll('a[href]').length")
+        logging.debug(
+            f"Found {total_links} total <a> tags, {href_links} with href attributes"
+        )
+
         links = page.evaluate(
             """() => Array.from(document.querySelectorAll('a[href]')).map(a => a.href).filter(href => href && !href.endsWith('#') && !href.includes('/#'))"""
         )
+
+        logging.debug(f"Extracted {len(links)} links after filtering anchors")
+        if links:
+            logging.debug(f"First 10 links: {links[:10]}")
+
         valid_links = [link for link in links if self.is_valid_url(link)]
+
+        logging.debug(f"Valid links after domain/pattern filtering: {len(valid_links)}")
+        if valid_links:
+            logging.debug(f"First 5 valid links: {valid_links[:5]}")
+
         if len(links) != len(valid_links):
             logging.debug(
                 f"Filtered out {len(links) - len(valid_links)} external/invalid links"
@@ -749,9 +874,21 @@ class WebsiteCrawler:
 
         title = page.title() or "No Title Found"
         logging.debug(f"Page title: {title}")
+
         html_content = page.content()
+        logging.debug(f"Raw HTML content length: {len(html_content)}")
+
         clean_text = self.clean_content(html_content)
         logging.debug(f"Cleaned text length: {len(clean_text)}")
+
+        # Take screenshot in debug mode
+        if self.debug:
+            try:
+                screenshot_path = f"debug_screenshot_{self.site_id}_{url.replace('https://', '').replace('/', '_')}.png"
+                page.screenshot(path=screenshot_path)
+                logging.debug(f"Screenshot saved to {screenshot_path}")
+            except Exception as screenshot_e:
+                logging.debug(f"Screenshot failed: {screenshot_e}")
 
         schemed_valid_links = [ensure_scheme(link) for link in valid_links]
 
@@ -765,6 +902,11 @@ class WebsiteCrawler:
             content=clean_text,
             metadata={"type": "text", "source": url},
         )
+
+        logging.debug(
+            f"Created PageContent object with {len(clean_text)} chars of content and {len(schemed_valid_links)} valid links"
+        )
+
         return page_content, schemed_valid_links
 
     def _handle_crawl_exception(self, e: Exception, url: str) -> tuple[bool, bool]:
@@ -929,9 +1071,12 @@ def create_chunks_from_page(page_content, text_splitter=None) -> list[str]:
     # same paragraph as the opening content, preventing header-only chunks.
     full_text = f"{page_content.title}\n{page_content.content}"
 
-    # Create text splitter using built-in dynamic sizing
+    # Create text splitter using historical parameters for web content
     if text_splitter is None:
-        text_splitter = SpacyTextSplitter()
+        text_splitter = SpacyTextSplitter(
+            chunk_size=250,  # Historical web content chunk size
+            chunk_overlap=50,  # Historical 20% overlap
+        )
 
     # Use URL as document ID for metrics tracking
     document_id = page_content.url
@@ -1010,6 +1155,11 @@ def parse_arguments() -> argparse.Namespace:
         "--stop-after",
         type=int,
         help="Stop crawling after processing this many pages (useful for testing).",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug mode with detailed logging and page screenshots.",
     )
     return parser.parse_args()
 
@@ -1527,15 +1677,31 @@ def handle_fresh_start(args: argparse.Namespace) -> None:
     db_file_to_delete = db_dir / f"crawler_queue_{args.site}.db"
 
     if db_file_to_delete.exists():
+        # Add verification step with default No
+        print("\n⚠️  WARNING: Fresh start will delete the existing database file:")
+        print(f"   {db_file_to_delete}")
+        print(
+            f"   This will remove all crawl history and queue state for site '{args.site}'."
+        )
+
+        response = input("\nProceed with deletion? [y/N]: ").strip().lower()
+
+        # Default to "no" if empty response, only proceed with explicit yes
+        if not response or response not in ["y", "yes"]:
+            print("Fresh start cancelled.")
+            logging.info("Fresh start cancelled by user.")
+            sys.exit(0)
+
         try:
             os.remove(db_file_to_delete)
+            print("✅ Successfully deleted database file for fresh start.")
             logging.info(
                 f"Successfully deleted database file for fresh start: {db_file_to_delete}"
             )
         except OSError as e:
             logging.error(f"Error deleting database file {db_file_to_delete}: {e}")
             print(
-                f"Error: Could not delete database file {db_file_to_delete} for fresh start. Please check permissions or delete manually. Exiting."
+                f"❌ Error: Could not delete database file {db_file_to_delete} for fresh start. Please check permissions or delete manually. Exiting."
             )
             sys.exit(1)
     else:
@@ -1590,6 +1756,11 @@ def cleanup_and_exit(crawler: WebsiteCrawler) -> None:
 def main():
     args = parse_arguments()
 
+    # Configure logging level based on debug flag
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.info("Debug mode enabled - detailed logging activated")
+
     # Load Site Configuration
     site_config = load_config(args.site)
     if not site_config:
@@ -1634,7 +1805,10 @@ def main():
     logging.info(f"Loaded environment from: {os.path.abspath(env_file_str)}")
 
     crawler = WebsiteCrawler(
-        site_id=args.site, site_config=site_config, retry_failed=args.retry_failed
+        site_id=args.site,
+        site_config=site_config,
+        retry_failed=args.retry_failed,
+        debug=args.debug,
     )
 
     pinecone_index = initialize_pinecone(env_file)

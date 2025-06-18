@@ -2,6 +2,7 @@
 """Unit tests for the website crawler functionality."""
 
 import json
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -11,6 +12,25 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 from crawler.website_crawler import WebsiteCrawler, ensure_scheme, load_config
+
+
+class BaseWebsiteCrawlerTest(unittest.TestCase):
+    """Base test class with environment variable setup for WebsiteCrawler tests."""
+
+    def setUp(self):
+        """Set up environment variables required by WebsiteCrawler."""
+        self.env_patcher = patch.dict(
+            os.environ,
+            {
+                "OPENAI_INGEST_EMBEDDINGS_MODEL": "text-embedding-ada-002",
+                "OPENAI_API_KEY": "test-api-key",
+            },
+        )
+        self.env_patcher.start()
+
+    def tearDown(self):
+        """Clean up environment variable patches."""
+        self.env_patcher.stop()
 
 
 class TestCrawlerConfig(unittest.TestCase):
@@ -59,11 +79,12 @@ class TestCrawlerConfig(unittest.TestCase):
             self.assertEqual(config["crawl_frequency_days"], 14)
 
 
-class TestSQLiteIntegration(unittest.TestCase):
+class TestSQLiteIntegration(BaseWebsiteCrawlerTest):
     """Test cases for SQLite database integration."""
 
     def setUp(self):
         """Set up test environment."""
+        super().setUp()  # Set up environment variables
         self.temp_dir = tempfile.mkdtemp()
 
         self.site_id = "test-site"
@@ -92,6 +113,7 @@ class TestSQLiteIntegration(unittest.TestCase):
         self.path_patcher.stop()
         self.connect_patcher.stop()
         shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
 
     def test_database_initialization(self):
         """Test database initialization and table creation."""
@@ -194,11 +216,12 @@ class TestSQLiteIntegration(unittest.TestCase):
         crawler.close()
 
 
-class TestChangeDetection(unittest.TestCase):
+class TestChangeDetection(BaseWebsiteCrawlerTest):
     """Test cases for content change detection."""
 
     def setUp(self):
         """Set up test environment."""
+        super().setUp()  # Set up environment variables
         self.temp_dir = tempfile.mkdtemp()
         self.site_id = "test-site"
         self.site_config = {
@@ -222,6 +245,7 @@ class TestChangeDetection(unittest.TestCase):
         self.path_patcher.stop()
         self.connect_patcher.stop()
         shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
 
     def test_content_change_detection(self):
         """Test detection of content changes using hash comparison."""
@@ -260,11 +284,12 @@ class TestChangeDetection(unittest.TestCase):
         crawler.close()
 
 
-class TestFailureHandling(unittest.TestCase):
+class TestFailureHandling(BaseWebsiteCrawlerTest):
     """Test cases for handling of failed URLs and retry logic."""
 
     def setUp(self):
         """Set up test environment."""
+        super().setUp()  # Set up environment variables
         self.temp_dir = tempfile.mkdtemp()
         self.site_id = "test-site"
         self.site_config = {
@@ -288,6 +313,7 @@ class TestFailureHandling(unittest.TestCase):
         self.path_patcher.stop()
         self.connect_patcher.stop()
         shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
 
     def test_temporary_failure_retry(self):
         """Test that temporary failures are scheduled for retry with backoff."""
@@ -396,11 +422,12 @@ class TestFailureHandling(unittest.TestCase):
         crawler.close()
 
 
-class TestDaemonBehavior(unittest.TestCase):
+class TestDaemonBehavior(BaseWebsiteCrawlerTest):
     """Test cases for daemon loop behavior."""
 
     def setUp(self):
         """Set up test environment."""
+        super().setUp()  # Set up environment variables
         self.temp_dir = tempfile.mkdtemp()
         self.site_id = "test-site"
         self.site_config = {
@@ -424,6 +451,7 @@ class TestDaemonBehavior(unittest.TestCase):
         self.path_patcher.stop()
         self.connect_patcher.stop()
         shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
 
     @patch("time.sleep")
     @patch(
@@ -471,11 +499,12 @@ class TestDaemonBehavior(unittest.TestCase):
         crawler.close()
 
 
-class TestPunctuationPreservation(unittest.TestCase):
+class TestPunctuationPreservation(BaseWebsiteCrawlerTest):
     """Test cases for punctuation preservation in web crawler text processing."""
 
     def setUp(self):
         """Set up test environment."""
+        super().setUp()  # Set up environment variables
         self.temp_dir = tempfile.mkdtemp()
         self.site_id = "test-site"
         self.site_config = {
@@ -499,6 +528,7 @@ class TestPunctuationPreservation(unittest.TestCase):
         self.path_patcher.stop()
         self.connect_patcher.stop()
         shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
 
     def test_web_content_punctuation_preservation(self):
         """Test that web crawler preserves punctuation in extracted and chunked text."""
@@ -791,11 +821,12 @@ This is the third paragraph that provides additional content for comprehensive t
         self.assertIn("total_chunks", summary)
 
 
-class TestRobotsTxtCompliance(unittest.TestCase):
+class TestRobotsTxtCompliance(BaseWebsiteCrawlerTest):
     """Test cases for robots.txt compliance functionality."""
 
     def setUp(self):
         """Set up test environment."""
+        super().setUp()  # Set up environment variables
         self.temp_dir = tempfile.mkdtemp()
         self.site_id = "test-site"
         self.site_config = {
@@ -823,6 +854,7 @@ class TestRobotsTxtCompliance(unittest.TestCase):
         self.path_patcher.stop()
         self.connect_patcher.stop()
         shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
 
     @patch("crawler.website_crawler.RobotFileParser")
     def test_robots_txt_initialization_success(self, mock_robot_parser_class):
@@ -906,11 +938,12 @@ class TestRobotsTxtCompliance(unittest.TestCase):
         crawler.close()
 
 
-class TestRateLimiting(unittest.TestCase):
+class TestRateLimiting(BaseWebsiteCrawlerTest):
     """Test cases for rate limiting enforcement."""
 
     def setUp(self):
         """Set up test environment."""
+        super().setUp()  # Set up environment variables
         self.temp_dir = tempfile.mkdtemp()
 
         self.site_id = "test-site"
@@ -931,14 +964,6 @@ class TestRateLimiting(unittest.TestCase):
         mock_sqlite_connect.return_value.row_factory = sqlite3.Row
         mock_sqlite_connect.return_value.cursor.return_value.execute.return_value.fetchall.return_value = []
 
-        # Mock environment variables for OpenAI using os.environ.get
-        self.environ_patcher = patch("os.environ")
-        mock_environ = self.environ_patcher.start()
-        mock_environ.get.side_effect = lambda key, default=None: {
-            "OPENAI_INGEST_EMBEDDINGS_MODEL": "text-embedding-3-small",
-            "OPENAI_API_KEY": "mock-api-key",
-        }.get(key, default)
-
         # Mock other dependencies as needed
         self.robots_parser_patcher = patch("crawler.website_crawler.RobotFileParser")
         mock_robots_parser = self.robots_parser_patcher.start()
@@ -948,9 +973,9 @@ class TestRateLimiting(unittest.TestCase):
         """Clean up after tests."""
         self.path_patcher.stop()
         self.connect_patcher.stop()
-        self.environ_patcher.stop()
         self.robots_parser_patcher.stop()
         shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
 
     def test_crawl_delay_configuration(self):
         """Test that crawl delay is properly configured from site config."""
@@ -1130,11 +1155,12 @@ class TestRateLimiting(unittest.TestCase):
         crawler.close()
 
 
-class TestBrowserRestartCounter(unittest.TestCase):
+class TestBrowserRestartCounter(BaseWebsiteCrawlerTest):
     """Test cases for browser restart counter logic."""
 
     def setUp(self):
         """Set up test environment."""
+        super().setUp()  # Set up environment variables
         self.temp_dir = tempfile.mkdtemp()
         self.site_id = "test-site"
         self.site_config = {
@@ -1146,6 +1172,7 @@ class TestBrowserRestartCounter(unittest.TestCase):
     def tearDown(self):
         """Clean up after tests."""
         shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
 
     @patch("crawler.website_crawler.sync_playwright")
     def test_error_restart_counter_bug(self, mock_sync_playwright):

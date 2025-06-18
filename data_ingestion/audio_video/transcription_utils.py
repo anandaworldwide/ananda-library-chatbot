@@ -464,14 +464,16 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
     """
     Chunk a transcription into segments based on semantic boundaries using spaCy.
 
-    Uses fixed 600-token chunks with 20% overlap for optimal RAG performance.
+    Uses historical 190-token chunks with 95-token overlap (50%) for optimal audio transcription.
 
     Returns a list of chunk dictionaries with text, start time, end time, and word objects.
     """
 
-    # Use spaCy chunking with FIXED parameters for optimal RAG performance
-    # SpacyTextSplitter defaults to 600 tokens with 120-token overlap (20%)
-    text_splitter = SpacyTextSplitter(separator="\n\n", pipeline="en_core_web_sm")
+    # Use spaCy chunking with historical parameters for optimal audio transcription
+    # Audio historically used smaller chunks (190 tokens) with higher overlap (50%)
+    text_splitter = SpacyTextSplitter(
+        chunk_size=190, chunk_overlap=95, separator="\n\n", pipeline="en_core_web_sm"
+    )
 
     global chunk_lengths  # Ensure we are using the global list
     chunks = []
@@ -584,7 +586,7 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
             chunk_word_counts = [len(chunk["words"]) for chunk in chunks]
             avg_words = sum(chunk_word_counts) / len(chunk_word_counts)
             target_range_chunks = sum(
-                1 for count in chunk_word_counts if 225 <= count <= 450
+                1 for count in chunk_word_counts if 71 <= count <= 142
             )
             target_percentage = (target_range_chunks / len(chunks)) * 100
 
@@ -592,7 +594,7 @@ def chunk_transcription(transcript, target_chunk_size=150, overlap=75):
                 f"Chunking results: {len(chunks)} chunks, avg {avg_words:.1f} words/chunk"
             )
             logger.info(
-                f"Target range (225-450 words): {target_range_chunks}/{len(chunks)} chunks ({target_percentage:.1f}%)"
+                f"Target range (71-142 words): {target_range_chunks}/{len(chunks)} chunks ({target_percentage:.1f}%)"
             )
 
             # Warn about very small chunks (but don't fail)

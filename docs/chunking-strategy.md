@@ -2,9 +2,40 @@
 
 ## Overview
 
-The Ananda Library Chatbot uses a sophisticated semantic chunking strategy based on spaCy paragraph detection to improve
-retrieval quality in the RAG (Retrieval-Augmented Generation) pipeline. This approach significantly outperforms
-traditional fixed-size chunking methods and dynamic chunking strategies.
+The Ananda Library Chatbot uses a sophisticated semantic chunking strategy based on spaCy sentence detection with
+historical chunk parameters optimized for retrieval quality in the RAG (Retrieval-Augmented Generation) pipeline. The
+system has reverted to proven historical chunk sizes that delivered optimal performance before system changes caused
+degradation.
+
+## Historical Parameter Reversion (2025)
+
+**Background**: RAG evaluation revealed a significant performance drop from 78.6% precision to lower levels, prompting
+analysis of chunking parameters versus historical baselines.
+
+**Root Cause Unknown**: The exact reasons why larger chunk sizes (600 tokens) and newer chunking systems underperformed
+are not fully understood. Multiple factors could be involved:
+
+- Chunk size optimization for specific content types
+- Changes in embedding model behavior
+- Interaction effects between chunking strategy and retrieval algorithms
+- Data quality issues in the current Pinecone index
+
+**Empirical Approach**: Rather than investigate the complex root causes, the team is taking a proven-performance
+approach:
+
+**Key Finding**: Historical chunk sizes from commit before roughly `6be6e15b430454fc38a5db72e160b18aae31752d` provided
+optimal RAG performance:
+
+- **Audio transcription**: 150 words (~190 tokens) with 50% overlap
+- **Text sources**: 1000 characters (~250 tokens) with 20% overlap
+
+**Current Strategy**:
+
+1. **Revert to Historical Parameters**: All ingestion methods now use these proven historical parameters
+2. **Regenerate Vector Database**: Create new Pinecone database with historical chunk parameters
+3. **Performance Validation**: Measure that the new system performs the same or better than current production
+4. **Maintain spaCy Advantages**: Keep superior spaCy sentence-based chunking approach (78.6% precision vs 75.2% for
+   fixed-size chunking)
 
 ## Current Implementation: spaCy Word-Based Token Chunking
 
@@ -23,13 +54,14 @@ traditional fixed-size chunking methods and dynamic chunking strategies.
 
 ### Key Features
 
-- **spaCy Integration**: Uses spaCy's natural language processing for sentence detection and word tokenization
-- **Fixed Target Sizing**: Consistent chunk sizes (~600 tokens, ~300 words) with 20% overlap for optimal RAG performance
-- **Word-Based Boundaries**: Chunks based on word count rather than attempting paragraph detection
-- **Sentence Preservation**: Respects sentence boundaries within word-count targets
-- **Smart Merging**: Post-processing to merge small chunks into optimal word count ranges
+- **spaCy Integration**: Uses spaCy's natural language processing for sentence detection and token counting
+- **Historical Target Sizing**: Content-specific chunk sizes based on historical performance analysis
+  - **Audio/Video**: 190 tokens (~95 words) with 95 token overlap (50%)
+  - **Text Sources**: 250 tokens (~125 words) with 50 token overlap (20%)
+- **Sentence-Based Boundaries**: Respects sentence boundaries within token limits using spaCy sentence detection
+- **Smart Merging**: Post-processing to merge small chunks while maintaining content coherence
 - **Comprehensive Metrics**: Detailed logging and analytics for chunk quality assessment
-- **Proven Performance**: RAG evaluation results show excellent retrieval quality with consistent processing times
+- **Performance-Driven**: Chunk sizes optimized based on RAG evaluation results and content type characteristics
 
 ### Technical Implementation
 
@@ -99,18 +131,30 @@ chunks from a document) difficult and inefficient.
 
 All ingestion scripts now use consistent word-based token chunking parameters:
 
-#### Unified Target Sizes
+#### Historical Target Sizes (Reverted for Optimal Performance)
 
-- **Standard Configuration**: ~600 tokens with 20% overlap (120 tokens)
+**Content-Specific Parameters**:
 
-- **Target Word Range**: 225-450 words per chunk across all content types
-- **Very short texts** (<200 words): Single chunk, no splitting
+- **Audio/Video Transcription**: 190 tokens with 50% overlap (95 tokens)
+  - Rationale: Speech patterns require smaller, overlapping chunks for timestamp alignment
+  - Historical evidence: Best performance with ~150 words in original system
+- **Text Sources (PDF, Web, SQL)**: 250 tokens with 20% overlap (50 tokens)
+  - Rationale: Written content benefits from larger chunks preserving complete thoughts
+  - Historical evidence: Consistent 1000-character chunks (~250 tokens) in original system
 
-#### Target Word Range Achievement
+**Implementation Notes**:
 
-- **Primary Goal**: 225-450 words per chunk
-- **Current Achievement**: 70%+ of chunks within target range
-- **Smart Merging**: Post-processing combines small chunks to reach target
+- **Very short texts** (<100 tokens): Single chunk, no splitting
+- **Base chunk size**: Uses 75% of target (188 tokens) to provide buffer for sentence boundaries
+
+#### Target Token Range Achievement
+
+**Historical Performance Targets**:
+
+- **Audio/Video**: 95-285 tokens (50%-150% of 190 target)
+- **Text Sources**: 188-313 tokens (75%-125% of 250 target)
+- **Quality Metrics**: Token-based distributions aligned with content-specific targets
+- **Smart Merging**: Post-processing combines small chunks to reach optimal ranges
 
 ### Environment-Specific Settings
 

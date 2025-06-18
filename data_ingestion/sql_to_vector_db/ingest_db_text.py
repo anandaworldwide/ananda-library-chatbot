@@ -1161,7 +1161,8 @@ def main():
                     "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
                 )
             embeddings_model = OpenAIEmbeddings(model=model_name, chunk_size=500)
-            text_splitter = SpacyTextSplitter()
+            # Historical SQL/database processing used 1000 chars (~250 tokens) with 200 chars (~50 tokens) overlap (20%)
+            text_splitter = SpacyTextSplitter(chunk_size=250, chunk_overlap=50)
 
             (
                 processed_count_session,
