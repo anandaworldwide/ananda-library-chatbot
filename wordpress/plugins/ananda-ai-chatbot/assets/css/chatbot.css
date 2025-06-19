@@ -805,9 +805,13 @@
   padding: 2px; /* Thickness of the effect */
   background: conic-gradient(
     from 0deg,
-    rgba(173, 216, 230, 0.8) 0%,
-    rgba(173, 216, 230, 0.8) 10%,
-    transparent 30%
+    transparent 0%,
+    rgba(173, 216, 230, 0.2) 3%,
+    rgba(173, 216, 230, 0.6) 7%,
+    rgba(173, 216, 230, 0.8) 12%,
+    rgba(173, 216, 230, 0.6) 23%,
+    rgba(173, 216, 230, 0.2) 34%,
+    transparent 45%
   ); /* Adjust gradient stops for desired effect */
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude; /* Punch hole in the middle */
