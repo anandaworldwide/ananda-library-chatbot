@@ -2168,10 +2168,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const bubble = document.getElementById("aichatbot-bubble");
     if (!bubble) return;
 
-    // Start the recurring animation after initial animations complete (roughly 12 seconds)
+    // Be sure that at least 10 seconds have passed (might be a bit more, it depends on page load time)
     setTimeout(() => {
       // Disable initial animations by adding a class
       bubble.classList.add("initial-animations-complete");
+    }, 10000);
+
+    // Start the recurring animation after initial animations complete (roughly 12 seconds)
+    setTimeout(() => {
       // Function to play animation
       const playAnimation = () => {
         // Only play if window is not visible
@@ -2179,11 +2183,11 @@ document.addEventListener("DOMContentLoaded", () => {
           !document.getElementById("aichatbot-window") ||
           document.getElementById("aichatbot-window").style.display === "none"
         ) {
-          bubble.classList.add("magnetic-ripple-animation-big");
+          bubble.classList.add("pulse-animation");
           // Remove the class after animation completes to allow replay
           setTimeout(() => {
-            bubble.classList.remove("magnetic-ripple-animation-big");
-          }, 2000); // Matches the 2s animation duration
+            bubble.classList.remove("pulse-animation");
+          }, 8000); // 4 iterations of the animation
         }
       };
 
