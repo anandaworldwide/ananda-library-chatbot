@@ -912,6 +912,8 @@
 
 #aichatbot-bubble.initial-animations-complete::before {
   animation-name: none !important;
+  content: "" !important;
+  display: none !important;
 }
 
 /* Ensure the bigger magnetic ripple animation can still play */
@@ -1038,3 +1040,30 @@ div.aichatbot-search-bubble .aichatbot-search-bubble-arrow {
     right: 25px !important;
   }
 }
+
+
+#aichatbot-bubble.pulse-animation {
+  animation: chatbot-bubble-pulse 2s infinite !important;
+  box-shadow: 0 0 0 0 rgba(232, 182, 58,1);
+}
+
+#aichatbot-bubble.pulse-animation:before {
+  animation: none;
+}
+
+@keyframes chatbot-bubble-pulse {
+  0% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(232, 182, 58,0.6);
+  }
+
+  70% {
+      transform: scale(1.2);
+      box-shadow: 0 0 0 25px rgba(232, 182, 58,0);
+  }
+
+  100% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(232, 182, 58,0);
+  }
+} 
