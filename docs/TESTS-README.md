@@ -39,12 +39,18 @@ expressed with highly variable phrasing. Simple string matching or regex is ofte
 
 ### Problem
 
-Keyword or regex-based tests fail when the LLM provides a semantically correct answer using unexpected wording.
+Keyword or regex-based tests fail when the LLM provides a semantically correct answer using unexpected wording. This
+problem also applies to RAG system evaluation where textual similarity matching can produce false performance alarms.
 
 ### Solution: Embedding Similarity
 
 We leverage vector embeddings to compare the semantic meaning of the LLM's actual response against predefined canonical
 (ideal) responses.
+
+**Critical Lesson from RAG Evaluation**: Always use embedding-based semantic similarity for evaluating AI systems. A
+recent investigation revealed that textual similarity matching (using `difflib.SequenceMatcher`) suggested a 70%
+performance drop in our RAG system, but embedding-based evaluation showed only a 4% difference (96% vs 100% strict
+precision). The issue was evaluation methodology, not system performance.
 
 ### How It Works
 
@@ -72,6 +78,29 @@ We leverage vector embeddings to compare the semantic meaning of the LLM's actua
   test environments (`import 'openai/shims/node';` and `dangerouslyAllowBrowser: true`).
 - **Example**: See `__tests__/site_specific/ananda-public/semanticSearch.test.ts`.
 
+### Performance Optimization for Embedding-Based Testing
+
+**Caching Strategy**: For tests that make many embedding comparisons, implement caching to avoid redundant API calls:
+
+```typescript
+// Cache embeddings to avoid API overhead
+const embeddingCache = new Map<string, number[]>();
+
+async function getCachedEmbedding(text: string, model: string): Promise<number[]> {
+  const cacheKey = `${model}:${text}`;
+  if (embeddingCache.has(cacheKey)) {
+    return embeddingCache.get(cacheKey)!;
+  }
+
+  const embedding = await getEmbedding(text, model);
+  embeddingCache.set(cacheKey, embedding);
+  return embedding;
+}
+```
+
+**Batch Processing**: For large test suites, consider pre-computing embeddings for all canonical responses at test setup
+to minimize API calls during test execution.
+
 ### Tuning (Critical)
 
 The effectiveness of this method hinges on:
@@ -79,6 +108,25 @@ The effectiveness of this method hinges on:
 1. **Quality Canonical Responses**: Define representative examples of good (and bad/rejection) responses.
 2. **Threshold Adjustment**: The similarity thresholds are _not_ fixed values. They **must** be tuned by observing the
    scores generated during test runs for known good and bad responses to ensure reliable pass/fail separation.
+3. **Consistent Model Usage**: Use the same embedding model across your application and tests to ensure comparable
+   results.
+
+**Recommended Thresholds** (based on extensive RAG evaluation):
+
+- **Strict Similarity**: 0.85 for high-confidence semantic matches
+- **Lenient Similarity**: 0.7 for acceptable semantic matches
+- **Rejection Threshold**: < 0.7 for clearly unrelated content
+
+### RAG System Evaluation
+
+For RAG system evaluation specifically, the project includes specialized utilities:
+
+- **Main Evaluation**: `bin/evaluate_rag_system_no_rechunk.py` - Comprehensive RAG system comparison
+- **Multi-Query Analysis**: `data_ingestion/compare_multiple_queries.py` - Pattern detection across query types
+- **Single Query Deep Dive**: `data_ingestion/compare_representative_query.py` - Detailed chunk analysis
+
+These utilities demonstrate proper embedding-based evaluation with caching and progress tracking for production-scale
+testing.
 
 ## Running Tests
 

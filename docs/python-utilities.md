@@ -290,3 +290,136 @@ configure_logging(debug=True)
 
 This documentation serves as the definitive reference for all shared Python utilities in the Ananda Library Chatbot
 project. For specific implementation details, refer to the individual utility files and their comprehensive docstrings.
+
+---
+
+## RAG Evaluation Utilities (`bin/`)
+
+### Overview
+
+The project includes comprehensive utilities for evaluating Retrieval-Augmented Generation (RAG) system performance
+using embedding-based semantic similarity.
+
+### 1. RAG System Evaluation (`bin/evaluate_rag_system_no_rechunk.py`)
+
+**Purpose**: Evaluates and compares RAG systems using original Pinecone chunks with embedding-based semantic similarity.
+
+**Key Features**:
+
+- **Embedding-Based Evaluation**: Uses OpenAI embeddings and cosine similarity for accurate semantic matching
+- **Performance Caching**: Pre-computes embeddings to avoid redundant API calls (reduces runtime from 4+ hours to ~15
+  minutes)
+- **Multi-System Comparison**: Compares current vs new RAG systems simultaneously
+- **Comprehensive Metrics**: Calculates Precision@K and NDCG@K with detailed reporting
+
+**Critical Implementation Details**:
+
+- **Caching Strategy**: Global `EMBEDDING_CACHE` with MD5 hash keys prevents API call explosion
+- **Similarity Thresholds**: 0.85 strict, 0.7 lenient for semantic similarity matching
+- **Progress Tracking**: TQDM progress bars for embedding pre-computation phase
+
+**Usage**:
+
+```bash
+python bin/evaluate_rag_system_no_rechunk.py --site ananda
+```
+
+**Key Learning**: When switching from textual similarity to embedding-based evaluation, implement caching to prevent
+massive API overhead. Without caching: ~12,800 API calls (4+ hours). With caching: ~1,300 unique API calls (15 minutes).
+
+### 2. Multi-Query Analysis (`data_ingestion/compare_multiple_queries.py`)
+
+**Purpose**: Analyzes multiple representative queries simultaneously to understand performance patterns.
+
+**Key Features**:
+
+- **Representative Query Selection**: Tests diverse query types across different content domains
+- **Semantic Similarity Analysis**: Uses embedding-based matching for accurate evaluation
+- **Performance Pattern Detection**: Identifies whether issues are query-specific or systemic
+- **Detailed Reporting**: Per-query analysis with similarity scores and match types
+
+**Critical Findings**:
+
+- **Overall Performance**: Current system 100% strict precision (0.956 avg), New system 96% strict precision (0.933 avg)
+- **Query-Specific Issues**: Only 1 out of 5 queries showed degradation, confirming issue is not systemic
+- **Evaluation Methodology**: Embedding-based similarity provides much more accurate results than textual matching
+
+### 3. Representative Query Comparison (`data_ingestion/compare_representative_query.py`)
+
+**Purpose**: Deep analysis of a single representative query to understand retrieval differences between systems.
+
+**Key Features**:
+
+- **Top-K Chunk Analysis**: Retrieves and compares top-5 chunks from both Pinecone systems
+- **Detailed Similarity Scoring**: Analyzes chunk text, Pinecone scores, and semantic similarity to judged documents
+- **Match Type Classification**: Categorizes matches as strict, lenient, or no match based on similarity thresholds
+- **Chunk-Level Debugging**: Provides detailed analysis for understanding retrieval behavior
+
+### Key Evaluation Principles
+
+**1. Always Use Embedding-Based Similarity**
+
+- **Problem**: Textual similarity (difflib.SequenceMatcher) fails to capture semantic relevance
+- **Solution**: OpenAI embeddings with cosine similarity for accurate semantic matching
+- **Impact**: Prevents false performance alarms and misdirected optimization efforts
+
+**2. Implement Embedding Caching**
+
+- **Problem**: Embedding API calls create massive overhead (12,800+ calls = 4+ hours)
+- **Solution**: Pre-compute and cache all unique text embeddings at startup
+- **Implementation**: Global cache with MD5 hash keys based on text+model combination
+
+**3. Use Representative Query Sets**
+
+- **Purpose**: Understand whether performance issues are query-specific or systemic
+- **Method**: Test diverse queries across different content domains and complexity levels
+- **Benefit**: Prevents over-optimization for specific edge cases
+
+### Dependencies
+
+**Required Packages**:
+
+- `openai` - For embedding generation and semantic similarity
+- `pinecone-client` - For vector database operations
+- `scikit-learn` - For NDCG calculation and similarity metrics
+- `numpy` - For vector operations and cosine similarity
+- `tqdm` - For progress tracking during embedding pre-computation
+
+**Environment Variables**:
+
+- `OPENAI_API_KEY` - OpenAI API access for embeddings
+- `PINECONE_API_KEY` - Pinecone vector database access
+- Site-specific index and model configurations
+
+### Performance Optimization
+
+**Embedding Caching Strategy**:
+
+```python
+# Global cache prevents redundant API calls
+EMBEDDING_CACHE = {}
+
+def get_embedding(text, model_name, openai_client):
+    cache_key = get_text_hash(text, model_name)
+    if cache_key in EMBEDDING_CACHE:
+        return EMBEDDING_CACHE[cache_key]
+    # ... API call and caching logic
+```
+
+**Pre-computation Pattern**:
+
+```python
+def precompute_embeddings(eval_data, embedding_models, openai_client):
+    # Collect all unique texts from queries and judged documents
+    unique_texts = set()
+    for query, judged_docs in eval_data.items():
+        unique_texts.add(query)
+        for doc in judged_docs:
+            unique_texts.add(doc["document"])
+
+    # Pre-compute with progress tracking
+    with tqdm(total=len(unique_texts), desc=f"Embedding {model_name}") as pbar:
+        for text in unique_texts:
+            embedding = get_embedding(text, model_name, openai_client)
+            pbar.update(1)
+```

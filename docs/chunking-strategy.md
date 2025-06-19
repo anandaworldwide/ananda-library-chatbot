@@ -9,33 +9,37 @@ degradation.
 
 ## Historical Parameter Reversion (2025)
 
-**Background**: RAG evaluation revealed a significant performance drop from 78.6% precision to lower levels, prompting
-analysis of chunking parameters versus historical baselines.
+**Background**: Initial RAG evaluation using textual similarity matching suggested a significant performance drop,
+prompting investigation of chunking parameters and evaluation methodology.
 
-**Root Cause Unknown**: The exact reasons why larger chunk sizes (600 tokens) and newer chunking systems underperformed
-are not fully understood. Multiple factors could be involved:
+**Key Investigation Findings**:
 
-- Chunk size optimization for specific content types
-- Changes in embedding model behavior
-- Interaction effects between chunking strategy and retrieval algorithms
-- Data quality issues in the current Pinecone index
+- **Original Problem**: Evaluation using textual similarity (difflib.SequenceMatcher) suggested ~70% performance drop
+- **Actual Reality**: Embedding-based semantic similarity evaluation revealed only ~4% performance difference (96% vs
+  100% strict precision)
+- **Root Cause**: Evaluation methodology was flawed - textual matching cannot capture semantic relevance accurately
+- **Scope**: Performance differences are query-specific (affecting 1 out of 5 test queries) rather than systemic
 
-**Empirical Approach**: Rather than investigate the complex root causes, the team is taking a proven-performance
-approach:
+**Resolution**: The investigation concluded that both chunking systems perform nearly equivalently:
 
-**Key Finding**: Historical chunk sizes from commit before roughly `6be6e15b430454fc38a5db72e160b18aae31752d` provided
-optimal RAG performance:
-
-- **Audio transcription**: 150 words (~190 tokens) with 50% overlap
-- **Text sources**: 1000 characters (~250 tokens) with 20% overlap
+- **Current System**: 100% strict precision (0.956 average semantic similarity)
+- **New System**: 96% strict precision (0.933 average semantic similarity)
 
 **Current Strategy**:
 
-1. **Revert to Historical Parameters**: All ingestion methods now use these proven historical parameters
-2. **Regenerate Vector Database**: Create new Pinecone database with historical chunk parameters
-3. **Performance Validation**: Measure that the new system performs the same or better than current production
-4. **Maintain spaCy Advantages**: Keep superior spaCy sentence-based chunking approach (78.6% precision vs 75.2% for
-   fixed-size chunking)
+1. **Maintain Historical Parameters**: Continue using proven historical parameters as they provide reliable performance
+2. **Updated Evaluation Methods**: All RAG evaluation now uses embedding-based semantic similarity for accuracy
+3. **Performance Monitoring**: Established reliable evaluation infrastructure using proper semantic similarity metrics
+4. **Preserve spaCy Advantages**: Maintain superior spaCy sentence-based chunking approach while using historical chunk
+   sizes
+
+**Historical Chunk Parameters (Empirically Validated)**:
+
+- **Audio transcription**: 190 tokens (~95 words) with 95 token overlap (50%)
+- **Text sources**: 250 tokens (~125 words) with 50 token overlap (20%)
+
+**Key Learning**: Always use embedding-based semantic similarity for RAG evaluation. Textual matching leads to false
+performance alarms and can misdirect optimization efforts.
 
 ## Current Implementation: spaCy Word-Based Token Chunking
 
