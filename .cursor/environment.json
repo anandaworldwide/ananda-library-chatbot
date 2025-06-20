@@ -1,0 +1,10 @@
+{
+  "agentCanUpdateSnapshot": true,
+  "install": "cd web && npm install && cd .. && pip install -r requirements.txt",
+  "terminals": [
+    {
+      "name": "Run Next.js",
+      "command": "cd web && npm run dev ananda"
+    }
+  ]
+}
