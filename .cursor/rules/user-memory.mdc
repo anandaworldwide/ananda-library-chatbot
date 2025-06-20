@@ -37,6 +37,8 @@ in a different context. Use the format:
    ```
    ```
 
+**Important:** Do not log mistakes that are extremely specific to a circumstance. 
+
 ---
 ## Always add a step to read @self.md in your thoughts
 

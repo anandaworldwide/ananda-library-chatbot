@@ -95,7 +95,6 @@ function validateChatInput(input: unknown): string {
 ```bash
 # Authentication
 JWT_SECRET=                    # Strong random key
-JWT_EXPIRES_IN=24h
 
 # Database credentials
 PINECONE_API_KEY=
@@ -104,13 +103,9 @@ FIRESTORE_PRIVATE_KEY=
 
 # External services
 OPENAI_API_KEY=
-ASSEMBLYAI_API_KEY=
-REDIS_URL=
 
 # Site configuration
 SITE=                         # ananda, crystal, jairam, etc.
-NEXTAUTH_URL=
-NEXTAUTH_SECRET=
 ```
 
 ### Configuration Validation
