@@ -2,7 +2,7 @@
   "agentCanUpdateSnapshot": true,
   "install": "python3 -m venv venv && . venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt && playwright install",
   "build": {
-    "dockerfile": ".cursor/Dockerfile",
+    "dockerfile": "Dockerfile",
     "context": ".."
   },
   "terminals": [
