@@ -1,4 +1,10 @@
 {
   "agentCanUpdateSnapshot": true,
-  "install": "pip install -r requirements.txt"
+  "install": "python3 -m venv venv && . venv/bin/activate && pip install -r requirements.txt",
+  "terminals": [
+    {
+      "name": "Run Tests",
+      "command": ". venv/bin/activate && pytest"
+    }
+  ]
 }
