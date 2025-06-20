@@ -1,6 +1,10 @@
 {
   "agentCanUpdateSnapshot": true,
-  "install": "sudo apt update && sudo apt install -y software-properties-common && sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt update && sudo apt install -y python3.11 python3.11-venv python3.11-dev libpq-dev build-essential libxml2-dev libxslt1-dev libffi-dev libssl-dev && python3.11 -m venv venv && . venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt",
+  "install": "python3 -m venv venv && . venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt && playwright install",
+  "build": {
+    "dockerfile": ".cursor/Dockerfile",
+    "context": ".."
+  },
   "terminals": [
     {
       "name": "Run Tests",
