@@ -1,6 +1,6 @@
 {
   "agentCanUpdateSnapshot": true,
-  "install": "sudo apt update && sudo apt install -y python3.13-venv && python3 -m venv venv && . venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt",
+  "install": "sudo apt update && sudo apt install -y python3.11 python3.11-venv python3.11-dev libpq-dev build-essential libxml2-dev libxslt1-dev && python3.11 -m venv venv && . venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt",
   "terminals": [
     {
       "name": "Run Tests",
