@@ -45,14 +45,17 @@ RUN add-apt-repository ppa:deadsnakes/ppa && \
     python3.11 \
     python3.11-dev \
     python3.11-venv \
+    python3.11-distutils \
     python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-# Make python3.11 the default python3
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+# Make python3.11 the default python3 and python
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
-# Upgrade pip
-RUN python3 -m pip install --upgrade pip
+# Upgrade pip for Python 3.11 specifically
+RUN python3.11 -m pip install --upgrade pip
 #---------------------
 
 #+++++++++++++++++++++
