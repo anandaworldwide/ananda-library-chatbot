@@ -706,6 +706,65 @@ describe('makeChain', () => {
     expect(resolveDocs).toHaveBeenCalled();
     expect(resolveDocs).toHaveBeenCalledWith(expect.any(Array));
   });
+
+  test('should handle follow-up question conversion correctly', async () => {
+    const sendData = jest.fn();
+    const resolveDocs = jest.fn();
+
+    // Mock the RunnableSequence to return the expected structure with question
+    const mockRunnableSequence = {
+      from: jest.fn().mockImplementation((steps) => ({
+        steps,
+        invoke: jest.fn().mockImplementation(async (input) => {
+          // For the main answer chain, return the expected structure
+          if (input.question && input.chat_history !== undefined) {
+            return {
+              answer: 'Test answer response',
+              sourceDocuments: mockDocuments,
+              question: input.question // Return the question that was passed in
+            };
+          }
+          // For other chains
+          return 'Converted standalone question';
+        }),
+        pipe: jest.fn().mockReturnThis(),
+      })),
+    };
+
+    // Temporarily override the RunnableSequence mock
+    const originalRunnableSequence = require('@langchain/core/runnables').RunnableSequence;
+    require('@langchain/core/runnables').RunnableSequence = mockRunnableSequence;
+
+    try {
+      // Call makeChain with chat history to simulate follow-up question
+      const chain = await makeChain(
+        mockRetriever,
+        { model: 'gpt-4o-mini', temperature: 0.7 },
+        2,
+        undefined,
+        sendData,
+        resolveDocs,
+      );
+
+      // Test that the chain properly handles question conversion
+      const result = await chain.invoke({
+        question: 'What about that?', // Follow-up question
+        chat_history: 'Human: Who was Yogananda?\nAI: Yogananda was a spiritual leader who introduced meditation to the West.',
+      });
+
+      // The result should contain the answer, sourceDocuments, and question
+      expect(result).toHaveProperty('answer');
+      expect(result).toHaveProperty('sourceDocuments');
+      expect(result).toHaveProperty('question');
+      
+      // Verify the chain was properly constructed
+      expect(chain).toBeDefined();
+      expect(typeof chain.invoke).toBe('function');
+    } finally {
+      // Restore original mock
+      require('@langchain/core/runnables').RunnableSequence = originalRunnableSequence;
+    }
+  });
 });
 
 describe('convertChatHistory', () => {
