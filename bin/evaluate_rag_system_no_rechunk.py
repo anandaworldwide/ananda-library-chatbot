@@ -501,8 +501,19 @@ def print_average_metrics_report(metrics, times, query_count, systems):
 def print_comparison_table(metrics, times, systems):
     """Print comparison table for both systems."""
     print("\n--- Comparison Table ---")
-    print(f"{'System':<60} {'Precision@K':<12} {'NDCG@K':<10} {'Time (s)':<10}")
-    print("-" * 92)
+
+    # Calculate the maximum description length to ensure proper alignment
+    max_desc_length = max(len(system["description"]) for system in systems)
+    # Add some padding and ensure minimum width
+    desc_width = max(max_desc_length + 5, 40)
+
+    # Calculate total table width
+    total_width = desc_width + 12 + 10 + 10 + 3  # +3 for spaces between columns
+
+    print(
+        f"{'System':<{desc_width}} {'Precision@K':<12} {'NDCG@K':<10} {'Time (s)':<10}"
+    )
+    print("-" * total_width)
     for system in systems:
         avg_precision = (
             np.mean(metrics[system["name"]]["precision"])
@@ -516,7 +527,7 @@ def print_comparison_table(metrics, times, systems):
         )
         avg_time = np.mean(times[system["name"]]) if times[system["name"]] else 0.0
         print(
-            f"{system['description']:<60} {avg_precision:<12.4f} {avg_ndcg:<10.4f} {avg_time:<10.4f}"
+            f"{system['description']:<{desc_width}} {avg_precision:<12.4f} {avg_ndcg:<10.4f} {avg_time:<10.4f}"
         )
 
 
