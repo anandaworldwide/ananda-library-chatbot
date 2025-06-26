@@ -1405,3 +1405,76 @@ multiple responsibilities.
 
 **Status**: ✅ **COMPLETE** - processing_time_estimates.py now has comprehensive unit test coverage with 14 passing
 tests covering all functions, edge cases, and error conditions.
+
+## Successfully Implemented Restated Question Storage and Usage for Related Questions - ✅ COMPLETED
+
+**Problem**: Follow-up questions get restated through a generative AI call in the makechain, but the restated question was not being stored or used for related questions matching. The system was using the original question for embeddings instead of the semantically cleaner restated version.
+
+**Root Cause**: The conversational RAG pipeline generated restated questions for retrieval but didn't persist them or use them for related questions functionality. This led to suboptimal related questions matching since the original follow-up questions often lack context.
+
+**Evidence from System Architecture**:
+- `makechain.ts`: Generated standalone questions from follow-ups but didn't return them
+- `route.ts`: Saved chat responses but didn't store the restated question
+- `relatedQuestionsUtils.ts`: Used original question text for embeddings and related questions matching
+- Missing field in Answer type for storing restated questions
+
+**Solution Implemented**: Complete pipeline modification to store and use restated questions:
+
+1. **Modified makechain.ts** - Updated conversational chain to return restated question:
+   ```typescript
+   // Return restated question along with answer and documents
+   return {
+     ...result,
+     question: input.question // This is the restated question
+   };
+   ```
+
+2. **Updated route.ts** - Modified chat handler to capture and store restated question:
+   ```typescript
+   const { fullResponse, finalDocs, restatedQuestion } = await setupAndExecuteLanguageModelChain(...)
+   
+   await saveOrUpdateDocument(
+     null, originalQuestion, fullResponse, finalDocs, 
+     collection, history, clientIP, restatedQuestion
+   );
+   ```
+
+3. **Enhanced relatedQuestionsUtils.ts** - Modified to use restated question for embeddings:
+   ```typescript
+   // Use restated question for embeddings if available
+   const textForEmbedding = restatedQuestionText || questionText;
+   console.log(`Using ${restatedQuestionText ? 'restated' : 'original'} question for embeddings`);
+   ```
+
+4. **Updated Answer type** - Added restatedQuestion field:
+   ```typescript
+   export type Answer = {
+     // ... existing fields
+     restatedQuestion?: string; // AI-generated restated question
+   };
+   ```
+
+**Key Implementation Details**:
+
+- **Backwards Compatibility**: Falls back to original question if restated question is not available
+- **Batch Processing**: Updated `updateRelatedQuestionsBatch` to use restated questions
+- **Consistency**: Same text used for embeddings is used for Pinecone queries
+- **Logging**: Clear logging indicates when restated vs original questions are used
+- **Type Safety**: Added proper TypeScript types for the new field
+
+**Expected Benefits**:
+
+- **Better Related Questions**: Restated questions provide cleaner semantic context for matching
+- **Consistent Embeddings**: Same text used across the entire related questions pipeline
+- **Improved Follow-up Handling**: Follow-up questions get proper context restoration
+- **Semantic Accuracy**: AI-generated standalone questions better capture user intent
+
+**Files Modified**:
+- `web/src/utils/server/makechain.ts` - Return restated question from chain
+- `web/src/app/api/chat/v1/route.ts` - Capture and store restated question
+- `web/src/utils/server/relatedQuestionsUtils.ts` - Use restated question for embeddings
+- `web/src/types/answer.ts` - Added restatedQuestion field to Answer type
+
+**Technical Achievement**: Complete end-to-end implementation from question restatement generation through storage to usage in related questions matching, with proper fallbacks and type safety.
+
+**Status**: ✅ **COMPLETE** - Restated questions are now stored in Firestore and used for related questions matching, improving semantic accuracy of the RAG system.

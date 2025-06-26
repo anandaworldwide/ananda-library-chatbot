@@ -1258,3 +1258,53 @@ time estimation calculations, file locking, JSON persistence, and error handling
 
 **Integration**: The new test suite integrates seamlessly with the existing pytest infrastructure and follows the same
 patterns as other test files in the project.
+
+## Restated Question Storage and Usage for Related Questions - COMPLETED
+
+**Status**: Successfully implemented complete pipeline for storing and using AI-generated restated questions for related questions matching in the Ananda Library Chatbot.
+
+**Feature Implementation**:
+
+**Problem Solved**: The conversational RAG system was generating restated questions from follow-ups for retrieval but not persisting or using them for related questions functionality. This led to suboptimal semantic matching since original follow-up questions often lacked proper context.
+
+**Solution Architecture**:
+
+1. **Chain Modification**: Updated `makechain.ts` to return restated question alongside answer and source documents
+2. **Storage Integration**: Modified `route.ts` to capture restated question and store it in Firestore
+3. **Related Questions Enhancement**: Updated `relatedQuestionsUtils.ts` to use restated question for embeddings when available
+4. **Type System**: Added `restatedQuestion` field to Answer type with proper TypeScript support
+
+**Technical Implementation**:
+
+**Files Modified**:
+- **`web/src/utils/server/makechain.ts`**: Modified conversational chain to return restated question
+- **`web/src/app/api/chat/v1/route.ts`**: Updated chat handler to store restated question in Firestore
+- **`web/src/utils/server/relatedQuestionsUtils.ts`**: Enhanced to use restated question for embeddings and related questions matching
+- **`web/src/types/answer.ts`**: Added optional `restatedQuestion` field to Answer type
+
+**Key Features**:
+- **Backwards Compatibility**: System falls back to original question when restated question is not available
+- **Batch Processing Support**: Both single and batch related questions updates use restated questions
+- **Consistent Pipeline**: Same text used for embeddings is used throughout the related questions pipeline
+- **Comprehensive Logging**: Clear indication of when restated vs original questions are used
+- **Type Safety**: Full TypeScript support with proper typing for the new field
+
+**Benefits Achieved**:
+- **Improved Semantic Matching**: Restated questions provide cleaner context for related questions matching
+- **Better Follow-up Handling**: Follow-up questions get proper context restoration before embedding
+- **Consistent Embeddings**: Same text used across entire related questions functionality
+- **Enhanced User Experience**: More accurate related questions suggestions
+
+**Integration Points**:
+- **Question Restatement**: Leverages existing LangChain pipeline for generating standalone questions
+- **Firestore Storage**: Integrates with existing Answer document structure
+- **Pinecone Embeddings**: Uses existing embedding and vector search infrastructure
+- **Related Questions API**: Works with existing related questions endpoints and UI
+
+**Quality Assurance**:
+- **Fallback Logic**: Graceful degradation when restated question is not available
+- **Error Handling**: Proper error handling throughout the pipeline
+- **Logging**: Comprehensive logging for debugging and monitoring
+- **Type Safety**: Full TypeScript integration prevents runtime errors
+
+**Impact**: This enhancement significantly improves the accuracy of related questions matching by using semantically cleaner, context-aware restated questions instead of potentially ambiguous original follow-up questions.
