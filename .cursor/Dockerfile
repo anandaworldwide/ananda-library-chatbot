@@ -20,8 +20,10 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 
 # Set Python 3.11 as the default python3
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
-    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
-
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
+    && python -m spacy download en_core_web_sm \
+    && touch .env.ananda
+    
 # Verify installation
 RUN python3 --version && pip3 --version
 
