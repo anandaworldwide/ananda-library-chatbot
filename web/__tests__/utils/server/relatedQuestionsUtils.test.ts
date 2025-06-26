@@ -8,10 +8,6 @@
  * - Single question updates with restated questions
  */
 
-import { Document } from 'langchain/document';
-import { Answer } from '../../../src/types/answer';
-import { RelatedQuestion } from '../../../src/types/RelatedQuestion';
-
 // Mock modules before importing the functions
 jest.mock('../../../src/services/firebase', () => ({
   db: {
@@ -86,11 +82,8 @@ import {
 } from '../../../src/utils/server/relatedQuestionsUtils';
 
 // Get mocked modules
-const mockDb = jest.requireMock('../../../src/services/firebase').db;
 const mockFirestoreGet = jest.requireMock('../../../src/utils/server/firestoreRetryUtils').firestoreGet;
 const mockFirestoreUpdate = jest.requireMock('../../../src/utils/server/firestoreRetryUtils').firestoreUpdate;
-const mockFirestoreQueryGet = jest.requireMock('../../../src/utils/server/firestoreRetryUtils').firestoreQueryGet;
-const mockFirestoreBatchCommit = jest.requireMock('../../../src/utils/server/firestoreRetryUtils').firestoreBatchCommit;
 
 describe('relatedQuestionsUtils', () => {
   beforeEach(() => {

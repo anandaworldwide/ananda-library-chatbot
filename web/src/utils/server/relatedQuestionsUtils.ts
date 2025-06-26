@@ -1160,7 +1160,7 @@ export async function updateRelatedQuestionsBatch(batchSize: number): Promise<vo
   // 2. Upsert Embeddings for the current batch, providing the generated embeddings.
   try {
     // Create a modified questions array that uses the same text that was embedded
-    const questionsForUpsert = questions.map((q, index) => {
+    const questionsForUpsert = questions.map((q) => {
       const questionData = q as any;
       const textForEmbedding = questionData.restatedQuestion || q.question || "";
       return {

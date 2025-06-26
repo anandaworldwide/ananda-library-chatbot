@@ -732,8 +732,9 @@ describe('makeChain', () => {
     };
 
     // Temporarily override the RunnableSequence mock
-    const originalRunnableSequence = require('@langchain/core/runnables').RunnableSequence;
-    require('@langchain/core/runnables').RunnableSequence = mockRunnableSequence;
+    const runnablesModule = jest.requireMock('@langchain/core/runnables');
+    const originalRunnableSequence = runnablesModule.RunnableSequence;
+    runnablesModule.RunnableSequence = mockRunnableSequence;
 
     try {
       // Call makeChain with chat history to simulate follow-up question
@@ -762,7 +763,7 @@ describe('makeChain', () => {
       expect(typeof chain.invoke).toBe('function');
     } finally {
       // Restore original mock
-      require('@langchain/core/runnables').RunnableSequence = originalRunnableSequence;
+      runnablesModule.RunnableSequence = originalRunnableSequence;
     }
   });
 });
