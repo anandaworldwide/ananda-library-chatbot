@@ -520,6 +520,9 @@ export const makeChain = async (
     fullAnswerGenerationChain, // This now takes the mapped input and produces { answer, sourceDocuments }
   ]);
 
+  // Store the restated question in a closure to be accessed later
+  let capturedRestatedQuestion = "";
+
   // Combine all chains into the final conversational retrieval QA chain
   const conversationalRetrievalQAChain = RunnableSequence.from([
     {
@@ -532,10 +535,12 @@ export const makeChain = async (
         const simpleSocialPattern =
           /^(thanks|thank you|gracias|merci|danke|thank|thx|ty|thank u|muchas gracias|vielen dank|great|awesome|perfect|good|nice|ok|okay|got it|perfect|clear)[\s!.]*$/i;
         if (simpleSocialPattern.test(input.question.trim())) {
+          capturedRestatedQuestion = input.question; // Store for later
           return input.question; // Don't reformulate social messages
         }
 
         if (input.chat_history.trim() === "") {
+          capturedRestatedQuestion = input.question; // Store for later
           return input.question;
         }
 
@@ -545,18 +550,17 @@ export const makeChain = async (
         // Debug: Show the result of reformulation
         console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
 
+        capturedRestatedQuestion = standaloneQuestion; // Store for later
         return standaloneQuestion;
       },
       chat_history: (input: AnswerChainInput) => input.chat_history,
-      modelInfo: () => ({ label, model, temperature }), // Pass model info through
     },
-    // Store the restated question for later use
-    async (input: { question: string; chat_history: string; modelInfo: { label?: string; model: string; temperature: number } }) => {
-      const result = await answerChain.invoke(input);
-      // Include the restated question in the result
+    answerChain, // Use the answer chain directly to maintain streaming
+    // Add the restated question to the final result
+    (result: { answer: string; sourceDocuments: Document[] }) => {
       return {
         ...result,
-        question: input.question // This is the restated question
+        question: capturedRestatedQuestion // This is the restated question
       };
     },
   ]);
@@ -715,11 +719,11 @@ export async function setupAndExecuteLanguageModelChain(
 
       sendData({ done: true, timing: finalTiming });
 
-      // Use result.answer for fullResponse to ensure consistency, though fullResponse is also built by streaming.
+      // Use the streamed fullResponse as the authoritative answer since it's what was sent to the frontend
       // result.sourceDocuments are the correctly filtered documents from makeChain.
       // result.question is the restated question from the chain
       return { 
-        fullResponse: result.answer, 
+        fullResponse: fullResponse || result.answer, // Prefer streamed content, fallback to result.answer
         finalDocs: result.sourceDocuments, 
         restatedQuestion: result.question 
       };
