@@ -134,7 +134,7 @@ python manual_evaluation_interface.py \
 
 **Expected Output**:
 
-```
+```bash
 System Performance Comparison
 =============================
 System A (Ada-002):     Precision@5: 0.74 ± 0.08

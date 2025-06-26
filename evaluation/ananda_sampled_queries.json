@@ -1,0 +1,207 @@
+{
+  "metadata": {
+    "sampling_date": "2025-06-20T18:29:49.818257",
+    "total_queries": 25,
+    "description": "Production queries sampled for unbiased RAG evaluation"
+  },
+  "queries": [
+    {
+      "id": "3MJP0knZgSkIHCyn8aIn",
+      "question": "is energy intelligent",
+      "word_count": 3,
+      "char_count": 21,
+      "collection": "master_swami",
+      "cluster": 0,
+      "timestamp": "2025-05-22T23:45:12.250000+00:00"
+    },
+    {
+      "id": "GAsQmuMh3czMdqTsbY6M",
+      "question": "No, not a prayer. I want you to write a prompt that I can give to an AI on the topic of meditating more deeply when I am feeling upset.",
+      "word_count": 30,
+      "char_count": 135,
+      "collection": "master_swami",
+      "cluster": 7,
+      "timestamp": "2025-04-02T03:05:33.899000+00:00"
+    },
+    {
+      "id": "gjZZP3DLHkMKZAwDxFfl",
+      "question": "Be Even-Minded and Cheerful",
+      "word_count": 4,
+      "char_count": 27,
+      "collection": "master_swami",
+      "cluster": 7,
+      "timestamp": "2025-05-09T23:12:32.250000+00:00"
+    },
+    {
+      "id": "FDNqJL6kGszttSS4kVFy",
+      "question": "What are some suggestions for people (esp. beginners) who may not see the spiritual eye perfectly?",
+      "word_count": 16,
+      "char_count": 98,
+      "collection": "master_swami",
+      "cluster": 1,
+      "timestamp": "2025-04-10T17:59:07.239000+00:00"
+    },
+    {
+      "id": "fMCgfVG2mJFA48kDrHgo",
+      "question": "what does it mean \"to spiriitualize\" something",
+      "word_count": 7,
+      "char_count": 46,
+      "collection": "master_swami",
+      "cluster": 1,
+      "timestamp": "2025-06-05T16:43:57.098000+00:00"
+    },
+    {
+      "id": "5qBnoncWrJoWlcDIUKq2",
+      "question": "Have we all been brothers and sisters in a previous incarnation",
+      "word_count": 11,
+      "char_count": 63,
+      "collection": "master_swami",
+      "cluster": 0,
+      "timestamp": "2025-06-18T22:53:11.133000+00:00"
+    },
+    {
+      "id": "7YZSwIFlaNRCnAOVVVFx",
+      "question": "Video of swamiji where he talks about how to find god in meditation",
+      "word_count": 13,
+      "char_count": 67,
+      "collection": "master_swami",
+      "cluster": 3,
+      "timestamp": "2025-06-06T18:16:02.962000+00:00"
+    },
+    {
+      "id": "Adcj2i2jRENPoGAfjs5p",
+      "question": "who liberated Judas Iscariot in the 20th century?",
+      "word_count": 8,
+      "char_count": 49,
+      "collection": "master_swami",
+      "cluster": 4,
+      "timestamp": "2025-04-10T06:59:31.494000+00:00"
+    },
+    {
+      "id": "gF7tAV9b1AehhZO48gD0",
+      "question": "Who was Yogananda?",
+      "word_count": 3,
+      "char_count": 18,
+      "collection": "master_swami",
+      "cluster": 2,
+      "timestamp": "2025-03-24T21:09:36.754000+00:00"
+    },
+    {
+      "id": "P6fkhXC9rV9JfJJ3knTa",
+      "question": "I'm trying to find an audio recording of a talk by Swamiji. Perhaps the entire class was about teaching, but I'm not sure. At one point, he talked about the \"levels\" of teaching: talking at your students fro ma level of information, then talking to them rather than just from what you're thinking, then feeling their needs and addressing those. He said to try to feel your students' thoughts, their vibrations, and then respond accordingly. Can you help me find that talk?",
+      "word_count": 82,
+      "char_count": 472,
+      "collection": "master_swami",
+      "cluster": 3,
+      "timestamp": "2025-06-18T22:04:46.270000+00:00"
+    },
+    {
+      "id": "EWfsqte3eP25jcdEga7p",
+      "question": "Why is the Autobiography of a Yogi written with such English?",
+      "word_count": 11,
+      "char_count": 61,
+      "collection": "master_swami",
+      "cluster": 2,
+      "timestamp": "2025-04-18T12:38:59.880000+00:00"
+    },
+    {
+      "id": "sQzUsmG3BUPYH0hnEzX9",
+      "question": "Does the Astral body need to breathe?",
+      "word_count": 7,
+      "char_count": 37,
+      "collection": "master_swami",
+      "cluster": 5,
+      "timestamp": "2025-05-09T14:37:30.587000+00:00"
+    },
+    {
+      "id": "HTE2Mx0Pu3jnhuxuPjvt",
+      "question": "can you edit this based on our teachings: Let us celebrate together the Summer Solstice, a symbol of spiritual fulfillment, illumination, and joy\u2014that pure light every soul longs for and already carries within.\n\nThis is a sacred opportunity to honor the fullness of God\u2019s presence in our lives, a presence we have each felt through the blessing of belonging to a spiritual community.\n\nWe will gather under the open sky to share a delicious dinner prepared by Chef Jaidhara, illuminated by candlelight and accompanied by live instrumental music, uplifting songs, and more.\n\nDon\u2019t miss this special evening!",
+      "word_count": 97,
+      "char_count": 605,
+      "collection": "master_swami",
+      "cluster": 1,
+      "timestamp": "2025-04-13T04:19:55.940000+00:00"
+    },
+    {
+      "id": "Y5jBhOAvjHzr3Isl7B4t",
+      "question": "Find the story of Ram Gopal in Autobiography of a Yogi, where he was meditating 10 to 22 hours a day",
+      "word_count": 21,
+      "char_count": 100,
+      "collection": "whole_library",
+      "cluster": 2,
+      "timestamp": "2025-06-04T15:30:57.317000+00:00"
+    },
+    {
+      "id": "YvevVd2HuPCxmbZWwwBq",
+      "question": "did Babaji say he was Krishna",
+      "word_count": 6,
+      "char_count": 29,
+      "collection": "master_swami",
+      "cluster": 3,
+      "timestamp": "2025-04-17T11:36:22.148000+00:00"
+    },
+    {
+      "id": "qGF8pzUgIJe4cH834nOs",
+      "question": "Provide a specifi example and quote for each one of the following 5 points:                              \n     Inner Truth Over Institutional: Both true Christianity and Kriya Yoga emphasize that divine truth is inward, not institutional. This means that the focus is on personal spiritual experience rather than adherence to external religious structures.\n\nLove and Devotion: In Christianity, Jesus taught to love God with all one's heart, mind, strength, and soul. Similarly, Kriya Yoga requires love, devotion, and upliftment of consciousness as essential qualities for spiritual progress.\n\nThe Spine as a Battleground: Kriya Yoga teaches that the spine is the battleground where the seeds of karma are buried. By practicing Kriya Yoga, individuals can work on uplifting their consciousness and overcoming these karmic seeds.\n\nParallels in Symbolism: Swamiji highlights parallels between Christian symbols and those in Kriya Yoga. For example, the star of Bethlehem is likened to the star of the spiritual eye, and the sound of cosmic vibration (Aum) is seen as the Holy Ghost or Holy Spirit.\n\nTechniques as Keys to the Kingdom: The techniques of meditation in Kriya Yoga, such as those that open the chakras of the spine, are likened to the keys of the Kingdom of Heaven. These techniques help raise the body's energy towards the highest centers in the brain, where the Kingdom of God is said to reside.",
+      "word_count": 221,
+      "char_count": 1407,
+      "collection": "master_swami",
+      "cluster": 5,
+      "timestamp": "2025-03-25T21:16:10.172000+00:00"
+    },
+    {
+      "id": "JGNqNXdGGu5SiA0b5DDj",
+      "question": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "word_count": 22,
+      "char_count": 128,
+      "collection": "master_swami",
+      "cluster": 4,
+      "timestamp": "2025-04-10T07:25:25.893000+00:00"
+    },
+    {
+      "id": "ANUvcvQObotGp9NiIawq",
+      "question": "give three main points on \"Why Do Devotees Fall?\"",
+      "word_count": 9,
+      "char_count": 49,
+      "collection": "whole_library",
+      "cluster": 5,
+      "timestamp": "2025-06-03T18:16:13.662000+00:00"
+    },
+    {
+      "id": "JMLdExbr7z78rJmQd7UW",
+      "question": "What is master\u2019s famous quote from the garden party about creating communities",
+      "word_count": 12,
+      "char_count": 78,
+      "collection": "master_swami",
+      "cluster": 4,
+      "timestamp": "2025-06-08T23:11:12.037000+00:00"
+    },
+    {
+      "id": "LCHOMsPDVdawzLzOIBZj",
+      "question": "Who said Matt is a vibration of energy and energy is a vibration of light and light as a vibration of consciousness",
+      "word_count": 22,
+      "char_count": 115,
+      "collection": "master_swami",
+      "cluster": 0,
+      "timestamp": "2025-06-19T14:43:28.029000+00:00"
+    },
+    {
+      "id": "BRhkSNH4E1VRNiB1dFxo",
+      "question": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "word_count": 36,
+      "char_count": 205,
+      "collection": "master_swami",
+      "cluster": 6,
+      "timestamp": "2025-06-16T16:55:11.015000+00:00"
+    },
+    {
+      "id": "CQiD9rSSvxRYUINYk5FT",
+      "question": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "word_count": 19,
+      "char_count": 94,
+      "collection": "master_swami",
+      "cluster": 7,
+      "timestamp": "2025-04-02T03:05:01.300000+00:00"
+    }
+  ]
+}
