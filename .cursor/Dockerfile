@@ -22,19 +22,11 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
-# Create workspace directory and set as working directory
-WORKDIR /workspace
-
-# Create virtual environment in /workspace/.venv
-RUN python3 -m venv .venv
-
-# Activate virtual environment and install spaCy model
-RUN . .venv/bin/activate && pip install --upgrade pip && pip install spacy && python -m spacy download en_core_web_sm
-
-# Create .env.ananda file
-RUN touch .env.ananda
+# Pre-install spaCy globally to speed up virtual environment setup
+RUN pip3 install spacy && python3 -m spacy download en_core_web_sm
     
 # Verify installation
 RUN python3 --version && pip3 --version
 
-ENV PATH="/workspace/.venv/bin:$PATH"
+# Set environment variable for virtual environment path
+ENV PATH="/workspace/venv/bin:$PATH"
