@@ -1,10 +1,12 @@
 {
-  "agentCanUpdateSnapshot": true,
+  "name": "Ananda Chatbot Development",
+  "build": {
+    "context": ".",
+    "dockerfile": "Dockerfile"
+  },
+  "user": "ubuntu",
   "install": "python3 -m venv venv && . venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt && playwright install",
-  "terminals": [
-    {
-      "name": "Run Tests",
-      "command": ". venv/bin/activate && pytest"
-    }
-  ]
+  "start": "echo hi",
+  "terminals": [],
+  "repositoryDependencies": []
 }
