@@ -330,7 +330,8 @@ async function saveOrUpdateDocument(
   finalDocuments: Document[], // Use the final documents
   collection: string,
   history: ChatMessage[],
-  clientIP: string
+  clientIP: string,
+  restatedQuestion: string
 ): Promise<string | null> {
   if (!db) {
     return null;
@@ -347,6 +348,7 @@ async function saveOrUpdateDocument(
     ip: clientIP,
     timestamp: fbadmin.firestore.FieldValue.serverTimestamp(), // Update timestamp on save/update
     relatedQuestionsV2: [], // Reset or handle related questions as needed
+    restatedQuestion: restatedQuestion,
   };
 
   try {
@@ -759,7 +761,7 @@ async function handleChatRequest(req: NextRequest) {
         );
 
         // Execute the full chain
-        const { fullResponse, finalDocs } = await setupAndExecuteLanguageModelChain(
+        const { fullResponse, finalDocs, restatedQuestion } = await setupAndExecuteLanguageModelChain(
           retriever,
           sanitizedInput.question,
           sanitizedInput.history || [],
@@ -782,7 +784,8 @@ async function handleChatRequest(req: NextRequest) {
               finalDocs,
               sanitizedInput.collection || "whole_library",
               sanitizedInput.history || [],
-              clientIP
+              clientIP,
+              restatedQuestion // Pass the restated question
             );
 
             if (savedDocId) {
