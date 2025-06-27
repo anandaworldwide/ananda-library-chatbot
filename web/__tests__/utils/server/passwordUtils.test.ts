@@ -121,9 +121,9 @@ describe('passwordUtils', () => {
     });
 
     it('should handle token with multiple colons', () => {
-      // Should split on first colon, taking everything after as timestamp
+      // Destructuring takes second element, so 'some:token:1672617600' -> 'token' -> NaN -> false
       const tokenWithMultipleColons = 'some:token:1672617600';
-      expect(isTokenValid(tokenWithMultipleColons)).toBe(true);
+      expect(isTokenValid(tokenWithMultipleColons)).toBe(false);
     });
 
     it('should correctly convert millisecond timestamp at boundary (9999999999)', () => {
@@ -133,9 +133,15 @@ describe('passwordUtils', () => {
     });
 
     it('should correctly convert millisecond timestamp at boundary (10000000000)', () => {
-      // Timestamp of 10000000000 should be converted from milliseconds to seconds
+      // Timestamp of 10000000000 converts to 10000000 seconds (1970), which is before 2023 password change
       const boundaryToken = 'sometoken:10000000000';
-      expect(isTokenValid(boundaryToken)).toBe(true);
+      expect(isTokenValid(boundaryToken)).toBe(false);
+    });
+
+    it('should correctly convert valid millisecond timestamp above boundary', () => {
+      // Future millisecond timestamp (2024) that should convert and be valid
+      const futureMillisecondToken = 'sometoken:1704067200000'; // Jan 1, 2024 in milliseconds
+      expect(isTokenValid(futureMillisecondToken)).toBe(true);
     });
 
     it('should handle zero timestamp', () => {

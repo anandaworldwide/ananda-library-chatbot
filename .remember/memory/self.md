@@ -1316,101 +1316,52 @@ using `querySnapshot.docs.map()`.
 
 ## Successfully Implemented Restated Question Storage and Usage for Related Questions - ✅ FULLY COMPLETED WITH TESTS
 
-**Problem**: Follow-up questions get restated through a generative AI call in the makechain, but the restated question was not being stored or used for related questions matching. The system was using the original question for embeddings instead of the semantically cleaner restated version.
+**Problem**: Follow-up questions get restated through a generative AI call in the makechain, but the restated question
+was not being stored or used for related questions matching. The system was using the original question for embeddings
+instead of the semantically cleaner restated version.
 
-**Root Cause**: The conversational RAG pipeline generated restated questions for retrieval but didn't persist them or use them for related questions functionality. This led to suboptimal related questions matching since the original follow-up questions often lack context.
+**Root Cause**: The conversational RAG pipeline generated restated questions for retrieval but didn't persist them or
+use them for related questions functionality. This led to suboptimal related questions matching since the original
+follow-up questions often lack context.
 
 **Evidence from System Architecture**:
+
 - `makechain.ts` generated restated questions but didn't return them
-- `route.ts` saved responses but not the restated question 
+- `route.ts` saved responses but not the restated question
 - `relatedQuestionsUtils.ts` used original question text for embeddings
 - No type definition for storing restated questions
 
 **Complete Solution Implemented**:
 
-1. **Chain Modification**: Updated `makechain.ts` `setupAndExecuteLanguageModelChain()` to return `{ fullResponse, finalDocs, restatedQuestion }`
-2. **Storage Integration**: Modified `route.ts` to capture restated question and pass to `saveOrUpdateDocument()`  
-3. **Embedding Enhancement**: Updated `relatedQuestionsUtils.ts` to use restated question for embeddings when available, with fallback to original
+1. **Chain Modification**: Updated `makechain.ts` `setupAndExecuteLanguageModelChain()` to return
+   `{ fullResponse, finalDocs, restatedQuestion }`
+2. **Storage Integration**: Modified `route.ts` to capture restated question and pass to `saveOrUpdateDocument()`
+3. **Embedding Enhancement**: Updated `relatedQuestionsUtils.ts` to use restated question for embeddings when available,
+   with fallback to original
 4. **Type Support**: Extended `Answer` type to include optional `restatedQuestion: string` field
 
 **Verification Evidence**:
-- Console logs show: "Using restated question for embeddings: [restated text]" vs "Using original question for embeddings: [original text]"
+
+- Console logs show: "Using restated question for embeddings: [restated text]" vs "Using original question for
+  embeddings: [original text]"
 - Graceful fallback working when restated question not available
 - All test suites passing (8/8) with 90/90 tests passing
 
 **Test Coverage Completed**:
-- **makechain.test.ts**: ✅ 16/16 tests passing 
+
+- **makechain.test.ts**: ✅ 16/16 tests passing
 - **route.test.ts**: ✅ 27/27 tests passing (including restated question storage test)
 - **relatedQuestionsUtils.test.ts**: ✅ 6/6 tests passing (restated question usage tests)
 - **answer.test.ts**: ✅ 4/4 tests passing (type definition tests)
 
-**Critical Learning**: When implementing RAG pipeline changes that affect multiple components, ensure the complete data flow is updated:
+**Critical Learning**: When implementing RAG pipeline changes that affect multiple components, ensure the complete data
+flow is updated:
+
 1. ✅ Chain generation (makechain.ts)
-2. ✅ Data capture (route.ts) 
+2. ✅ Data capture (route.ts)
 3. ✅ Storage (Firestore with proper field)
 4. ✅ Usage (relatedQuestionsUtils.ts)
 5. ✅ Type definitions (Answer type)
 6. ✅ Comprehensive test coverage for all components
 
 **Status**: Production-ready implementation with full test coverage confirming functionality.
-
-## Successfully Created Comprehensive Unit Tests for passwordUtils.ts - ✅ COMPLETED
-
-**Problem**: passwordUtils.ts module had only 22% test coverage and needed to reach 70% or higher. The module contains critical security functions for token validation and timestamp management.
-
-**Module Analysis**: The passwordUtils.ts module contains two key functions:
-1. `getLastPasswordChangeTimestamp()` - reads and parses password change timestamp from environment variable
-2. `isTokenValid(token: string)` - validates tokens against password change timestamps with automatic conversion between millisecond and second formats
-
-**Solution Implemented**: Created comprehensive test suite with 25 test cases in `web/__tests__/utils/server/passwordUtils.test.ts`:
-
-**Test Coverage Breakdown**:
-
-1. **getLastPasswordChangeTimestamp() - 7 test cases**:
-   - Valid number parsing from environment variable
-   - Handling undefined environment variable (returns 0)
-   - Handling empty string (returns 0)  
-   - Handling invalid non-numeric values (returns NaN)
-   - Zero timestamp handling
-   - Negative timestamp handling
-   - Large timestamp values
-
-2. **isTokenValid() - 15 test cases**:
-   - Valid tokens with seconds format timestamps
-   - Valid tokens with milliseconds format timestamps  
-   - Invalid tokens before password change (both formats)
-   - Boundary conditions (exactly at password change time)
-   - Malformed tokens (no colon, empty timestamp, non-numeric)
-   - Token format edge cases (multiple colons)
-   - Timestamp conversion boundary testing (9999999999 vs 10000000000)
-   - Zero and negative timestamps
-   - Very large future timestamps
-   - Environment variable edge cases (password timestamp = 0, NaN)
-
-3. **Integration Scenarios - 3 test cases**:
-   - Realistic authentication flow simulation
-   - Password rotation security incident scenario
-   - Mixed timestamp format consistency verification
-
-**Key Testing Features**:
-- **Environment variable isolation**: Proper setup/teardown to prevent test pollution
-- **Boundary testing**: Critical conversion logic at 10-digit threshold (9999999999 vs 10000000000)
-- **Security scenarios**: Password change invalidation, rotation handling
-- **Edge case coverage**: Malformed inputs, NaN handling, negative values
-- **Real-world simulation**: Actual timestamp values and realistic scenarios
-
-**Technical Quality**:
-- **Consistent patterns**: Follows same structure as existing jwtUtils.test.ts and ipUtils.test.ts
-- **Proper imports**: Uses `@/utils/server/passwordUtils` import pattern
-- **Jest best practices**: Proper mocking, setup/teardown, descriptive test names
-- **Comprehensive documentation**: Clear test descriptions and inline comments
-
-**Expected Coverage Improvement**: From 22% to 90%+ (targeting well above 70% requirement)
-
-**Security Validation**: Tests verify critical security logic including:
-- Token timestamp validation against password change events
-- Proper handling of both millisecond and second timestamp formats
-- Graceful failure for malformed or expired tokens
-- Environment configuration validation
-
-**Status**: ✅ **COMPLETE** - Comprehensive test suite created with 25 test cases covering all functions, edge cases, and security scenarios for passwordUtils.ts module.
