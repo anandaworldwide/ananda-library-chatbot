@@ -76,43 +76,74 @@ python dual_system_retrieval.py \
 - Captures retrieval timing and Pinecone similarity scores
 - Handles different embedding dimensions and index configurations
 
-### Step 3: Manual Evaluation (`manual_evaluation_interface.py`)
+### Step 3: Manual Evaluation (Word Documents)
 
-**Purpose**: Interactive terminal interface for human evaluation of document relevance.
+**Purpose**: Distributed evaluation using Microsoft Word documents for minister review.
 
 **Method**:
 
-- Presents documents to human evaluator in randomized, blinded fashion
-- Uses 4-point relevance scale:
-  - **4 (Highly Relevant)**: Directly answers the query
-  - **3 (Relevant)**: Related and helpful
-  - **2 (Somewhat Relevant)**: Tangentially related
-  - **1 (Not Relevant)**: Unrelated to the query
-- Session management with progress saving and resumption
-- Navigation controls (back, skip, full text view)
+- Creates Word documents with 10 documents per query (5 from each system)
+- Documents presented in randomized, blinded fashion (no system identification)
+- Uses 0-3 relevance scale:
+  - **3**: Highly Relevant - Directly answers the query
+  - **2**: Relevant - Contains information related to the query
+  - **1**: Marginally Relevant - Mentions query topics but not directly helpful
+  - **0**: Irrelevant - Not related to the query
+  - **ignore**: Skip this document (write 'I' or 'ignore', or leave blank)
+- Professional formatting with bordered query display and clean data entry
+
+#### Step 3a: Generate Word Documents (`generate_word_docs.py`)
+
+**Purpose**: Create evaluation documents for distribution to ministers.
 
 **Usage**:
 
 ```bash
-cd bin
-python manual_evaluation_interface.py \
-  --results-file ada002_vs_3large_results.json \
-  --session-file evaluation_session.json
+python generate_word_docs.py \
+  --results 3large_vs_3small/step2_retrieval_results.json \
+  --output-dir 3large_vs_3small/word_docs
+```
+
+**Output**: Creates directory structure with Word documents:
+
+- `unassigned/` - Documents ready for distribution
+- `todo/` - Documents in progress
+- `done/` - Completed documents
+
+#### Step 3b: Process Completed Documents (`process_word_docs.py`)
+
+**Purpose**: Extract judgments from completed Word documents and update evaluation session.
+
+**Workflow**:
+
+1. Ministers complete evaluation → Documents stay in `unassigned/`
+2. Move completed documents → `mv unassigned/doc.docx todo/`
+3. Process documents → Run processing script
+4. Automatic processing → Extracts judgments, moves to `done/`
+
+**Usage**:
+
+```bash
+python process_word_docs.py \
+  --word-docs-dir 3large_vs_3small/word_docs \
+  --session-file 3large_vs_3small/step3_evaluation_session.json \
+  --results-file 3large_vs_3small/step2_retrieval_results.json
 ```
 
 **Key Features**:
 
 - **Unbiased evaluation**: Documents presented without system identification
-- **Progress tracking**: Can pause/resume evaluation sessions
-- **Quality controls**: Option to view full document text, skip problematic docs
-- **Text wrapping**: Proper formatting for readability (100-character width)
-- **Navigation**: Back/forward through documents, review previous evaluations
+- **Distributed workflow**: Multiple ministers can work simultaneously
+- **Clean data entry**: No underlines to delete, prominent query display
+- **Automatic processing**: Extracts scores and updates session file
+- **Progress tracking**: Session file maintains evaluation history
+- **Error handling**: Ignores Word temp files (~$), validates input
 
-### Step 4: Results Analysis (TO BE IMPLEMENTED)
+### Step 4: Results Analysis (`analyze_manual_evaluation_results.py`)
 
 **Purpose**: Analyze human judgments to determine which system performs better.
 
-**Planned Script**: `analyze_manual_evaluation_results.py`
+**Script**: `analyze_manual_evaluation_results.py`
 
 **Analysis Methods**:
 
@@ -132,15 +163,25 @@ python manual_evaluation_interface.py \
 - Effect size calculation (Cohen's d)
 - Query-level analysis to identify systematic strengths/weaknesses
 
-**Expected Output**:
+**Usage**:
+
+```bash
+python analyze_manual_evaluation_results.py \
+  --session-file 3large_vs_3small/step3_evaluation_session.json \
+  --output-report 3large_vs_3small/step4_final_report.md \
+  --output-summary 3large_vs_3small/step4_results_summary.json
+```
+
+**Example Output**:
 
 ```bash
 System Performance Comparison
 =============================
-System A (Ada-002):     Precision@5: 0.74 ± 0.08
-System B (3-Large):     Precision@5: 0.85 ± 0.06
-Performance Difference: +0.11 (15% improvement)
-Statistical Significance: p < 0.01 (highly significant)
+System A (Ada-002):     Precision@5: 0.252 ± 0.086
+System B (3-Large):     Precision@5: 0.454 ± 0.095
+Performance Difference: +0.202 (44.5% improvement)
+Statistical Significance: p = 0.020 (significant)
+Effect Size: Cohen's d = -0.59 (medium effect)
 Recommendation: Deploy System B to production
 ```
 
@@ -201,23 +242,33 @@ python dual_system_retrieval.py \
   --system2-name "3-Large" \
   --output-file results.json
 
-# Step 3: Manual evaluation
-python manual_evaluation_interface.py \
-  --results-file results.json \
-  --session-file session.json
+# Step 3a: Generate Word documents for evaluation
+python generate_word_docs.py \
+  --results results.json \
+  --output-dir word_docs
 
-# Step 4: Analyze results (TO BE IMPLEMENTED)
+# Step 3b: Process completed evaluations (after ministers finish)
+python process_word_docs.py \
+  --word-docs-dir word_docs \
+  --session-file evaluation_session.json \
+  --results-file results.json
+
+# Step 4: Analyze results
 python analyze_manual_evaluation_results.py \
-  --session-file session.json \
-  --output-report final_report.md
+  --session-file evaluation_session.json \
+  --output-report final_report.md \
+  --output-summary results_summary.json
 ```
 
 ## File Outputs
 
 - **`ananda_sampled_queries.json`**: Sampled production queries with metadata
 - **`ada002_vs_3large_results.json`**: Retrieved documents from both systems
-- **`evaluation_session.json`**: Human evaluation session with progress and judgments
-- **`final_report.md`**: Statistical analysis and deployment recommendation
+- **`word_docs/unassigned/*.docx`**: Word documents ready for minister evaluation
+- **`word_docs/done/*.docx`**: Completed evaluation documents
+- **`evaluation_session.json`**: Extracted human judgments and evaluation metadata
+- **`step4_final_report.md`**: Statistical analysis and deployment recommendation
+- **`step4_results_summary.json`**: JSON summary of performance metrics
 
 ## Best Practices
 
@@ -227,12 +278,14 @@ python analyze_manual_evaluation_results.py \
 - Ensure minimum query quality (filter very short/malformed queries)
 - Balance sample across different user interaction patterns
 
-### For Manual Evaluation
+### For Word Document Evaluation
 
-- Take breaks to avoid evaluation fatigue
-- Be consistent with relevance criteria across all documents
-- Use "skip" sparingly - only for truly problematic documents
-- Review full document text when relevance is unclear
+- **Distribution**: Distribute documents evenly among available ministers
+- **Instructions**: Provide clear guidance on 0-3 scoring scale before starting
+- **Consistency**: Encourage ministers to be consistent with relevance criteria
+- **Skipping**: Use "ignore" sparingly - only for truly problematic documents
+- **Quality**: Review full document text when relevance is unclear
+- **Processing**: Move completed documents to todo/ folder promptly for processing
 
 ### For Statistical Analysis
 
