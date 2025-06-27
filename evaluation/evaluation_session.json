@@ -1,6 +1,6 @@
 {
-  "current_query_idx": 15,
-  "current_doc_idx": 6,
+  "current_query_idx": 22,
+  "current_doc_idx": 0,
   "evaluations": {
     "3MJP0knZgSkIHCyn8aIn_audio||The Bhaktan Files||Week 01 - 05||b1119d2f||chunk4_Ada-002": {
       "score": 3,
@@ -1210,8 +1210,486 @@
       "system": "3-Large",
       "doc_score": 0.716519296,
       "timestamp": 1750606032.411057
+    },
+    "qGF8pzUgIJe4cH834nOs_text||Ananda Library||db||Clarity Magazine Archives 2009-2015:: 2013 Summer ||Paramhansa Yogananda||651863e5||1_3-Large": "skip",
+    "qGF8pzUgIJe4cH834nOs_text||Ananda Library||db||The Hindu Way Of Awakening:: 12. The Symbolism of ||Swami Kriyananda||5eb06eba||27_3-Large": "skip",
+    "qGF8pzUgIJe4cH834nOs_text||Ananda Library||db||The New Path:: Part II: 34. Kriya Yoga||Swami Kriyananda||2c7950af||29_3-Large": "skip",
+    "qGF8pzUgIJe4cH834nOs_audio||Treasures||audio||The Essence of Yoga||Swami Kriyananda||29f6e9cc||99_3-Large": "skip",
+    "JGNqNXdGGu5SiA0b5DDj_youtube||Ananda Youtube||Satsang: Questions and Answers with Swami Kriyananda - June 6, 2002 - Palo Alto||57484d9d||chunk17_Ada-002": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "JGNqNXdGGu5SiA0b5DDj",
+      "query_text": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "doc_id": "youtube||Ananda Youtube||Satsang: Questions and Answers with Swami Kriyananda - June 6, 2002 - Palo Alto||57484d9d||chunk17",
+      "system": "Ada-002",
+      "doc_score": 0.856721,
+      "timestamp": 1750986009.11276
+    },
+    "JGNqNXdGGu5SiA0b5DDj_youtube||Ananda Youtube||Balancing Self-Effort With Receptivity to Divine Grace (With Swami Kriyananda)||f59498b8||chunk1_Ada-002": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "JGNqNXdGGu5SiA0b5DDj",
+      "query_text": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "doc_id": "youtube||Ananda Youtube||Balancing Self-Effort With Receptivity to Divine Grace (With Swami Kriyananda)||f59498b8||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.856337428,
+      "timestamp": 1750986035.5574322
+    },
+    "JGNqNXdGGu5SiA0b5DDj_audio||Treasures||197_True_Renunciation||78edd663||chunk15_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "JGNqNXdGGu5SiA0b5DDj",
+      "query_text": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "doc_id": "audio||Treasures||197_True_Renunciation||78edd663||chunk15",
+      "system": "Ada-002",
+      "doc_score": 0.854597628,
+      "timestamp": 1750986055.0950558
+    },
+    "JGNqNXdGGu5SiA0b5DDj_youtube||Ananda Youtube||Why Devotees Fall (With Swami Kriyananda) June 8, 2003||131b2b72||chunk33_Ada-002": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "JGNqNXdGGu5SiA0b5DDj",
+      "query_text": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "doc_id": "youtube||Ananda Youtube||Why Devotees Fall (With Swami Kriyananda) June 8, 2003||131b2b72||chunk33",
+      "system": "Ada-002",
+      "doc_score": 0.851976514,
+      "timestamp": 1750986077.3366039
+    },
+    "JGNqNXdGGu5SiA0b5DDj_audio||Treasures||How to Be Happy||18c0d667||chunk42_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "JGNqNXdGGu5SiA0b5DDj",
+      "query_text": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "doc_id": "audio||Treasures||How to Be Happy||18c0d667||chunk42",
+      "system": "Ada-002",
+      "doc_score": 0.850312769,
+      "timestamp": 1750986091.092133
+    },
+    "JGNqNXdGGu5SiA0b5DDj_video||Ananda Youtube||video||Balancing Self-Effort With Receptivity to Divine G||Swami Kriyananda||4d78fe1c||0_3-Large": "skip",
+    "JGNqNXdGGu5SiA0b5DDj_text||Ananda Library||db||Kriya and the Evolution of World Religions, 5-96||Swami Kriyananda||b2567564||12_3-Large": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "JGNqNXdGGu5SiA0b5DDj",
+      "query_text": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "doc_id": "text||Ananda Library||db||Kriya and the Evolution of World Religions, 5-96||Swami Kriyananda||b2567564||12",
+      "system": "3-Large",
+      "doc_score": 0.610180676,
+      "timestamp": 1750986211.9577768
+    },
+    "JGNqNXdGGu5SiA0b5DDj_text||Ananda Library||db||The Jewel In the Lotus:: A Play in One Act||Swami Kriyananda||9cf267a5||33_3-Large": "skip",
+    "JGNqNXdGGu5SiA0b5DDj_audio||Treasures||audio||The Importance of Individual Effort||Swami Kriyananda||58700abc||19_3-Large": "skip",
+    "JGNqNXdGGu5SiA0b5DDj_audio||Treasures||audio||inner-experience-of-truth.mp3||Swami Kriyananda||8190041a||99_3-Large": "skip",
+    "ANUvcvQObotGp9NiIawq_text||Crystal Clarity||The_Promise_of_Immortality||f485196a||chunk1_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "ANUvcvQObotGp9NiIawq",
+      "query_text": "give three main points on \"Why Do Devotees Fall?\"",
+      "doc_id": "text||Crystal Clarity||The_Promise_of_Immortality||f485196a||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.897495091,
+      "timestamp": 1750986244.523406
+    },
+    "ANUvcvQObotGp9NiIawq_text||Crystal Clarity||The_Promise_of_Immortality||bbc2cd6d||chunk1_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "ANUvcvQObotGp9NiIawq",
+      "query_text": "give three main points on \"Why Do Devotees Fall?\"",
+      "doc_id": "text||Crystal Clarity||The_Promise_of_Immortality||bbc2cd6d||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.892488301,
+      "timestamp": 1750986246.839228
+    },
+    "ANUvcvQObotGp9NiIawq_text||Crystal Clarity||The_Promise_of_Immortality||5bb88552||chunk1_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "ANUvcvQObotGp9NiIawq",
+      "query_text": "give three main points on \"Why Do Devotees Fall?\"",
+      "doc_id": "text||Crystal Clarity||The_Promise_of_Immortality||5bb88552||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.89015764,
+      "timestamp": 1750986248.8285792
+    },
+    "ANUvcvQObotGp9NiIawq_text||Crystal Clarity||The_Promise_of_Immortality||ba9a5834||chunk1_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "ANUvcvQObotGp9NiIawq",
+      "query_text": "give three main points on \"Why Do Devotees Fall?\"",
+      "doc_id": "text||Crystal Clarity||The_Promise_of_Immortality||ba9a5834||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.88988924,
+      "timestamp": 1750986250.546528
+    },
+    "ANUvcvQObotGp9NiIawq_text||ananda.org||Why Do Devotees Fall_ _With Nayaswami Jyotish_ - Ananda||e46765af||chunk1_Ada-002": {
+      "score": 2,
+      "label": "Relevant",
+      "query_id": "ANUvcvQObotGp9NiIawq",
+      "query_text": "give three main points on \"Why Do Devotees Fall?\"",
+      "doc_id": "text||ananda.org||Why Do Devotees Fall_ _With Nayaswami Jyotish_ - Ananda||e46765af||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.875102937,
+      "timestamp": 1750986273.8273559
+    },
+    "ANUvcvQObotGp9NiIawq_text||Ananda Library||db||The Promise Of Immortality:: 24. How Devotees Can ||Swami Kriyananda||cb8f4f45||0_3-Large": {
+      "score": 1,
+      "label": "Somewhat Relevant",
+      "query_id": "ANUvcvQObotGp9NiIawq",
+      "query_text": "give three main points on \"Why Do Devotees Fall?\"",
+      "doc_id": "text||Ananda Library||db||The Promise Of Immortality:: 24. How Devotees Can ||Swami Kriyananda||cb8f4f45||0",
+      "system": "3-Large",
+      "doc_score": 0.6161111,
+      "timestamp": 1750986288.8196402
+    },
+    "ANUvcvQObotGp9NiIawq_audio||The Bhaktan Files||audio||Sunday Service 17.6.2007 at Village||Swami Kriyananda||d5e4d96d||18_3-Large": {
+      "score": 2,
+      "label": "Relevant",
+      "query_id": "ANUvcvQObotGp9NiIawq",
+      "query_text": "give three main points on \"Why Do Devotees Fall?\"",
+      "doc_id": "audio||The Bhaktan Files||audio||Sunday Service 17.6.2007 at Village||Swami Kriyananda||d5e4d96d||18",
+      "system": "3-Large",
+      "doc_score": 0.588932753,
+      "timestamp": 1750986304.252745
+    },
+    "ANUvcvQObotGp9NiIawq_audio||The Bhaktan Files||audio||Swami_9_6_2002||Swami Kriyananda||bf6ef0fb||0_3-Large": "skip",
+    "ANUvcvQObotGp9NiIawq_text||Ananda Library||db||Clarity Magazine Archives 2009-2015:: 2013 Fall Cl||Swami Kriyananda||39efc907||9_3-Large": {
+      "score": 1,
+      "label": "Somewhat Relevant",
+      "query_id": "ANUvcvQObotGp9NiIawq",
+      "query_text": "give three main points on \"Why Do Devotees Fall?\"",
+      "doc_id": "text||Ananda Library||db||Clarity Magazine Archives 2009-2015:: 2013 Fall Cl||Swami Kriyananda||39efc907||9",
+      "system": "3-Large",
+      "doc_score": 0.564906597,
+      "timestamp": 1750986345.149618
+    },
+    "ANUvcvQObotGp9NiIawq_video||Ananda Youtube||video||Why Devotees Rise (With Swami Kriyananda) June 6, ||Swami Kriyananda||da9da69e||4_3-Large": "skip",
+    "JMLdExbr7z78rJmQd7UW_audio||The Bhaktan Files||Swami Kriyananda Sunday Service 13.9.2009||b1d1063b||chunk34_Ada-002": {
+      "score": 1,
+      "label": "Somewhat Relevant",
+      "query_id": "JMLdExbr7z78rJmQd7UW",
+      "query_text": "What is master\u2019s famous quote from the garden party about creating communities",
+      "doc_id": "audio||The Bhaktan Files||Swami Kriyananda Sunday Service 13.9.2009||b1d1063b||chunk34",
+      "system": "Ada-002",
+      "doc_score": 0.864164054,
+      "timestamp": 1750986404.6203918
+    },
+    "JMLdExbr7z78rJmQd7UW_text||Ananda_Library||Paramhansa_Yogananda_A_Biography_32_His_||723708f1||chunk2_Ada-002": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "JMLdExbr7z78rJmQd7UW",
+      "query_text": "What is master\u2019s famous quote from the garden party about creating communities",
+      "doc_id": "text||Ananda_Library||Paramhansa_Yogananda_A_Biography_32_His_||723708f1||chunk2",
+      "system": "Ada-002",
+      "doc_score": 0.863809884,
+      "timestamp": 1750986420.8156521
+    },
+    "JMLdExbr7z78rJmQd7UW_audio||The Bhaktan Files||Swami 9.10.2000||f5aa422a||chunk29_Ada-002": {
+      "score": 1,
+      "label": "Somewhat Relevant",
+      "query_id": "JMLdExbr7z78rJmQd7UW",
+      "query_text": "What is master\u2019s famous quote from the garden party about creating communities",
+      "doc_id": "audio||The Bhaktan Files||Swami 9.10.2000||f5aa422a||chunk29",
+      "system": "Ada-002",
+      "doc_score": 0.860441208,
+      "timestamp": 1750986438.2084448
+    },
+    "JMLdExbr7z78rJmQd7UW_youtube||Ananda Youtube||Swami Kriyananda Birthday Satsang (2011)||7c5543b2||chunk77_Ada-002": {
+      "score": 2,
+      "label": "Relevant",
+      "query_id": "JMLdExbr7z78rJmQd7UW",
+      "query_text": "What is master\u2019s famous quote from the garden party about creating communities",
+      "doc_id": "youtube||Ananda Youtube||Swami Kriyananda Birthday Satsang (2011)||7c5543b2||chunk77",
+      "system": "Ada-002",
+      "doc_score": 0.856752,
+      "timestamp": 1750986460.255712
+    },
+    "JMLdExbr7z78rJmQd7UW_audio||The Bhaktan Files||sevaka retreat-07-part_2||bcb3270c||chunk51_Ada-002": "skip",
+    "JMLdExbr7z78rJmQd7UW_text||Ananda Library||db||Paramhansa Yogananda: A Biography:: 32. His Legacy||Swami Kriyananda||672c1dc5||4_3-Large": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "JMLdExbr7z78rJmQd7UW",
+      "query_text": "What is master\u2019s famous quote from the garden party about creating communities",
+      "doc_id": "text||Ananda Library||db||Paramhansa Yogananda: A Biography:: 32. His Legacy||Swami Kriyananda||672c1dc5||4",
+      "system": "3-Large",
+      "doc_score": 0.567454457,
+      "timestamp": 1750986478.576135
+    },
+    "JMLdExbr7z78rJmQd7UW_video||Ananda Youtube||video||Swami Kriyananda Birthday Satsang (2011)||Swami Kriyananda||b87cd688||47_3-Large": "skip",
+    "JMLdExbr7z78rJmQd7UW_text||Ananda Library||db||Rescuing Yogananda:: 11. Master's Zeal for Foundin||Swami Kriyananda||ee69e08c||0_3-Large": {
+      "score": 1,
+      "label": "Somewhat Relevant",
+      "query_id": "JMLdExbr7z78rJmQd7UW",
+      "query_text": "What is master\u2019s famous quote from the garden party about creating communities",
+      "doc_id": "text||Ananda Library||db||Rescuing Yogananda:: 11. Master's Zeal for Foundin||Swami Kriyananda||ee69e08c||0",
+      "system": "3-Large",
+      "doc_score": 0.5555861,
+      "timestamp": 1750986496.136091
+    },
+    "JMLdExbr7z78rJmQd7UW_audio||The Bhaktan Files||audio||10 Swami 24_12_Last Bible chapter||Swami Kriyananda||59e36662||1_3-Large": {
+      "score": 2,
+      "label": "Relevant",
+      "query_id": "JMLdExbr7z78rJmQd7UW",
+      "query_text": "What is master\u2019s famous quote from the garden party about creating communities",
+      "doc_id": "audio||The Bhaktan Files||audio||10 Swami 24_12_Last Bible chapter||Swami Kriyananda||59e36662||1",
+      "system": "3-Large",
+      "doc_score": 0.5481475,
+      "timestamp": 1750986512.5424619
+    },
+    "JMLdExbr7z78rJmQd7UW_video||Ananda Youtube||video||Building a Spiritual Community with Swami Kriyanan||Swami Kriyananda||92e3cbdb||5_3-Large": "skip",
+    "LCHOMsPDVdawzLzOIBZj_audio||Treasures||Humility||30ad9f54||chunk17_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "LCHOMsPDVdawzLzOIBZj",
+      "query_text": "Who said Matt is a vibration of energy and energy is a vibration of light and light as a vibration of consciousness",
+      "doc_id": "audio||Treasures||Humility||30ad9f54||chunk17",
+      "system": "Ada-002",
+      "doc_score": 0.877176225,
+      "timestamp": 1750986579.4066718
+    },
+    "LCHOMsPDVdawzLzOIBZj_youtube||Ananda Youtube||The Battle of Life - Talk by Swami Kriyananda||a815afdd||chunk7_Ada-002": {
+      "score": 2,
+      "label": "Relevant",
+      "query_id": "LCHOMsPDVdawzLzOIBZj",
+      "query_text": "Who said Matt is a vibration of energy and energy is a vibration of light and light as a vibration of consciousness",
+      "doc_id": "youtube||Ananda Youtube||The Battle of Life - Talk by Swami Kriyananda||a815afdd||chunk7",
+      "system": "Ada-002",
+      "doc_score": 0.877075374,
+      "timestamp": 1750986598.7718651
+    },
+    "LCHOMsPDVdawzLzOIBZj_audio||Treasures||Christ, The Bible and Becoming One with God||3f407e2f||chunk22_Ada-002": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "LCHOMsPDVdawzLzOIBZj",
+      "query_text": "Who said Matt is a vibration of energy and energy is a vibration of light and light as a vibration of consciousness",
+      "doc_id": "audio||Treasures||Christ, The Bible and Becoming One with God||3f407e2f||chunk22",
+      "system": "Ada-002",
+      "doc_score": 0.876679182,
+      "timestamp": 1750986616.208928
+    },
+    "LCHOMsPDVdawzLzOIBZj_audio||Treasures||Humility||e3df25b2||chunk16_Ada-002": {
+      "score": 2,
+      "label": "Relevant",
+      "query_id": "LCHOMsPDVdawzLzOIBZj",
+      "query_text": "Who said Matt is a vibration of energy and energy is a vibration of light and light as a vibration of consciousness",
+      "doc_id": "audio||Treasures||Humility||e3df25b2||chunk16",
+      "system": "Ada-002",
+      "doc_score": 0.875917614,
+      "timestamp": 1750986637.375082
+    },
+    "LCHOMsPDVdawzLzOIBZj_youtube||Ananda Youtube||Becoming Free Of the Ego (With Swami Kriyananda)||265b4e81||chunk17_Ada-002": {
+      "score": 2,
+      "label": "Relevant",
+      "query_id": "LCHOMsPDVdawzLzOIBZj",
+      "query_text": "Who said Matt is a vibration of energy and energy is a vibration of light and light as a vibration of consciousness",
+      "doc_id": "youtube||Ananda Youtube||Becoming Free Of the Ego (With Swami Kriyananda)||265b4e81||chunk17",
+      "system": "Ada-002",
+      "doc_score": 0.874711454,
+      "timestamp": 1750986664.046443
+    },
+    "LCHOMsPDVdawzLzOIBZj_video||Ananda Youtube||video||\"Art as Idealized Reality\" (Ask Me About Truth #53||Swami Kriyananda||620a1909||10_3-Large": "skip",
+    "LCHOMsPDVdawzLzOIBZj_text||Ananda Library||db||The Promise Of Immortality:: 2. What is the Source||Swami Kriyananda||cc846e4e||0_3-Large": "skip",
+    "LCHOMsPDVdawzLzOIBZj_audio||Treasures||audio||Humility||Swami Kriyananda||f59a6099||10_3-Large": "skip",
+    "LCHOMsPDVdawzLzOIBZj_audio||The Bhaktan Files||audio||Swami in Pune 27.9.2007||Swami Kriyananda||5040a3aa||35_3-Large": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "LCHOMsPDVdawzLzOIBZj",
+      "query_text": "Who said Matt is a vibration of energy and energy is a vibration of light and light as a vibration of consciousness",
+      "doc_id": "audio||The Bhaktan Files||audio||Swami in Pune 27.9.2007||Swami Kriyananda||5040a3aa||35",
+      "system": "3-Large",
+      "doc_score": 0.585873187,
+      "timestamp": 1750986710.330975
+    },
+    "LCHOMsPDVdawzLzOIBZj_audio||The Bhaktan Files||audio||2013-01-20 Swami in Chennai||Swami Kriyanananda||12ee3aaf||4_3-Large": "skip",
+    "BRhkSNH4E1VRNiB1dFxo_text||ananda.org||Out of the Labyrinth_ Book Study _Series Introduction_ - Ananda||cd37321e||chunk0_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||ananda.org||Out of the Labyrinth_ Book Study _Series Introduction_ - Ananda||cd37321e||chunk0",
+      "system": "Ada-002",
+      "doc_score": 0.859923363,
+      "timestamp": 1750986742.215379
+    },
+    "BRhkSNH4E1VRNiB1dFxo_text||ananda.org||Going Beyond the Textbook - Ananda||f7e6b9b4||chunk0_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||ananda.org||Going Beyond the Textbook - Ananda||f7e6b9b4||chunk0",
+      "system": "Ada-002",
+      "doc_score": 0.849645317,
+      "timestamp": 1750986745.936585
+    },
+    "BRhkSNH4E1VRNiB1dFxo_text||ananda.org||Autobiography of a Yogi_ Book Study _Class 12_ - Ananda||3b04ac21||chunk0_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||ananda.org||Autobiography of a Yogi_ Book Study _Class 12_ - Ananda||3b04ac21||chunk0",
+      "system": "Ada-002",
+      "doc_score": 0.848768,
+      "timestamp": 1750986748.22654
+    },
+    "BRhkSNH4E1VRNiB1dFxo_text||ananda.org||12 Lessons from 12 Years of Kriya Yoga - Ananda||20642d19||chunk0_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||ananda.org||12 Lessons from 12 Years of Kriya Yoga - Ananda||20642d19||chunk0",
+      "system": "Ada-002",
+      "doc_score": 0.845856249,
+      "timestamp": 1750986750.289054
+    },
+    "BRhkSNH4E1VRNiB1dFxo_text||ananda.org||Course on Discipleship - Ananda||80547349||chunk0_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||ananda.org||Course on Discipleship - Ananda||80547349||chunk0",
+      "system": "Ada-002",
+      "doc_score": 0.844500661,
+      "timestamp": 1750986751.535903
+    },
+    "BRhkSNH4E1VRNiB1dFxo_text||Ananda Library||db||Meditation Step 1-4-class outline, Karen, example ||Karen Gamow||906efb30||0_3-Large": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||Ananda Library||db||Meditation Step 1-4-class outline, Karen, example ||Karen Gamow||906efb30||0",
+      "system": "3-Large",
+      "doc_score": 0.501040399,
+      "timestamp": 1750986774.817319
+    },
+    "BRhkSNH4E1VRNiB1dFxo_text||Ananda Library||db||Making It Real-2005 class series (3 teachers)-prop||Dambara Begley||929de041||0_3-Large": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||Ananda Library||db||Making It Real-2005 class series (3 teachers)-prop||Dambara Begley||929de041||0",
+      "system": "3-Large",
+      "doc_score": 0.484393895,
+      "timestamp": 1750986783.5343208
+    },
+    "BRhkSNH4E1VRNiB1dFxo_text||Ananda Library||db||The Art and Science of Raja Yoga:: Suggestions for||Swami Kriyananda||d420acc5||0_3-Large": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||Ananda Library||db||The Art and Science of Raja Yoga:: Suggestions for||Swami Kriyananda||d420acc5||0",
+      "system": "3-Large",
+      "doc_score": 0.47983411,
+      "timestamp": 1750986802.007964
+    },
+    "BRhkSNH4E1VRNiB1dFxo_text||Ananda Library||db||Ananda Leadership Training #1, How to Be an Effect||Dambara Begley||571915e7||0_3-Large": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "text||Ananda Library||db||Ananda Leadership Training #1, How to Be an Effect||Dambara Begley||571915e7||0",
+      "system": "3-Large",
+      "doc_score": 0.477532625,
+      "timestamp": 1750986812.905959
+    },
+    "BRhkSNH4E1VRNiB1dFxo_audio||The Bhaktan Files||audio||Swami in Portland 7.5.2006||Swami Kriyananda||172b38ec||9_3-Large": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "BRhkSNH4E1VRNiB1dFxo",
+      "query_text": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "doc_id": "audio||The Bhaktan Files||audio||Swami in Portland 7.5.2006||Swami Kriyananda||172b38ec||9",
+      "system": "3-Large",
+      "doc_score": 0.474039376,
+      "timestamp": 1750986825.686135
+    },
+    "CQiD9rSSvxRYUINYk5FT_text||Crystal Clarity||How_to_Meditate||dadb633d||chunk1_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "text||Crystal Clarity||How_to_Meditate||dadb633d||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.851175666,
+      "timestamp": 1750986834.633682
+    },
+    "CQiD9rSSvxRYUINYk5FT_text||Ananda_Library||Wisdom_of_Yogananda_Series_How_to_Have_C||42ec0d99||chunk3_Ada-002": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "text||Ananda_Library||Wisdom_of_Yogananda_Series_How_to_Have_C||42ec0d99||chunk3",
+      "system": "Ada-002",
+      "doc_score": 0.849927306,
+      "timestamp": 1750986854.1987169
+    },
+    "CQiD9rSSvxRYUINYk5FT_text||ananda.org||Meditation to Attune to the Highest within You by Paramhansa Yogananda - Ananda||1d85d8c5||chunk1_Ada-002": {
+      "score": 1,
+      "label": "Somewhat Relevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "text||ananda.org||Meditation to Attune to the Highest within You by Paramhansa Yogananda - Ananda||1d85d8c5||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.84946233,
+      "timestamp": 1750986887.960772
+    },
+    "CQiD9rSSvxRYUINYk5FT_text||Crystal Clarity||Meditation_for_Starters||029d6df4||chunk1_Ada-002": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "text||Crystal Clarity||Meditation_for_Starters||029d6df4||chunk1",
+      "system": "Ada-002",
+      "doc_score": 0.848702312,
+      "timestamp": 1750986890.710857
+    },
+    "CQiD9rSSvxRYUINYk5FT_text||Crystal Clarity||How_to_Have_Courage_Calmness__Confidence||db7366d5||chunk1_Ada-002": "skip",
+    "CQiD9rSSvxRYUINYk5FT_text||Ananda Library||db||Clarity Magazine Archives 2009-2015:: 2009 Summer ||Atman Goering||c5e1b699||5_3-Large": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "text||Ananda Library||db||Clarity Magazine Archives 2009-2015:: 2009 Summer ||Atman Goering||c5e1b699||5",
+      "system": "3-Large",
+      "doc_score": 0.59495759,
+      "timestamp": 1750987038.399105
+    },
+    "CQiD9rSSvxRYUINYk5FT_text||Ananda Library||db||Clarity Magazine Archives 2009-2015:: 2009 Summer ||Atman Goering||b9f6c5da||6_3-Large": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "text||Ananda Library||db||Clarity Magazine Archives 2009-2015:: 2009 Summer ||Atman Goering||b9f6c5da||6",
+      "system": "3-Large",
+      "doc_score": 0.585137606,
+      "timestamp": 1750987063.7837288
+    },
+    "CQiD9rSSvxRYUINYk5FT_audio||The Bhaktan Files||audio||Week 04 - 02||Swami Kriyananda (J.||30b19f8d||2_3-Large": {
+      "score": 1,
+      "label": "Somewhat Relevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "audio||The Bhaktan Files||audio||Week 04 - 02||Swami Kriyananda (J.||30b19f8d||2",
+      "system": "3-Large",
+      "doc_score": 0.574250638,
+      "timestamp": 1750987086.1454458
+    },
+    "CQiD9rSSvxRYUINYk5FT_text||Ananda Library||db||Touch of Divine Wisdom:: 41. Start with the Heart||Jyotish Novak||1f0a2f73||4_3-Large": {
+      "score": 3,
+      "label": "Highly Relevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "text||Ananda Library||db||Touch of Divine Wisdom:: 41. Start with the Heart||Jyotish Novak||1f0a2f73||4",
+      "system": "3-Large",
+      "doc_score": 0.572938323,
+      "timestamp": 1750987117.0204558
+    },
+    "CQiD9rSSvxRYUINYk5FT_text||Ananda Library||db||The Essence of Self-Realization:: 18. On Meditatio||Paramhansa Yogananda||ef29edcb||3_3-Large": {
+      "score": 0,
+      "label": "Irrelevant",
+      "query_id": "CQiD9rSSvxRYUINYk5FT",
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "doc_id": "text||Ananda Library||db||The Essence of Self-Realization:: 18. On Meditatio||Paramhansa Yogananda||ef29edcb||3",
+      "system": "3-Large",
+      "doc_score": 0.562109888,
+      "timestamp": 1750987175.2412841
     }
   },
   "start_time": 1750469696.2584682,
-  "last_saved": 1750976649.890254
+  "last_saved": 1750987175.258542
 }
