@@ -26,19 +26,15 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 RUN pip3 install spacy && python3 -m spacy download en_core_web_sm
 
 # Install Node.js 20 using nvm
-ENV NVM_DIR=/root/.nvm
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash \
-    && . $NVM_DIR/nvm.sh \
+    && source ~/.bashrc \
     && nvm install 20 \
     && nvm use 20 \
     && nvm alias default 20
-
-# Add nvm and node to PATH for subsequent RUN commands
-ENV PATH="$NVM_DIR/versions/node/v20.*/bin:$PATH"
     
 # Verify installation
 RUN python3 --version && pip3 --version \
-    && . $NVM_DIR/nvm.sh && nvm use 20 && node --version && npm --version
+    && source ~/.bashrc && nvm use 20 && node --version && npm --version
 
 # Set environment variable for virtual environment path
 ENV PATH="/workspace/venv/bin:$PATH"
