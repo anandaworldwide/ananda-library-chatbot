@@ -274,7 +274,7 @@ Specialized test suite (`test_diverse_content_chunker.py`) validates chunking ac
 
 ### RAG Evaluation Framework
 
-Comprehensive evaluation system (`data_ingestion/bin/evaluate_rag_system.py`) provides:
+Comprehensive evaluation system (`evaluation/evaluate_rag_system.py`) provides:
 
 - **Multi-strategy comparison**: Tests paragraph-based, sentence-based, dynamic, and fixed-size chunking
 - **Performance metrics**: Precision@K, NDCG@K, and retrieval time measurements

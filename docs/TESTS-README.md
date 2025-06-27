@@ -121,9 +121,9 @@ The effectiveness of this method hinges on:
 
 For RAG system evaluation specifically, the project includes specialized utilities:
 
-- **Main Evaluation**: `bin/evaluate_rag_system_no_rechunk.py` - Comprehensive RAG system comparison
-- **Multi-Query Analysis**: `data_ingestion/compare_multiple_queries.py` - Pattern detection across query types
-- **Single Query Deep Dive**: `data_ingestion/compare_representative_query.py` - Detailed chunk analysis
+- **Main Evaluation**: `evaluation/evaluate_rag_system_no_rechunk.py` - Comprehensive RAG system comparison
+- **Multi-Query Analysis**: `evaluation/compare_multiple_queries.py` - Pattern detection across query types
+- **Single Query Deep Dive**: `evaluation/compare_representative_query.py` - Detailed chunk analysis
 
 These utilities demonstrate proper embedding-based evaluation with caching and progress tracking for production-scale
 testing.

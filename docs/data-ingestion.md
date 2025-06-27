@@ -102,7 +102,7 @@ cd data_ingestion && python -m pytest
 python bin/analyze_small_chunks.py --site ananda --library "Library Name"
 
 # Evaluate RAG performance
-python bin/evaluate_spacy_chunking_strategies.py --site ananda
+python evaluation/evaluate_spacy_chunking_strategies.py --site ananda
 ```
 
 ## Getting Started

@@ -327,7 +327,7 @@ python bin/evaluate_rag_system_no_rechunk.py --site ananda
 **Key Learning**: When switching from textual similarity to embedding-based evaluation, implement caching to prevent
 massive API overhead. Without caching: ~12,800 API calls (4+ hours). With caching: ~1,300 unique API calls (15 minutes).
 
-### 2. Multi-Query Analysis (`data_ingestion/compare_multiple_queries.py`)
+### 2. Multi-Query Analysis (`evaluation/compare_multiple_queries.py`)
 
 **Purpose**: Analyzes multiple representative queries simultaneously to understand performance patterns.
 
