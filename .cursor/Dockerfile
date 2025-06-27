@@ -35,16 +35,6 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | b
 
 # Add nvm and node to PATH for subsequent RUN commands
 ENV PATH="$NVM_DIR/versions/node/v20.*/bin:$PATH"
-
-# Copy package files first for better caching
-COPY package.json package-lock.json ./
-COPY web/package.json web/package-lock.json ./web/
-
-# Install root dependencies
-RUN . $NVM_DIR/nvm.sh && nvm use 20 && npm install
-
-# Install web dependencies  
-RUN . $NVM_DIR/nvm.sh && nvm use 20 && cd web && npm install
     
 # Verify installation
 RUN python3 --version && pip3 --version \
