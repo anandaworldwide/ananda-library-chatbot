@@ -1,0 +1,180 @@
+{
+  "metadata": {
+    "sampling_date": "2025-06-20T18:29:49.818257",
+    "total_queries": 25,
+    "description": "Production queries sampled for unbiased RAG evaluation"
+  },
+  "queries": [
+    {
+      "id": "3MJP0knZgSkIHCyn8aIn",
+      "question": "is energy intelligent",
+      "word_count": 3,
+      "char_count": 21,
+      "collection": "master_swami",
+      "cluster": 0,
+      "timestamp": "2025-05-22T23:45:12.250000+00:00"
+    },
+    {
+      "id": "GAsQmuMh3czMdqTsbY6M",
+      "question": "No, not a prayer. I want you to write a prompt that I can give to an AI on the topic of meditating more deeply when I am feeling upset.",
+      "word_count": 30,
+      "char_count": 135,
+      "collection": "master_swami",
+      "cluster": 7,
+      "timestamp": "2025-04-02T03:05:33.899000+00:00"
+    },
+    {
+      "id": "gjZZP3DLHkMKZAwDxFfl",
+      "question": "Be Even-Minded and Cheerful",
+      "word_count": 4,
+      "char_count": 27,
+      "collection": "master_swami",
+      "cluster": 7,
+      "timestamp": "2025-05-09T23:12:32.250000+00:00"
+    },
+    {
+      "id": "FDNqJL6kGszttSS4kVFy",
+      "question": "What are some suggestions for people (esp. beginners) who may not see the spiritual eye perfectly?",
+      "word_count": 16,
+      "char_count": 98,
+      "collection": "master_swami",
+      "cluster": 1,
+      "timestamp": "2025-04-10T17:59:07.239000+00:00"
+    },
+    {
+      "id": "fMCgfVG2mJFA48kDrHgo",
+      "question": "what does it mean \"to spiriitualize\" something",
+      "word_count": 7,
+      "char_count": 46,
+      "collection": "master_swami",
+      "cluster": 1,
+      "timestamp": "2025-06-05T16:43:57.098000+00:00"
+    },
+    {
+      "id": "5qBnoncWrJoWlcDIUKq2",
+      "question": "Have we all been brothers and sisters in a previous incarnation",
+      "word_count": 11,
+      "char_count": 63,
+      "collection": "master_swami",
+      "cluster": 0,
+      "timestamp": "2025-06-18T22:53:11.133000+00:00"
+    },
+    {
+      "id": "7YZSwIFlaNRCnAOVVVFx",
+      "question": "Video of swamiji where he talks about how to find god in meditation",
+      "word_count": 13,
+      "char_count": 67,
+      "collection": "master_swami",
+      "cluster": 3,
+      "timestamp": "2025-06-06T18:16:02.962000+00:00"
+    },
+    {
+      "id": "Adcj2i2jRENPoGAfjs5p",
+      "question": "who liberated Judas Iscariot in the 20th century?",
+      "word_count": 8,
+      "char_count": 49,
+      "collection": "master_swami",
+      "cluster": 4,
+      "timestamp": "2025-04-10T06:59:31.494000+00:00"
+    },
+    {
+      "id": "gF7tAV9b1AehhZO48gD0",
+      "question": "Who was Yogananda?",
+      "word_count": 3,
+      "char_count": 18,
+      "collection": "master_swami",
+      "cluster": 2,
+      "timestamp": "2025-03-24T21:09:36.754000+00:00"
+    },
+    {
+      "id": "EWfsqte3eP25jcdEga7p",
+      "question": "Why is the Autobiography of a Yogi written with such English?",
+      "word_count": 11,
+      "char_count": 61,
+      "collection": "master_swami",
+      "cluster": 2,
+      "timestamp": "2025-04-18T12:38:59.880000+00:00"
+    },
+    {
+      "id": "sQzUsmG3BUPYH0hnEzX9",
+      "question": "Does the Astral body need to breathe?",
+      "word_count": 7,
+      "char_count": 37,
+      "collection": "master_swami",
+      "cluster": 5,
+      "timestamp": "2025-05-09T14:37:30.587000+00:00"
+    },
+    {
+      "id": "Y5jBhOAvjHzr3Isl7B4t",
+      "question": "Find the story of Ram Gopal in Autobiography of a Yogi, where he was meditating 10 to 22 hours a day",
+      "word_count": 21,
+      "char_count": 100,
+      "collection": "whole_library",
+      "cluster": 2,
+      "timestamp": "2025-06-04T15:30:57.317000+00:00"
+    },
+    {
+      "id": "YvevVd2HuPCxmbZWwwBq",
+      "question": "did Babaji say he was Krishna",
+      "word_count": 6,
+      "char_count": 29,
+      "collection": "master_swami",
+      "cluster": 3,
+      "timestamp": "2025-04-17T11:36:22.148000+00:00"
+    },
+    {
+      "id": "JGNqNXdGGu5SiA0b5DDj",
+      "question": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "word_count": 22,
+      "char_count": 128,
+      "collection": "master_swami",
+      "cluster": 4,
+      "timestamp": "2025-04-10T07:25:25.893000+00:00"
+    },
+    {
+      "id": "ANUvcvQObotGp9NiIawq",
+      "question": "give three main points on \"Why Do Devotees Fall?\"",
+      "word_count": 9,
+      "char_count": 49,
+      "collection": "whole_library",
+      "cluster": 5,
+      "timestamp": "2025-06-03T18:16:13.662000+00:00"
+    },
+    {
+      "id": "JMLdExbr7z78rJmQd7UW",
+      "question": "What is master\u2019s famous quote from the garden party about creating communities",
+      "word_count": 12,
+      "char_count": 78,
+      "collection": "master_swami",
+      "cluster": 4,
+      "timestamp": "2025-06-08T23:11:12.037000+00:00"
+    },
+    {
+      "id": "LCHOMsPDVdawzLzOIBZj",
+      "question": "Who said Matt is a vibration of energy and energy is a vibration of light and light as a vibration of consciousness",
+      "word_count": 22,
+      "char_count": 115,
+      "collection": "master_swami",
+      "cluster": 0,
+      "timestamp": "2025-06-19T14:43:28.029000+00:00"
+    },
+    {
+      "id": "BRhkSNH4E1VRNiB1dFxo",
+      "question": "Create a 12 week course outline for a Philosophy course for Ananda College using the book Out of the Labyrinth as a core textbook for the course , include in your weekly outline activities and assignemebts",
+      "word_count": 36,
+      "char_count": 205,
+      "collection": "master_swami",
+      "cluster": 6,
+      "timestamp": "2025-06-16T16:55:11.015000+00:00"
+    },
+    {
+      "id": "CQiD9rSSvxRYUINYk5FT",
+      "question": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "word_count": 19,
+      "char_count": 94,
+      "collection": "master_swami",
+      "cluster": 7,
+      "timestamp": "2025-04-02T03:05:01.300000+00:00"
+    }
+  ]
+}
