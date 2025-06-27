@@ -92,6 +92,33 @@ crawler_config/ananda-config.json     # Crawling configuration
 site-config/prompts/ananda.txt        # System prompts
 ```
 
+## Evaluation Pipeline
+
+The project includes a comprehensive evaluation pipeline located in the `evaluation/` directory. This pipeline provides
+unbiased statistical comparison of RAG systems using real production queries and human judgment:
+
+**Core Evaluation Scripts:**
+
+- **`evaluation/sample_production_queries.py`** - Extracts diverse queries from production data using semantic
+  clustering
+- **`evaluation/dual_system_retrieval.py`** - Retrieves results from multiple Pinecone systems for comparison
+- **`evaluation/manual_evaluation_interface.py`** - Interactive human evaluation with 4-point relevance scoring
+- **`evaluation/analyze_manual_evaluation_results.py`** - Statistical analysis with significance testing and effect
+  sizes
+- **`evaluation/evaluate_rag_system_no_rechunk.py`** - Comprehensive system evaluation with embedding-based similarity
+- **`evaluation/evaluate_spacy_chunking_strategies.py`** - Chunking strategy performance comparison
+
+**Evaluation Methodology:**
+
+- Uses real production queries to avoid evaluation bias
+- Implements blinded human judgment for relevance scoring
+- Provides statistical significance testing with Cohen's d effect sizes
+- Generates both JSON summaries and markdown reports
+- Includes confidence intervals and deployment recommendations
+
+**Documentation:** See `evaluation/dual_sys_eval_README.md` for complete evaluation pipeline documentation and usage
+examples.
+
 ## Quality Monitoring
 
 ```bash
