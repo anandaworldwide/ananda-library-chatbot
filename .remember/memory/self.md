@@ -1316,37 +1316,49 @@ using `querySnapshot.docs.map()`.
 
 ## Successfully Implemented Restated Question Storage and Usage for Related Questions - ✅ FULLY COMPLETED WITH TESTS
 
-**Problem**: Follow-up questions get restated through a generative AI call in the makechain, but the restated question was not being stored or used for related questions matching. The system was using the original question for embeddings instead of the semantically cleaner restated version.
+**Problem**: Follow-up questions get restated through a generative AI call in the makechain, but the restated question
+was not being stored or used for related questions matching. The system was using the original question for embeddings
+instead of the semantically cleaner restated version.
 
-**Root Cause**: The conversational RAG pipeline generated restated questions for retrieval but didn't persist them or use them for related questions functionality. This led to suboptimal related questions matching since the original follow-up questions often lack context.
+**Root Cause**: The conversational RAG pipeline generated restated questions for retrieval but didn't persist them or
+use them for related questions functionality. This led to suboptimal related questions matching since the original
+follow-up questions often lack context.
 
 **Evidence from System Architecture**:
+
 - `makechain.ts` generated restated questions but didn't return them
-- `route.ts` saved responses but not the restated question 
+- `route.ts` saved responses but not the restated question
 - `relatedQuestionsUtils.ts` used original question text for embeddings
 - No type definition for storing restated questions
 
 **Complete Solution Implemented**:
 
-1. **Chain Modification**: Updated `makechain.ts` `setupAndExecuteLanguageModelChain()` to return `{ fullResponse, finalDocs, restatedQuestion }`
-2. **Storage Integration**: Modified `route.ts` to capture restated question and pass to `saveOrUpdateDocument()`  
-3. **Embedding Enhancement**: Updated `relatedQuestionsUtils.ts` to use restated question for embeddings when available, with fallback to original
+1. **Chain Modification**: Updated `makechain.ts` `setupAndExecuteLanguageModelChain()` to return
+   `{ fullResponse, finalDocs, restatedQuestion }`
+2. **Storage Integration**: Modified `route.ts` to capture restated question and pass to `saveOrUpdateDocument()`
+3. **Embedding Enhancement**: Updated `relatedQuestionsUtils.ts` to use restated question for embeddings when available,
+   with fallback to original
 4. **Type Support**: Extended `Answer` type to include optional `restatedQuestion: string` field
 
 **Verification Evidence**:
-- Console logs show: "Using restated question for embeddings: [restated text]" vs "Using original question for embeddings: [original text]"
+
+- Console logs show: "Using restated question for embeddings: [restated text]" vs "Using original question for
+  embeddings: [original text]"
 - Graceful fallback working when restated question not available
 - All test suites passing (8/8) with 90/90 tests passing
 
 **Test Coverage Completed**:
-- **makechain.test.ts**: ✅ 16/16 tests passing 
+
+- **makechain.test.ts**: ✅ 16/16 tests passing
 - **route.test.ts**: ✅ 27/27 tests passing (including restated question storage test)
 - **relatedQuestionsUtils.test.ts**: ✅ 6/6 tests passing (restated question usage tests)
 - **answer.test.ts**: ✅ 4/4 tests passing (type definition tests)
 
-**Critical Learning**: When implementing RAG pipeline changes that affect multiple components, ensure the complete data flow is updated:
+**Critical Learning**: When implementing RAG pipeline changes that affect multiple components, ensure the complete data
+flow is updated:
+
 1. ✅ Chain generation (makechain.ts)
-2. ✅ Data capture (route.ts) 
+2. ✅ Data capture (route.ts)
 3. ✅ Storage (Firestore with proper field)
 4. ✅ Usage (relatedQuestionsUtils.ts)
 5. ✅ Type definitions (Answer type)
