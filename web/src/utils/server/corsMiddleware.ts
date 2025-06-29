@@ -313,7 +313,7 @@ export function addCorsHeaders(response: NextResponse, req: NextRequest, siteCon
 // Handle OPTIONS requests for both routers
 export function handleCorsOptions(req: NextRequest | NextApiRequest, res?: NextApiResponse, siteConfig?: SiteConfig) {
   // For Pages Router
-  if ("status" in (res as NextApiResponse) && siteConfig) {
+  if (res && "status" in res && siteConfig) {
     setCorsHeaders(req as NextApiRequest, res as NextApiResponse, siteConfig);
     return (res as NextApiResponse).status(204).end();
   }
