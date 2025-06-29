@@ -2,6 +2,55 @@ import { queryFetch } from '@/utils/client/reactQueryConfig';
 import { isLikesPublic } from '@/utils/client/authConfig';
 import { SiteConfig } from '@/types/siteConfig';
 
+/**
+ * TODO: REFACTORING NEEDED FOR TESTABILITY
+ * 
+ * This service has a complex dependency chain that makes it difficult to test in isolation:
+ * likeService → queryFetch → tokenManager → browser navigation APIs
+ * 
+ * Challenges for testing:
+ * 1. Deep authentication dependency chain with browser APIs (window.location)
+ * 2. Dual authentication modes (public vs authenticated sites)
+ * 3. Overloaded function signatures complicate mocking
+ * 4. Intertwined error handling for auth vs network errors
+ * 
+ * Recommended refactoring for testability:
+ * 
+ * 1. DEPENDENCY INJECTION:
+ *    - Extract dependencies into an interface (fetchFn, authHandler, etc.)
+ *    - Make dependencies injectable in constructor or function parameters
+ *    - Example: LikeService class with injected HttpClient and AuthHandler
+ * 
+ * 2. SPLIT COMPLEX FUNCTIONS:
+ *    - Separate the overloaded checkUserLikes into distinct functions
+ *    - checkUserLikesById(uuid: string): Promise<string[]>
+ *    - checkUserLikesByAnswers(answerIds: string[], uuid: string): Promise<Record<string, boolean>>
+ * 
+ * 3. EXTRACT AUTHENTICATION LOGIC:
+ *    - Create separate auth handler that can be easily mocked
+ *    - Move site config logic to dedicated service
+ *    - Handle browser dependencies in separate navigation handler
+ * 
+ * 4. PURE ERROR HANDLING:
+ *    - Separate error transformation from HTTP logic
+ *    - Make error handling predictable and testable
+ * 
+ * 5. EXAMPLE REFACTORED INTERFACE:
+ *    interface LikeServiceDependencies {
+ *      httpClient: HttpClient;
+ *      authHandler: AuthHandler;
+ *      configService: ConfigService;
+ *    }
+ * 
+ * Current testing challenges:
+ * - Cannot easily mock queryFetch due to tokenManager complexity
+ * - Browser navigation errors in JSDOM environment
+ * - Authentication state management across test cases
+ * - Complex error handling paths difficult to isolate
+ * 
+ * Priority: Medium - Service works well in production, but testing would help catch regressions
+ */
+
 // Overloaded function signatures for backward compatibility
 export async function checkUserLikes(uuid: string): Promise<string[]>;
 export async function checkUserLikes(
