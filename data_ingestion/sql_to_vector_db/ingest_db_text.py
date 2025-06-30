@@ -189,6 +189,66 @@ def download_exclusion_rules_from_s3(site: str) -> dict:
         return {}
 
 
+def _extract_post_categories(row: dict) -> list[str]:
+    """Extracts and processes categories from post row data."""
+    categories = []
+    if row.get("categories"):
+        categories = [
+            cat.strip() for cat in row["categories"].split("|||") if cat.strip()
+        ]
+    return categories
+
+
+def _extract_post_authors(row: dict) -> list[str]:
+    """Extracts and processes authors from post row data."""
+    authors = []
+    if row.get("authors_list"):
+        authors = [
+            auth.strip() for auth in row["authors_list"].split("|||") if auth.strip()
+        ]
+    return authors
+
+
+def _check_category_rule(rule: dict, categories: list[str]) -> tuple[bool, str]:
+    """Checks if a post should be excluded based on category rule."""
+    if rule["category"] in categories:
+        return True, f"Rule '{rule['name']}': Has category '{rule['category']}'"
+    return False, ""
+
+
+def _check_category_author_rule(
+    rule: dict, categories: list[str], authors: list[str]
+) -> tuple[bool, str]:
+    """Checks if a post should be excluded based on category+author combination rule."""
+    if rule["category"] in categories and rule["author"] in authors:
+        return (
+            True,
+            f"Rule '{rule['name']}': Has category '{rule['category']}' AND author '{rule['author']}'",
+        )
+    return False, ""
+
+
+def _check_post_hierarchy_rule(rule: dict, post_id: int, row: dict) -> tuple[bool, str]:
+    """Checks if a post should be excluded based on post hierarchy rule."""
+    parent_id = rule["parent_post_id"]
+    if post_id == parent_id:
+        if rule.get("include_parent", True):
+            return True, f"Rule '{rule['name']}': Is parent post (ID: {parent_id})"
+    elif row.get("post_parent") == parent_id:
+        return (
+            True,
+            f"Rule '{rule['name']}': Is child of parent post (ID: {parent_id})",
+        )
+    return False, ""
+
+
+def _check_specific_post_rule(rule: dict, post_id: int) -> tuple[bool, str]:
+    """Checks if a post should be excluded based on specific post ID rule."""
+    if post_id in rule["post_ids"]:
+        return True, f"Rule '{rule['name']}': Specific post ID ({post_id})"
+    return False, ""
+
+
 def should_exclude_post(row: dict, exclusion_rules: dict) -> tuple[bool, str]:
     """
     Check if a post should be excluded based on exclusion rules.
@@ -200,50 +260,33 @@ def should_exclude_post(row: dict, exclusion_rules: dict) -> tuple[bool, str]:
         return False, ""
 
     post_id = row["ID"]
-    categories = []
-    if row.get("categories"):
-        categories = [
-            cat.strip() for cat in row["categories"].split("|||") if cat.strip()
-        ]
-
-    authors = []
-    if row.get("authors_list"):
-        authors = [
-            auth.strip() for auth in row["authors_list"].split("|||") if auth.strip()
-        ]
+    categories = _extract_post_categories(row)
+    authors = _extract_post_authors(row)
 
     for rule in exclusion_rules["rules"]:
-        rule_name = rule["name"]
         rule_type = rule["type"]
 
         if rule_type == "category":
-            # Exclude if post has the specified category
-            if rule["category"] in categories:
-                return True, f"Rule '{rule_name}': Has category '{rule['category']}'"
+            should_exclude, reason = _check_category_rule(rule, categories)
+            if should_exclude:
+                return True, reason
 
         elif rule_type == "category_author_combination":
-            # Exclude if post has both the specified category AND author
-            if rule["category"] in categories and rule["author"] in authors:
-                return (
-                    True,
-                    f"Rule '{rule_name}': Has category '{rule['category']}' AND author '{rule['author']}'",
-                )
+            should_exclude, reason = _check_category_author_rule(
+                rule, categories, authors
+            )
+            if should_exclude:
+                return True, reason
 
         elif rule_type == "post_hierarchy":
-            # Exclude if post is parent or child of specified parent
-            parent_id = rule["parent_post_id"]
-            if post_id == parent_id:
-                if rule.get("include_parent", True):
-                    return True, f"Rule '{rule_name}': Is parent post (ID: {parent_id})"
-            elif row.get("post_parent") == parent_id:
-                return (
-                    True,
-                    f"Rule '{rule_name}': Is child of parent post (ID: {parent_id})",
-                )
+            should_exclude, reason = _check_post_hierarchy_rule(rule, post_id, row)
+            if should_exclude:
+                return True, reason
 
-        elif rule_type == "specific_post_ids" and post_id in rule["post_ids"]:
-            # Exclude if post ID is in the list
-            return True, f"Rule '{rule_name}': Specific post ID ({post_id})"
+        elif rule_type == "specific_post_ids":
+            should_exclude, reason = _check_specific_post_rule(rule, post_id)
+            if should_exclude:
+                return True, reason
 
     return False, ""
 
@@ -638,29 +681,13 @@ def calculate_permalink(
     return base_url + path_part
 
 
-def fetch_data(
-    db_connection,
-    site_config: dict,
-    library_name: str,
-    authors: dict,
-    site: str,
+def _construct_sql_query(
+    post_types: list[str],
+    category_taxonomy: str,
+    author_taxonomy: str,
     max_records: int = None,
-) -> list[dict]:
-    """Fetches, cleans, and prepares post data from the database for ingestion."""
-
-    # Download exclusion rules from S3
-    logger.info(f"🔍 Loading exclusion rules for site '{site}'...")
-    exclusion_rules = download_exclusion_rules_from_s3(site)
-
-    # Initialize exclusion tracking
-    exclusion_stats = {}
-    total_excluded = 0
-
-    post_types = site_config["post_types"]
-    category_taxonomy = site_config["category_taxonomy"]
-    # Use the confirmed taxonomy slug for authors
-    author_taxonomy = "library-author"
-    base_url = site_config["base_url"]
+) -> tuple[str, list]:
+    """Constructs the main SQL query and parameters for fetching posts."""
     # Create placeholders for the SQL query IN clauses
     placeholders = ", ".join(["%s"] * len(post_types))
 
@@ -719,11 +746,129 @@ def fetch_data(
 
     query += ";"
 
+    # Parameters: post_types for parents, category taxonomy, author taxonomy, post_types for child WHERE clause
+    params = post_types * 3 + [category_taxonomy, author_taxonomy] + post_types
+
+    return query, params
+
+
+def _build_full_title(row: dict) -> str:
+    """Builds hierarchical title from parent titles and post title."""
+    titles = [
+        title
+        for title in [
+            row.get(
+                "PARENT_TITLE_3"
+            ),  # Use .get for safety if columns might be missing
+            row.get("PARENT_TITLE_2"),
+            row.get("PARENT_TITLE_1"),
+            row.get("CHILD_TITLE"),
+        ]
+        if title  # Filter out None or empty titles
+    ]
+    return ":: ".join(titles)  # Use ':: ' as a separator
+
+
+def _process_categories(row: dict) -> list[str]:
+    """Processes and returns the list of categories for a post."""
+    category_list = []
+    if row.get("categories"):
+        # Split by the '|||' separator used in GROUP_CONCAT and strip whitespace
+        category_list = [
+            cat.strip() for cat in row["categories"].split("|||") if cat.strip()
+        ]
+    return category_list
+
+
+def _determine_author_name(row: dict) -> str:
+    """Determines the author name from taxonomy data."""
+    author_name = "Unknown"  # Default author
+    authors_list_str = row.get("authors_list")
+    if authors_list_str:
+        # Split the concatenated string, take the first author, strip whitespace
+        potential_authors = [
+            name.strip() for name in authors_list_str.split("|||") if name.strip()
+        ]
+        if potential_authors:
+            author_name = potential_authors[0]  # Use the first author found
+    return author_name
+
+
+def _build_processed_data_entry(
+    row: dict,
+    full_title: str,
+    author_name: str,
+    permalink: str,
+    cleaned_content: str,
+    category_list: list[str],
+    library_name: str,
+) -> dict:
+    """Builds the processed data dictionary for a single post."""
+    return {
+        "id": row["ID"],  # Original WordPress Post ID
+        "title": full_title,
+        "author": author_name,  # Now using the name from taxonomy
+        "permalink": permalink,  # URL source
+        "content": cleaned_content,  # The main text content for embedding
+        "categories": category_list,  # Associated categories
+        "library": library_name,  # Library name for Pinecone metadata filtering
+    }
+
+
+def _log_exclusion_summary(
+    exclusion_rules: dict,
+    total_excluded: int,
+    exclusion_stats: dict,
+    processed_data: list,
+):
+    """Logs the exclusion summary statistics."""
+    if exclusion_rules and exclusion_rules.get("rules"):
+        logger.info("📊 EXCLUSION SUMMARY:")
+        logger.info(f"   🚫 Total posts excluded: {total_excluded}")
+        logger.info(f"   ✅ Total posts prepared for ingestion: {len(processed_data)}")
+
+        if exclusion_stats:
+            logger.info("   📋 Exclusions by rule:")
+            for rule_name, count in sorted(exclusion_stats.items()):
+                logger.info(f"      • {rule_name}: {count} posts")
+        else:
+            logger.info("   ℹ️  No posts were excluded by any rules")
+    else:
+        logger.info("📊 No exclusion rules active - all content processed normally")
+
+
+def fetch_data(
+    db_connection,
+    site_config: dict,
+    library_name: str,
+    authors: dict,
+    site: str,
+    max_records: int = None,
+) -> list[dict]:
+    """Fetches, cleans, and prepares post data from the database for ingestion."""
+
+    # Download exclusion rules from S3
+    logger.info(f"🔍 Loading exclusion rules for site '{site}'...")
+    exclusion_rules = download_exclusion_rules_from_s3(site)
+
+    # Initialize exclusion tracking
+    exclusion_stats = {}
+    total_excluded = 0
+
+    post_types = site_config["post_types"]
+    category_taxonomy = site_config["category_taxonomy"]
+    # Use the confirmed taxonomy slug for authors
+    author_taxonomy = "library-author"
+    base_url = site_config["base_url"]
+
+    # Construct SQL query and parameters
+    query, params = _construct_sql_query(
+        post_types, category_taxonomy, author_taxonomy, max_records
+    )
+
     processed_data = []
     try:
         with db_connection.cursor() as cursor:
-            # Parameters: post_types for parents, category taxonomy, author taxonomy, post_types for child WHERE clause
-            params = post_types * 3 + [category_taxonomy, author_taxonomy] + post_types
             if max_records:
                 logger.info(
                     f"Executing main data fetching query (limited to {max_records} records)..."
@@ -774,25 +919,12 @@ def fetch_data(
                         )
                     continue
 
-                # Combine parent titles and the post's title into a hierarchical string
-                titles = [
-                    title
-                    for title in [
-                        row.get(
-                            "PARENT_TITLE_3"
-                        ),  # Use .get for safety if columns might be missing
-                        row.get("PARENT_TITLE_2"),
-                        row.get("PARENT_TITLE_1"),
-                        row.get("CHILD_TITLE"),
-                    ]
-                    if title  # Filter out None or empty titles
-                ]
-                full_title = ":: ".join(titles)  # Use ':: ' as a separator
+                # Build hierarchical title
+                full_title = _build_full_title(row)
 
                 # Skip processing if any part of the title indicates it should be excluded
                 # This is a convention used in the Ananda Library data
-                if any("DO NOT USE" in (title or "") for title in titles):
-                    # print(f"Skipping 'DO NOT USE' post ID: {row['ID']}")
+                if "DO NOT USE" in full_title:
                     continue
 
                 # Clean the raw HTML content
@@ -800,35 +932,11 @@ def fetch_data(
                 cleaned_content = replace_smart_quotes(cleaned_content)
                 # Skip if content becomes empty after cleaning (e.g., posts with only shortcodes/HTML)
                 if not cleaned_content:
-                    # print(f"Skipping post ID {row['ID']} due to empty content after cleaning.")
                     continue
 
-                # Parse the concatenated categories string
-                category_list = []
-                if row.get("categories"):
-                    # Split by the '|||' separator used in GROUP_CONCAT and strip whitespace
-                    category_list = [
-                        cat.strip()
-                        for cat in row["categories"].split("|||")
-                        if cat.strip()
-                    ]
-
-                # --- Author Assignment (using taxonomy) ---
-                author_name = "Unknown"  # Default author
-                authors_list_str = row.get("authors_list")
-                if authors_list_str:
-                    # Split the concatenated string, take the first author, strip whitespace
-                    potential_authors = [
-                        name.strip()
-                        for name in authors_list_str.split("|||")
-                        if name.strip()
-                    ]
-                    if potential_authors:
-                        author_name = potential_authors[0]  # Use the first author found
-                        # Optional: Handle multiple authors differently if needed, e.g., join them
-                        # if len(potential_authors) > 1:
-                        #     author_name = ", ".join(potential_authors)
-                # --- End Author Assignment ---
+                # Process categories and author
+                category_list = _process_categories(row)
+                author_name = _determine_author_name(row)
 
                 # Calculate the permalink
                 permalink = calculate_permalink(
@@ -842,35 +950,22 @@ def fetch_data(
                     site=site,
                 )
 
-                # Append the processed data dictionary to the list
-                processed_data.append(
-                    {
-                        "id": row["ID"],  # Original WordPress Post ID
-                        "title": full_title,
-                        "author": author_name,  # Now using the name from taxonomy
-                        "permalink": permalink,  # URL source
-                        "content": cleaned_content,  # The main text content for embedding
-                        "categories": category_list,  # Associated categories
-                        "library": library_name,  # Library name for Pinecone metadata filtering
-                    }
+                # Build processed data entry
+                processed_entry = _build_processed_data_entry(
+                    row,
+                    full_title,
+                    author_name,
+                    permalink,
+                    cleaned_content,
+                    category_list,
+                    library_name,
                 )
+                processed_data.append(processed_entry)
 
         # Log exclusion summary at the end
-        if exclusion_rules and exclusion_rules.get("rules"):
-            logger.info("📊 EXCLUSION SUMMARY:")
-            logger.info(f"   🚫 Total posts excluded: {total_excluded}")
-            logger.info(
-                f"   ✅ Total posts prepared for ingestion: {len(processed_data)}"
-            )
-
-            if exclusion_stats:
-                logger.info("   📋 Exclusions by rule:")
-                for rule_name, count in sorted(exclusion_stats.items()):
-                    logger.info(f"      • {rule_name}: {count} posts")
-            else:
-                logger.info("   ℹ️  No posts were excluded by any rules")
-        else:
-            logger.info("📊 No exclusion rules active - all content processed normally")
+        _log_exclusion_summary(
+            exclusion_rules, total_excluded, exclusion_stats, processed_data
+        )
 
         logger.info(
             f"Finished processing rows. {len(processed_data)} posts prepared for ingestion."
@@ -1003,6 +1098,164 @@ def clear_library_vectors(
 # --- Processing & Upsertion ---
 
 
+def _initialize_batch_processing():
+    """Initializes batch processing variables and counters."""
+    vectors_to_upsert = []
+    errors_in_batch = 0
+    total_chunks_in_batch = 0
+    processed_ids_in_batch = []
+
+    # Add counter for total chunks processed across all batches (as a list for mutability)
+    if not hasattr(process_and_upsert_batch, "total_chunks_processed"):
+        process_and_upsert_batch.total_chunks_processed = [0]
+
+    return (
+        vectors_to_upsert,
+        errors_in_batch,
+        total_chunks_in_batch,
+        processed_ids_in_batch,
+    )
+
+
+def _process_document_chunks(post_data: dict, text_splitter) -> tuple[list, int]:
+    """Processes a document by splitting into chunks and preparing chunk data."""
+    post_id = post_data.get("id", "N/A")
+
+    # Create document metadata for SpacyTextSplitter
+    document_metadata = {
+        "id": f"wp_{post_id}",
+        "title": post_data["title"],
+        "source": post_data["permalink"],
+        "wp_id": post_id,
+    }
+
+    # Create Langchain document and split into chunks
+    langchain_doc = Document(
+        page_content=post_data["content"], metadata=document_metadata
+    )
+    docs = text_splitter.split_documents([langchain_doc])
+
+    if not docs:
+        logger.warning(
+            f"Warning: Post ID {post_id} resulted in zero chunks after splitting. Skipping."
+        )
+        return [], 0
+
+    return docs, len(docs)
+
+
+def _prepare_vector_data(docs: list, post_data: dict) -> list[dict]:
+    """Prepares vector data for each chunk including IDs and metadata."""
+    prepared_vectors_data = []
+    post_id = post_data.get("id", "N/A")
+
+    for i, doc in enumerate(docs):
+        # Update total chunk count
+        process_and_upsert_batch.total_chunks_processed[0] += 1
+
+        # Generate unique vector ID for this chunk
+        pinecone_id = generate_vector_id(
+            library_name=post_data["library"],
+            title=post_data["title"],
+            chunk_index=i,
+            source_location="db",
+            source_identifier=post_data["permalink"],
+            content_type="text",
+            author=post_data["author"],
+            chunk_text=doc.page_content,
+        )
+
+        # Construct metadata dictionary
+        metadata = {
+            "library": post_data["library"],
+            "type": "text",
+            "author": post_data["author"],
+            "source": post_data["permalink"],
+            "title": post_data["title"],
+            "categories": post_data["categories"],
+            "text": doc.page_content,
+            "wp_id": post_id,
+            "chunk_index": i + 1,
+        }
+
+        prepared_vectors_data.append(
+            {
+                "id": pinecone_id,
+                "metadata": metadata,
+                "page_content": doc.page_content,
+            }
+        )
+
+    return prepared_vectors_data
+
+
+def _combine_embeddings_and_metadata(
+    prepared_vectors_data: list, embeddings: list, post_id
+) -> tuple[list, int]:
+    """Combines embeddings with prepared vector data for Pinecone upsert."""
+    vectors_to_upsert = []
+    embedding_errors = 0
+
+    for i, vec_data in enumerate(prepared_vectors_data):
+        if i < len(embeddings):
+            vectors_to_upsert.append(
+                {
+                    "id": vec_data["id"],
+                    "values": embeddings[i],
+                    "metadata": vec_data["metadata"],
+                }
+            )
+        else:
+            logger.warning(
+                f"Error: Mismatch between prepared vector data and embeddings for post {post_id}, chunk {i}. Skipping chunk."
+            )
+            embedding_errors += 1
+
+    return vectors_to_upsert, embedding_errors
+
+
+def _upsert_vectors_to_pinecone(
+    vectors_to_upsert: list,
+    pinecone_index,
+    processed_ids_in_batch: list,
+    total_chunks_in_batch: int,
+    dry_run: bool,
+) -> bool:
+    """Upserts vectors to Pinecone or simulates in dry run mode."""
+    if not vectors_to_upsert:
+        return False
+
+    if not dry_run:
+        try:
+            logger.info(
+                f"Upserting {len(vectors_to_upsert)} vectors from {len(processed_ids_in_batch)} successfully processed posts ({total_chunks_in_batch} chunks) in this batch..."
+            )
+
+            # Upsert in smaller batches for optimal performance
+            max_upsert_batch_size = 100
+            total_upserted = 0
+
+            for j in range(0, len(vectors_to_upsert), max_upsert_batch_size):
+                upsert_batch = vectors_to_upsert[j : j + max_upsert_batch_size]
+                upsert_response = pinecone_index.upsert(vectors=upsert_batch)
+                batch_upserted = getattr(
+                    upsert_response, "upserted_count", len(upsert_batch)
+                )
+                total_upserted += batch_upserted
+
+            return False  # No errors
+
+        except Exception as e:
+            logger.error(f"Error during Pinecone upsert for batch: {e}")
+            return True  # Indicate error
+    else:
+        # Dry run: Simulate upsert
+        logger.info(
+            f"Dry run: Skipping Pinecone upsert for {len(vectors_to_upsert)} vectors from {len(processed_ids_in_batch)} posts."
+        )
+        return False  # No errors in dry run
+
+
 def process_and_upsert_batch(
     batch_data: list[dict],
     pinecone_index,
@@ -1017,154 +1270,70 @@ def process_and_upsert_batch(
             - bool: True if any processing errors occurred during the batch, False otherwise.
             - list[int]: A list of post IDs successfully processed in this batch.
     """
-    vectors_to_upsert = []
-    errors_in_batch = 0
-    total_chunks_in_batch = 0
-    processed_ids_in_batch = []  # Track IDs successfully processed in this batch
+    # Initialize batch processing variables
+    (
+        vectors_to_upsert,
+        errors_in_batch,
+        total_chunks_in_batch,
+        processed_ids_in_batch,
+    ) = _initialize_batch_processing()
 
-    # Add counter for total chunks processed across all batches (as a list for mutability)
-    # Using a list encapsulation to create a mutable reference that persists between function calls
-    if not hasattr(process_and_upsert_batch, "total_chunks_processed"):
-        process_and_upsert_batch.total_chunks_processed = [0]
-
+    # Process each document in the batch
     for post_data in batch_data:
-        post_id = post_data.get("id", "N/A")  # Get post ID for logging
+        post_id = post_data.get("id", "N/A")
+
         if is_exiting():
             logger.info("Exiting batch processing due to shutdown signal.")
-            # Return True if errors occurred before exiting, indicating batch wasn't fully successful
-            return True, []  # Return error and empty processed list
+            return True, []
 
         try:
-            # 1. Split content into manageable chunks
-            # Using Langchain's Document structure helps maintain consistency, though only page_content is strictly needed here
-            # Add metadata so SpacyTextSplitter can generate proper document IDs for metrics
-            document_metadata = {
-                "id": f"wp_{post_id}",  # WordPress post ID
-                "title": post_data["title"],
-                "source": post_data["permalink"],
-                "wp_id": post_id,
-            }
-            langchain_doc = Document(
-                page_content=post_data["content"], metadata=document_metadata
-            )
-            # Split the document using the provided text splitter
-            docs = text_splitter.split_documents([langchain_doc])
-            total_chunks_in_batch += len(docs)
-
+            # Process document chunks
+            docs, chunk_count = _process_document_chunks(post_data, text_splitter)
             if not docs:
-                logger.warning(
-                    f"Warning: Post ID {post_id} resulted in zero chunks after splitting. Skipping."
-                )
-                continue  # Skip this post if splitting results in nothing
+                continue
 
-            # 2. Prepare chunk data for embedding and Pinecone upsert
+            total_chunks_in_batch += chunk_count
+
+            # Prepare vector data for chunks
+            prepared_vectors_data = _prepare_vector_data(docs, post_data)
+
+            # Generate embeddings for all chunks in this post
             batch_chunk_texts = [doc.page_content for doc in docs]
-            prepared_vectors_data = []  # Store data before embedding
-
-            # Print periodic samples of text being embedded
-            for i, doc in enumerate(docs):
-                # Update total count and check if we should print a sample
-                process_and_upsert_batch.total_chunks_processed[0] += 1
-
-                # Generate the unique ID for this specific chunk vector
-                pinecone_id = generate_vector_id(
-                    library_name=post_data["library"],
-                    title=post_data["title"],
-                    chunk_index=i,  # Chunk index (0-based)
-                    source_location="db",
-                    source_identifier=post_data["permalink"],
-                    content_type="text",
-                    author=post_data["author"],
-                    chunk_text=doc.page_content,
-                )
-                # Construct the metadata dictionary to be stored with the vector in Pinecone
-                metadata = {
-                    # "id": pinecone_id, # ID is provided at the top level in the upsert tuple/dict
-                    "library": post_data["library"],
-                    "type": "text",  # Indicate the source type
-                    "author": post_data["author"],
-                    "source": post_data["permalink"],  # URL of the original post
-                    "title": post_data["title"],
-                    "categories": post_data["categories"],  # List of categories
-                    "text": doc.page_content,  # Store the actual text chunk in metadata for retrieval context
-                    "wp_id": post_id,  # Store original WP ID if needed later
-                    "chunk_index": i + 1,  # Store 1-based chunk index
-                }
-                prepared_vectors_data.append(
-                    {
-                        "id": pinecone_id,
-                        "metadata": metadata,
-                        "page_content": doc.page_content,
-                    }
-                )
-
-            # 3. Generate Embeddings using the provided OpenAI model
-            # This makes one API call for all chunks belonging to the current post
             embeddings = embeddings_model.embed_documents(batch_chunk_texts)
 
-            # 4. Combine ID, Embeddings, and Metadata for each chunk into Pinecone's expected format
-            for i, vec_data in enumerate(prepared_vectors_data):
-                if i < len(embeddings):  # Ensure we have a corresponding embedding
-                    vectors_to_upsert.append(
-                        # Pinecone expects tuples (id, values, metadata) or dicts
-                        {
-                            "id": vec_data["id"],
-                            "values": embeddings[i],
-                            "metadata": vec_data["metadata"],
-                        }
-                    )
-                else:
-                    logger.warning(
-                        f"Error: Mismatch between prepared vector data and embeddings for post {post_id}, chunk {i}. Skipping chunk."
-                    )
-                    errors_in_batch += 1
+            # Combine embeddings with metadata
+            post_vectors, embedding_errors = _combine_embeddings_and_metadata(
+                prepared_vectors_data, embeddings, post_id
+            )
+            vectors_to_upsert.extend(post_vectors)
+            errors_in_batch += embedding_errors
 
-            # If processing reached this point without critical errors for the post, mark its ID as processed in this batch
+            # Mark post as successfully processed
             processed_ids_in_batch.append(post_id)
 
         except Exception as e:
             logger.error(f"Error processing post ID {post_id}: {e}")
             import traceback
 
-            traceback.print_exc()  # Print full traceback for debugging
+            traceback.print_exc()
             errors_in_batch += 1
-            # Decide whether to continue with the rest of the batch or stop
-            continue  # Continue processing other posts in the batch for robustness
+            continue
 
-    # 5. Upsert the accumulated vectors for the entire batch to Pinecone (or simulate in dry run)
-    if vectors_to_upsert:
-        if not dry_run:
-            try:
-                logger.info(
-                    f"Upserting {len(vectors_to_upsert)} vectors from {len(processed_ids_in_batch)} successfully processed posts ({total_chunks_in_batch} chunks) in this batch..."
-                )
-                # Pinecone client handles internal batching for upserts, but ensure the list isn't excessively large
-                # Upsert vectors; Pinecone client library handles potential batching within the upsert call itself.
-                max_upsert_batch_size = 100  # Pinecone recommends batches of 100 or fewer vectors for optimal performance.
+    # Upsert vectors to Pinecone
+    upsert_had_errors = _upsert_vectors_to_pinecone(
+        vectors_to_upsert,
+        pinecone_index,
+        processed_ids_in_batch,
+        total_chunks_in_batch,
+        dry_run,
+    )
 
-                total_upserted = 0
+    if upsert_had_errors:
+        # If upsert fails, consider all posts in batch as errored
+        errors_in_batch += len(processed_ids_in_batch)
+        return True, []
 
-                for j in range(0, len(vectors_to_upsert), max_upsert_batch_size):
-                    upsert_batch = vectors_to_upsert[j : j + max_upsert_batch_size]
-                    upsert_response = pinecone_index.upsert(vectors=upsert_batch)
-                    batch_upserted = getattr(
-                        upsert_response, "upserted_count", len(upsert_batch)
-                    )
-                    total_upserted += batch_upserted
-
-            except Exception as e:
-                logger.error(f"Error during Pinecone upsert for batch: {e}")
-                # If upsert fails, all posts intended for this batch are considered errored
-                errors_in_batch += len(processed_ids_in_batch)  # Increment error count
-                return True, []  # Indicate error and no newly processed IDs
-        else:
-            # Dry run: Simulate upsert
-            logger.info(
-                f"Dry run: Skipping Pinecone upsert for {len(vectors_to_upsert)} vectors from {len(processed_ids_in_batch)} posts."
-            )
-            # Do not increment errors_in_batch here for dry run simulation
-
-    # Return error status and the list of IDs processed in this batch
+    # Return error status and processed IDs
     return errors_in_batch > 0, processed_ids_in_batch
 
 
