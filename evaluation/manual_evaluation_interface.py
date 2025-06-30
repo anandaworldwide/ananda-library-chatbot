@@ -2,6 +2,10 @@
 """
 Manual evaluation interface for unbiased RAG system comparison.
 
+This is a secondary approach now that we have code to generate Word docs and process
+Word docs. That path is the happy path. And this is the alternate. See generate_word_docs.py
+and process_word_docs.py.
+
 This script provides a systematic interface for manually judging the relevance
 of retrieved documents from both systems. Features:
 
