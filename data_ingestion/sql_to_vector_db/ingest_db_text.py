@@ -11,7 +11,7 @@ and options to clear existing data for a specific library before starting.
 
 Configuration:
     The script supports optional content exclusion rules via an S3-hosted JSON configuration
-    file located at: s3://ananda-chatbot/site-config/data_ingestion/sql_to_vector_db/exclusion_rules.json
+    file located at: s3://{S3_BUCKET_NAME}/site-config/data_ingestion/sql_to_vector_db/exclusion_rules.json
 
     This configuration file can contain site-specific exclusion rules in the following format:
     {
@@ -65,7 +65,7 @@ from data_ingestion.utils.progress_utils import (
     is_exiting,
     setup_signal_handlers,
 )
-from data_ingestion.utils.s3_utils import get_s3_client
+from data_ingestion.utils.s3_utils import get_bucket_name, get_s3_client
 from data_ingestion.utils.text_processing import remove_html_tags, replace_smart_quotes
 from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
 from pyutil.env_utils import load_env
@@ -99,7 +99,7 @@ def download_exclusion_rules_from_s3(site: str) -> dict:
     """Download exclusion rules from S3 for the specified site."""
     try:
         s3_client = get_s3_client()
-        bucket_name = "ananda-chatbot"
+        bucket_name = get_bucket_name()
 
         logger.info(
             f"🔍 Downloading exclusion rules from S3: s3://{bucket_name}/{EXCLUSION_RULES_S3_PATH}"
@@ -241,10 +241,9 @@ def should_exclude_post(row: dict, exclusion_rules: dict) -> tuple[bool, str]:
                     f"Rule '{rule_name}': Is child of parent post (ID: {parent_id})",
                 )
 
-        elif rule_type == "specific_post_ids":
+        elif rule_type == "specific_post_ids" and post_id in rule["post_ids"]:
             # Exclude if post ID is in the list
-            if post_id in rule["post_ids"]:
-                return True, f"Rule '{rule_name}': Specific post ID ({post_id})"
+            return True, f"Rule '{rule_name}': Specific post ID ({post_id})"
 
     return False, ""
 

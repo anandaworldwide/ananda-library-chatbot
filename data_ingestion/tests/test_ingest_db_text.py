@@ -124,9 +124,15 @@ class TestS3ExclusionRules(unittest.TestCase):
             ]
         }
 
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_bucket_name")
     @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_s3_client")
-    def test_download_exclusion_rules_success(self, mock_get_s3_client):
+    def test_download_exclusion_rules_success(
+        self, mock_get_s3_client, mock_get_bucket_name
+    ):
         """Test successful download of exclusion rules from S3."""
+        # Mock bucket name function
+        mock_get_bucket_name.return_value = "ananda-chatbot"
+
         # Mock S3 client and response
         mock_s3_client = MagicMock()
         mock_get_s3_client.return_value = mock_s3_client
@@ -151,9 +157,15 @@ class TestS3ExclusionRules(unittest.TestCase):
         self.assertEqual(len(rules["rules"]), 5)  # Should have 5 rules after conversion
         self.assertEqual(rules["rules"][0]["name"], "Exclude category 'Restricted'")
 
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_bucket_name")
     @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_s3_client")
-    def test_download_exclusion_rules_s3_error(self, mock_get_s3_client):
+    def test_download_exclusion_rules_s3_error(
+        self, mock_get_s3_client, mock_get_bucket_name
+    ):
         """Test handling of S3 errors when downloading exclusion rules."""
+        # Mock bucket name function
+        mock_get_bucket_name.return_value = "ananda-chatbot"
+
         # Mock S3 client to raise exception
         mock_s3_client = MagicMock()
         mock_get_s3_client.return_value = mock_s3_client
@@ -165,9 +177,15 @@ class TestS3ExclusionRules(unittest.TestCase):
         # Should return empty dict on error (based on actual implementation)
         self.assertEqual(rules, {})
 
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_bucket_name")
     @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_s3_client")
-    def test_download_exclusion_rules_invalid_json(self, mock_get_s3_client):
+    def test_download_exclusion_rules_invalid_json(
+        self, mock_get_s3_client, mock_get_bucket_name
+    ):
         """Test handling of invalid JSON in exclusion rules."""
+        # Mock bucket name function
+        mock_get_bucket_name.return_value = "ananda-chatbot"
+
         # Mock S3 client with invalid JSON response
         mock_s3_client = MagicMock()
         mock_get_s3_client.return_value = mock_s3_client
@@ -182,9 +200,15 @@ class TestS3ExclusionRules(unittest.TestCase):
         # Should return empty dict on JSON parse error (based on actual implementation)
         self.assertEqual(rules, {})
 
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_bucket_name")
     @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_s3_client")
-    def test_download_exclusion_rules_site_not_found(self, mock_get_s3_client):
+    def test_download_exclusion_rules_site_not_found(
+        self, mock_get_s3_client, mock_get_bucket_name
+    ):
         """Test handling when requested site is not in exclusion rules."""
+        # Mock bucket name function
+        mock_get_bucket_name.return_value = "ananda-chatbot"
+
         # Mock S3 client with rules for different site
         mock_s3_client = MagicMock()
         mock_get_s3_client.return_value = mock_s3_client
