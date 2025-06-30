@@ -190,7 +190,7 @@ class TestPDFIngestionQuality:
             pytest.skip(
                 "No Crystal Clarity PDF vectors found in test database. "
                 "PDF script needs to be updated to use standardized generate_vector_id() function. "
-                "Run manual ingestion first - see tests/INTEGRATION_TEST_SETUP.md"
+                "Run manual ingestion first - see data_ingestion/tests/INTEGRATION_TEST_SETUP.md"
             )
 
         analysis = chunk_analyzer.analyze_chunk_quality(vectors)
@@ -456,7 +456,7 @@ class TestCrossMethodConsistency:
         if len(all_vectors) == 0:
             pytest.skip(
                 "No vectors found in test database. "
-                "Run manual ingestion first - see tests/INTEGRATION_TEST_SETUP.md"
+                "Run manual ingestion first - see data_ingestion/tests/INTEGRATION_TEST_SETUP.md"
             )
 
         analysis = chunk_analyzer.analyze_chunk_quality(all_vectors)
@@ -494,7 +494,7 @@ class TestCrossMethodConsistency:
         if len(method_analyses) < 2:
             pytest.skip(
                 f"Need at least 2 methods for comparison, found {len(method_analyses)}. "
-                "Run manual ingestion for multiple content types - see tests/INTEGRATION_TEST_SETUP.md"
+                "Run manual ingestion for multiple content types - see data_ingestion/tests/INTEGRATION_TEST_SETUP.md"
             )
 
         # Check that all methods meet minimum compliance (use different thresholds for web crawler)

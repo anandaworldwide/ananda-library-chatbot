@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Unit tests for the SQL database text ingestion functionality."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -58,6 +59,551 @@ class TestArgumentParsing(unittest.TestCase):
             self.assertTrue(args.keep_data)
             self.assertEqual(args.batch_size, 100)
             self.assertTrue(args.dry_run)
+
+
+class TestS3ExclusionRules(unittest.TestCase):
+    """Test cases for S3-based exclusion rules functionality."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        # S3 format (user-friendly format)
+        self.sample_s3_exclusion_rules = {
+            "test_site": {
+                "exclude_categories": ["Restricted"],
+                "exclude_combinations": [
+                    {"category": "Letters", "author": "Admin User"}
+                ],
+                "exclude_post_hierarchies": [
+                    {
+                        "parent_id": 3155,
+                        "description": "Unpublished class notes for premium members",
+                    }
+                ],
+                "exclude_specific_posts": [
+                    {
+                        "post_id": 10800,
+                        "description": "Unedited notes - reference only",
+                    },
+                    {"post_id": 11997, "description": "Additional unedited notes"},
+                ],
+            }
+        }
+
+        # Internal format (what the function should return after conversion)
+        self.expected_internal_rules = {
+            "rules": [
+                {
+                    "name": "Exclude category 'Restricted'",
+                    "type": "category",
+                    "category": "Restricted",
+                },
+                {
+                    "name": "Exclude category 'Letters' + author 'Admin User'",
+                    "type": "category_author_combination",
+                    "category": "Letters",
+                    "author": "Admin User",
+                },
+                {
+                    "name": "Exclude hierarchy under post 3155",
+                    "type": "post_hierarchy",
+                    "parent_post_id": 3155,
+                    "description": "Unpublished class notes for premium members",
+                },
+                {
+                    "name": "Exclude specific post 10800",
+                    "type": "specific_post_ids",
+                    "post_ids": [10800],
+                    "description": "Unedited notes - reference only",
+                },
+                {
+                    "name": "Exclude specific post 11997",
+                    "type": "specific_post_ids",
+                    "post_ids": [11997],
+                    "description": "Additional unedited notes",
+                },
+            ]
+        }
+
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_s3_client")
+    def test_download_exclusion_rules_success(self, mock_get_s3_client):
+        """Test successful download of exclusion rules from S3."""
+        # Mock S3 client and response
+        mock_s3_client = MagicMock()
+        mock_get_s3_client.return_value = mock_s3_client
+
+        mock_response = {"Body": MagicMock()}
+        mock_response["Body"].read.return_value = json.dumps(
+            self.sample_s3_exclusion_rules
+        ).encode("utf-8")
+        mock_s3_client.get_object.return_value = mock_response
+
+        # Test the function
+        rules = ingest_db_text.download_exclusion_rules_from_s3("test_site")
+
+        # Verify S3 call
+        mock_s3_client.get_object.assert_called_once_with(
+            Bucket="ananda-chatbot",
+            Key="site-config/data_ingestion/sql_to_vector_db/exclusion_rules.json",
+        )
+
+        # Verify returned rules (should be converted to internal format)
+        self.assertEqual(rules, self.expected_internal_rules)
+        self.assertEqual(len(rules["rules"]), 5)  # Should have 5 rules after conversion
+        self.assertEqual(rules["rules"][0]["name"], "Exclude category 'Restricted'")
+
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_s3_client")
+    def test_download_exclusion_rules_s3_error(self, mock_get_s3_client):
+        """Test handling of S3 errors when downloading exclusion rules."""
+        # Mock S3 client to raise exception
+        mock_s3_client = MagicMock()
+        mock_get_s3_client.return_value = mock_s3_client
+        mock_s3_client.get_object.side_effect = Exception("S3 access denied")
+
+        # Test the function
+        rules = ingest_db_text.download_exclusion_rules_from_s3("test_site")
+
+        # Should return empty dict on error (based on actual implementation)
+        self.assertEqual(rules, {})
+
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_s3_client")
+    def test_download_exclusion_rules_invalid_json(self, mock_get_s3_client):
+        """Test handling of invalid JSON in exclusion rules."""
+        # Mock S3 client with invalid JSON response
+        mock_s3_client = MagicMock()
+        mock_get_s3_client.return_value = mock_s3_client
+
+        mock_response = {"Body": MagicMock()}
+        mock_response["Body"].read.return_value = b"invalid json content"
+        mock_s3_client.get_object.return_value = mock_response
+
+        # Test the function
+        rules = ingest_db_text.download_exclusion_rules_from_s3("test_site")
+
+        # Should return empty dict on JSON parse error (based on actual implementation)
+        self.assertEqual(rules, {})
+
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.get_s3_client")
+    def test_download_exclusion_rules_site_not_found(self, mock_get_s3_client):
+        """Test handling when requested site is not in exclusion rules."""
+        # Mock S3 client with rules for different site
+        mock_s3_client = MagicMock()
+        mock_get_s3_client.return_value = mock_s3_client
+
+        rules_for_other_site = {"other_site": {"rules": []}}
+        mock_response = {"Body": MagicMock()}
+        mock_response["Body"].read.return_value = json.dumps(
+            rules_for_other_site
+        ).encode("utf-8")
+        mock_s3_client.get_object.return_value = mock_response
+
+        # Test the function
+        rules = ingest_db_text.download_exclusion_rules_from_s3("test_site")
+
+        # Should return empty dict when site not found (based on actual implementation)
+        self.assertEqual(rules, {})
+
+    def test_should_exclude_post_restricted_category(self):
+        """Test exclusion rule for restricted category."""
+        exclusion_rules = self.expected_internal_rules
+
+        # Post with restricted category should be excluded
+        post_data = {
+            "ID": 123,
+            "categories": "Restricted|||Other Category",
+            "authors_list": "Some Author",
+            "post_parent": 0,
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        self.assertTrue(should_exclude)
+        self.assertEqual(
+            rule_name, "Rule 'Exclude category 'Restricted'': Has category 'Restricted'"
+        )
+
+    def test_should_exclude_post_admin_letters(self):
+        """Test exclusion rule for Admin User Letters."""
+        exclusion_rules = self.expected_internal_rules
+
+        # Post with Letters category AND Admin User author should be excluded
+        post_data = {
+            "ID": 456,
+            "categories": "Letters|||Other Category",
+            "authors_list": "Admin User|||Co-Author",
+            "post_parent": 0,
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        self.assertTrue(should_exclude)
+        self.assertEqual(
+            rule_name,
+            "Rule 'Exclude category 'Letters' + author 'Admin User'': Has category 'Letters' AND author 'Admin User'",
+        )
+
+    def test_should_exclude_post_admin_letters_category_only(self):
+        """Test that Letters category alone (without Admin author) is not excluded."""
+        exclusion_rules = self.expected_internal_rules
+
+        # Post with Letters category but different author should NOT be excluded
+        post_data = {
+            "ID": 789,
+            "categories": "Letters|||Other Category",
+            "authors_list": "Other Author",
+            "post_parent": 0,
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        self.assertFalse(should_exclude)
+        self.assertEqual(rule_name, "")
+
+    def test_should_exclude_post_private_classes_parent(self):
+        """Test exclusion rule for Private Classes parent post."""
+        exclusion_rules = self.expected_internal_rules
+
+        # Parent post should be excluded
+        post_data = {
+            "ID": 3155,  # The parent post ID
+            "categories": "Classes",
+            "authors_list": "Test Author",
+            "post_parent": 0,
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        self.assertTrue(should_exclude)
+        self.assertEqual(
+            rule_name,
+            "Rule 'Exclude hierarchy under post 3155': Is parent post (ID: 3155)",
+        )
+
+    def test_should_exclude_post_private_classes_child(self):
+        """Test exclusion rule for Private Classes child posts."""
+        exclusion_rules = self.expected_internal_rules
+
+        # Child post should be excluded
+        post_data = {
+            "ID": 4000,
+            "categories": "Classes",
+            "authors_list": "Test Author",
+            "post_parent": 3155,  # Child of the Private Classes parent
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        self.assertTrue(should_exclude)
+        self.assertEqual(
+            rule_name,
+            "Rule 'Exclude hierarchy under post 3155': Is child of parent post (ID: 3155)",
+        )
+
+    def test_should_exclude_post_draft_notes_specific_ids(self):
+        """Test exclusion rule for specific Draft Notes post IDs."""
+        exclusion_rules = self.expected_internal_rules
+
+        # Specific post ID should be excluded
+        post_data = {
+            "ID": 10800,  # One of the specific IDs
+            "categories": "Notes",
+            "authors_list": "Test Author",
+            "post_parent": 0,
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        self.assertTrue(should_exclude)
+        self.assertEqual(
+            rule_name, "Rule 'Exclude specific post 10800': Specific post ID (10800)"
+        )
+
+    def test_should_exclude_post_draft_notes_child_posts(self):
+        """Test exclusion rule for children of Draft Notes."""
+        exclusion_rules = self.expected_internal_rules
+
+        # Note: The current implementation only checks specific_post_ids rule for exact ID matches,
+        # it doesn't check for children when include_children is True. This test reflects current behavior.
+        post_data = {
+            "ID": 12000,
+            "categories": "Notes",
+            "authors_list": "Test Author",
+            "post_parent": 10800,  # Child of excluded post
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        # Current implementation doesn't handle include_children for specific_post_ids
+        self.assertFalse(should_exclude)
+        self.assertEqual(rule_name, "")
+
+    def test_should_exclude_post_no_exclusion(self):
+        """Test that normal posts are not excluded."""
+        exclusion_rules = self.expected_internal_rules
+
+        # Normal post should not be excluded
+        post_data = {
+            "ID": 999,
+            "categories": "Meditation|||Spiritual Practice",
+            "authors_list": "Test Author",
+            "post_parent": 0,
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        self.assertFalse(should_exclude)
+        self.assertEqual(rule_name, "")
+
+    def test_should_exclude_post_empty_rules(self):
+        """Test behavior with empty exclusion rules."""
+        exclusion_rules = {"rules": []}
+
+        post_data = {
+            "ID": 123,
+            "categories": "Restricted",
+            "authors_list": "Admin User",
+            "post_parent": 0,
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(
+            post_data, exclusion_rules
+        )
+        self.assertFalse(should_exclude)
+        self.assertEqual(rule_name, "")
+
+    def test_should_exclude_post_none_rules(self):
+        """Test behavior with None exclusion rules."""
+        post_data = {
+            "ID": 123,
+            "categories": "Restricted",
+            "authors_list": "Admin User",
+            "post_parent": 0,
+        }
+
+        should_exclude, rule_name = ingest_db_text.should_exclude_post(post_data, None)
+        self.assertFalse(should_exclude)
+        self.assertEqual(rule_name, "")
+
+
+class TestExclusionRulesIntegration(unittest.TestCase):
+    """Test cases for exclusion rules integration in fetch_data function."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.sample_exclusion_rules = {
+            "rules": [
+                {
+                    "name": "Ministry Category",
+                    "type": "category",
+                    "category": "Ministry",
+                },
+                {
+                    "name": "Admin Author Letters",
+                    "type": "category_author_combination",
+                    "category": "Letters",
+                    "author": "Admin Author",
+                },
+            ]
+        }
+
+    @patch(
+        "data_ingestion.sql_to_vector_db.ingest_db_text.download_exclusion_rules_from_s3"
+    )
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.pymysql.connect")
+    def test_fetch_data_with_exclusions(self, mock_connect, mock_download_rules):
+        """Test that fetch_data properly applies exclusion rules."""
+        # Mock S3 exclusion rules download
+        mock_download_rules.return_value = self.sample_exclusion_rules
+
+        # Mock database connection and cursor
+        mock_connection = MagicMock()
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_connect.return_value = mock_connection
+
+        # Mock database rows - mix of included and excluded posts
+        mock_rows = [
+            {  # Should be excluded - Ministry category
+                "ID": 1,
+                "post_content": "<p>Ministry content</p>",
+                "post_name": "ministry-post",
+                "post_title": "Ministry Post",
+                "PARENT_TITLE_1": None,
+                "PARENT_TITLE_2": None,
+                "PARENT_TITLE_3": None,
+                "PARENT_SLUG_1": None,
+                "PARENT_SLUG_2": None,
+                "PARENT_SLUG_3": None,
+                "CHILD_TITLE": "Ministry Post",
+                "post_author": 1,
+                "post_date": datetime(2023, 6, 15),
+                "post_type": "content",
+                "categories": "Ministry|||Other Category",
+                "authors_list": "Test Author",
+                "PARENT3_AUTHOR_ID": 1,
+                "post_parent": 0,
+            },
+            {  # Should be excluded - Admin author Letters
+                "ID": 2,
+                "post_content": "<p>Letter content</p>",
+                "post_name": "letter-post",
+                "post_title": "Letter Post",
+                "PARENT_TITLE_1": None,
+                "PARENT_TITLE_2": None,
+                "PARENT_TITLE_3": None,
+                "PARENT_SLUG_1": None,
+                "PARENT_SLUG_2": None,
+                "PARENT_SLUG_3": None,
+                "CHILD_TITLE": "Letter Post",
+                "post_author": 2,
+                "post_date": datetime(2023, 6, 15),
+                "post_type": "content",
+                "categories": "Letters",
+                "authors_list": "Admin Author",
+                "PARENT3_AUTHOR_ID": 2,
+                "post_parent": 0,
+            },
+            {  # Should be included - normal post
+                "ID": 3,
+                "post_content": "<p>Normal content</p>",
+                "post_name": "normal-post",
+                "post_title": "Normal Post",
+                "PARENT_TITLE_1": None,
+                "PARENT_TITLE_2": None,
+                "PARENT_TITLE_3": None,
+                "PARENT_SLUG_1": None,
+                "PARENT_SLUG_2": None,
+                "PARENT_SLUG_3": None,
+                "CHILD_TITLE": "Normal Post",
+                "post_author": 1,
+                "post_date": datetime(2023, 6, 15),
+                "post_type": "content",
+                "categories": "Meditation",
+                "authors_list": "Test Author",
+                "PARENT3_AUTHOR_ID": 1,
+                "post_parent": 0,
+            },
+        ]
+
+        mock_cursor.fetchall.return_value = mock_rows
+
+        # Mock site configuration
+        site_config = {
+            "base_url": "https://example.com/",
+            "post_types": ["content"],
+            "category_taxonomy": "library-category",
+        }
+
+        # Mock authors dictionary
+        authors = {1: "Test Author", 2: "Admin Author"}
+
+        # Mock text processing functions
+        with (
+            patch(
+                "data_ingestion.sql_to_vector_db.ingest_db_text.remove_html_tags"
+            ) as mock_remove_html,
+            patch(
+                "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
+            ) as mock_replace_quotes,
+        ):
+            mock_remove_html.side_effect = lambda x: x.replace("<p>", "").replace(
+                "</p>", ""
+            )
+            mock_replace_quotes.side_effect = lambda x: x
+
+            # Test the fetch_data function
+            processed_data = ingest_db_text.fetch_data(
+                mock_connection, site_config, "Test Library", authors, "ananda"
+            )
+
+            # Verify exclusion rules were downloaded
+            mock_download_rules.assert_called_once_with("ananda")
+
+            # Should only include the normal post (ID=3), exclude the Ministry and Letters posts
+            self.assertEqual(len(processed_data), 1)
+            self.assertEqual(processed_data[0]["id"], 3)
+            self.assertEqual(processed_data[0]["title"], "Normal Post")
+
+    @patch(
+        "data_ingestion.sql_to_vector_db.ingest_db_text.download_exclusion_rules_from_s3"
+    )
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.pymysql.connect")
+    def test_fetch_data_no_exclusion_rules(self, mock_connect, mock_download_rules):
+        """Test that fetch_data works normally when no exclusion rules are available."""
+        # Mock S3 download to return None (no rules)
+        mock_download_rules.return_value = None
+
+        # Mock database connection and cursor
+        mock_connection = MagicMock()
+        mock_cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_connect.return_value = mock_connection
+
+        # Mock database row
+        mock_rows = [
+            {
+                "ID": 1,
+                "post_content": "<p>Test content</p>",
+                "post_name": "test-post",
+                "post_title": "Test Post",
+                "PARENT_TITLE_1": None,
+                "PARENT_TITLE_2": None,
+                "PARENT_TITLE_3": None,
+                "PARENT_SLUG_1": None,
+                "PARENT_SLUG_2": None,
+                "PARENT_SLUG_3": None,
+                "CHILD_TITLE": "Test Post",
+                "post_author": 1,
+                "post_date": datetime(2023, 6, 15),
+                "post_type": "content",
+                "categories": "Ministry",  # Would be excluded if rules were active
+                "authors_list": "Test Author",
+                "PARENT3_AUTHOR_ID": 1,
+                "post_parent": 0,
+            }
+        ]
+
+        mock_cursor.fetchall.return_value = mock_rows
+
+        # Mock site configuration
+        site_config = {
+            "base_url": "https://example.com/",
+            "post_types": ["content"],
+            "category_taxonomy": "library-category",
+        }
+
+        # Mock authors dictionary
+        authors = {1: "Test Author"}
+
+        # Mock text processing functions
+        with (
+            patch(
+                "data_ingestion.sql_to_vector_db.ingest_db_text.remove_html_tags"
+            ) as mock_remove_html,
+            patch(
+                "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
+            ) as mock_replace_quotes,
+        ):
+            mock_remove_html.side_effect = lambda x: x.replace("<p>", "").replace(
+                "</p>", ""
+            )
+            mock_replace_quotes.side_effect = lambda x: x
+
+            # Test the fetch_data function
+            processed_data = ingest_db_text.fetch_data(
+                mock_connection, site_config, "Test Library", authors, "ananda"
+            )
+
+            # Should include all posts when no exclusion rules are active
+            self.assertEqual(len(processed_data), 1)
+            self.assertEqual(processed_data[0]["id"], 1)
 
 
 class TestEnvironmentLoading(unittest.TestCase):

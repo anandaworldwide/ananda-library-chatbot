@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError
 
-from data_ingestion.audio_video.s3_utils import upload_to_s3
 from data_ingestion.audio_video.youtube_utils import download_youtube_audio
+from data_ingestion.utils.s3_utils import upload_to_s3
 
 logger = logging.getLogger(__name__)
 

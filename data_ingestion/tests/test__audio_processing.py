@@ -11,13 +11,13 @@ from data_ingestion.audio_video.IngestQueue import IngestQueue
 from data_ingestion.audio_video.pinecone_utils import (
     load_pinecone,
 )
-from data_ingestion.audio_video.s3_utils import S3UploadError, upload_to_s3
 from data_ingestion.audio_video.transcribe_and_ingest_media import process_file
 from data_ingestion.audio_video.transcription_utils import (
     TimeoutException,
     chunk_transcription,
     transcribe_media,
 )
+from data_ingestion.utils.s3_utils import S3UploadError, upload_to_s3
 from pyutil.env_utils import load_env
 
 
@@ -465,9 +465,7 @@ class TestAudioProcessing(unittest.TestCase):
         logger.debug("Starting S3 upload error handling test")
 
         # Mock the S3 client to simulate an error
-        with patch(
-            "data_ingestion.audio_video.s3_utils.get_s3_client"
-        ) as mock_get_s3_client:
+        with patch("data_ingestion.utils.s3_utils.get_s3_client") as mock_get_s3_client:
             mock_s3 = MagicMock()
             mock_s3.upload_file.side_effect = ClientError(
                 {"Error": {"Code": "TestException", "Message": "Test error message"}},
@@ -490,9 +488,7 @@ class TestAudioProcessing(unittest.TestCase):
         logger.debug("Starting S3 upload RequestTimeTooSkewed test")
 
         # Mock the S3 client to simulate a RequestTimeTooSkewed error
-        with patch(
-            "data_ingestion.audio_video.s3_utils.get_s3_client"
-        ) as mock_get_s3_client:
+        with patch("data_ingestion.utils.s3_utils.get_s3_client") as mock_get_s3_client:
             mock_s3 = MagicMock()
             mock_s3.upload_file.side_effect = [
                 ClientError(
@@ -529,9 +525,7 @@ class TestAudioProcessing(unittest.TestCase):
 
         # Mock the S3 client to simulate file already exists with same size
         with (
-            patch(
-                "data_ingestion.audio_video.s3_utils.get_s3_client"
-            ) as mock_get_s3_client,
+            patch("data_ingestion.utils.s3_utils.get_s3_client") as mock_get_s3_client,
             patch("os.path.getsize") as mock_getsize,
         ):
             mock_s3 = MagicMock()
@@ -557,9 +551,7 @@ class TestAudioProcessing(unittest.TestCase):
 
         # Mock the S3 client to simulate file exists but with different size
         with (
-            patch(
-                "data_ingestion.audio_video.s3_utils.get_s3_client"
-            ) as mock_get_s3_client,
+            patch("data_ingestion.utils.s3_utils.get_s3_client") as mock_get_s3_client,
             patch("os.path.getsize") as mock_getsize,
         ):
             mock_s3 = MagicMock()

@@ -61,7 +61,6 @@ from data_ingestion.audio_video.pinecone_utils import (
     store_in_pinecone,
 )
 from data_ingestion.audio_video.processing_time_estimates import save_estimate
-from data_ingestion.audio_video.s3_utils import S3UploadError, upload_to_s3
 from data_ingestion.audio_video.transcription_utils import (
     RateLimitError,
     UnsupportedAudioFormatError,
@@ -78,6 +77,7 @@ from data_ingestion.audio_video.youtube_utils import (
     extract_youtube_id,
 )
 from data_ingestion.utils.pinecone_utils import clear_library_vectors
+from data_ingestion.utils.s3_utils import S3UploadError, upload_to_s3
 from pyutil.env_utils import load_env
 from pyutil.logging_utils import configure_logging
 

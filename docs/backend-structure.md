@@ -25,8 +25,7 @@ facilitate understanding and future development.
   - **Firestore:** NoSQL database used for storing chat logs, user data, votes, likes, cached related questions, and
     potentially ingestion queue state (`firestoreUtils.ts`, `services/firebase.ts`).
   - **Redis:** In-memory data store used primarily for API rate limiting (`redisUtils.ts`, `genericRateLimiter.ts`).
-  - **AWS S3:** Object storage used for hosting source audio files (`awsConfig.ts`,
-    `data_ingestion/audio_video/s3_utils.py`).
+  - **AWS S3:** Object storage used for hosting source audio files (`awsConfig.ts`, `data_ingestion/utils/s3_utils.py`).
   - **AssemblyAI / Whisper:** Likely used for audio transcription within the Python ingestion scripts.
 
 ---

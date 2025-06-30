@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from data_ingestion.audio_video.s3_utils import (
+from data_ingestion.utils.s3_utils import (
     S3UploadError,
     check_unique_filenames,
     exponential_backoff,
@@ -28,7 +28,7 @@ class TestS3Utils:
 
     def test_get_s3_client(self):
         """Test that get_s3_client returns a boto3 S3 client."""
-        with patch("data_ingestion.audio_video.s3_utils.boto3.client") as mock_client:
+        with patch("data_ingestion.utils.s3_utils.boto3.client") as mock_client:
             mock_s3_client = MagicMock()
             mock_client.return_value = mock_s3_client
 
@@ -133,9 +133,9 @@ class TestS3Utils:
 
         assert result is False
 
-    @patch("data_ingestion.audio_video.s3_utils.get_bucket_name")
-    @patch("data_ingestion.audio_video.s3_utils.get_s3_client")
-    @patch("data_ingestion.audio_video.s3_utils.file_exists_with_same_size")
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.file_exists_with_same_size")
     def test_upload_to_s3_success(
         self, mock_file_exists, mock_get_client, mock_get_bucket
     ):
@@ -157,9 +157,9 @@ class TestS3Utils:
             mock_s3_client, "test-bucket", "audio/file.mp3", "/path/to/file.mp3"
         )
 
-    @patch("data_ingestion.audio_video.s3_utils.get_bucket_name")
-    @patch("data_ingestion.audio_video.s3_utils.get_s3_client")
-    @patch("data_ingestion.audio_video.s3_utils.file_exists_with_same_size")
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.file_exists_with_same_size")
     def test_upload_to_s3_file_already_exists(
         self, mock_file_exists, mock_get_client, mock_get_bucket
     ):
@@ -185,9 +185,9 @@ class TestS3Utils:
         with pytest.raises(ValueError, match="s3_key must be provided"):
             upload_to_s3("/path/to/file.mp3", None)
 
-    @patch("data_ingestion.audio_video.s3_utils.get_bucket_name")
-    @patch("data_ingestion.audio_video.s3_utils.get_s3_client")
-    @patch("data_ingestion.audio_video.s3_utils.file_exists_with_same_size")
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.file_exists_with_same_size")
     @patch("time.sleep")  # Mock sleep to speed up tests
     def test_upload_to_s3_retry_on_time_skew(
         self, mock_sleep, mock_file_exists, mock_get_client, mock_get_bucket
@@ -212,9 +212,9 @@ class TestS3Utils:
         assert mock_s3_client.upload_file.call_count == 2
         mock_sleep.assert_called_once()  # Should have slept during backoff
 
-    @patch("data_ingestion.audio_video.s3_utils.get_bucket_name")
-    @patch("data_ingestion.audio_video.s3_utils.get_s3_client")
-    @patch("data_ingestion.audio_video.s3_utils.file_exists_with_same_size")
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.file_exists_with_same_size")
     @patch("time.sleep")
     def test_upload_to_s3_max_retries_exceeded(
         self, mock_sleep, mock_file_exists, mock_get_client, mock_get_bucket
@@ -238,9 +238,9 @@ class TestS3Utils:
         # Verify all retries were attempted
         assert mock_s3_client.upload_file.call_count == 5
 
-    @patch("data_ingestion.audio_video.s3_utils.get_bucket_name")
-    @patch("data_ingestion.audio_video.s3_utils.get_s3_client")
-    @patch("data_ingestion.audio_video.s3_utils.file_exists_with_same_size")
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.file_exists_with_same_size")
     def test_upload_to_s3_immediate_error(
         self, mock_file_exists, mock_get_client, mock_get_bucket
     ):
@@ -263,8 +263,8 @@ class TestS3Utils:
         # Verify no retries for non-retryable error
         assert mock_s3_client.upload_file.call_count == 1
 
-    @patch("data_ingestion.audio_video.s3_utils.get_bucket_name")
-    @patch("data_ingestion.audio_video.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
     @patch("os.walk")
     def test_check_unique_filenames_with_conflicts(
         self, mock_walk, mock_get_client, mock_get_bucket
@@ -309,8 +309,8 @@ class TestS3Utils:
         assert "/path/audio/duplicate.mp3" in duplicate_paths
         assert "/path/video/duplicate.mp3" in duplicate_paths
 
-    @patch("data_ingestion.audio_video.s3_utils.get_bucket_name")
-    @patch("data_ingestion.audio_video.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
     @patch("os.walk")
     def test_check_unique_filenames_s3_error(
         self, mock_walk, mock_get_client, mock_get_bucket
@@ -338,8 +338,8 @@ class TestS3Utils:
         # Should return empty dict when S3 access fails
         assert result == {}
 
-    @patch("data_ingestion.audio_video.s3_utils.get_bucket_name")
-    @patch("data_ingestion.audio_video.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
     @patch("os.walk")
     def test_check_unique_filenames_no_conflicts(
         self, mock_walk, mock_get_client, mock_get_bucket

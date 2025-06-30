@@ -9,6 +9,26 @@ generates embeddings using OpenAI, and upserts the resulting vectors into a spec
 Pinecone index. It includes features for checkpointing to resume interrupted ingestions
 and options to clear existing data for a specific library before starting.
 
+Configuration:
+    The script supports optional content exclusion rules via an S3-hosted JSON configuration
+    file located at: s3://ananda-chatbot/site-config/data_ingestion/sql_to_vector_db/exclusion_rules.json
+
+    This configuration file can contain site-specific exclusion rules in the following format:
+    {
+      "site_name": {
+        "exclude_categories": ["category1", "category2"],
+        "exclude_combinations": [
+          {"category": "Letters", "author": "Author Name"}
+        ],
+        "exclude_post_hierarchies": [
+          {"parent_id": 1234, "description": "Optional description"}
+        ],
+        "exclude_specific_posts": [
+          {"post_id": 5678, "description": "Optional description"}
+        ]
+      }
+    }
+
 Command Line Arguments:
     --site: Required. Site name (e.g., ananda, jairam) for config and env loading.
     --database: Required. Name of the MySQL database to connect to.
@@ -45,6 +65,7 @@ from data_ingestion.utils.progress_utils import (
     is_exiting,
     setup_signal_handlers,
 )
+from data_ingestion.utils.s3_utils import get_s3_client
 from data_ingestion.utils.text_processing import remove_html_tags, replace_smart_quotes
 from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
 from pyutil.env_utils import load_env
@@ -66,6 +87,166 @@ CHECKPOINT_FILE_TEMPLATE = os.path.join(
 
 # Default number of documents to process in each embedding/upsert batch
 DEFAULT_BATCH_SIZE = 50
+
+# S3 location for exclusion rules
+EXCLUSION_RULES_S3_PATH = (
+    "site-config/data_ingestion/sql_to_vector_db/exclusion_rules.json"
+)
+
+
+# --- Exclusion Rules Functions ---
+def download_exclusion_rules_from_s3(site: str) -> dict:
+    """Download exclusion rules from S3 for the specified site."""
+    try:
+        s3_client = get_s3_client()
+        bucket_name = "ananda-chatbot"
+
+        logger.info(
+            f"🔍 Downloading exclusion rules from S3: s3://{bucket_name}/{EXCLUSION_RULES_S3_PATH}"
+        )
+
+        response = s3_client.get_object(Bucket=bucket_name, Key=EXCLUSION_RULES_S3_PATH)
+        rules_data = json.loads(response["Body"].read().decode("utf-8"))
+
+        if site not in rules_data:
+            logger.warning(
+                f"⚠️  No exclusion rules found for site '{site}' in S3 config"
+            )
+            return {}
+
+        site_rules = rules_data[site]
+
+        # Convert the user-friendly format to internal format
+        converted_rules = []
+        total_rule_count = 0
+
+        # Process exclude_categories
+        if "exclude_categories" in site_rules:
+            for category in site_rules["exclude_categories"]:
+                converted_rules.append(
+                    {
+                        "name": f"Exclude category '{category}'",
+                        "type": "category",
+                        "category": category,
+                    }
+                )
+                total_rule_count += 1
+
+        # Process exclude_combinations
+        if "exclude_combinations" in site_rules:
+            for combo in site_rules["exclude_combinations"]:
+                converted_rules.append(
+                    {
+                        "name": f"Exclude category '{combo['category']}' + author '{combo['author']}'",
+                        "type": "category_author_combination",
+                        "category": combo["category"],
+                        "author": combo["author"],
+                    }
+                )
+                total_rule_count += 1
+
+        # Process exclude_post_hierarchies
+        if "exclude_post_hierarchies" in site_rules:
+            for hierarchy in site_rules["exclude_post_hierarchies"]:
+                converted_rules.append(
+                    {
+                        "name": f"Exclude hierarchy under post {hierarchy['parent_id']}",
+                        "type": "post_hierarchy",
+                        "parent_post_id": hierarchy["parent_id"],
+                        "description": hierarchy.get("description", ""),
+                    }
+                )
+                total_rule_count += 1
+
+        # Process exclude_specific_posts
+        if "exclude_specific_posts" in site_rules:
+            for post in site_rules["exclude_specific_posts"]:
+                converted_rules.append(
+                    {
+                        "name": f"Exclude specific post {post['post_id']}",
+                        "type": "specific_post_ids",
+                        "post_ids": [post["post_id"]],
+                        "description": post.get("description", ""),
+                    }
+                )
+                total_rule_count += 1
+
+        logger.info(
+            f"✅ Successfully loaded {total_rule_count} exclusion rules for site '{site}'"
+        )
+
+        # Debug: Print rule summary
+        for rule in converted_rules:
+            logger.info(f"   📋 Rule: {rule['name']} ({rule['type']})")
+
+        return {"rules": converted_rules}
+
+    except Exception as e:
+        logger.error(f"❌ Failed to download exclusion rules from S3: {e}")
+        logger.warning(
+            "⚠️  Proceeding without exclusion rules - all content will be ingested"
+        )
+        return {}
+
+
+def should_exclude_post(row: dict, exclusion_rules: dict) -> tuple[bool, str]:
+    """
+    Check if a post should be excluded based on exclusion rules.
+
+    Returns:
+        tuple: (should_exclude: bool, reason: str)
+    """
+    if not exclusion_rules or "rules" not in exclusion_rules:
+        return False, ""
+
+    post_id = row["ID"]
+    categories = []
+    if row.get("categories"):
+        categories = [
+            cat.strip() for cat in row["categories"].split("|||") if cat.strip()
+        ]
+
+    authors = []
+    if row.get("authors_list"):
+        authors = [
+            auth.strip() for auth in row["authors_list"].split("|||") if auth.strip()
+        ]
+
+    for rule in exclusion_rules["rules"]:
+        rule_name = rule["name"]
+        rule_type = rule["type"]
+
+        if rule_type == "category":
+            # Exclude if post has the specified category
+            if rule["category"] in categories:
+                return True, f"Rule '{rule_name}': Has category '{rule['category']}'"
+
+        elif rule_type == "category_author_combination":
+            # Exclude if post has both the specified category AND author
+            if rule["category"] in categories and rule["author"] in authors:
+                return (
+                    True,
+                    f"Rule '{rule_name}': Has category '{rule['category']}' AND author '{rule['author']}'",
+                )
+
+        elif rule_type == "post_hierarchy":
+            # Exclude if post is parent or child of specified parent
+            parent_id = rule["parent_post_id"]
+            if post_id == parent_id:
+                if rule.get("include_parent", True):
+                    return True, f"Rule '{rule_name}': Is parent post (ID: {parent_id})"
+            elif row.get("post_parent") == parent_id:
+                return (
+                    True,
+                    f"Rule '{rule_name}': Is child of parent post (ID: {parent_id})",
+                )
+
+        elif rule_type == "specific_post_ids":
+            # Exclude if post ID is in the list
+            if post_id in rule["post_ids"]:
+                return True, f"Rule '{rule_name}': Specific post ID ({post_id})"
+
+    return False, ""
 
 
 # --- Argument Parsing ---
@@ -467,6 +648,15 @@ def fetch_data(
     max_records: int = None,
 ) -> list[dict]:
     """Fetches, cleans, and prepares post data from the database for ingestion."""
+
+    # Download exclusion rules from S3
+    logger.info(f"🔍 Loading exclusion rules for site '{site}'...")
+    exclusion_rules = download_exclusion_rules_from_s3(site)
+
+    # Initialize exclusion tracking
+    exclusion_stats = {}
+    total_excluded = 0
+
     post_types = site_config["post_types"]
     category_taxonomy = site_config["category_taxonomy"]
     # Use the confirmed taxonomy slug for authors
@@ -482,6 +672,7 @@ def fetch_data(
             child.ID,
             child.post_content,
             child.post_name,
+            child.post_parent,                     -- Add post_parent for hierarchy filtering
             parent.post_title AS PARENT_TITLE_1,  -- Immediate parent
             parent.post_name AS PARENT_SLUG_1,    -- Immediate parent slug
             parent2.post_title AS PARENT_TITLE_2, -- Grandparent
@@ -516,7 +707,7 @@ def fetch_data(
             AND child.post_type IN ({placeholders}) -- Only desired post types
         GROUP BY
             -- Group by all selected post fields to ensure one row per post
-            child.ID, child.post_content, child.post_name, PARENT_TITLE_1, PARENT_TITLE_2, PARENT_TITLE_3, PARENT3_AUTHOR_ID,
+            child.ID, child.post_content, child.post_name, child.post_parent, PARENT_TITLE_1, PARENT_TITLE_2, PARENT_TITLE_3, PARENT3_AUTHOR_ID,
             CHILD_TITLE, child.post_author, child.post_date, child.post_type
         ORDER BY
             child.ID -- Order by ID for potentially easier debugging/checkpointing
@@ -560,6 +751,30 @@ def fetch_data(
 
             # Iterate through fetched rows with a progress bar
             for row in progress_bar:
+                # Check exclusion rules first
+                should_exclude, exclusion_reason = should_exclude_post(
+                    row, exclusion_rules
+                )
+                if should_exclude:
+                    total_excluded += 1
+                    rule_name = (
+                        exclusion_reason.split(":")[0]
+                        .replace("Rule '", "")
+                        .replace("'", "")
+                    )
+                    exclusion_stats[rule_name] = exclusion_stats.get(rule_name, 0) + 1
+
+                    # Debug: Log excluded posts (but not too verbosely)
+                    if total_excluded <= 10:  # Only log first 10 for debugging
+                        logger.info(
+                            f"🚫 EXCLUDED Post ID {row['ID']} ({row.get('CHILD_TITLE', 'No Title')}): {exclusion_reason}"
+                        )
+                    elif total_excluded == 11:
+                        logger.info(
+                            "🚫 ... (additional exclusions will be counted but not logged individually)"
+                        )
+                    continue
+
                 # Combine parent titles and the post's title into a hierarchical string
                 titles = [
                     title
@@ -640,6 +855,24 @@ def fetch_data(
                         "library": library_name,  # Library name for Pinecone metadata filtering
                     }
                 )
+
+        # Log exclusion summary at the end
+        if exclusion_rules and exclusion_rules.get("rules"):
+            logger.info("📊 EXCLUSION SUMMARY:")
+            logger.info(f"   🚫 Total posts excluded: {total_excluded}")
+            logger.info(
+                f"   ✅ Total posts prepared for ingestion: {len(processed_data)}"
+            )
+
+            if exclusion_stats:
+                logger.info("   📋 Exclusions by rule:")
+                for rule_name, count in sorted(exclusion_stats.items()):
+                    logger.info(f"      • {rule_name}: {count} posts")
+            else:
+                logger.info("   ℹ️  No posts were excluded by any rules")
+        else:
+            logger.info("📊 No exclusion rules active - all content processed normally")
+
         logger.info(
             f"Finished processing rows. {len(processed_data)} posts prepared for ingestion."
         )
