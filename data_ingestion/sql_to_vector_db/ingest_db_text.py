@@ -453,10 +453,10 @@ def generate_document_hash(
 
 def _process_content_for_pdf(content: str, debug_mode: bool = False) -> str:
     """
-    Process content for PDF generation by cleaning HTML and normalizing text.
+    Process content for PDF generation by converting HTML paragraphs to newlines and cleaning HTML.
 
-    Only removes problematic HTML attributes while preserving all tags and structure.
-    This maintains paragraph formatting and emphasis tags that are important for PDFs.
+    Converts HTML paragraph tags to double newlines while preserving inline formatting tags.
+    This ensures proper paragraph splitting while maintaining emphasis tags for PDFs.
 
     Args:
         content: Raw content string
@@ -465,13 +465,20 @@ def _process_content_for_pdf(content: str, debug_mode: bool = False) -> str:
     Returns:
         str: Processed content suitable for PDF generation
     """
+    import re
 
-    # Parse HTML content
+    # STEP 1: Convert paragraph tags to double newlines using regex
+    # This approach is more reliable than BeautifulSoup tree manipulation
+    # Replace opening <p> tags with double newline prefix
+    content = re.sub(r"<p[^>]*>", "\n\n", content)
+    # Replace closing </p> tags with double newline suffix
+    content = re.sub(r"</p>", "\n\n", content)
+
+    # Parse HTML content for attribute cleaning
     soup = BeautifulSoup(content, "html.parser")
 
-    # Remove only problematic attributes that cause ReportLab issues
-    # Keep all tags but clean attributes that might cause parsing errors
-
+    # STEP 2: Remove only problematic attributes that cause ReportLab issues
+    # Keep all remaining tags (like <em>, <strong>) but clean attributes that might cause parsing errors
     for tag in soup.find_all():
         # Remove problematic attributes
         attrs_to_remove = []
@@ -486,15 +493,27 @@ def _process_content_for_pdf(content: str, debug_mode: bool = False) -> str:
         for attr in attrs_to_remove:
             del tag.attrs[attr]
 
-    # Convert back to string, preserving all HTML structure
+    # Convert back to string, preserving remaining HTML structure (emphasis, etc.)
     cleaned_content = str(soup)
+
+    # STEP 3: Clean up excessive newlines that may have been created
+    # Normalize multiple newlines to double newlines (paragraph breaks)
+    cleaned_content = re.sub(r"\n{3,}", "\n\n", cleaned_content)
+
+    # Remove leading/trailing whitespace
+    cleaned_content = cleaned_content.strip()
 
     if debug_mode:
         logger.info(
-            f"DEBUG: HTML cleaning - Original length: {len(content)}, Cleaned length: {len(cleaned_content)}"
+            f"DEBUG: HTML processing - Original length: {len(content)}, Processed length: {len(cleaned_content)}"
         )
-        if len(content) != len(cleaned_content):
-            logger.info("DEBUG: HTML attributes were cleaned for PDF generation")
+        logger.info(
+            "DEBUG: HTML paragraph tags converted to newlines, attributes cleaned"
+        )
+        # Show first 300 chars to see paragraph structure
+        logger.info(
+            f"DEBUG: First 300 chars after processing: '{cleaned_content[:300]}...'"
+        )
 
     return cleaned_content
 
