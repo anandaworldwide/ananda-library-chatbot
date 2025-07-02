@@ -45,7 +45,9 @@ certifi==2025.4.26
 cffi==1.17.1
     # via cryptography
 chardet==5.2.0
-    # via readability-lxml
+    # via
+    #   readability-lxml
+    #   reportlab
 charset-normalizer==3.4.2
     # via
     #   pdfminer-six
@@ -318,6 +320,7 @@ pillow==11.2.1
     #   imageio
     #   matplotlib
     #   pdfplumber
+    #   reportlab
 pinecone-client==5.0.1
     # via -r requirements.in
 pinecone-plugin-inference==1.1.0
@@ -426,6 +429,8 @@ regex==2024.11.6
     #   nltk
     #   tiktoken
     #   transformers
+reportlab==4.2.5
+    # via -r requirements.in
 requests==2.32.4
     # via
     #   -r requirements.in
