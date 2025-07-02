@@ -529,17 +529,9 @@ class TestExclusionRulesIntegration(unittest.TestCase):
         authors = {1: "Test Author", 2: "Admin Author"}
 
         # Mock text processing functions
-        with (
-            patch(
-                "data_ingestion.sql_to_vector_db.ingest_db_text.remove_html_tags"
-            ) as mock_remove_html,
-            patch(
-                "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
-            ) as mock_replace_quotes,
-        ):
-            mock_remove_html.side_effect = lambda x: x.replace("<p>", "").replace(
-                "</p>", ""
-            )
+        with patch(
+            "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
+        ) as mock_replace_quotes:
             mock_replace_quotes.side_effect = lambda x: x
 
             # Test the fetch_data function
@@ -607,17 +599,9 @@ class TestExclusionRulesIntegration(unittest.TestCase):
         authors = {1: "Test Author"}
 
         # Mock text processing functions
-        with (
-            patch(
-                "data_ingestion.sql_to_vector_db.ingest_db_text.remove_html_tags"
-            ) as mock_remove_html,
-            patch(
-                "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
-            ) as mock_replace_quotes,
-        ):
-            mock_remove_html.side_effect = lambda x: x.replace("<p>", "").replace(
-                "</p>", ""
-            )
+        with patch(
+            "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
+        ) as mock_replace_quotes:
             mock_replace_quotes.side_effect = lambda x: x
 
             # Test the fetch_data function
@@ -1014,14 +998,9 @@ class TestPunctuationPreservation(unittest.TestCase):
         authors = {1: "Test Author"}
 
         # Test the fetch_data function
-        with (
-            patch(
-                "data_ingestion.sql_to_vector_db.ingest_db_text.remove_html_tags"
-            ) as mock_remove_html,
-            patch(
-                "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
-            ) as mock_replace_quotes,
-        ):
+        with patch(
+            "data_ingestion.sql_to_vector_db.ingest_db_text.replace_smart_quotes"
+        ) as mock_replace_quotes:
             # Mock text processing to preserve punctuation
             cleaned_text = """Welcome to our meditation guide! Are you ready to begin?
 
@@ -1036,7 +1015,6 @@ Let's explore the fundamentals: breathing, posture, and mindfulness.
 Remember: it's not about perfection; it's about progress!
 Questions? Email us at info@example.com or call (555) 123-4567."""
 
-            mock_remove_html.return_value = cleaned_text
             mock_replace_quotes.return_value = cleaned_text
 
             processed_data = ingest_db_text.fetch_data(
@@ -1164,6 +1142,8 @@ Questions? Email us at info@example.com or call (555) 123-4567.""",
             mock_pinecone_index,
             mock_embeddings,
             mock_splitter,
+            site="test_site",
+            library_name="test_library",
             dry_run=False,
         )
 

@@ -104,6 +104,28 @@
         "PYTHONPATH": "${workspaceFolder}"
       },
       "args": ["--debug", "--site", "ananda-public"]
+    },
+    {
+      "name": "Python: ingest_db_text.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/data_ingestion/sql_to_vector_db/ingest_db_text.py",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "args": [
+        "--site",
+        "ananda",
+        "--database",
+        "anandalib_2025_03_06",
+        "--library",
+        "Ananda Library",
+        "--dry-run",
+        "--max-records",
+        "5",
+        "--debug-pdfs"
+      ]
     }
   ]
 }
