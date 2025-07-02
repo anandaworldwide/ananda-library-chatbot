@@ -121,3 +121,24 @@ if max_overlap_tokens > 0:
     actual_overlap = min(self.chunk_overlap, max_overlap_tokens)
     # Only add overlap that fits within token budget
 ```
+
+### 8. HTML Paragraph Tag Processing for PDF Generation
+
+**Wrong**: BeautifulSoup tree manipulation with insert_before/insert_after can fail to preserve newlines.
+
+```python
+# Unreliable - BeautifulSoup may not preserve inserted newlines
+for p_tag in soup.find_all("p"):
+    p_tag.insert_before("\n\n")
+    p_tag.insert_after("\n\n")
+    p_tag.unwrap()
+```
+
+**Correct**: Use regex preprocessing before BeautifulSoup for reliable paragraph conversion.
+
+```python
+# Reliable - Convert <p> tags to newlines before parsing
+content = re.sub(r'<p[^>]*>', '\n\n', content)  # Opening tags
+content = re.sub(r'</p>', '\n\n', content)      # Closing tags
+soup = BeautifulSoup(content, "html.parser")    # Then clean attributes
+```
