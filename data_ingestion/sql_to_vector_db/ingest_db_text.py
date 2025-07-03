@@ -1036,6 +1036,79 @@ def get_pinecone_client() -> Pinecone:
     return Pinecone(api_key=api_key)
 
 
+def _get_index_configuration() -> tuple[int, str, ServerlessSpec]:
+    """Gets Pinecone index configuration from environment variables."""
+    dimension_str = os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION")
+    if not dimension_str:
+        raise ValueError(
+            "OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set"
+        )
+
+    dimension = int(dimension_str)
+    metric = "cosine"
+    spec = ServerlessSpec(
+        cloud=os.getenv("PINECONE_CLOUD", "aws"),
+        region=os.getenv("PINECONE_REGION", "us-west-2"),
+    )
+
+    return dimension, metric, spec
+
+
+def _wait_for_index_ready(pinecone: Pinecone, index_name: str) -> None:
+    """Waits for Pinecone index to become ready with timeout."""
+    logger.info(
+        f"Waiting for index '{index_name}' to be created (this may take a moment)..."
+    )
+    start_wait_time = time.time()
+    wait_timeout = 300  # 5 minutes timeout for index creation
+
+    while not pinecone.describe_index(index_name).status["ready"]:
+        time.sleep(5)
+        if time.time() - start_wait_time > wait_timeout:
+            logger.error(
+                f"Error: Timeout waiting for index '{index_name}' to become ready."
+            )
+            sys.exit(1)
+
+    logger.info(f"Index '{index_name}' created successfully.")
+
+
+def _create_pinecone_index(pinecone: Pinecone, index_name: str) -> None:
+    """Creates a Pinecone index with standard configuration."""
+    try:
+        dimension, metric, spec = _get_index_configuration()
+
+        pinecone.create_index(
+            name=index_name, dimension=dimension, metric=metric, spec=spec
+        )
+
+        _wait_for_index_ready(pinecone, index_name)
+
+    except Exception as create_error:
+        logger.error(f"Error creating Pinecone index '{index_name}': {create_error}")
+        sys.exit(1)
+
+
+def _handle_dry_run_index_creation(pinecone: Pinecone, index_name: str) -> None:
+    """Handles index creation confirmation and execution in dry run mode."""
+    logger.info(f"Dry run: Index '{index_name}' does not exist.")
+
+    confirm = input(
+        f"Would you like to create the index '{index_name}' even in dry run mode? (Y/n): "
+    )
+
+    # Default to yes if user just presses enter or enters anything starting with Y/y
+    if confirm.lower() not in ["n", "no"]:
+        logger.info(f"Creating index '{index_name}' in dry run mode...")
+        _create_pinecone_index(pinecone, index_name)
+    else:
+        # User declined to create the index
+        logger.error(
+            "Index creation declined. Cannot proceed in dry run mode without an existing index."
+        )
+        sys.exit(1)
+
+
 def create_pinecone_index_if_not_exists(
     pinecone: Pinecone, index_name: str, dry_run: bool = False
 ):
@@ -1045,103 +1118,15 @@ def create_pinecone_index_if_not_exists(
         logger.info(f"Checking status of index '{index_name}'...")
         pinecone.describe_index(index_name)
         logger.info(f"Index '{index_name}' already exists.")
+        return
+
     except NotFoundException:
         # This is the expected exception when the index does not exist
         if dry_run:
-            logger.info(f"Dry run: Index '{index_name}' does not exist.")
-            # Ask if the user wants to create the index even in dry run mode
-            confirm = input(
-                f"Would you like to create the index '{index_name}' even in dry run mode? (Y/n): "
-            )
-            # Default to yes if user just presses enter or enters anything starting with Y/y
-            if confirm.lower() not in ["n", "no"]:
-                logger.info(f"Creating index '{index_name}' in dry run mode...")
-                try:
-                    # Create the index with the same parameters as the non-dry-run case
-                    dimension_str = os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION")
-                    if not dimension_str:
-                        raise ValueError(
-                            "OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set"
-                        )
-                    dimension = int(dimension_str)
-                    metric = "cosine"
-                    spec = ServerlessSpec(
-                        cloud=os.getenv("PINECONE_CLOUD", "aws"),
-                        region=os.getenv("PINECONE_REGION", "us-west-2"),
-                    )
-
-                    pinecone.create_index(
-                        name=index_name, dimension=dimension, metric=metric, spec=spec
-                    )
-
-                    logger.info(
-                        f"Waiting for index '{index_name}' to be created (this may take a moment)..."
-                    )
-                    start_wait_time = time.time()
-                    wait_timeout = 300  # 5 minutes timeout for index creation
-                    while not pinecone.describe_index(index_name).status["ready"]:
-                        time.sleep(5)
-                        if time.time() - start_wait_time > wait_timeout:
-                            logger.error(
-                                f"Error: Timeout waiting for index '{index_name}' to become ready."
-                            )
-                            sys.exit(1)
-                    logger.info(f"Index '{index_name}' created successfully.")
-
-                except Exception as create_error:
-                    logger.error(
-                        f"Error creating Pinecone index '{index_name}': {create_error}"
-                    )
-                    sys.exit(1)
-            else:
-                # User declined to create the index
-                logger.error(
-                    "Index creation declined. Cannot proceed in dry run mode without an existing index."
-                )
-                sys.exit(1)
+            _handle_dry_run_index_creation(pinecone, index_name)
         else:
             logger.info(f"Index '{index_name}' does not exist. Creating...")
-            try:
-                # Dimension for OpenAI text-embedding-ada-002
-                dimension_str = os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION")
-                if not dimension_str:
-                    raise ValueError(
-                        "OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set"
-                    )
-                dimension = int(dimension_str)
-                # Using cosine similarity as it's common for text embeddings
-                metric = "cosine"
-                # Specify serverless configuration
-                # Ensure the cloud and region match your Pinecone setup
-                spec = ServerlessSpec(
-                    cloud=os.getenv("PINECONE_CLOUD", "aws"),
-                    region=os.getenv("PINECONE_REGION", "us-west-2"),
-                )
-
-                pinecone.create_index(
-                    name=index_name, dimension=dimension, metric=metric, spec=spec
-                )
-                # Wait for index to be ready before proceeding
-                logger.info(
-                    f"Waiting for index '{index_name}' to be created (this may take a moment)..."
-                )
-                # Add a timeout check within the wait loop?
-                start_wait_time = time.time()
-                wait_timeout = 300  # 5 minutes timeout for index creation
-                while not pinecone.describe_index(index_name).status["ready"]:
-                    time.sleep(5)
-                    if time.time() - start_wait_time > wait_timeout:
-                        logger.error(
-                            f"Error: Timeout waiting for index '{index_name}' to become ready."
-                        )
-                        sys.exit(1)
-                logger.info(f"Index '{index_name}' created successfully.")
-            except Exception as create_error:
-                # Catch Pinecone specific API errors during creation
-                logger.error(
-                    f"Error creating Pinecone index '{index_name}': {create_error}"
-                )
-                sys.exit(1)
+            _create_pinecone_index(pinecone, index_name)
 
     except Exception as e:
         # Catch any other unexpected errors during description
@@ -1162,17 +1147,25 @@ def load_checkpoint(checkpoint_file: str) -> dict | None:
     if not os.path.exists(checkpoint_file):
         return None
 
-    with open(checkpoint_file, encoding="utf-8") as f:
-        checkpoint_data = json.load(f)
-        # Basic validation of checkpoint structure
-        if isinstance(checkpoint_data.get("processed_doc_ids"), list) and isinstance(
-            checkpoint_data.get("last_processed_id"), int
-        ):
-            logger.info(f"Loaded checkpoint from {checkpoint_file}")
-            return checkpoint_data
-        else:
-            logger.info(f"Invalid checkpoint format in {checkpoint_file}. Ignoring.")
-            return None
+    try:
+        with open(checkpoint_file, encoding="utf-8") as f:
+            checkpoint_data = json.load(f)
+            # Basic validation of checkpoint structure
+            if isinstance(
+                checkpoint_data.get("processed_doc_ids"), list
+            ) and isinstance(checkpoint_data.get("last_processed_id"), int):
+                logger.info(f"Loaded checkpoint from {checkpoint_file}")
+                return checkpoint_data
+            else:
+                logger.info(
+                    f"Invalid checkpoint format in {checkpoint_file}. Ignoring."
+                )
+                return None
+    except json.JSONDecodeError as e:
+        logger.warning(
+            f"Invalid JSON in checkpoint file {checkpoint_file}: {e}. Ignoring."
+        )
+        return None
 
 
 def save_checkpoint(
@@ -1998,25 +1991,18 @@ def handle_checkpoint_or_clear_data(
     """Loads checkpoint or clears existing library data based on args."""
     processed_doc_ids = set()
     if args.keep_data:
-        try:
-            checkpoint = load_checkpoint(checkpoint_file)
-            if checkpoint:
-                loaded_ids = checkpoint.get("processed_doc_ids", [])
-                processed_doc_ids = set(loaded_ids)
-                last_processed_id = checkpoint.get("last_processed_id", 0)
-                logger.info(
-                    f"Resuming ingestion. Found {len(processed_doc_ids)} documents previously processed (last highest ID: {last_processed_id})."
-                )
-            else:
-                logger.info(
-                    "No valid checkpoint found. Starting ingestion from the beginning for this library."
-                )
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Error loading checkpoint file {checkpoint_file}: {e}")
-            logger.info("Starting ingestion from the beginning for this library.")
-        except Exception as e:
-            logger.error(f"Unexpected error loading checkpoint {checkpoint_file}: {e}")
-            logger.info("Starting ingestion from the beginning for this library.")
+        checkpoint = load_checkpoint(checkpoint_file)
+        if checkpoint:
+            loaded_ids = checkpoint.get("processed_doc_ids", [])
+            processed_doc_ids = set(loaded_ids)
+            last_processed_id = checkpoint.get("last_processed_id", 0)
+            logger.info(
+                f"Resuming ingestion. Found {len(processed_doc_ids)} documents previously processed (last highest ID: {last_processed_id})."
+            )
+        else:
+            logger.info(
+                "No valid checkpoint found. Starting ingestion from the beginning for this library."
+            )
     else:
         logger.info(
             "Keep data set to False. Attempting to clear existing vectors for this library..."
