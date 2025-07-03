@@ -713,10 +713,25 @@ async function handleChatRequest(req: NextRequest) {
                 }
               } catch (serializeError) {
                 console.error(`❌ SSE SOURCES ERROR: Failed to serialize SSE data:`, serializeError);
+                console.error(`❌ SSE SOURCES ERROR: This explains the bug - answer will stream but sources will fail`);
+                console.error(`❌ SSE SOURCES ERROR: Serialization error details:`, {
+                  name: serializeError.name,
+                  message: serializeError.message,
+                  sourceCount: data.sourceDocs?.length || 0
+                });
                 // Don't send sourceDocs if serialization fails
                 data = { ...data, sourceDocs: [] };
-                console.log(`🔍 SSE SOURCES DEBUG: Fallback - sending empty sources array`);
+                console.log(`🔍 SSE SOURCES DEBUG: Fallback - sending empty sources array, answer will still stream normally`);
               }
+            }
+            
+            // DEBUG: Log the sequence of sources vs answer streaming
+            if (data.sourceDocs && !data.token) {
+              console.log(`🔍 SSE TIMING DEBUG: Sending sources BEFORE answer streaming begins`);
+            } else if (data.token && !data.sourceDocs) {
+              // This is normal answer streaming - no need to log every token
+            } else if (data.token && data.sourceDocs) {
+              console.log(`🔍 SSE TIMING DEBUG: Unusual - sending both token and sources simultaneously`);
             }
             
             if (data.timing?.firstTokenGenerated && !timingMetrics.firstTokenGenerated) {

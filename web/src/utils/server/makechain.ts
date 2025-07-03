@@ -462,6 +462,28 @@ export const makeChain = async (
             console.warn(`⚠️ SOURCES WARNING: No documents retrieved for question: "${input.question.substring(0, 100)}..."`);
           }
           
+          // DEBUG: Check for problematic content that could break JSON serialization
+          const problematicSources = allDocuments.filter((doc, index) => {
+            try {
+              JSON.stringify(doc);
+              return false;
+            } catch (e) {
+              console.error(`❌ SOURCES ERROR: Document ${index} failed individual serialization:`, e);
+              console.error(`❌ SOURCES ERROR: Problematic document structure:`, {
+                hasPageContent: !!doc.pageContent,
+                pageContentLength: doc.pageContent?.length,
+                hasMetadata: !!doc.metadata,
+                metadataKeys: doc.metadata ? Object.keys(doc.metadata) : [],
+                metadataSize: doc.metadata ? JSON.stringify(doc.metadata).length : 0
+              });
+              return true;
+            }
+          });
+          
+          if (problematicSources.length > 0) {
+            console.error(`❌ SOURCES ERROR: ${problematicSources.length} documents have serialization issues`);
+          }
+          
           // Test JSON serialization before sending
           const serializedTest = JSON.stringify(allDocuments);
           const serializedSize = new Blob([serializedTest]).size;
@@ -469,6 +491,7 @@ export const makeChain = async (
           
           if (serializedSize > 1000000) { // 1MB threshold
             console.warn(`⚠️ SOURCES WARNING: Large sources payload detected: ${serializedSize} bytes`);
+            console.warn(`⚠️ SOURCES WARNING: This could cause JSON serialization to fail in SSE transmission`);
           }
           
           // Test if sources can be parsed back
@@ -484,6 +507,12 @@ export const makeChain = async (
           
         } catch (serializationError) {
           console.error(`❌ SOURCES ERROR: Failed to serialize/send sources:`, serializationError);
+          console.error(`❌ SOURCES ERROR: This is likely THE BUG - answer will stream but sources will be missing`);
+          console.error(`❌ SOURCES ERROR: Error details:`, {
+            name: serializationError.name,
+            message: serializationError.message,
+            documentCount: allDocuments.length
+          });
           // Send empty array as fallback
           sendData({ sourceDocs: [] });
         }
