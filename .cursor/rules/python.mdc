@@ -3,6 +3,7 @@ description:
 globs: *.py,*.pyc
 alwaysApply: false
 ---
+
 # Python
 
 - Python 3.10+, use typing module.
@@ -10,5 +11,3 @@ alwaysApply: false
 - Async/await for I/O, Poetry/Rye for deps.
 - 90%+ test coverage with pytest.
 - Specific exception handling.
-
-[python-utilities.md](mdc:docs/python-utilities.md)
