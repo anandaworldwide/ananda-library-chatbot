@@ -112,14 +112,14 @@ def upload_to_s3(file_path, s3_key, max_attempts=5):
                 else:
                     error_message = f"Failed to upload {file_path} after {max_attempts} attempts: {str(e)}"
                     logger.error(error_message)
-                    raise S3UploadError(error_message)
+                    raise S3UploadError(error_message) from e
             else:
                 error_message = f"Error uploading {file_path}: {str(e)}"
                 logger.error(error_message)
-                raise S3UploadError(error_message)
+                raise S3UploadError(error_message) from e
 
 
-def check_unique_filenames(directory_path):
+def check_unique_filenames(directory_path):  # noqa: C901
     s3_client = get_s3_client()
     bucket_name = get_bucket_name()
     local_files = defaultdict(list)
