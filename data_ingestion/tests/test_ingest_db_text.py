@@ -35,7 +35,7 @@ class TestArgumentParsing(unittest.TestCase):
             self.assertEqual(args.database, "test_db")
             self.assertEqual(args.library_name, "Test Library")
             self.assertFalse(args.keep_data)  # Default value
-            self.assertEqual(args.batch_size, 50)  # Default value
+            self.assertEqual(args.batch_size, 10)  # Default value
             self.assertFalse(args.dry_run)  # Default value
 
     def test_optional_arguments(self):
