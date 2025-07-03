@@ -511,8 +511,8 @@ class TestAudioProcessing(unittest.TestCase):
             # Attempt to upload the file
             result = upload_to_s3(self.trimmed_audio_path, "test_s3_key")
 
-            # Check that the upload was successful after retry
-            self.assertIsNone(result)
+            # Check that the upload was successful after retry (returns True)
+            self.assertTrue(result)
 
             # Verify that upload_file was called twice
             self.assertEqual(mock_s3.upload_file.call_count, 2)
@@ -537,8 +537,8 @@ class TestAudioProcessing(unittest.TestCase):
             # Attempt to upload the file
             result = upload_to_s3(self.trimmed_audio_path, "test_s3_key")
 
-            # Check that the upload was skipped (returns None)
-            self.assertIsNone(result)
+            # Check that the upload was skipped (returns False)
+            self.assertFalse(result)
 
             # Verify that upload_file was not called
             mock_s3.upload_file.assert_not_called()
@@ -566,8 +566,8 @@ class TestAudioProcessing(unittest.TestCase):
             # Attempt to upload the file
             result = upload_to_s3(self.trimmed_audio_path, "test_s3_key")
 
-            # Check that the upload was successful (returns None)
-            self.assertIsNone(result)
+            # Check that the upload was successful (returns True)
+            self.assertTrue(result)
 
             # Verify that upload_file was called
             mock_s3.upload_file.assert_called_once()
