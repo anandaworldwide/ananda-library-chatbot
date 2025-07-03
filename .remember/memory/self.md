@@ -142,3 +142,34 @@ content = re.sub(r'<p[^>]*>', '\n\n', content)  # Opening tags
 content = re.sub(r'</p>', '\n\n', content)      # Closing tags
 soup = BeautifulSoup(content, "html.parser")    # Then clean attributes
 ```
+
+### 9. ReportLab PDF Generation - Attribute Filtering for End-User PDFs
+
+**Wrong**: Removing all HTML or not removing problematic attributes that cause ReportLab paraparser failures.
+
+```python
+# Either too aggressive (removes formatting)
+text = soup.get_text()  # Loses <em>, <strong> formatting
+
+# Or insufficient (misses problematic attributes)
+if attr in ["id", "class", "style"]:  # Misses "rel", "alt", etc.
+```
+
+**Correct**: Remove specific problematic attributes while preserving formatting tags for end-user PDF consumption.
+
+```python
+# Comprehensive list of attributes that cause ReportLab paraparser errors
+problematic_attrs = [
+    "id", "class", "style", "href", "onclick", "onload", "name",
+    "rel", "target", "alt", "height", "width", "src",  # Common failure sources
+    "title", "lang", "dir", "tabindex", "accesskey", "contenteditable",
+    "draggable", "hidden", "spellcheck", "translate"
+]
+
+for attr in tag.attrs:
+    if (attr in problematic_attrs
+        or attr.startswith("data-")
+        or attr.startswith("on")
+        or attr.startswith("aria-")):
+        # Remove attribute but keep the tag for formatting
+```
