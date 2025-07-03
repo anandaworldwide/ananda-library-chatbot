@@ -79,6 +79,9 @@ def upload_to_s3(file_path, s3_key, max_attempts=5):
         s3_key: S3 object key
         max_attempts: Maximum retry attempts
 
+    Returns:
+        bool: True if file was uploaded, False if skipped (already exists with same size)
+
     Raises:
         S3UploadError: If upload fails after all attempts
         ValueError: If s3_key is not provided
@@ -91,13 +94,13 @@ def upload_to_s3(file_path, s3_key, max_attempts=5):
 
     # Check if file already exists with same size
     if file_exists_with_same_size(s3_client, bucket_name, s3_key, file_path):
-        return
+        return False
 
     for attempt in range(max_attempts):
         try:
             s3_client.upload_file(file_path, bucket_name, s3_key)
             logger.info(f"Successfully uploaded {file_path} to {bucket_name}/{s3_key}")
-            return
+            return True
         except ClientError as e:
             if e.response["Error"]["Code"] == "RequestTimeTooSkewed":
                 if attempt < max_attempts - 1:

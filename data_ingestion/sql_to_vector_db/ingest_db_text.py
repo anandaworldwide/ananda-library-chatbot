@@ -480,13 +480,41 @@ def _process_content_for_pdf(content: str, debug_mode: bool = False) -> str:
     # STEP 2: Remove only problematic attributes that cause ReportLab issues
     # Keep all remaining tags (like <em>, <strong>) but clean attributes that might cause parsing errors
     for tag in soup.find_all():
-        # Remove problematic attributes
+        # Remove problematic attributes that ReportLab's paraparser rejects
         attrs_to_remove = []
         for attr in tag.attrs:
             if (
-                attr in ["id", "class", "style", "href", "onclick", "onload", "name"]
+                attr
+                in [
+                    "id",
+                    "class",
+                    "style",
+                    "href",
+                    "onclick",
+                    "onload",
+                    "name",
+                    "rel",
+                    "target",
+                    "alt",
+                    "height",
+                    "width",
+                    "src",  # Add specific problematic attributes
+                    "title",
+                    "lang",
+                    "dir",
+                    "tabindex",
+                    "accesskey",
+                    "contenteditable",
+                    "draggable",
+                    "hidden",
+                    "spellcheck",
+                    "translate",
+                ]
                 or attr.startswith("data-")
                 or attr.startswith("on")
+                or attr.startswith(
+                    "aria-"
+                )  # Remove ARIA attributes that can cause issues
             ):
                 attrs_to_remove.append(attr)
 
@@ -838,9 +866,13 @@ def generate_and_upload_pdf(
 
         try:
             # Upload to S3 with retry logic
-            upload_to_s3(temp_file_path, s3_key)
-            logger.info(f"Successfully uploaded PDF to S3: {s3_key}")
-            return s3_key
+            uploaded = upload_to_s3(temp_file_path, s3_key)
+            if uploaded:
+                logger.info(f"Successfully uploaded PDF to S3: {s3_key}")
+                return s3_key
+            else:
+                logger.info(f"PDF already exists in S3: {s3_key}")
+                return None
 
         finally:
             # Clean up temporary file
