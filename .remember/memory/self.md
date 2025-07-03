@@ -143,25 +143,30 @@ content = re.sub(r'</p>', '\n\n', content)      # Closing tags
 soup = BeautifulSoup(content, "html.parser")    # Then clean attributes
 ```
 
-### 9. ReportLab PDF Generation - Attribute Filtering for End-User PDFs
+### 9. ReportLab PDF Generation - Remove Problematic Tags and Attributes
 
-**Wrong**: Removing all HTML or not removing problematic attributes that cause ReportLab paraparser failures.
+**Wrong**: Removing all HTML or not removing problematic tags/attributes that cause ReportLab paraparser failures.
 
 ```python
 # Either too aggressive (removes formatting)
 text = soup.get_text()  # Loses <em>, <strong> formatting
 
-# Or insufficient (misses problematic attributes)
+# Or insufficient (misses problematic tags/attributes)
 if attr in ["id", "class", "style"]:  # Misses "rel", "alt", etc.
+# Missing: <img> tags without src attribute cause "paraparser: syntax error: <img> needs src attribute"
 ```
 
-**Correct**: Remove specific problematic attributes while preserving formatting tags for end-user PDF consumption.
+**Correct**: Remove problematic tags completely, then clean attributes while preserving formatting tags.
 
 ```python
-# Comprehensive list of attributes that cause ReportLab paraparser errors
+# STEP 1: Remove tags that cause paraparser failures
+for img_tag in soup.find_all("img"):
+    img_tag.decompose()  # <img> tags without src cause paraparser errors
+
+# STEP 2: Remove problematic attributes while keeping formatting tags
 problematic_attrs = [
     "id", "class", "style", "href", "onclick", "onload", "name",
-    "rel", "target", "alt", "height", "width", "src",  # Common failure sources
+    "rel", "target", "alt", "height", "width", "src",
     "title", "lang", "dir", "tabindex", "accesskey", "contenteditable",
     "draggable", "hidden", "spellcheck", "translate"
 ]
@@ -171,5 +176,5 @@ for attr in tag.attrs:
         or attr.startswith("data-")
         or attr.startswith("on")
         or attr.startswith("aria-")):
-        # Remove attribute but keep the tag for formatting
+        del tag.attrs[attr]  # Remove attribute but keep the tag
 ```

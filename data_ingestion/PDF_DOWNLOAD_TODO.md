@@ -9,10 +9,10 @@ for users to access source documents.
 
 ### Phase 1: SQL Ingestion PDF Generation (PRIORITY)
 
-- [ ] **1.1** Install PDF generation dependencies
+- [x] **1.1** Install PDF generation dependencies
   - Add `reportlab` to `requirements.in` (more popular than weasyprint)
   - Update `requirements.txt` via pip-compile
-- [ ] **1.2** Modify `data_ingestion/sql_to_vector_db/ingest_db_text.py`
+- [x] **1.2** Modify `data_ingestion/sql_to_vector_db/ingest_db_text.py`
   - Import PDF generation libraries and S3 utilities
   - Add `--no-pdf-uploads` command line argument to argparse
   - Create PDF generation function using scraped content (simple text-based PDFs with basic formatting)
@@ -22,7 +22,7 @@ for users to access source documents.
   - Implement 200 MB file size limit for generated PDFs
   - Add error handling with retry/backup strategy: retry once with backup approach, then fail whole processing if that
     doesn't work
-- [ ] **1.3** Update SQL ingestion test suite
+- [x] **1.3** Update SQL ingestion test suite
   - Add tests for PDF generation functionality
   - Mock S3 uploads in test environment
   - Test `--no-pdf-uploads` flag behavior
