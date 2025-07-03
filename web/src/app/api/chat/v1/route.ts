@@ -484,7 +484,12 @@ async function handleComparisonRequest(req: NextRequest, requestBody: Comparison
             temperature: requestBody.temperatureA,
             label: "A",
           },
-          sourceCount
+          sourceCount,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          requestBody.privateSession || false
         );
 
         const chainB = await makeChain(
@@ -494,7 +499,12 @@ async function handleComparisonRequest(req: NextRequest, requestBody: Comparison
             temperature: requestBody.temperatureB,
             label: "B",
           },
-          sourceCount
+          sourceCount,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          requestBody.privateSession || false
         );
 
         // Format chat history for each model
@@ -769,7 +779,8 @@ async function handleChatRequest(req: NextRequest) {
           sourceCount,
           filter,
           siteConfig,
-          timingMetrics.startTime
+          timingMetrics.startTime,
+          sanitizedInput.privateSession || false
         );
         // --- End of Encapsulated Call ---
 

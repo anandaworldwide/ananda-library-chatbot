@@ -321,7 +321,8 @@ export const makeChain = async (
   rephraseModelConfig: ModelConfig = {
     model: "gpt-3.5-turbo",
     temperature: 0.1,
-  }
+  },
+  privateSession: boolean = false
 ) => {
   const siteId = process.env.SITE_ID || "default";
   const configPath = path.join(process.cwd(), "site-config/config.json");
@@ -527,8 +528,10 @@ export const makeChain = async (
   const conversationalRetrievalQAChain = RunnableSequence.from([
     {
       question: async (input: AnswerChainInput) => {
-        // Debug: Log the original question
-        console.log(`🔍 ORIGINAL QUESTION: "${input.question}"`);
+        // Debug: Log the original question only if not in private mode
+        if (!privateSession) {
+          console.log(`🔍 ORIGINAL QUESTION: "${input.question}"`);
+        }
 
         // Check for social messages like "thanks" and bypass reformulation.
         // This is a fallback to catch the basic cases in case the CONDENSE_TEMPLATE does not handle it correctly.
@@ -547,8 +550,10 @@ export const makeChain = async (
         // Get the reformulated standalone question
         const standaloneQuestion = await standaloneQuestionChain.invoke(input);
 
-        // Debug: Show the result of reformulation
-        console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
+        // Debug: Show the result of reformulation only if not in private mode
+        if (!privateSession) {
+          console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
+        }
 
         capturedRestatedQuestion = standaloneQuestion; // Store for later
         return standaloneQuestion;
@@ -560,7 +565,7 @@ export const makeChain = async (
     (result: { answer: string; sourceDocuments: Document[] }) => {
       return {
         ...result,
-        question: capturedRestatedQuestion // This is the restated question
+        question: capturedRestatedQuestion, // This is the restated question
       };
     },
   ]);
@@ -577,12 +582,31 @@ export const makeComparisonChains = async (
   rephraseModelConfig: ModelConfig = {
     model: "gpt-3.5-turbo",
     temperature: 0.1,
-  }
+  },
+  privateSession: boolean = false
 ) => {
   try {
     const [chainA, chainB] = await Promise.all([
-      makeChain(retriever, { ...modelA, label: "A" }, undefined, undefined, undefined, undefined, rephraseModelConfig),
-      makeChain(retriever, { ...modelB, label: "B" }, undefined, undefined, undefined, undefined, rephraseModelConfig),
+      makeChain(
+        retriever,
+        { ...modelA, label: "A" },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        rephraseModelConfig,
+        privateSession
+      ),
+      makeChain(
+        retriever,
+        { ...modelB, label: "B" },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        rephraseModelConfig,
+        privateSession
+      ),
     ]);
 
     return { chainA, chainB };
@@ -601,7 +625,8 @@ export async function setupAndExecuteLanguageModelChain(
   sourceCount: number = 4,
   filter?: Record<string, unknown>,
   siteConfig?: AppSiteConfig | null,
-  startTime?: number
+  startTime?: number,
+  privateSession: boolean = false
 ): Promise<{ fullResponse: string; finalDocs: Document[]; restatedQuestion: string }> {
   const TIMEOUT_MS = process.env.NODE_ENV === "test" ? 1000 : 30000;
   const RETRY_DELAY_MS = process.env.NODE_ENV === "test" ? 10 : 1000;
@@ -636,7 +661,8 @@ export async function setupAndExecuteLanguageModelChain(
         filter,
         sendData,
         undefined,
-        { model: rephraseModelName, temperature: rephraseTemperature }
+        { model: rephraseModelName, temperature: rephraseTemperature },
+        privateSession
       );
 
       // Format chat history for the language model
@@ -722,10 +748,10 @@ export async function setupAndExecuteLanguageModelChain(
       // Use the streamed fullResponse as the authoritative answer since it's what was sent to the frontend
       // result.sourceDocuments are the correctly filtered documents from makeChain.
       // result.question is the restated question from the chain
-      return { 
+      return {
         fullResponse: fullResponse || result.answer, // Prefer streamed content, fallback to result.answer
-        finalDocs: result.sourceDocuments, 
-        restatedQuestion: result.question 
+        finalDocs: result.sourceDocuments,
+        restatedQuestion: result.question,
       };
     } catch (error) {
       lastError = error as Error;
