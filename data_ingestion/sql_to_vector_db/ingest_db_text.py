@@ -38,6 +38,7 @@ Command Line Arguments:
     --max-records: Optional. Maximum number of records to process (useful for testing or incremental processing).
     --dry-run: Optional. Perform all steps except Pinecone index creation, deletion, and upsertion.
     --no-pdf-uploads: Optional. Disable PDF generation and S3 uploads.
+    --debug-pdfs: Optional. Enable debug mode for PDF generation.
 
 Example Usage:
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --keep-data
