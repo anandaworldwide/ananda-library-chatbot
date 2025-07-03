@@ -453,7 +453,40 @@ export const makeChain = async (
 
       // Send retrieved documents if sendData is available
       if (sendData) {
-        sendData({ sourceDocs: allDocuments });
+        // DEBUG: Add extensive logging for sources debugging
+        try {
+          console.log(`🔍 SOURCES DEBUG: Retrieved ${allDocuments.length} documents`);
+          
+          // Check for empty documents
+          if (allDocuments.length === 0) {
+            console.warn(`⚠️ SOURCES WARNING: No documents retrieved for question: "${input.question.substring(0, 100)}..."`);
+          }
+          
+          // Test JSON serialization before sending
+          const serializedTest = JSON.stringify(allDocuments);
+          const serializedSize = new Blob([serializedTest]).size;
+          console.log(`🔍 SOURCES DEBUG: Serialized sources size: ${serializedSize} bytes`);
+          
+          if (serializedSize > 1000000) { // 1MB threshold
+            console.warn(`⚠️ SOURCES WARNING: Large sources payload detected: ${serializedSize} bytes`);
+          }
+          
+          // Test if sources can be parsed back
+          const parseTest = JSON.parse(serializedTest);
+          if (!Array.isArray(parseTest) || parseTest.length !== allDocuments.length) {
+            console.error(`❌ SOURCES ERROR: Serialization round-trip failed!`);
+          } else {
+            console.log(`✅ SOURCES DEBUG: Serialization test passed`);
+          }
+          
+          sendData({ sourceDocs: allDocuments });
+          console.log(`✅ SOURCES DEBUG: Successfully sent ${allDocuments.length} sources to client`);
+          
+        } catch (serializationError) {
+          console.error(`❌ SOURCES ERROR: Failed to serialize/send sources:`, serializationError);
+          // Send empty array as fallback
+          sendData({ sourceDocs: [] });
+        }
       }
 
       // Resolve the document promise if resolveDocs is provided

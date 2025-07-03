@@ -1365,3 +1365,44 @@ flow is updated:
 6. ✅ Comprehensive test coverage for all components
 
 **Status**: Production-ready implementation with full test coverage confirming functionality.
+
+## Sources Not Displaying Bug Investigation - DEBUGGING ADDED
+
+**Problem**: Intermittent bug where chat responses return with no sources displayed in the frontend, even though sources should be available.
+
+**Root Analysis Completed**: Comprehensive code flow analysis from backend retrieval through frontend display identified 5 potential failure points.
+
+**Source Data Flow**:
+1. **Backend**: `makeChain` → `retrievalSequence` → `sendData({ sourceDocs: allDocuments })`
+2. **API**: Streamed via Server-Sent Events in `/api/chat/v1/route.ts`
+3. **Frontend**: `index.tsx` → `handleStreamingResponse` → processes with 100ms `setTimeout`
+4. **Display**: `SourcesList` component checks `sources.length > 0` before rendering
+
+**Five Theories Identified** (ranked by likelihood):
+
+1. **JSON Serialization/Parsing Failure**: Large sourceDocs arrays fail serialization or get corrupted during streaming
+2. **Timing Race Condition**: 100ms setTimeout in frontend processing loses sources if streaming completes too quickly
+3. **Browser Network Issues**: SSE chunks containing sourceDocs dropped due to network/browser issues  
+4. **makeChain Retrieval Silent Failure**: Document retrieval fails silently, returning empty arrays without proper logging
+5. **Frontend State Management Bug**: Sources received but not properly propagated through React state
+
+**Debugging Implementation**: Added comprehensive logging for top 2 theories:
+
+- **Backend** (`makeChain.ts`): Tests JSON serialization, logs payload sizes, detects silent failures
+- **SSE Layer** (`route.ts`): Validates JSON before transmission, monitors large payloads
+- **Frontend** (`index.tsx`): Tracks timing, validates data structure, logs state updates
+- **Component** (`SourcesList.tsx`): Monitors actual display rendering
+
+**Debug Markers**: All logs use consistent emoji prefixes for easy production filtering:
+- 🔍 = Debug info
+- ⚠️ = Warnings  
+- ❌ = Errors
+- ✅ = Success confirmations
+
+**Expected Production Evidence**:
+- **Theory #1**: Will show serialization errors, payload size warnings, round-trip failures
+- **Theory #2**: Will show timing mismatches between receive/process timestamps
+- **Silent failures**: Backend will log zero-document retrievals with question context
+- **Network issues**: Will show SSE transmission failures or missing frontend receipt logs
+
+**Status**: **DEBUGGING PHASE** - Comprehensive logging deployed to production for data collection and root cause identification.

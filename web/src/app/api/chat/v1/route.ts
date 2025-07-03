@@ -698,6 +698,27 @@ async function handleChatRequest(req: NextRequest) {
       const sendData = (data: StreamingResponseData) => {
         if (!isControllerClosed) {
           try {
+            // DEBUG: Add logging for sources debugging
+            if (data.sourceDocs) {
+              console.log(`🔍 SSE SOURCES DEBUG: Attempting to send ${data.sourceDocs.length} sources via SSE`);
+              
+              // Test JSON stringification before sending
+              try {
+                const testSerialization = JSON.stringify(data);
+                const serializedSize = new Blob([testSerialization]).size;
+                console.log(`🔍 SSE SOURCES DEBUG: SSE payload size: ${serializedSize} bytes`);
+                
+                if (serializedSize > 2000000) { // 2MB threshold for SSE
+                  console.warn(`⚠️ SSE SOURCES WARNING: Very large SSE payload: ${serializedSize} bytes`);
+                }
+              } catch (serializeError) {
+                console.error(`❌ SSE SOURCES ERROR: Failed to serialize SSE data:`, serializeError);
+                // Don't send sourceDocs if serialization fails
+                data = { ...data, sourceDocs: [] };
+                console.log(`🔍 SSE SOURCES DEBUG: Fallback - sending empty sources array`);
+              }
+            }
+            
             if (data.timing?.firstTokenGenerated && !timingMetrics.firstTokenGenerated) {
               timingMetrics.firstTokenGenerated = data.timing.firstTokenGenerated;
             }
@@ -730,7 +751,16 @@ async function handleChatRequest(req: NextRequest) {
               };
             }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+            
+            // DEBUG: Log successful transmission
+            if (data.sourceDocs) {
+              console.log(`✅ SSE SOURCES DEBUG: Successfully sent ${data.sourceDocs.length} sources via SSE`);
+            }
           } catch (error) {
+            // DEBUG: Enhanced error logging
+            if (data.sourceDocs) {
+              console.error(`❌ SSE SOURCES ERROR: Failed to send sources via SSE:`, error);
+            }
             if (error instanceof TypeError && error.message.includes("Controller is already closed")) {
               isControllerClosed = true;
             } else {
