@@ -477,7 +477,12 @@ def _process_content_for_pdf(content: str, debug_mode: bool = False) -> str:
     # Parse HTML content for attribute cleaning
     soup = BeautifulSoup(content, "html.parser")
 
-    # STEP 2: Remove only problematic attributes that cause ReportLab issues
+    # STEP 2: Remove problematic tags that cause ReportLab paraparser failures
+    # Remove <img> tags entirely - they cause paraparser errors and aren't needed for text PDFs
+    for img_tag in soup.find_all("img"):
+        img_tag.decompose()  # Completely remove the tag and its contents
+
+    # STEP 3: Remove only problematic attributes that cause ReportLab issues
     # Keep all remaining tags (like <em>, <strong>) but clean attributes that might cause parsing errors
     for tag in soup.find_all():
         # Remove problematic attributes that ReportLab's paraparser rejects
@@ -524,7 +529,7 @@ def _process_content_for_pdf(content: str, debug_mode: bool = False) -> str:
     # Convert back to string, preserving remaining HTML structure (emphasis, etc.)
     cleaned_content = str(soup)
 
-    # STEP 3: Clean up excessive newlines that may have been created
+    # STEP 4: Clean up excessive newlines that may have been created
     # Normalize multiple newlines to double newlines (paragraph breaks)
     cleaned_content = re.sub(r"\n{3,}", "\n\n", cleaned_content)
 
