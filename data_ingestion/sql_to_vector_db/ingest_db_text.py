@@ -44,9 +44,6 @@ Example Usage:
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --keep-data
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --max-records 100 --dry-run
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --no-pdf-uploads
-
-TODO:
-    - Strip all HTML tags during chunking process. But be careful not to strip HTML tags for PDF generation process.
 """
 
 import argparse
@@ -83,7 +80,7 @@ from data_ingestion.utils.s3_utils import (
     get_bucket_name,
     get_s3_client,
 )
-from data_ingestion.utils.text_processing import replace_smart_quotes
+from data_ingestion.utils.text_processing import remove_html_tags, replace_smart_quotes
 from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
 from pyutil.env_utils import load_env
 from pyutil.logging_utils import configure_logging
@@ -198,13 +195,13 @@ class FailureTracker:
             ):
                 logger.error(f"  {stage}: {count} documents")
 
-        # Detailed failure list (first 10 failures)
-        logger.error("\n📋 Detailed Failure List (first 10):")
-        for i, failure in enumerate(self.failures[:10]):
+        # Detailed failure list (first 100 failures)
+        logger.error("\n📋 Detailed Failure List (first 100):")
+        for i, failure in enumerate(self.failures[:100]):
             logger.error(f"  {i + 1}. {failure}")
 
-        if len(self.failures) > 10:
-            logger.error(f"  ... and {len(self.failures) - 10} more failures")
+        if len(self.failures) > 100:
+            logger.error(f"  ... and {len(self.failures) - 100} more failures")
 
         # Most common error details
         failures_by_type = self.get_failures_by_type()
@@ -875,10 +872,11 @@ def generate_and_upload_pdf(
             uploaded = upload_to_s3(temp_file_path, s3_key)
             if uploaded:
                 logger.info(f"Successfully uploaded PDF to S3: {s3_key}")
-                return s3_key
             else:
                 logger.info(f"PDF already exists in S3: {s3_key}")
-                return None
+
+            # Return S3 key regardless of whether file was uploaded or already existed
+            return s3_key
 
         finally:
             # Clean up temporary file
@@ -1706,9 +1704,13 @@ def _process_document_chunks(post_data: dict, text_splitter) -> tuple[list, int]
         "wp_id": post_id,
     }
 
+    # Strip HTML tags from content for Pinecone chunking
+    # This ensures clean text for embeddings while preserving original HTML for PDF generation
+    content_for_chunking = remove_html_tags(post_data["content"])
+
     # Create Langchain document and split into chunks
     langchain_doc = Document(
-        page_content=post_data["content"], metadata=document_metadata
+        page_content=content_for_chunking, metadata=document_metadata
     )
     docs = text_splitter.split_documents([langchain_doc])
 
