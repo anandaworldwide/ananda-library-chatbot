@@ -30,19 +30,19 @@ for users to access source documents.
 
 ### Phase 2: Frontend PDF Download Capabilities
 
-- [ ] **2.1** Create server-side signed URL generation
+- [x] **2.1** Create server-side signed URL generation
   - Create `web/src/utils/server/getS3PdfSignedUrl.ts`
   - Follow pattern from `web/src/utils/client/getS3AudioUrl.ts`
   - Generate signed URLs with 8-hour expiration using AWS SDK
   - Handle error cases (missing S3 key, AWS errors)
-- [ ] **2.2** Add PDF download button to SourcesList component
+- [x] **2.2** Add PDF download button to SourcesList component
   - Modify `web/src/components/SourcesList.tsx`
   - Create `renderPdfDownloadButton()` function similar to `renderGoToSourceButton()`
   - Position download button to the left of "Go to source" button
   - Use download icon (e.g., `download` Material Icon)
   - Only show if `pdf_s3_key` exists in source metadata
   - Handle download click events with proper analytics logging
-- [ ] **2.3** Update TypeScript types
+- [x] **2.3** Update TypeScript types
 
   - Add `pdf_s3_key?: string` to `web/src/types/DocMetadata.ts`
   - Ensure type safety across components
