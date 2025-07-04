@@ -1484,15 +1484,16 @@ class TestPDFGeneration(unittest.TestCase):
         self.test_post_data = {
             "id": 123,
             "title": "Test Document for PDF Generation",
-            "content": """This is test content for PDF generation.
+            "content": """<p>This is test content for <strong>PDF generation</strong>.</p>
 
-This content will be used to test the PDF generation functionality.
-It includes multiple paragraphs to ensure proper formatting.
+<p>This content will be used to test the PDF generation functionality.
+It includes multiple paragraphs to ensure proper formatting.</p>
 
-The PDF should maintain the original text structure and formatting.""",
+<p>The PDF should maintain the original text structure and formatting.</p>""",
             "author": "Test Author",
             "permalink": "https://example.com/test-document",
             "categories": ["test-category"],
+            "library": "Test Library",
         }
 
     @patch("data_ingestion.utils.s3_utils.upload_to_s3")
@@ -1564,10 +1565,10 @@ The PDF should maintain the original text structure and formatting.""",
     @patch("data_ingestion.utils.s3_utils.upload_to_s3")
     @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_document_hash")
     def test_generate_and_upload_pdf_s3_failure_retry(self, mock_hash, mock_upload):
-        """Test PDF generation with S3 upload failure and retry logic."""
+        """Test PDF generation when file already exists in S3."""
         mock_hash.return_value = "test_hash_retry"
 
-        # Mock S3 upload to fail
+        # Mock S3 upload to return False (file already exists)
         mock_upload.return_value = False
 
         result = ingest_db_text.generate_and_upload_pdf(
@@ -1576,8 +1577,8 @@ The PDF should maintain the original text structure and formatting.""",
             library_name="test-library",
         )
 
-        # Should return None on failure
-        self.assertIsNone(result)
+        # Should return S3 key even if file already exists
+        self.assertEqual(result, "public/pdf/test-library/test_hash_retry.pdf")
 
         # Verify upload was called once
         self.assertEqual(mock_upload.call_count, 1)
@@ -1585,10 +1586,10 @@ The PDF should maintain the original text structure and formatting.""",
     @patch("data_ingestion.utils.s3_utils.upload_to_s3")
     @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_document_hash")
     def test_generate_and_upload_pdf_complete_failure(self, mock_hash, mock_upload):
-        """Test PDF generation with complete S3 upload failure."""
+        """Test PDF generation when file already exists in S3."""
         mock_hash.return_value = "test_hash_fail"
 
-        # Mock S3 upload to fail both times
+        # Mock S3 upload to return False (file already exists)
         mock_upload.return_value = False
 
         result = ingest_db_text.generate_and_upload_pdf(
@@ -1597,8 +1598,8 @@ The PDF should maintain the original text structure and formatting.""",
             library_name="test-library",
         )
 
-        # Should return None after failed upload
-        self.assertIsNone(result)
+        # Should return S3 key even if file already exists
+        self.assertEqual(result, "public/pdf/test-library/test_hash_fail.pdf")
 
         # Verify upload was attempted once (the function returns None on failure, doesn't retry)
         self.assertEqual(mock_upload.call_count, 1)
@@ -1860,6 +1861,418 @@ This tests the PDF generation robustness."""
 
                 self.assertEqual(result, expected_key)
                 self.assertTrue(result.startswith(f"{site}/public/pdf/"))
+
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.create_pdf_from_content")
+    @patch("data_ingestion.utils.s3_utils.upload_to_s3")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_document_hash")
+    def test_html_preserved_for_pdf_generation(
+        self, mock_hash, mock_upload, mock_create_pdf
+    ):
+        """Test that HTML tags are preserved in content used for PDF generation."""
+        # Mock dependencies
+        mock_hash.return_value = "test_hash"
+        mock_upload.return_value = True
+        mock_create_pdf.return_value = b"fake_pdf_content"
+
+        # Capture the content passed to PDF generation
+        captured_pdf_content = None
+
+        def capture_pdf_content(
+            title, content, author, categories, permalink, debug_mode=False
+        ):
+            nonlocal captured_pdf_content
+            captured_pdf_content = content
+            return b"fake_pdf_content"
+
+        mock_create_pdf.side_effect = capture_pdf_content
+
+        # Call the PDF generation function
+        result = ingest_db_text.generate_and_upload_pdf(
+            self.test_post_data,
+            site="test_site",
+            library_name="Test Library",
+            no_pdf_uploads=False,
+            debug_pdfs=False,
+        )
+
+        # Verify PDF generation was called
+        mock_create_pdf.assert_called_once()
+        self.assertIsNotNone(
+            captured_pdf_content, "PDF content should have been captured"
+        )
+
+        # Verify HTML tags are preserved in PDF content
+        html_tags = [
+            "<h1>",
+            "</h1>",
+            "<p>",
+            "</p>",
+            "<strong>",
+            "</strong>",
+            "<em>",
+            "</em>",
+            "<ul>",
+            "</ul>",
+            "<li>",
+            "</li>",
+            "<blockquote>",
+            "</blockquote>",
+        ]
+
+        for tag in html_tags:
+            self.assertIn(
+                tag,
+                captured_pdf_content,
+                f"HTML tag '{tag}' should be preserved in content for PDF generation",
+            )
+
+        # Verify the function succeeded
+        self.assertIsNotNone(result)
+        self.assertEqual(result, "public/pdf/Test Library/test_hash.pdf")
+
+    @patch("data_ingestion.utils.text_splitter_utils.SpacyTextSplitter")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_and_upload_pdf")
+    def test_chunking_and_pdf_use_different_content_processing(
+        self, mock_pdf_gen, mock_splitter_class
+    ):
+        """Test that chunking uses HTML-stripped content while PDF generation uses original HTML."""
+        # Create mock text splitter
+        mock_splitter = MagicMock()
+        mock_splitter_class.return_value = mock_splitter
+        mock_pdf_gen.return_value = "test_s3_key.pdf"
+
+        # Capture content passed to both functions
+        captured_chunking_content = None
+        captured_pdf_content = None
+
+        def capture_split_documents(docs):
+            nonlocal captured_chunking_content
+            captured_chunking_content = docs[0].page_content
+            return [Document(page_content="Mock chunk")]
+
+        def capture_pdf_generation(
+            post_data, site, library_name, no_pdf_uploads=False, debug_pdfs=False
+        ):
+            nonlocal captured_pdf_content
+            captured_pdf_content = post_data["content"]
+            return "test_s3_key.pdf"
+
+        mock_splitter.split_documents.side_effect = capture_split_documents
+        mock_pdf_gen.side_effect = capture_pdf_generation
+
+        # Mock embeddings and Pinecone for the full processing pipeline
+        mock_embeddings = MagicMock()
+        mock_embeddings.embed_documents.return_value = [[0.1, 0.2, 0.3]]
+        mock_pinecone_index = MagicMock()
+        mock_upsert_response = MagicMock()
+        mock_upsert_response.upserted_count = 1
+        mock_pinecone_index.upsert.return_value = mock_upsert_response
+
+        # Call the full processing pipeline
+        had_errors, processed_ids = ingest_db_text.process_and_upsert_batch(
+            [self.test_post_data],
+            mock_pinecone_index,
+            mock_embeddings,
+            mock_splitter,
+            site="test_site",
+            library_name="Test Library",
+            dry_run=False,
+        )
+
+        # Verify both functions were called
+        self.assertIsNotNone(
+            captured_chunking_content, "Chunking content should be captured"
+        )
+        self.assertIsNotNone(captured_pdf_content, "PDF content should be captured")
+
+        # Verify chunking content has HTML stripped
+        self.assertNotIn(
+            "<p>",
+            captured_chunking_content,
+            "Chunking content should not contain HTML tags",
+        )
+        self.assertNotIn(
+            "<strong>",
+            captured_chunking_content,
+            "Chunking content should not contain HTML tags",
+        )
+
+        # Verify PDF content preserves HTML
+        self.assertIn(
+            "<p>", captured_pdf_content, "PDF content should preserve HTML tags"
+        )
+        self.assertIn(
+            "<strong>", captured_pdf_content, "PDF content should preserve HTML tags"
+        )
+
+        # Verify both contain the same text content (just different formatting)
+        self.assertIn("comprehensive meditation guide", captured_chunking_content)
+        self.assertIn("comprehensive", captured_pdf_content)
+        self.assertIn("breathing techniques", captured_chunking_content)
+        self.assertIn("breathing", captured_pdf_content)
+
+        # Verify processing succeeded
+        self.assertFalse(had_errors)
+        self.assertEqual(processed_ids, [12345])
+
+
+class TestHTMLProcessing(unittest.TestCase):
+    """Test cases for HTML tag processing during chunking vs PDF generation."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.test_post_data = {
+            "id": 12345,
+            "title": "Test HTML Content",
+            "author": "Test Author",
+            "permalink": "https://example.com/test-html",
+            "content": """<h1>Meditation Guide</h1>
+<p>Welcome to our <strong>comprehensive</strong> meditation guide!</p>
+<p>This guide covers:</p>
+<ul>
+<li>Basic <em>breathing</em> techniques</li>
+<li>Proper <span class="highlight">posture</span> alignment</li>
+<li>Mindfulness practices</li>
+</ul>
+<blockquote>
+<p>"The mind is everything. What you <strong>think</strong> you become." —Buddha</p>
+</blockquote>
+<p>For questions, contact us at <a href="mailto:info@example.com">info@example.com</a>.</p>""",
+            "categories": ["Meditation", "Mindfulness"],
+            "library": "Test Library",
+        }
+
+    @patch("data_ingestion.utils.text_splitter_utils.SpacyTextSplitter")
+    def test_html_stripped_for_chunking(self, mock_splitter_class):
+        """Test that HTML tags are stripped from content before chunking."""
+        # Create mock text splitter
+        mock_splitter = MagicMock()
+        mock_splitter_class.return_value = mock_splitter
+
+        # Mock the split_documents method to capture what content is passed to it
+        captured_content = None
+
+        def capture_split_documents(docs):
+            nonlocal captured_content
+            captured_content = docs[0].page_content
+            # Return mock chunks
+            return [
+                Document(page_content="Welcome to our comprehensive meditation guide!"),
+                Document(page_content="This guide covers: Basic breathing techniques"),
+            ]
+
+        mock_splitter.split_documents.side_effect = capture_split_documents
+
+        # Call the function that processes document chunks
+        docs, chunk_count = ingest_db_text._process_document_chunks(
+            self.test_post_data, mock_splitter
+        )
+
+        # Verify that HTML tags were stripped from the content passed to the splitter
+        self.assertIsNotNone(captured_content, "Content should have been captured")
+
+        # Verify HTML tags are removed
+        html_tags = [
+            "<h1>",
+            "</h1>",
+            "<p>",
+            "</p>",
+            "<strong>",
+            "</strong>",
+            "<em>",
+            "</em>",
+            "<ul>",
+            "</ul>",
+            "<li>",
+            "</li>",
+            "<blockquote>",
+            "</blockquote>",
+            "<span",
+            "</span>",
+            "<a",
+            "</a>",
+        ]
+
+        for tag in html_tags:
+            self.assertNotIn(
+                tag,
+                captured_content,
+                f"HTML tag '{tag}' should be stripped from content for chunking",
+            )
+
+        # Verify that text content is preserved
+        expected_text_fragments = [
+            "Meditation Guide",
+            "Welcome to our comprehensive meditation guide!",
+            "breathing techniques",
+            "posture alignment",
+            "The mind is everything",
+            "info@example.com",
+        ]
+
+        for fragment in expected_text_fragments:
+            self.assertIn(
+                fragment,
+                captured_content,
+                f"Text fragment '{fragment}' should be preserved after HTML removal",
+            )
+
+        # Verify the function returned the expected results
+        self.assertEqual(chunk_count, 2)
+        self.assertEqual(len(docs), 2)
+
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_document_hash")
+    @patch("data_ingestion.utils.s3_utils.upload_to_s3")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.create_pdf_from_content")
+    def test_html_preserved_for_pdf_generation(
+        self, mock_create_pdf, mock_upload, mock_hash
+    ):
+        """Test that HTML tags are preserved in content used for PDF generation."""
+        # Mock dependencies
+        mock_hash.return_value = "test_hash"
+        mock_upload.return_value = True
+        mock_create_pdf.return_value = b"fake_pdf_content"
+
+        # Capture the content passed to PDF generation
+        captured_pdf_content = None
+
+        def capture_pdf_content(
+            title, content, author, categories, permalink, debug_mode=False
+        ):
+            nonlocal captured_pdf_content
+            captured_pdf_content = content
+            return b"fake_pdf_content"
+
+        mock_create_pdf.side_effect = capture_pdf_content
+
+        # Call the PDF generation function
+        result = ingest_db_text.generate_and_upload_pdf(
+            self.test_post_data,
+            site="test_site",
+            library_name="Test Library",
+            no_pdf_uploads=False,
+            debug_pdfs=False,
+        )
+
+        # Verify PDF generation was called
+        mock_create_pdf.assert_called_once()
+        self.assertIsNotNone(
+            captured_pdf_content, "PDF content should have been captured"
+        )
+
+        # Verify HTML tags are preserved in PDF content
+        html_tags = [
+            "<h1>",
+            "</h1>",
+            "<p>",
+            "</p>",
+            "<strong>",
+            "</strong>",
+            "<em>",
+            "</em>",
+            "<ul>",
+            "</ul>",
+            "<li>",
+            "</li>",
+            "<blockquote>",
+            "</blockquote>",
+        ]
+
+        for tag in html_tags:
+            self.assertIn(
+                tag,
+                captured_pdf_content,
+                f"HTML tag '{tag}' should be preserved in content for PDF generation",
+            )
+
+        # Verify the function succeeded
+        self.assertIsNotNone(result)
+        self.assertEqual(result, "public/pdf/Test Library/test_hash.pdf")
+
+    @patch("data_ingestion.utils.text_splitter_utils.SpacyTextSplitter")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_and_upload_pdf")
+    def test_chunking_and_pdf_use_different_content_processing(
+        self, mock_pdf_gen, mock_splitter_class
+    ):
+        """Test that chunking uses HTML-stripped content while PDF generation uses original HTML."""
+        # Create mock text splitter
+        mock_splitter = MagicMock()
+        mock_splitter_class.return_value = mock_splitter
+        mock_pdf_gen.return_value = "test_s3_key.pdf"
+
+        # Capture content passed to both functions
+        captured_chunking_content = None
+        captured_pdf_content = None
+
+        def capture_split_documents(docs):
+            nonlocal captured_chunking_content
+            captured_chunking_content = docs[0].page_content
+            return [Document(page_content="Mock chunk")]
+
+        def capture_pdf_generation(
+            post_data, site, library_name, no_pdf_uploads=False, debug_pdfs=False
+        ):
+            nonlocal captured_pdf_content
+            captured_pdf_content = post_data["content"]
+            return "test_s3_key.pdf"
+
+        mock_splitter.split_documents.side_effect = capture_split_documents
+        mock_pdf_gen.side_effect = capture_pdf_generation
+
+        # Mock embeddings and Pinecone for the full processing pipeline
+        mock_embeddings = MagicMock()
+        mock_embeddings.embed_documents.return_value = [[0.1, 0.2, 0.3]]
+        mock_pinecone_index = MagicMock()
+        mock_upsert_response = MagicMock()
+        mock_upsert_response.upserted_count = 1
+        mock_pinecone_index.upsert.return_value = mock_upsert_response
+
+        # Call the full processing pipeline
+        had_errors, processed_ids = ingest_db_text.process_and_upsert_batch(
+            [self.test_post_data],
+            mock_pinecone_index,
+            mock_embeddings,
+            mock_splitter,
+            site="test_site",
+            library_name="Test Library",
+            dry_run=False,
+        )
+
+        # Verify both functions were called
+        self.assertIsNotNone(
+            captured_chunking_content, "Chunking content should be captured"
+        )
+        self.assertIsNotNone(captured_pdf_content, "PDF content should be captured")
+
+        # Verify chunking content has HTML stripped
+        self.assertNotIn(
+            "<p>",
+            captured_chunking_content,
+            "Chunking content should not contain HTML tags",
+        )
+        self.assertNotIn(
+            "<strong>",
+            captured_chunking_content,
+            "Chunking content should not contain HTML tags",
+        )
+
+        # Verify PDF content preserves HTML
+        self.assertIn(
+            "<p>", captured_pdf_content, "PDF content should preserve HTML tags"
+        )
+        self.assertIn(
+            "<strong>", captured_pdf_content, "PDF content should preserve HTML tags"
+        )
+
+        # Verify both contain the same text content (just different formatting)
+        self.assertIn("comprehensive meditation guide", captured_chunking_content)
+        self.assertIn("comprehensive", captured_pdf_content)
+        self.assertIn("breathing techniques", captured_chunking_content)
+        self.assertIn("breathing", captured_pdf_content)
+
+        # Verify processing succeeded
+        self.assertFalse(had_errors)
+        self.assertEqual(processed_ids, [12345])
 
 
 if __name__ == "__main__":
