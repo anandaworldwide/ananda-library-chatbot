@@ -1,5 +1,5 @@
-import { Redis } from '@upstash/redis';
-import { isDevelopment } from '@/utils/env';
+import { Redis } from "@upstash/redis";
+import { isDevelopment } from "@/utils/env";
 
 // Types for better type safety
 export interface RedisConfig {
@@ -16,11 +16,7 @@ export interface RedisClientInterface {
 
 export interface CacheService {
   getFromCache<T>(key: string): Promise<T | null>;
-  setInCache(
-    key: string,
-    value: string | number | boolean | null | object,
-    expiration?: number,
-  ): Promise<void>;
+  setInCache(key: string, value: string | number | boolean | null | object, expiration?: number): Promise<void>;
   deleteFromCache(key: string): Promise<void>;
   isAvailable(): boolean;
   clearCache?(): Promise<void>;
@@ -57,62 +53,64 @@ export function createRedisClient(config: RedisConfig): RedisClientInterface {
 
 // Validate cache key for security
 export function validateCacheKey(key: string): void {
-  if (typeof key !== 'string') {
-    throw new Error('Cache key must be a string');
+  if (typeof key !== "string") {
+    throw new Error("Cache key must be a string");
   }
-  
+
   if (key.length === 0) {
-    throw new Error('Cache key cannot be empty');
+    throw new Error("Cache key cannot be empty");
   }
-  
+
   if (key.length > 250) {
-    throw new Error('Cache key too long (max 250 characters)');
+    throw new Error("Cache key too long (max 250 characters)");
   }
-  
+
   // Prevent potential injection attacks
-  if (key.includes('\n') || key.includes('\r') || key.includes('\0')) {
-    throw new Error('Cache key contains invalid characters');
+  if (key.includes("\n") || key.includes("\r") || key.includes("\0")) {
+    throw new Error("Cache key contains invalid characters");
   }
-  
+
   // Prevent keys that could cause issues with Redis
-  if (key.startsWith(' ') || key.endsWith(' ')) {
-    throw new Error('Cache key cannot start or end with whitespace');
+  if (key.startsWith(" ") || key.endsWith(" ")) {
+    throw new Error("Cache key cannot start or end with whitespace");
   }
 }
 
 // Sanitize cache value for security
 export function sanitizeCacheValue(value: string | number | boolean | null | object): string {
   if (value === null || value === undefined) {
-    return 'null';
+    return "null";
   }
-  
-  if (typeof value === 'string') {
+
+  if (typeof value === "string") {
     // Prevent potential security issues with very large strings
-    if (value.length > 1048576) { // 1MB limit
-      throw new Error('Cache value too large (max 1MB)');
+    if (value.length > 1048576) {
+      // 1MB limit
+      throw new Error("Cache value too large (max 1MB)");
     }
     return JSON.stringify(value);
   }
-  
+
   try {
     const serialized = JSON.stringify(value);
-    if (serialized.length > 1048576) { // 1MB limit
-      throw new Error('Cache value too large (max 1MB)');
+    if (serialized.length > 1048576) {
+      // 1MB limit
+      throw new Error("Cache value too large (max 1MB)");
     }
     return serialized;
   } catch (error) {
     // Check if it's a specific size error first
-    if (error instanceof Error && error.message === 'Cache value too large (max 1MB)') {
+    if (error instanceof Error && error.message === "Cache value too large (max 1MB)") {
       throw error;
     }
-    throw new Error('Cache value cannot be serialized to JSON');
+    throw new Error("Cache value cannot be serialized to JSON");
   }
 }
 
 // Parse cache value safely
 export function parseCacheValue<T>(cachedData: string | null): T | null {
   if (cachedData === null) return null;
-  
+
   try {
     return JSON.parse(cachedData) as T;
   } catch (e) {
@@ -140,18 +138,18 @@ export class RedisCacheService implements CacheService {
       try {
         const url = this.envConfig.getRedisUrl();
         const token = this.envConfig.getRedisToken();
-        
+
         if (!url || !token) {
-          console.warn('Redis configuration missing - caching disabled');
+          console.warn("Redis configuration missing - caching disabled");
           return null;
         }
 
         this.redisClient = createRedisClient({ url, token });
-        
+
         // Test the connection
         await this.redisClient.ping();
       } catch (error) {
-        console.error('Redis Cache not available:', error);
+        console.error("Redis Cache not available:", error);
         this.redisClient = null; // Ensure redis is set to null if connection fails
       }
     }
@@ -161,7 +159,7 @@ export class RedisCacheService implements CacheService {
   async getFromCache<T>(key: string): Promise<T | null> {
     try {
       validateCacheKey(key);
-      
+
       const redisClient = await this.initializeRedis();
       if (!redisClient) return null;
 
@@ -176,19 +174,20 @@ export class RedisCacheService implements CacheService {
   async setInCache(
     key: string,
     value: string | number | boolean | null | object,
-    expiration: number = this.defaultExpiration,
+    expiration: number = this.defaultExpiration
   ): Promise<void> {
     try {
       validateCacheKey(key);
-      
+
       if (expiration < 0) {
-        throw new Error('Cache expiration must be non-negative');
+        throw new Error("Cache expiration must be non-negative");
       }
-      
-      if (expiration > 2147483647) { // Redis max TTL
-        throw new Error('Cache expiration too large (max ~68 years)');
+
+      if (expiration > 2147483647) {
+        // Redis max TTL
+        throw new Error("Cache expiration too large (max ~68 years)");
       }
-      
+
       const redisClient = await this.initializeRedis();
       if (!redisClient) return;
 
@@ -202,7 +201,7 @@ export class RedisCacheService implements CacheService {
   async deleteFromCache(key: string): Promise<void> {
     try {
       validateCacheKey(key);
-      
+
       const redisClient = await this.initializeRedis();
       if (!redisClient) return;
 
@@ -239,10 +238,6 @@ function getGlobalCacheService(): RedisCacheService {
 }
 
 // Legacy functions for backward compatibility
-export function initializeRedis(): RedisClientInterface | null {
-  const service = getGlobalCacheService();
-  return service.isAvailable() ? (service as any).redisClient : null;
-}
 
 export async function getFromCache<T>(key: string): Promise<T | null> {
   const service = getGlobalCacheService();
@@ -252,7 +247,7 @@ export async function getFromCache<T>(key: string): Promise<T | null> {
 export async function setInCache(
   key: string,
   value: string | number | boolean | null | object,
-  expiration: number = CACHE_EXPIRATION,
+  expiration: number = CACHE_EXPIRATION
 ): Promise<void> {
   const service = getGlobalCacheService();
   return service.setInCache(key, value, expiration);
@@ -271,8 +266,8 @@ export function createCacheService(envConfig?: EnvironmentConfig): CacheService 
 
 // Test utility function to inject mock client into global service
 export function __setGlobalRedisClientForTesting(client: RedisClientInterface | null): void {
-  if (process.env.NODE_ENV !== 'test') {
-    throw new Error('This function should only be used in test environment');
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("This function should only be used in test environment");
   }
   const service = getGlobalCacheService();
   service.setRedisClient(client);
