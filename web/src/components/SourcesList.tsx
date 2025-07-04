@@ -64,6 +64,21 @@ const SourcesList: React.FC<SourcesListProps> = ({
   siteConfig,
   isSudoAdmin = false,
 }) => {
+  // DEBUG: Add logging for sources display debugging
+  React.useEffect(() => {
+    console.log(`🔍 SOURCELIST DEBUG: Component received ${sources.length} sources`);
+    if (sources.length === 0) {
+      console.log(`⚠️ SOURCELIST WARNING: No sources to display`);
+    } else {
+      console.log(`🔍 SOURCELIST DEBUG: First source:`, {
+        hasPageContent: !!sources[0]?.pageContent,
+        hasMetadata: !!sources[0]?.metadata,
+        type: sources[0]?.metadata?.type,
+        title: sources[0]?.metadata?.title
+      });
+    }
+  }, [sources]);
+
   // State hooks
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set());
   const [showSourcesPopover, setShowSourcesPopover] = useState<boolean>(false);

@@ -319,15 +319,35 @@ export default function Home({
 
       if (data.sourceDocs) {
         try {
+          // DEBUG: Add extensive logging for sources debugging
+          const receiveTimestamp = Date.now();
+          console.log(`🔍 FRONTEND SOURCES DEBUG: Received sourceDocs at ${receiveTimestamp}, type:`, typeof data.sourceDocs, 'isArray:', Array.isArray(data.sourceDocs));
+          
           setTimeout(() => {
+            const processTimestamp = Date.now();
+            const timeDiff = processTimestamp - receiveTimestamp;
+            console.log(`🔍 FRONTEND SOURCES DEBUG: Processing sourceDocs after ${timeDiff}ms delay`);
+            
             const immutableSourceDocs = Array.isArray(data.sourceDocs)
               ? [...data.sourceDocs]
               : [];
 
+            console.log(`🔍 FRONTEND SOURCES DEBUG: Processed ${immutableSourceDocs.length} sources`);
+
             if (immutableSourceDocs.length < sourceCount) {
               console.error(
-                `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
+                `❌ FRONTEND SOURCES ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
               );
+            }
+
+            // DEBUG: Check if sources are properly structured
+            if (immutableSourceDocs.length > 0) {
+              const firstSource = immutableSourceDocs[0];
+              console.log(`🔍 FRONTEND SOURCES DEBUG: First source structure:`, {
+                hasPageContent: !!firstSource.pageContent,
+                hasMetadata: !!firstSource.metadata,
+                metadataKeys: firstSource.metadata ? Object.keys(firstSource.metadata) : 'none'
+              });
             }
 
             setSourceDocs(immutableSourceDocs);
@@ -335,9 +355,12 @@ export default function Home({
               accumulatedResponseRef.current,
               immutableSourceDocs,
             );
+            
+            console.log(`✅ FRONTEND SOURCES DEBUG: Successfully updated state with ${immutableSourceDocs.length} sources`);
           }, 100);
         } catch (error) {
-          console.error('Error handling sourceDocs:', error);
+          console.error('❌ FRONTEND SOURCES ERROR: Error handling sourceDocs:', error);
+          console.error('❌ FRONTEND SOURCES ERROR: Raw data.sourceDocs:', data.sourceDocs);
           // Fallback to empty array if parsing fails
           setSourceDocs([]);
           updateMessageState(accumulatedResponseRef.current, []);

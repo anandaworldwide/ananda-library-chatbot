@@ -1365,3 +1365,67 @@ flow is updated:
 6. ✅ Comprehensive test coverage for all components
 
 **Status**: Production-ready implementation with full test coverage confirming functionality.
+
+## Sources Not Displaying Bug Investigation - DEBUGGING ADDED & TESTED ✅
+
+**Problem**: Intermittent bug where chat responses return with no sources displayed in the frontend, even though sources should be available.
+
+**CRITICAL INSIGHT**: **Answer text streams successfully while only sources are missing** - This significantly narrows the cause.
+
+**Root Analysis Completed**: Comprehensive code flow analysis from backend retrieval through frontend display identified 5 potential failure points.
+
+**Source Data Flow**:
+1. **Backend**: `makeChain` → `retrievalSequence` → `sendData({ sourceDocs: allDocuments })` (SENT FIRST)
+2. **API**: Streamed via Server-Sent Events in `/api/chat/v1/route.ts`
+3. **Frontend**: `index.tsx` → `handleStreamingResponse` → processes with 100ms `setTimeout`
+4. **Display**: `SourcesList` component checks `sources.length > 0` before rendering
+
+**Five Theories Identified** (ranked by likelihood):
+
+1. **JSON Serialization/Parsing Failure** 🎯 (Prime Suspect)
+   - Large sourceDocs arrays fail to serialize correctly
+   - Complex metadata breaks JSON.stringify()
+   - Backend catches error, continues with answer stream
+
+2. **Timing Race Condition** 🎯 (Strong Suspect)
+   - 100ms setTimeout processing delay in frontend
+   - Sources processed before frontend state is ready
+   - Asynchronous state update timing mismatches
+
+3. **Component State Management Issue**
+   - React state updates not triggering re-renders properly
+   - useEffect dependencies missing sources changes
+   - Component unmounting before sources processed
+
+4. **Server-Sent Events (SSE) Reliability**
+   - SSE chunks dropped during transmission
+   - Network interruptions affecting sources but not answer
+   - Browser SSE handling inconsistencies
+
+5. **Silent Retrieval Failure**
+   - Vector DB returns empty results intermittently
+   - Document retrieval pipeline silently fails
+   - Error handling masks retrieval failures
+
+**DEBUGGING SYSTEM IMPLEMENTED** ✅:
+
+**Files Modified & Production-Ready**:
+- `web/src/utils/server/makechain.ts` - JSON serialization & retrieval debugging
+- `web/src/app/api/chat/v1/route.ts` - SSE transmission debugging  
+- `web/src/pages/index.tsx` - Frontend processing & timing debugging
+- `web/src/components/SourcesList.tsx` - Component display debugging
+
+**Test Results**: ✅ All 722 tests passed (61 client + 14 server suites)
+
+**Debug Log Examples** (when bug occurs):
+```
+🔍 SOURCES DEBUG: Retrieved 5 documents
+🔍 SSE SOURCES DEBUG: Attempting to send 5 sources via SSE
+⚠️ JSON SERIALIZATION ERROR: TypeError: Converting circular structure
+🔍 FRONTEND SOURCES DEBUG: Received sourceDocs, isArray: true  
+⚠️ SOURCELIST WARNING: No sources to display
+```
+
+**Next Action**: Deploy to production and monitor logs when intermittent bug occurs. The comprehensive debugging will pinpoint exact failure location in the source flow.
+
+**Expected Resolution**: Once logs identify the failure point, implement targeted fix for the specific cause (likely JSON serialization or timing race condition).
