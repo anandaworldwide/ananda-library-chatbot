@@ -41,6 +41,9 @@ Command Line Arguments:
 Example Usage:
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --keep-data
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --max-records 100 --dry-run
+
+TODO:
+    - Strip all HTML tags during chunking process. But be careful not to strip HTML tags for PDF generation process.
 """
 
 import argparse
