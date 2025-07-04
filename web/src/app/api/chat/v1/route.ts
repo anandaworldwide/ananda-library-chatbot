@@ -711,30 +711,33 @@ async function handleChatRequest(req: NextRequest) {
             // DEBUG: Add logging for sources debugging
             if (data.sourceDocs) {
               console.log(`🔍 SSE SOURCES DEBUG: Attempting to send ${data.sourceDocs.length} sources via SSE`);
-              
+
               // Test JSON stringification before sending
               try {
                 const testSerialization = JSON.stringify(data);
                 const serializedSize = new Blob([testSerialization]).size;
                 console.log(`🔍 SSE SOURCES DEBUG: SSE payload size: ${serializedSize} bytes`);
-                
-                if (serializedSize > 2000000) { // 2MB threshold for SSE
+
+                if (serializedSize > 2000000) {
+                  // 2MB threshold for SSE
                   console.warn(`⚠️ SSE SOURCES WARNING: Very large SSE payload: ${serializedSize} bytes`);
                 }
               } catch (serializeError) {
                 console.error(`❌ SSE SOURCES ERROR: Failed to serialize SSE data:`, serializeError);
                 console.error(`❌ SSE SOURCES ERROR: This explains the bug - answer will stream but sources will fail`);
                 console.error(`❌ SSE SOURCES ERROR: Serialization error details:`, {
-                  name: serializeError.name,
-                  message: serializeError.message,
-                  sourceCount: data.sourceDocs?.length || 0
+                  name: serializeError instanceof Error ? serializeError.name : "Unknown",
+                  message: serializeError instanceof Error ? serializeError.message : String(serializeError),
+                  sourceCount: data.sourceDocs?.length || 0,
                 });
                 // Don't send sourceDocs if serialization fails
                 data = { ...data, sourceDocs: [] };
-                console.log(`🔍 SSE SOURCES DEBUG: Fallback - sending empty sources array, answer will still stream normally`);
+                console.log(
+                  `🔍 SSE SOURCES DEBUG: Fallback - sending empty sources array, answer will still stream normally`
+                );
               }
             }
-            
+
             // DEBUG: Log the sequence of sources vs answer streaming
             if (data.sourceDocs && !data.token) {
               console.log(`🔍 SSE TIMING DEBUG: Sending sources BEFORE answer streaming begins`);
@@ -743,7 +746,7 @@ async function handleChatRequest(req: NextRequest) {
             } else if (data.token && data.sourceDocs) {
               console.log(`🔍 SSE TIMING DEBUG: Unusual - sending both token and sources simultaneously`);
             }
-            
+
             if (data.timing?.firstTokenGenerated && !timingMetrics.firstTokenGenerated) {
               timingMetrics.firstTokenGenerated = data.timing.firstTokenGenerated;
             }
@@ -776,7 +779,7 @@ async function handleChatRequest(req: NextRequest) {
               };
             }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-            
+
             // DEBUG: Log successful transmission
             if (data.sourceDocs) {
               console.log(`✅ SSE SOURCES DEBUG: Successfully sent ${data.sourceDocs.length} sources via SSE`);

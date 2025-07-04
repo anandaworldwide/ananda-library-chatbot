@@ -457,12 +457,14 @@ export const makeChain = async (
         // DEBUG: Add extensive logging for sources debugging
         try {
           console.log(`🔍 SOURCES DEBUG: Retrieved ${allDocuments.length} documents`);
-          
+
           // Check for empty documents
           if (allDocuments.length === 0) {
-            console.warn(`⚠️ SOURCES WARNING: No documents retrieved for question: "${input.question.substring(0, 100)}..."`);
+            console.warn(
+              `⚠️ SOURCES WARNING: No documents retrieved for question: "${input.question.substring(0, 100)}..."`
+            );
           }
-          
+
           // DEBUG: Check for problematic content that could break JSON serialization
           const problematicSources = allDocuments.filter((doc, index) => {
             try {
@@ -475,26 +477,27 @@ export const makeChain = async (
                 pageContentLength: doc.pageContent?.length,
                 hasMetadata: !!doc.metadata,
                 metadataKeys: doc.metadata ? Object.keys(doc.metadata) : [],
-                metadataSize: doc.metadata ? JSON.stringify(doc.metadata).length : 0
+                metadataSize: doc.metadata ? JSON.stringify(doc.metadata).length : 0,
               });
               return true;
             }
           });
-          
+
           if (problematicSources.length > 0) {
             console.error(`❌ SOURCES ERROR: ${problematicSources.length} documents have serialization issues`);
           }
-          
+
           // Test JSON serialization before sending
           const serializedTest = JSON.stringify(allDocuments);
           const serializedSize = new Blob([serializedTest]).size;
           console.log(`🔍 SOURCES DEBUG: Serialized sources size: ${serializedSize} bytes`);
-          
-          if (serializedSize > 1000000) { // 1MB threshold
+
+          if (serializedSize > 1000000) {
+            // 1MB threshold
             console.warn(`⚠️ SOURCES WARNING: Large sources payload detected: ${serializedSize} bytes`);
             console.warn(`⚠️ SOURCES WARNING: This could cause JSON serialization to fail in SSE transmission`);
           }
-          
+
           // Test if sources can be parsed back
           const parseTest = JSON.parse(serializedTest);
           if (!Array.isArray(parseTest) || parseTest.length !== allDocuments.length) {
@@ -502,17 +505,16 @@ export const makeChain = async (
           } else {
             console.log(`✅ SOURCES DEBUG: Serialization test passed`);
           }
-          
+
           sendData({ sourceDocs: allDocuments });
           console.log(`✅ SOURCES DEBUG: Successfully sent ${allDocuments.length} sources to client`);
-          
         } catch (serializationError) {
           console.error(`❌ SOURCES ERROR: Failed to serialize/send sources:`, serializationError);
           console.error(`❌ SOURCES ERROR: This is likely THE BUG - answer will stream but sources will be missing`);
           console.error(`❌ SOURCES ERROR: Error details:`, {
-            name: serializationError.name,
-            message: serializationError.message,
-            documentCount: allDocuments.length
+            name: serializationError instanceof Error ? serializationError.name : "Unknown",
+            message: serializationError instanceof Error ? serializationError.message : String(serializationError),
+            documentCount: allDocuments.length,
           });
           // Send empty array as fallback
           sendData({ sourceDocs: [] });
