@@ -1304,3 +1304,38 @@ patterns as other test files in the project.
 - **Backwards Compatibility**: System gracefully handles cases where restated questions aren't available
 
 **Production Status**: ✅ Ready for production deployment with full test coverage and verified functionality.
+
+## Pagination Browser History Fix - COMPLETED
+
+**Status**: Successfully fixed browser history navigation on the answers page pagination controls.
+
+**Problem Resolved**: The answers page (/answers) pagination was using `router.replace()` which prevented proper browser history entries from being created. This caused the browser's back button to skip over intermediate pages when users navigated through multiple answer pages.
+
+**User Experience Requirement**: 
+- User expects each page navigation to create a browser history entry
+- Browser back button should allow navigation through previously viewed answer pages
+- Standard web navigation behavior should be maintained
+
+**Technical Implementation**:
+- **File Modified**: `web/src/pages/answers.tsx`
+- **Function Updated**: `updateUrl` callback
+- **Change Applied**: `router.replace()` → `router.push()`
+- **Routing Strategy**: Maintained shallow routing for performance while enabling proper history
+
+**User Preference Identified**:
+- **Browser History**: Users expect standard web navigation behavior
+- **Back Button**: Should work with pagination controls
+- **Page Navigation**: Each page should create a distinct history entry
+- **UX Standard**: Follows conventional web application navigation patterns
+
+**Benefits**:
+- Improved user experience for multi-page browsing
+- Standard browser navigation behavior restored
+- Users can navigate back through their browsing history
+- Maintains existing performance optimizations (shallow routing)
+
+**Implementation Details**:
+- Uses Next.js router with `shallow: true` option
+- Preserves URL parameters for page and sort order
+- Creates proper browser history entries for each navigation
+- Maintains existing scroll position management
