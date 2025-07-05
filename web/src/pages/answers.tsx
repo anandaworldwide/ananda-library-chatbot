@@ -228,8 +228,8 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
           path += '?' + params.toString();
         }
 
-        // Use router.replace() with the 'as' parameter
-        router.replace(
+        // Use router.push() to create browser history entries for back button navigation
+        router.push(
           {
             pathname: '/answers',
             query: { page: page.toString(), sortBy },
