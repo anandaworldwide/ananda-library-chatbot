@@ -1429,3 +1429,56 @@ flow is updated:
 **Next Action**: Deploy to production and monitor logs when intermittent bug occurs. The comprehensive debugging will pinpoint exact failure location in the source flow.
 
 **Expected Resolution**: Once logs identify the failure point, implement targeted fix for the specific cause (likely JSON serialization or timing race condition).
+
+## Critical Fix: Browser History Navigation in Pagination - ✅ RESOLVED
+
+**Problem**: When using pagination controls (next/previous buttons) on the answers page (/answers), the browser's back button didn't work properly. Each page navigation would replace the current history entry instead of creating a new one, preventing users from using the back button to navigate through previously viewed answer pages.
+
+**Root Cause**: The `updateUrl` function in `web/src/pages/answers.tsx` was using `router.replace()` instead of `router.push()`. The `replace` method replaces the current browser history entry, while `push` creates a new history entry.
+
+**Evidence from User Report**: 
+- User reported: "if I use the next page button a few times, and then I have the browser back button it leaves the prior answers page of the Times I hit the next previous button. It should leave a browser entry for the back button"
+- Navigation through answer pages didn't create browser history entries for back button navigation
+
+**Symptoms**:
+- Next/previous page navigation worked functionally
+- Browser back button would skip over intermediate pages
+- Users couldn't navigate back through their pagination history
+- Poor user experience for browsing multiple pages
+
+**Fix Applied**: Changed `router.replace()` to `router.push()` in the `updateUrl` function:
+
+**Wrong**:
+```typescript
+// Use router.replace() with the 'as' parameter
+router.replace(
+  {
+    pathname: '/answers',
+    query: { page: page.toString(), sortBy },
+  },
+  path,
+  { shallow: true },
+);
+```
+
+**Correct**:
+```typescript
+// Use router.push() to create browser history entries for back button navigation
+router.push(
+  {
+    pathname: '/answers',
+    query: { page: page.toString(), sortBy },
+  },
+  path,
+  { shallow: true },
+);
+```
+
+**Impact**:
+- Browser back button now works correctly with pagination
+- Each page navigation creates a proper browser history entry
+- Users can navigate back through their browsing history of answer pages
+- Improved user experience for multi-page browsing
+- Maintains shallow routing for performance (no full page reload)
+
+**Status**: ✅ **COMPLETE** - Browser history navigation fixed for pagination controls.
