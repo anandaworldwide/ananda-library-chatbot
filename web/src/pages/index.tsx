@@ -304,13 +304,10 @@ export default function Home({
 
       // Capture timing information
       if (data.timing) {
-        console.log('Data: Timing');
         setTimingMetrics(data.timing);
       }
 
       if (data.token) {
-
-        console.log('Data: Token');
         
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
@@ -327,8 +324,6 @@ export default function Home({
       }
 
       if (data.sourceDocs) {
-
-        console.log('Data: SourceDocs');
 
         try {
           const immutableSourceDocs = Array.isArray(data.sourceDocs)
@@ -355,8 +350,6 @@ export default function Home({
       }
 
       if (data.done) {
-
-        console.log('Data: Done');
         // Check for docId one more time right when done is received.
         // Immediately set loading to false so the buttons appear right away
         setLoading(false);
