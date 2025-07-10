@@ -1923,6 +1923,12 @@ def process_and_upsert_batch(
             # Mark post as successfully processed
             processed_ids_in_batch.append(post_id)
 
+            # Simple completion log without percentage
+            logger.info(
+                f"✓ Completed document ID {post_id} - {post_title[:50]}{'...' if len(post_title) > 50 else ''} "
+                f"({chunk_count} chunks)"
+            )
+
         except Exception as e:
             # Use the failure tracking system for individual document errors
             failure_tracker.add_failure(
@@ -1933,6 +1939,12 @@ def process_and_upsert_batch(
                 include_traceback=True,
             )
             errors_in_batch += 1
+
+            # Simple error log without percentage
+            logger.error(
+                f"✗ Failed document ID {post_id} - {post_title[:50]}{'...' if len(post_title) > 50 else ''} "
+                f"Error: {str(e)[:100]}{'...' if len(str(e)) > 100 else ''}"
+            )
             continue
 
     # Upsert vectors to Pinecone - now catches Pinecone errors specifically
@@ -2064,9 +2076,18 @@ def run_ingestion_loop(
         max(processed_doc_ids) if processed_doc_ids else 0
     )  # Start with highest ID from checkpoint
 
+    # Calculate total unprocessed documents for overall progress tracking
+    total_unprocessed_docs = sum(
+        1 for post_data in all_rows if post_data.get("id") not in processed_doc_ids
+    )
+
     num_batches = math.ceil(len(all_rows) / args.batch_size)
     logger.info(
         f"Processing {len(all_rows)} documents in {num_batches} batches of size {args.batch_size}."
+    )
+    logger.info(
+        f"Total unprocessed documents: {total_unprocessed_docs} "
+        f"(skipping {len(all_rows) - total_unprocessed_docs} already processed)"
     )
 
     # Create progress configuration for batch processing
@@ -2075,6 +2096,16 @@ def run_ingestion_loop(
         unit="batch",
         total=num_batches,
         checkpoint_interval=1,  # Save checkpoint after each batch
+    )
+
+    # Create overall document progress configuration
+    overall_doc_progress_config = ProgressConfig(
+        description="Overall Document Progress",
+        unit="doc",
+        total=total_unprocessed_docs,
+        show_progress=True,
+        enable_eta=True,
+        bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} docs [{elapsed}<{remaining}, {rate_fmt}]",
     )
 
     def checkpoint_callback(current_progress: int, data: dict):
@@ -2089,11 +2120,14 @@ def run_ingestion_loop(
             logger.error(f"Unexpected error saving checkpoint: {e}")
 
     # Use ProgressTracker for comprehensive progress tracking
-    with ProgressTracker(
-        progress_config,
-        checkpoint_callback=checkpoint_callback,
-        checkpoint_data={"processed_doc_ids": processed_doc_ids},
-    ) as progress:
+    with (
+        ProgressTracker(
+            progress_config,
+            checkpoint_callback=checkpoint_callback,
+            checkpoint_data={"processed_doc_ids": processed_doc_ids},
+        ) as progress,
+        ProgressTracker(overall_doc_progress_config) as overall_progress,
+    ):
         for i in range(num_batches):
             if is_exiting():
                 logger.info(
@@ -2120,6 +2154,18 @@ def run_ingestion_loop(
                 progress.update(1)  # Still update progress even if skipping
                 continue
 
+            # Log batch start with overall progress
+            overall_completed = processed_count_session + skipped_count_session
+            overall_percentage = (
+                (overall_completed / len(all_rows)) * 100 if len(all_rows) > 0 else 0
+            )
+
+            logger.info(
+                f"\n📦 Starting Batch {i + 1}/{num_batches} "
+                f"({len(current_batch_data_unprocessed)} documents) "
+                f"- Overall Progress: {overall_completed}/{len(all_rows)} ({overall_percentage:.1f}%)"
+            )
+
             batch_had_errors, processed_ids_this_batch = process_and_upsert_batch(
                 current_batch_data_unprocessed,
                 pinecone_index,
@@ -2140,6 +2186,11 @@ def run_ingestion_loop(
                     )
                 processed_count_session += len(processed_ids_this_batch)
                 progress.increment_success(len(processed_ids_this_batch))
+
+                # Update overall document progress
+                overall_progress.update(len(processed_ids_this_batch))
+                overall_progress.increment_success(len(processed_ids_this_batch))
+
             else:
                 logger.warning(
                     f"Batch {i + 1} encountered errors. Checkpoint not advanced for this batch's documents."
@@ -2147,8 +2198,25 @@ def run_ingestion_loop(
                 error_count_session += len(current_batch_data_unprocessed)
                 progress.increment_error(len(current_batch_data_unprocessed))
 
-            # Update progress tracker
+                # Update overall document progress for errors
+                overall_progress.update(len(current_batch_data_unprocessed))
+                overall_progress.increment_error(len(current_batch_data_unprocessed))
+
+            # Update batch progress tracker
             progress.update(1)
+
+            # Log batch completion with overall progress
+            overall_completed_after = processed_count_session + skipped_count_session
+            overall_percentage_after = (
+                (overall_completed_after / len(all_rows)) * 100
+                if len(all_rows) > 0
+                else 0
+            )
+
+            logger.info(
+                f"✓ Batch {i + 1}/{num_batches} completed "
+                f"- Overall Progress: {overall_completed_after}/{len(all_rows)} ({overall_percentage_after:.1f}%)"
+            )
 
     return (
         processed_count_session,
@@ -2208,7 +2276,9 @@ def main():
                 )
             embeddings_model = OpenAIEmbeddings(model=model_name, chunk_size=500)
             # Historical SQL/database processing used 1000 chars (~250 tokens) with 200 chars (~50 tokens) overlap (20%)
-            text_splitter = SpacyTextSplitter(chunk_size=250, chunk_overlap=50)
+            text_splitter = SpacyTextSplitter(
+                chunk_size=250, chunk_overlap=50, log_summary_on_split=False
+            )
 
             (
                 processed_count_session,
@@ -2268,6 +2338,12 @@ def main():
                 )
             except Exception as cp_err:
                 logger.error(f"Could not save checkpoint on interrupt: {cp_err}")
+
+        # Print chunking statistics before exiting
+        if "text_splitter" in locals():
+            logger.info("")
+            text_splitter.metrics.print_summary()
+
         logger.info("Exiting due to KeyboardInterrupt.")
         sys.exit(1)
     except Exception as e:
@@ -2291,6 +2367,12 @@ def main():
                 logger.error(
                     f"Could not save checkpoint during error handling: {cp_err}"
                 )
+
+        # Print chunking statistics before exiting
+        if "text_splitter" in locals():
+            logger.info("")
+            text_splitter.metrics.print_summary()
+
         sys.exit(1)
     finally:
         logger.info("Closing database connection...")

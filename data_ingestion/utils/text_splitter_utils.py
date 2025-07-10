@@ -217,6 +217,7 @@ class SpacyTextSplitter:
         chunk_overlap=50,  # Historical 20% overlap (50 tokens)
         separator="\n\n",
         pipeline="en_core_web_sm",
+        log_summary_on_split: bool = True,
     ):
         """
         Initialize the SpacyTextSplitter with historical paragraph-based chunking parameters.
@@ -226,6 +227,7 @@ class SpacyTextSplitter:
             chunk_overlap (int): Fixed overlap in tokens (default: 50 = 20% of chunk_size)
             separator (str): Separator to use for splitting text
             pipeline (str): Name of spaCy pipeline/model to use
+            log_summary_on_split (bool): Whether to automatically log summary after each split_documents call.
         """
         # Calculate base chunk size to account for overlap
         # Target: final chunks of 250 tokens with 50 token overlap
@@ -241,6 +243,7 @@ class SpacyTextSplitter:
         self.nlp = None
         self.logger = logging.getLogger(f"{__name__}.SpacyTextSplitter")
         self.metrics = ChunkingMetrics()
+        self.log_summary_on_split = log_summary_on_split
 
     def _ensure_nlp(self):
         """
@@ -1533,7 +1536,8 @@ class SpacyTextSplitter:
             )
 
             # Log comprehensive metrics summary
-            self.metrics.log_summary(self.logger)
+            if self.log_summary_on_split:
+                self.metrics.log_summary(self.logger)
 
             return chunked_docs
         except Exception as e:
