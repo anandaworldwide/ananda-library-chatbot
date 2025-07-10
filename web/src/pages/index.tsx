@@ -319,7 +319,7 @@ export default function Home({
             if (!showScrollDownButton) {
               setShowScrollDownButton(true);
             }
-          }, 200);
+          }, 5000);
         } else {
           // Subsequent tokens - process immediately
           accumulatedResponseRef.current += data.token;
