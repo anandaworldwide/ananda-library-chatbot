@@ -303,39 +303,57 @@ export default function Home({
       }
 
       if (data.token) {
-        accumulatedResponseRef.current += data.token;
-        updateMessageState(accumulatedResponseRef.current, null);
+        // Add 100ms delay to first token to simulate slower response, giving time for the sources to appear
+        if (accumulatedResponseRef.current === '') {
+          // This is the first token - delay it by 100ms
+          setTimeout(() => {
+            accumulatedResponseRef.current += data.token;
+            updateMessageState(accumulatedResponseRef.current, null);
 
-        // Any new content should reset the scroll state
-        // This ensures clicking the button after new content arrives
-        // will always scroll to content bottom first
-        setScrollClickState(0);
+            // Any new content should reset the scroll state
+            // This ensures clicking the button after new content arrives
+            // will always scroll to content bottom first
+            setScrollClickState(0);
 
-        // Force scroll button to show when streaming content
-        if (!showScrollDownButton) {
-          setShowScrollDownButton(true);
+            // Force scroll button to show when streaming content
+            if (!showScrollDownButton) {
+              setShowScrollDownButton(true);
+            }
+          }, 200);
+        } else {
+          // Subsequent tokens - process immediately
+          accumulatedResponseRef.current += data.token;
+          updateMessageState(accumulatedResponseRef.current, null);
+
+          // Any new content should reset the scroll state
+          // This ensures clicking the button after new content arrives
+          // will always scroll to content bottom first
+          setScrollClickState(0);
+
+          // Force scroll button to show when streaming content
+          if (!showScrollDownButton) {
+            setShowScrollDownButton(true);
+          }
         }
       }
 
       if (data.sourceDocs) {
         try {
-          setTimeout(() => {
-            const immutableSourceDocs = Array.isArray(data.sourceDocs)
-              ? [...data.sourceDocs]
-              : [];
+          const immutableSourceDocs = Array.isArray(data.sourceDocs)
+            ? [...data.sourceDocs]
+            : [];
 
-            if (immutableSourceDocs.length < sourceCount) {
-              console.error(
-                `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
-              );
-            }
-
-            setSourceDocs(immutableSourceDocs);
-            updateMessageState(
-              accumulatedResponseRef.current,
-              immutableSourceDocs,
+          if (immutableSourceDocs.length < sourceCount) {
+            console.error(
+              `ERROR: Received ${immutableSourceDocs.length} sources, but ${sourceCount} were requested.`,
             );
-          }, 100);
+          }
+
+          setSourceDocs(immutableSourceDocs);
+          updateMessageState(
+            accumulatedResponseRef.current,
+            immutableSourceDocs,
+          );
         } catch (error) {
           console.error('Error handling sourceDocs:', error);
           // Fallback to empty array if parsing fails
