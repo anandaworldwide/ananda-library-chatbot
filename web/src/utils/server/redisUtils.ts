@@ -1,3 +1,40 @@
+/**
+ * Redis Cache Utilities - Ananda Library Chatbot
+ *
+ * This module provides a comprehensive Redis-based caching layer for the Next.js application,
+ * designed to improve performance by caching frequently accessed data and reducing database load.
+ *
+ * Key Features:
+ * - Type-safe Redis client wrapper with comprehensive error handling
+ * - Automatic connection management with graceful fallback when Redis is unavailable
+ * - Configurable cache expiration (1 hour dev, 24 hours prod)
+ * - Input validation and sanitization to prevent cache poisoning attacks
+ * - Size limits (1MB max) to prevent memory exhaustion
+ * - Global cache service singleton for application-wide use
+ * - Testing utilities for unit test isolation
+ *
+ * Architecture:
+ * - Uses Upstash Redis for serverless-friendly Redis hosting
+ * - Implements CacheService interface for dependency injection and testing
+ * - Provides both class-based (RedisCacheService) and functional APIs
+ * - Environment-aware configuration with development/production modes
+ *
+ * Security Considerations:
+ * - Validates cache keys to prevent injection attacks
+ * - Sanitizes values before storage to prevent malicious data
+ * - Enforces size limits to prevent DoS attacks
+ * - Graceful degradation when Redis is unavailable (no app crashes)
+ *
+ * Usage:
+ * - Import getFromCache/setInCache for simple caching operations
+ * - Use RedisCacheService class for advanced scenarios with custom configuration
+ * - Leverage __setGlobalRedisClientForTesting for unit tests
+ *
+ * Dependencies:
+ * - @upstash/redis: Serverless Redis client
+ * - Environment variables: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+ */
+
 import { Redis } from "@upstash/redis";
 import { isDevelopment } from "@/utils/env";
 
