@@ -287,6 +287,7 @@ export default function Home({
 
   const handleStreamingResponse = useCallback(
     (data: StreamingResponseData) => {
+
       if (
         data.siteId &&
         siteConfig?.siteId &&
@@ -299,45 +300,32 @@ export default function Home({
 
       // Capture timing information
       if (data.timing) {
+        console.log('Data: Timing');
         setTimingMetrics(data.timing);
       }
 
       if (data.token) {
-        // Add 100ms delay to first token to simulate slower response, giving time for the sources to appear
-        if (accumulatedResponseRef.current === '') {
-          // This is the first token - delay it by 100ms
-          setTimeout(() => {
-            accumulatedResponseRef.current += data.token;
-            updateMessageState(accumulatedResponseRef.current, null);
 
-            // Any new content should reset the scroll state
-            // This ensures clicking the button after new content arrives
-            // will always scroll to content bottom first
-            setScrollClickState(0);
+        console.log('Data: Token');
+        
+        accumulatedResponseRef.current += data.token;
+        updateMessageState(accumulatedResponseRef.current, null);
 
-            // Force scroll button to show when streaming content
-            if (!showScrollDownButton) {
-              setShowScrollDownButton(true);
-            }
-          }, 5000);
-        } else {
-          // Subsequent tokens - process immediately
-          accumulatedResponseRef.current += data.token;
-          updateMessageState(accumulatedResponseRef.current, null);
+        // Any new content should reset the scroll state
+        // This ensures clicking the button after new content arrives
+        // will always scroll to content bottom first
+        setScrollClickState(0);
 
-          // Any new content should reset the scroll state
-          // This ensures clicking the button after new content arrives
-          // will always scroll to content bottom first
-          setScrollClickState(0);
-
-          // Force scroll button to show when streaming content
-          if (!showScrollDownButton) {
-            setShowScrollDownButton(true);
-          }
+        // Force scroll button to show when streaming content
+        if (!showScrollDownButton) {
+          setShowScrollDownButton(true);
         }
       }
 
       if (data.sourceDocs) {
+
+        console.log('Data: SourceDocs');
+
         try {
           const immutableSourceDocs = Array.isArray(data.sourceDocs)
             ? [...data.sourceDocs]
@@ -363,6 +351,8 @@ export default function Home({
       }
 
       if (data.done) {
+
+        console.log('Data: Done');
         // Check for docId one more time right when done is received.
         // Immediately set loading to false so the buttons appear right away
         setLoading(false);
