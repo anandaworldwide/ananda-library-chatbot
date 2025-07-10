@@ -382,7 +382,7 @@ def generate_system_performance_section(
 - **Precision@3**: {system1_metrics.precision_at_3:.3f} (strict), {system1_metrics.precision_at_3_lenient:.3f} (lenient)  
 - **Precision@5**: {system1_metrics.precision_at_5:.3f} (strict), {system1_metrics.precision_at_5_lenient:.3f} (lenient)
 - **NDCG@5**: {system1_metrics.ndcg_at_5:.3f}
-- **Average Relevance**: {system1_metrics.avg_relevance_score:.2f} / 4.0
+- **Average Relevance**: {system1_metrics.avg_relevance_score:.2f} / 3.0
 - **Documents Evaluated**: {system1_metrics.evaluated_documents} / {system1_metrics.total_documents}
 
 ### {system2_metrics.name}
@@ -390,7 +390,7 @@ def generate_system_performance_section(
 - **Precision@3**: {system2_metrics.precision_at_3:.3f} (strict), {system2_metrics.precision_at_3_lenient:.3f} (lenient)
 - **Precision@5**: {system2_metrics.precision_at_5:.3f} (strict), {system2_metrics.precision_at_5_lenient:.3f} (lenient)
 - **NDCG@5**: {system2_metrics.ndcg_at_5:.3f}
-- **Average Relevance**: {system2_metrics.avg_relevance_score:.2f} / 4.0
+- **Average Relevance**: {system2_metrics.avg_relevance_score:.2f} / 3.0
 - **Documents Evaluated**: {system2_metrics.evaluated_documents} / {system2_metrics.total_documents}
 
 """
@@ -516,16 +516,16 @@ def generate_methodology_and_limitations_section(
     """Generate methodology and limitations section."""
     return f"""## Methodology
 
-**Evaluation Approach**: Manual human judgment with 4-point relevance scale  
+**Evaluation Approach**: Manual human judgment with 4-point relevance scale (0-3)  
 **Relevance Scale**:
-- 4 (Highly Relevant): Directly answers the query
-- 3 (Relevant): Related and helpful  
-- 2 (Somewhat Relevant): Tangentially related
-- 1 (Not Relevant): Unrelated to the query
+- 3 (Highly Relevant): Directly answers the query
+- 2 (Relevant): Contains information related to the query  
+- 1 (Marginally Relevant): Mentions query topics but not directly helpful
+- 0 (Irrelevant): Not related to the query
 
 **Thresholds**:
-- Strict: Relevance score ≥ 3 (highly relevant + relevant)
-- Lenient: Relevance score ≥ 2 (includes somewhat relevant)
+- Strict: Relevance score ≥ 3 (highly relevant only)
+- Lenient: Relevance score ≥ 2 (includes relevant + highly relevant)
 
 **Statistical Tests**: Paired t-test for significance testing  
 **Effect Size**: Cohen's d for practical significance
