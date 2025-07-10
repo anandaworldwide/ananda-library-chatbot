@@ -598,6 +598,7 @@ export async function setupAndExecuteLanguageModelChain(
   let retryCount = 0;
   let lastError: Error | null = null;
   let tokensStreamed = 0;
+  let errorPrefix = "";
 
   while (retryCount < MAX_RETRIES) {
     try {
@@ -617,6 +618,7 @@ export async function setupAndExecuteLanguageModelChain(
         sendData({ siteId: siteConfig.siteId });
       }
 
+      console.log("[makechain] Building chain...");
       const chain = await makeChain(
         retriever,
         { model: modelName, temperature },
@@ -626,14 +628,15 @@ export async function setupAndExecuteLanguageModelChain(
         undefined,
         { model: rephraseModelName, temperature: rephraseTemperature }
       );
+      console.log("[makechain] Chain built.");
 
       // Format chat history for the language model
       const pastMessages = convertChatHistory(history);
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       let fullResponse = ""; // This will be populated by streaming tokens
       let firstTokenTime: number | null = null;
       let firstByteTime: number | null = null;
+      let firstTokenSent = false;
 
       // Create a promise that rejects after timeout
       const timeoutPromise = new Promise((_, reject) => {
@@ -642,6 +645,7 @@ export async function setupAndExecuteLanguageModelChain(
         }, TIMEOUT_MS);
       });
 
+      console.log("[makechain] Invoking chain...");
       const chainPromise = chain.invoke(
         {
           question: sanitizedQuestion,
@@ -654,13 +658,16 @@ export async function setupAndExecuteLanguageModelChain(
                 if (!firstTokenTime) {
                   firstTokenTime = Date.now();
                   firstByteTime = Date.now();
+                  // Prepend errorPrefix if set
+                  const tokenToSend = errorPrefix ? `${errorPrefix}\n${token}` : token;
                   sendData({
-                    token,
+                    token: tokenToSend,
                     timing: {
                       firstTokenGenerated: firstTokenTime,
                       ttfb: firstByteTime && startTime ? firstByteTime - startTime : undefined,
                     },
                   });
+                  firstTokenSent = true;
                 } else {
                   sendData({ token });
                 }
@@ -712,11 +719,18 @@ export async function setupAndExecuteLanguageModelChain(
     } catch (error) {
       lastError = error as Error;
       retryCount++;
+      errorPrefix = `[BACKEND ERROR]: ${lastError?.message || lastError}`;
+      console.error(`[makechain] ERROR (attempt ${retryCount}):`, lastError);
+      // On error, send a token with the error message if not already sent
+      if (retryCount === MAX_RETRIES) {
+        // If we never sent a token, send the error as the first token
+        sendData({ token: errorPrefix });
+        sendData({ done: true, timing: {} });
+      }
       if (retryCount < MAX_RETRIES) {
-        console.warn(`Attempt ${retryCount} failed. Retrying in ${RETRY_DELAY_MS}ms...`, error);
+        console.warn(`[makechain] Retrying in ${RETRY_DELAY_MS}ms...`);
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
       } else {
-        console.error("All retry attempts failed:", error);
         throw lastError;
       }
     }
