@@ -287,6 +287,10 @@ export default function Home({
 
   const handleStreamingResponse = useCallback(
     (data: StreamingResponseData) => {
+      if (data.log) {
+        // eslint-disable-next-line no-console
+        console.log('[BACKEND]', data.log)
+      }
 
       if (
         data.siteId &&

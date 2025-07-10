@@ -380,7 +380,8 @@ export const makeChain = async (
     async (input: AnswerChainInput) => {
       const allDocuments: Document[] = [];
       try {
-        console.log(`[RAG] Retrieving documents: requested=${sourceCount}`)
+        if (sendData) sendData({ log: `[RAG] Retrieving documents: requested=${sourceCount}` });
+        else console.log(`[RAG] Retrieving documents: requested=${sourceCount}`);
         // If no libraries specified or they don't have weights, use a single query
         if (!includedLibraries || includedLibraries.length === 0) {
           const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, baseFilter);
@@ -395,19 +396,22 @@ export const makeChain = async (
               sourceCount,
               includedLibraries as { name: string; weight?: number }[]
             );
-            console.log(`[RAG] Weighted source distribution:`, sourcesDistribution)
+            if (sendData) sendData({ log: `[RAG] Weighted source distribution: ${JSON.stringify(sourcesDistribution)}` });
+            else console.log(`[RAG] Weighted source distribution:`, sourcesDistribution);
             const retrievalPromises = sourcesDistribution
               .filter(({ sources }) => sources > 0)
               .map(async ({ name, sources }) => {
                 try {
                   const docs = await retrieveDocumentsByLibrary(retriever, name, sources, input.question, baseFilter);
-                  console.log(`[RAG] Retrieved ${docs.length} docs from library: ${name}`)
+                  if (sendData) sendData({ log: `[RAG] Retrieved ${docs.length} docs from library: ${name}` });
+                  else console.log(`[RAG] Retrieved ${docs.length} docs from library: ${name}`);
                   if (!loggedLibraries.has(name)) {
                     loggedLibraries.add(name);
                   }
                   return docs;
                 } catch (err) {
-                  console.error(`[RAG] Error retrieving from library: ${name}`, err);
+                  if (sendData) sendData({ log: `[RAG] Error retrieving from library: ${name} ${err}` });
+                  else console.error(`[RAG] Error retrieving from library: ${name}`, err);
                   return [];
                 }
               });
@@ -437,17 +441,22 @@ export const makeChain = async (
               finalFilter = libraryFilter;
             }
             const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, finalFilter);
-            console.log(`[RAG] Retrieved ${docs.length} docs from combined libraries`)
+            if (sendData) sendData({ log: `[RAG] Retrieved ${docs.length} docs from combined libraries` });
+            else console.log(`[RAG] Retrieved ${docs.length} docs from combined libraries`);
             allDocuments.push(...docs);
           }
         }
-        console.log(`[RAG] Documents retrieved: found=${allDocuments.length}`)
+        if (sendData) sendData({ log: `[RAG] Documents retrieved: found=${allDocuments.length}` });
+        else console.log(`[RAG] Documents retrieved: found=${allDocuments.length}`);
       } catch (err) {
-        console.error('[RAG] Error retrieving documents', err)
+        if (sendData) sendData({ log: `[RAG] Error retrieving documents: ${err}` });
+        else console.error('[RAG] Error retrieving documents', err);
       }
       if (sendData) {
-        console.log(`[RAG] Sending sourceDocs to frontend: count=${allDocuments.length}`)
+        sendData({ log: `[RAG] Sending sourceDocs to frontend: count=${allDocuments.length}` });
         sendData({ sourceDocs: allDocuments });
+      } else {
+        console.log(`[RAG] Sending sourceDocs to frontend: count=${allDocuments.length}`);
       }
       if (resolveDocs) {
         resolveDocs(allDocuments);
@@ -642,7 +651,8 @@ export async function setupAndExecuteLanguageModelChain(
           callbacks: [
             {
               handleLLMNewToken(token: string) {
-                console.log(`[RAG] Sending token to frontend: token='${token.slice(0, 20)}...'`)
+                if (sendData) sendData({ log: `[RAG] Sending token to frontend: token='${token.slice(0, 20)}...'` });
+                else console.log(`[RAG] Sending token to frontend: token='${token.slice(0, 20)}...'`);
                 if (!firstTokenTime) {
                   firstTokenTime = Date.now();
                   firstByteTime = Date.now();
@@ -697,7 +707,8 @@ export async function setupAndExecuteLanguageModelChain(
       }
 
       sendData({ done: true, timing: finalTiming });
-      console.log('[RAG] Sent done event to frontend')
+      if (sendData) sendData({ log: '[RAG] Sent done event to frontend' });
+      else console.log('[RAG] Sent done event to frontend');
 
       // Use result.answer for fullResponse to ensure consistency, though fullResponse is also built by streaming.
       // result.sourceDocuments are the correctly filtered documents from makeChain.
