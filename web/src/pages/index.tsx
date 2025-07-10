@@ -287,7 +287,8 @@ export default function Home({
 
   const handleStreamingResponse = useCallback(
     (data: StreamingResponseData) => {
-
+      console.log('ACEROCIRE');
+      console.log(data);
       if (
         data.siteId &&
         siteConfig?.siteId &&
