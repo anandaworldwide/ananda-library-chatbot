@@ -2,9 +2,9 @@
   "metadata": {
     "created_at": "2025-06-30T16:42:39.594447",
     "evaluation_type": "dual_system_word_docs",
-    "total_evaluations": 73,
-    "total_skipped": 2,
-    "last_updated": "2025-07-02T10:11:25.556934"
+    "total_evaluations": 94,
+    "total_skipped": 4,
+    "last_updated": "2025-07-10T09:44:05.736637"
   },
   "evaluations": {
     "qGF8pzUgIJe4cH834nOs_doc0_3-Small": {
@@ -592,16 +592,189 @@
       "judge": "Gyandev",
       "document_text": "is to know that we can rise, and how shall we rise? In the last chapter, we considered how devotees fall. In this one, let us consider the opposite question, how devotees can rise again after a fall. For no fall is permanent. Though a spiritual one is more to be dreaded than any plunge down a precipice. From which one recovers after dying only once. Whether a fall is dramatic or only a slip depends on one's attitude, primarily. Especially one's courage and devotion. God wants nothing but our good. We, ourselves, however, falling into delusion may reject his love. God will never abandon you, Paramhansa Yogananda used to say. But if you tell yourself all is lost, all will be so, at least for this lifetime. The question to be addressed here, then, is, how can a fallen devotee stop falling further and turn his steps back toward ",
       "system": "3-Large"
-    }
+    },
+    "fMCgfVG2mJFA48kDrHgo_doc0_3-Small": {
+      "score": 2,
+      "doc_score": 0.524807215,
+      "timestamp": "2025-07-10T09:44:05.711406",
+      "judge": "Hriman",
+      "document_text": "spiritual life is to be able to see in everything a channel through which the divine can come to you. The spiritual life is that kind of life which encourages you to give up the consciousness of ego and selfhood and to live in the life-affirming, divine life-affirming flow that all things can give you if you see them as expressions of God. That's an interesting point, too, in relation to your relations with other people. That when you see people as divine, I've seen this happen again and again. In the presence of a saint, people who will be normally very selfish, people who will be normally not in tune. In the presence of that saint, suddenly they become loving. Suddenly they become life-affirming and positive and basically happy and giving. The reason? Because in that consciousness of the saint, what the saint puts out, he's able to awaken in others. There are interesting stories of ",
+      "system": "3-Small"
+    },
+    "fMCgfVG2mJFA48kDrHgo_doc1_3-Large": {
+      "score": 2,
+      "doc_score": 0.526566207,
+      "timestamp": "2025-07-10T09:44:05.711479",
+      "judge": "Hriman",
+      "document_text": "spiritual life is to be able to see in everything a channel through which the divine can come to you. The spiritual life is that kind of life which encourages you to give up the consciousness of ego and selfhood and to live in the life-affirming, divine life-affirming flow that all things can give you if you see them as expressions of God. That's an interesting point, too, in relation to your relations with other people. That when you see people as divine, I've seen this happen again and again. In the presence of a saint, people who will be normally very selfish, people who will be normally not in tune. In the presence of that saint, suddenly they become loving. Suddenly they become life-affirming and positive and basically happy and giving. The reason? Because in that consciousness of the saint, what the saint puts out, he's able to awaken in others. There are interesting stories of ",
+      "system": "3-Large"
+    },
+    "fMCgfVG2mJFA48kDrHgo_doc2_3-Large": {
+      "score": 3,
+      "doc_score": 0.543478966,
+      "timestamp": "2025-07-10T09:44:05.711483",
+      "judge": "Hriman",
+      "document_text": "more spiritual. Now what do we mean by spiritual? We tend to create a sort of a nebulous and altogether artificial image when we think of spirituality. We think of God way up there in the heavens. We think of spirituality as being something where we chant with a very devotional and sort of pious attitude. We don't understand that spirituality is a living and breathing part of daily life. And this is the message that I would like to share with you this evening. Spirituality versus, perhaps, religion. I remember a discussion that I had with a man a few years ago who claimed to be an atheist. In a sense there is no such thing as an atheist because what we believe isn't only what our minds form as ideas in our heads. It's also what we believe with our lives. It's what we believe with our experience. And I'll tell you what I mean by this little illustration. This man was ",
+      "system": "3-Large"
+    },
+    "fMCgfVG2mJFA48kDrHgo_doc6_3-Small": {
+      "score": 2,
+      "doc_score": 0.508464098,
+      "timestamp": "2025-07-10T09:44:05.711487",
+      "judge": "Hriman",
+      "document_text": "spiritual?\" The difficulty lies in the thought that spirituality demands doing things that are commonly labeled \"spiritual.\" And it lies in the definitions people accept of the householder state. The need of the age is for new definitions, leading to new expectations. And the time is ripe for them. For a new consciousness has begun to enter the human race, demanding a widespread transformation of outlook. That traditional concepts of marriage no longer work, even for those who believe in \"the old ways,\" is evident in the high prevalence of divorce.",
+      "system": "3-Small"
+    },
+    "fMCgfVG2mJFA48kDrHgo_doc7_3-Large": {
+      "score": 3,
+      "doc_score": 0.523326457,
+      "timestamp": "2025-07-10T09:44:05.711491",
+      "judge": "Hriman",
+      "document_text": "of blessing to others, if they are open, it can't fail. So, if you want to spiritualize them, and remember that by spiritualizing, by sharing your inspiration with others, you are the one who will benefit the most. The instrument is blessed by that which flows through it. You will find, indeed, that you can spiritualize your relationships, and you will automatically be drawn into those kinds of relationships that will help you and form a lasting bond in God that will last through eternity.",
+      "system": "3-Large"
+    },
+    "fMCgfVG2mJFA48kDrHgo_doc9_3-Large": {
+      "score": 1,
+      "doc_score": 0.5535478,
+      "timestamp": "2025-07-10T09:44:05.711495",
+      "judge": "Hriman",
+      "document_text": "Question: \"What is meant by 'spiritualizing' astrology?\" Answer: Astrology is a very deep study, but most people consider it as a sort of superstitious guide to material progress. If you use astrology only for guidance in material matters, you will be doing its teachings an injustice. Astrology is the mathematics of your life, the mathematics of your actions. The relation of the stars to the human body and mind is very subtle. There is a relation of the spinal plexuses to the signs of the zodiac. No matter what environment you may live in, all the surrounding rays of the earth and universe react upon your body. You respond to those rays. There is a reaction between the stars and the rays around your body. Your body itself must be judged from the standpoint of your actions of the past and present.",
+      "system": "3-Large"
+    },
+    "FDNqJL6kGszttSS4kVFy_doc0_3-Small": {
+      "score": 3,
+      "doc_score": 0.588267565,
+      "timestamp": "2025-07-10T09:44:05.724128",
+      "judge": "Hriman",
+      "document_text": "astral body. This is Master's description of the spiritual eye: \"When the spiritual eye becomes visible, it appears as an eye of light, with a palpitating, silvery star encased in an opal-blue disc surrounded by a golden halo. These three discs are subtle telescopes into omnipresent space (one within the other). The golden outer ring represents Cosmic Energy [AUM]; the blue, Christ Consciousness [TAT]; the star, God the Father, or Cosmic Consciousness, the un-manifested kingdom of pure, ever-new blessedness of Spirit [SAT].\" 3) Pray to be able to see it. Often it comes as a gift, as the grace of God or the Masters. Going to and meditating in sacred pilgrimage spots helps, as does \"mixing with the saints.\" 4) The calmer you are, the more relaxed you are, the deeper you go into meditation, the more likely you'll be to be able to see it. Deep relaxation, not straining to see it, is a key. 5) Keep your attention there all the time, not just when meditating. 6) Place your finger there and rub or stimulate the ",
+      "system": "3-Small"
+    },
+    "FDNqJL6kGszttSS4kVFy_doc1_3-Large": {
+      "score": 3,
+      "doc_score": 0.629926085,
+      "timestamp": "2025-07-10T09:44:05.724139",
+      "judge": "Hriman",
+      "document_text": "is to bring your attention to that area. Don't try forcibly to bring your eyes to a focus, but gaze mentally towards that point, and let the spiritual eye draw you into itself. At all times keep your eyes relaxed and your brow smooth. Gaze deeply into, and behind, the darkness you behold at the point between the eyebrows when your eyes are closed. The more intently you gaze, with deep calmness, the sooner you will behold at the center of that darkness an island-like area of blue or violet light, surrounded, perhaps, by a faint circle of white or yellow. The light may be dim at first, but it will present the beginning of what will take shape, in time, as the spiritual eye, as described above. Remember not to strain. Rather, simply channel your awareness calmly, and with a feeling of joyous aspiration, to that point. Whether or not you behold the spiritual eye, by meditating at that point your consciousness will gradually rise until at last it passes the portals of human awareness and enters the state of ecstasy, or superconsciousness. In this state of ecstasy, the consciousness penetrates the spiritual eye and enters the inner realms.",
+      "system": "3-Large"
+    },
+    "FDNqJL6kGszttSS4kVFy_doc2_3-Large": {
+      "score": 3,
+      "doc_score": 0.637602806,
+      "timestamp": "2025-07-10T09:44:05.724142",
+      "judge": "Hriman",
+      "document_text": "go into your astral spine in meditation, the more likely you will be able to \"see\" or perceive the spiritual eye, which is made of energy. You are basically seeing your own energy and the pathways it takes in your astral body. 3) Pray to be able to see it. Often it comes as a gift, as the grace of God or the Masters. Going to and meditating in sacred pilgrimage spots helps, as does \"mixing with the saints.\" 4) The calmer you are, the more relaxed you are, the deeper you go into meditation, the more likely you'll be to be able to see it. Deep relaxation, not straining to see it, is a key. 5) Keep your attention there all the time, not just when meditating. 6) Place your finger there and rub or stimulate the area; knit your eyebrows together and then relax your forehead. 7) With eyes closed and very relaxed, look at a point about 18 inches out in front of you and a little upward. The more your eyes relax, the more they will automatically go to this point",
+      "system": "3-Large"
+    },
+    "FDNqJL6kGszttSS4kVFy_doc3_3-Small": {
+      "score": 3,
+      "doc_score": 0.587561965,
+      "timestamp": "2025-07-10T09:44:05.724144",
+      "judge": "Hriman",
+      "document_text": "or not. Many people, having had a spiritual experience, for example, I have described the spiritual eye to people. Many people have told me, when I say many, I mean possibly in my life at least a dozen, which is quite a few people who have never heard of the spiritual eye, said, oh, of course they've seen it. It's not a question of, oh, you expect to see this in Master's path and therefore you see the spiritual eye, which he described as a golden aureole with a blue field inside it and a five-pointed silvery white star in the center. And it's not as if, well, you keep visualizing it strongly enough and then suddenly there it is. It's that when your mind becomes focused deeply enough, without even expecting it, there it is. When your mind becomes uplifted enough, the energy withdraws into the spine, whether you expect it ",
+      "system": "3-Small"
+    },
+    "FDNqJL6kGszttSS4kVFy_doc4_3-Small": {
+      "score": 3,
+      "doc_score": 0.609132171,
+      "timestamp": "2025-07-10T09:44:05.724146",
+      "judge": "Hriman",
+      "document_text": "'re feeling at the spiritual eye, not in the body. Everything that you smell and taste, you're smelling and tasting here. And the same thing with seeing, that you're seeing through the spiritual eye and not with your physical eyes. It would be a good practice in looking at people, to look at them in the spiritual eye and feel that that's where you're communicating with them, rather than through the physical eyes, so that you're touching their soul rather than just their personalities. And that you're communicating with them through the spiritual eye. The more you can keep your mind functioning at the spiritual eye, the more rapid your spiritual progress will be. And so, that's another aspect of the ",
+      "system": "3-Small"
+    },
+    "FDNqJL6kGszttSS4kVFy_doc6_3-Small": {
+      "score": 3,
+      "doc_score": 0.585604608,
+      "timestamp": "2025-07-10T09:44:05.724150",
+      "judge": "Hriman",
+      "document_text": "or not. Many people, having had a spiritual experience, for example, I have described the spiritual eye to people. Many people have told me, when I say many, I mean possibly in my life at least a dozen, which is quite a few people who have never heard of the spiritual eye, said, oh, of course they've seen it. It's not a question of, oh, you expect to see this in Master's path, and therefore you see the spiritual eye, which he described as a golden aureole with a blue field inside it and a five-pointed silvery white star in the center. And it's not as if, well, you keep visualizing it strongly enough and then suddenly there it is. It's that when your mind becomes focused deeply enough, without even expecting it, there it is. When your mind becomes uplifted enough, the energy withdraws into the spine, whether you expect ",
+      "system": "3-Small"
+    },
+    "FDNqJL6kGszttSS4kVFy_doc8_3-Large": {
+      "score": 2,
+      "doc_score": 0.659333467,
+      "timestamp": "2025-07-10T09:44:05.724152",
+      "judge": "Hriman",
+      "document_text": "be able to see it. Deep relaxation, not straining to see it, is a key. 5) Keep your attention there all the time, not just when meditating. 6) Place your finger there and rub or stimulate the area; knit your eyebrows together and then relax your forehead. 7) With eyes closed and very relaxed, look at a point about 18 inches out in front of you and a little upward. The more your eyes relax, the more they will automatically go to this point 8) Do the 3-level eye exercises and affirmations recommend by Yogananda (see over) 9) Do the \"Going to sleep\" exercises recommended by Yogananda (see over) 10) Broadcast prayers and healing energy through the spiritual eye II) Relate to others through it; give love and energy through it; from your spiritual eye to theirs 12) Keeping eyes half open and half closed (in meditation or at other times-see over) 13) Work with guided visualization tapes like Metaphysical Meditations, Meditations on the Light, and Meditation, What It Is and How To Do It",
+      "system": "3-Large"
+    },
+    "FDNqJL6kGszttSS4kVFy_doc9_3-Large": "skip",
+    "JGNqNXdGGu5SiA0b5DDj_doc0_3-Small": {
+      "score": 0,
+      "doc_score": 0.601209462,
+      "timestamp": "2025-07-10T09:44:05.736393",
+      "judge": "Hriman",
+      "document_text": "conversation with me, referred with displeasure to what he had said. It seems clear from that single example that were the prevalent dogma extended into future generations, any personal guidance people received from teachers on this path would be officially repudiated. Such is the reality. It is vitally important, however, for all who consider themselves disciples of Master to understand that it is their responsibility to share not blessings with others. Daya Mata tells people, I don't presume to bless anyone. Her practice, consequently, is to stand quietly before people and silently ask Master to bless them. It is understandable that she should do so. After all, she spent many years in Master's company and remembers vividly the many times he blessed her personally. It is not surprising that she sees herself acting similarly in his place. Her memory is particular, however, and very personal. Considering the matter impersonally, it must appear to everyone she approaches in ",
+      "system": "3-Small"
+    },
+    "JGNqNXdGGu5SiA0b5DDj_doc1_3-Large": {
+      "score": 0,
+      "doc_score": 0.60071981,
+      "timestamp": "2025-07-10T09:44:05.736408",
+      "judge": "Hriman",
+      "document_text": "You keep people light. Be more serious. And the disciple said, well, I would like to be more serious, sir, but how can I do it? How can I change without your blessings? When I've told that story to Indian audiences, they say, oh, what a beautiful answer. They didn't like his answer. When guru, she answered him, he said, my blessings are with you already. God's blessings are there. It's your blessings that are lacking. You have to bless yourself. Don't say, well, wait till God wants you. He wants you now. Don't say, well, when I find a guru, if you want God deeply enough, he will send you a guru. Don't think you have to go running around looking for a guru. God will send him. I can give my experience that way. All the way from New York to Los Angeles, my first words were",
+      "system": "3-Large"
+    },
+    "JGNqNXdGGu5SiA0b5DDj_doc2_3-Large": {
+      "score": 2,
+      "doc_score": 0.602707684,
+      "timestamp": "2025-07-10T09:44:05.736411",
+      "judge": "Hriman",
+      "document_text": "\"I know my weakness, Master, and I want to overcome it. But how can I do so without your blessings?\" (All, except Romesh, express their inspiration over this reply.) Ramu: What a beautiful answer! Kanta: A true disciple! (As the Storyteller concludes his story, the smiles slowly fade from their faces until they look as though they had just swallowed bitter medicine.) Storyteller: The master replied, \"But my blessings are there already. God's blessings are there. It is your blessings that are lacking!\" Faith, you see, must be consciously exercised. If it makes one passive, it isn't faith; it's only wishful thinking. The Christian Bible says faith without works is dead. \"Works\" means the creative exercise of faith - inwardly, as well as outwardly. Romesh: (Beaming) Ho! Did you hear him, everyone? You all think me so ignorant in spiritual matters, and here your own teacher agrees with me, not with you! (He preens himself proudly) How do you like that, eh? (Confidently, to Storyteller)",
+      "system": "3-Large"
+    },
+    "JGNqNXdGGu5SiA0b5DDj_doc3_3-Small": {
+      "score": 3,
+      "doc_score": 0.59392029,
+      "timestamp": "2025-07-10T09:44:05.736414",
+      "judge": "Hriman",
+      "document_text": "this is a blessing. My guru has chosen to treat me this way. And what he's given me has to be a sign of his grace. And he took it home and when he got home he found that that brick had turned to gold. This is an example of what the divine path is all about. Don't think that Master expresses his love for you especially when he gives you nice things, which he does also. Treasure even more that he takes enough pains with you to give you difficult experiences, because it's those above all that will help you to grow. And if you want to get out of this mud puddle, if you want to become free in this lifetime, then be a warrior, don't be a beggar, just begging for a little penny at the gates of heaven. Be a warrior. To overcome your weaknesses, your delusions and to help other people. When a Master comes into this world, whatever he does is a blessing. When he seems to be giving a blow, he's giving a blessing. When he hurts somebody in a little way, which I've described. I'm not talking of his going around hurting people, never. There was always ",
+      "system": "3-Small"
+    },
+    "JGNqNXdGGu5SiA0b5DDj_doc5_3-Small": {
+      "score": 3,
+      "doc_score": 0.613586843,
+      "timestamp": "2025-07-10T09:44:05.736416",
+      "judge": "Hriman",
+      "document_text": "One time, the Master was scolding a disciple, saying to him, Why are you always so light? You should be more serious, because if you were always light, God won't be able to come to you. And he said, Sir, I would love to change, but how can I do so without your grace? Yogananda's answer was classic. He said, without your blessings. He said, my blessings are there already. God's blessings are there already. It's your blessings that are lacking. Many people in religion, both East and West, think that it's a sign of humility and therefore a virtue and a good thing and a blessing to believe that God does everything. I remember I ",
+      "system": "3-Small"
+    },
+    "JGNqNXdGGu5SiA0b5DDj_doc6_3-Small": {
+      "score": 3,
+      "doc_score": 0.587720275,
+      "timestamp": "2025-07-10T09:44:05.736418",
+      "judge": "Hriman",
+      "document_text": ", and Master was standing above the tennis courts, looking out over Los Angeles. And so I came to him and knelt and took his blessing. And he tapped me on the head. He said, very good. He knew what I'd been going through. And then sometime later, he said the trouble with too many of our ministers is that they let popular acclaim go to their heads. And I said, Master, that's why I don't want to be a ",
+      "system": "3-Small"
+    },
+    "JGNqNXdGGu5SiA0b5DDj_doc7_3-Large": {
+      "score": 3,
+      "doc_score": 0.597373068,
+      "timestamp": "2025-07-10T09:44:05.736420",
+      "judge": "Hriman",
+      "document_text": ". It's yours. Nobody needs to give it to you. You need to give it to yourself. I'll never forget one disciple used to joke a lot, and Yogananda said, why don't you act more serious? Don't just joke all the time. And the disciple said, well, Master, I would love to, but it's such a strong habit with me. How can I change without your grace, without your blessings? Yogananda said, well, my blessings are there already. God's blessings are there. It's your blessings that are lacking, and God's blessings are on you. God's blessings are always there, ready to be poured out. But if you keep your cup turned upside down, so what kind of tea is it going to be able to hold? You have to turn your cup upright. You have to open your consciousness to that, and then you will find that that is you",
+      "system": "3-Large"
+    },
+    "JGNqNXdGGu5SiA0b5DDj_doc8_3-Large": {
+      "score": 2,
+      "doc_score": 0.613233745,
+      "timestamp": "2025-07-10T09:44:05.736422",
+      "judge": "Hriman",
+      "document_text": "One time, the Master was scolding a disciple, saying to him, Why are you always so light? You should be more serious, because if you were always light, God won't be able to come to you. And he said, Sir, I would love to change, but how can I do so without your grace? Yogananda's answer was classic. He said, without your blessings. He said, my blessings are there already. God's blessings are there already. It's your blessings that are lacking. Many people in religion, both East and West, think that it's a sign of humility and therefore a virtue and a good thing and a blessing to believe that God does everything. I remember I ",
+      "system": "3-Large"
+    },
+    "JGNqNXdGGu5SiA0b5DDj_doc9_3-Large": "skip"
   },
   "judges": {
     "Hriman": {
-      "documents_evaluated": 33,
+      "documents_evaluated": 54,
       "queries_handled": [
         "qGF8pzUgIJe4cH834nOs",
         "GAsQmuMh3czMdqTsbY6M",
         "3MJP0knZgSkIHCyn8aIn",
-        "P6fkhXC9rV9JfJJ3knTa"
+        "P6fkhXC9rV9JfJJ3knTa",
+        "fMCgfVG2mJFA48kDrHgo",
+        "FDNqJL6kGszttSS4kVFy",
+        "JGNqNXdGGu5SiA0b5DDj"
       ]
     },
     "Gyandev": {
@@ -670,6 +843,27 @@
       "documents_evaluated": 10,
       "documents_skipped": 0,
       "processed_at": "2025-07-02T10:11:25.556751"
+    },
+    "fMCgfVG2mJFA48kDrHgo": {
+      "query_text": "what does it mean \"to spiriitualize\" something",
+      "judge": "Hriman",
+      "documents_evaluated": 6,
+      "documents_skipped": 0,
+      "processed_at": "2025-07-10T09:44:05.711501"
+    },
+    "FDNqJL6kGszttSS4kVFy": {
+      "query_text": "What are some suggestions for people (esp. beginners) who may not see the spiritual eye perfectly?",
+      "judge": "Hriman",
+      "documents_evaluated": 7,
+      "documents_skipped": 1,
+      "processed_at": "2025-07-10T09:44:05.724157"
+    },
+    "JGNqNXdGGu5SiA0b5DDj": {
+      "query_text": "tell me the episode where Master tells a disciple, \"you have God's blessing and my blessing, you have to give yourself blessing\"",
+      "judge": "Hriman",
+      "documents_evaluated": 8,
+      "documents_skipped": 1,
+      "processed_at": "2025-07-10T09:44:05.736427"
     }
   }
 }
