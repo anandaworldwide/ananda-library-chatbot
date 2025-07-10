@@ -378,89 +378,80 @@ export const makeChain = async (
   // Runnable sequence for retrieving documents
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
-      // Performing standard retrieval within makeChain
       const allDocuments: Document[] = [];
-
-      // If no libraries specified or they don't have weights, use a single query
-      if (!includedLibraries || includedLibraries.length === 0) {
-        const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, baseFilter);
-        allDocuments.push(...docs);
-      } else {
-        // Check if we have weights
-        const hasWeights = includedLibraries.some((lib) => typeof lib === "object" && lib !== null);
-
-        if (hasWeights) {
-          // Use the weighted distribution with parallel queries only when we have weights
-          // Create an array of retrieval promises to execute in parallel
-          const sourcesDistribution = calculateSources(
-            sourceCount,
-            includedLibraries as { name: string; weight?: number }[]
-          );
-          const retrievalPromises = sourcesDistribution
-            .filter(({ sources }) => sources > 0)
-            .map(async ({ name, sources }) => {
-              const docs = await retrieveDocumentsByLibrary(retriever, name, sources, input.question, baseFilter);
-
-              // Track logged libraries to prevent duplication
-              if (!loggedLibraries.has(name)) {
-                loggedLibraries.add(name);
-              }
-              return docs;
-            });
-
-          // Wait for all retrievals to complete in parallel
-          const docsArrays = await Promise.all(retrievalPromises);
-
-          // Combine all document arrays
-          docsArrays.forEach((docs) => {
-            allDocuments.push(...docs);
-          });
-        } else {
-          // If all libraries have equal weight or no weights, use a single query with library filter
-          // This avoids multiple parallel queries when not needed
-
-          // Extract library names for filtering
-          const libraryNames = includedLibraries.map((lib) => (typeof lib === "string" ? lib : lib.name));
-
-          let finalFilter: Record<string, unknown>;
-
-          // Use a cleaner $in filter structure for libraries instead of $or with multiple conditions
-          const libraryFilter = { library: { $in: libraryNames } };
-
-          // Combine with baseFilter if it exists
-          if (baseFilter) {
-            if ("$and" in baseFilter) {
-              // If baseFilter already has $and, add our library filter to it
-              finalFilter = {
-                ...baseFilter,
-                $and: [...(baseFilter.$and as Array<Record<string, unknown>>), libraryFilter],
-              };
-            } else {
-              // Otherwise create a new $and array with both filters
-              finalFilter = {
-                $and: [baseFilter, libraryFilter],
-              };
-            }
-          } else {
-            // No baseFilter, just use the library filter
-            finalFilter = libraryFilter;
-          }
-
-          const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, finalFilter);
+      try {
+        console.log(`[RAG] Retrieving documents: requested=${sourceCount}`)
+        // If no libraries specified or they don't have weights, use a single query
+        if (!includedLibraries || includedLibraries.length === 0) {
+          const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, baseFilter);
           allDocuments.push(...docs);
-        }
-      }
+        } else {
+          // Check if we have weights
+          const hasWeights = includedLibraries.some((lib) => typeof lib === "object" && lib !== null);
 
-      // Send retrieved documents if sendData is available
+          if (hasWeights) {
+            // Use the weighted distribution with parallel queries only when we have weights
+            const sourcesDistribution = calculateSources(
+              sourceCount,
+              includedLibraries as { name: string; weight?: number }[]
+            );
+            console.log(`[RAG] Weighted source distribution:`, sourcesDistribution)
+            const retrievalPromises = sourcesDistribution
+              .filter(({ sources }) => sources > 0)
+              .map(async ({ name, sources }) => {
+                try {
+                  const docs = await retrieveDocumentsByLibrary(retriever, name, sources, input.question, baseFilter);
+                  console.log(`[RAG] Retrieved ${docs.length} docs from library: ${name}`)
+                  if (!loggedLibraries.has(name)) {
+                    loggedLibraries.add(name);
+                  }
+                  return docs;
+                } catch (err) {
+                  console.error(`[RAG] Error retrieving from library: ${name}`, err);
+                  return [];
+                }
+              });
+
+            // Wait for all retrievals to complete in parallel
+            const docsArrays = await Promise.all(retrievalPromises);
+            docsArrays.forEach((docs) => {
+              allDocuments.push(...docs);
+            });
+          } else {
+            // If all libraries have equal weight or no weights, use a single query with library filter
+            const libraryNames = includedLibraries.map((lib) => (typeof lib === "string" ? lib : lib.name));
+            let finalFilter: Record<string, unknown>;
+            const libraryFilter = { library: { $in: libraryNames } };
+            if (baseFilter) {
+              if ("$and" in baseFilter) {
+                finalFilter = {
+                  ...baseFilter,
+                  $and: [...(baseFilter.$and as Array<Record<string, unknown>>), libraryFilter],
+                };
+              } else {
+                finalFilter = {
+                  $and: [baseFilter, libraryFilter],
+                };
+              }
+            } else {
+              finalFilter = libraryFilter;
+            }
+            const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, finalFilter);
+            console.log(`[RAG] Retrieved ${docs.length} docs from combined libraries`)
+            allDocuments.push(...docs);
+          }
+        }
+        console.log(`[RAG] Documents retrieved: found=${allDocuments.length}`)
+      } catch (err) {
+        console.error('[RAG] Error retrieving documents', err)
+      }
       if (sendData) {
+        console.log(`[RAG] Sending sourceDocs to frontend: count=${allDocuments.length}`)
         sendData({ sourceDocs: allDocuments });
       }
-
-      // Resolve the document promise if resolveDocs is provided
       if (resolveDocs) {
         resolveDocs(allDocuments);
       }
-
       return allDocuments;
     },
     (docs: Document[]) => {
@@ -598,7 +589,6 @@ export async function setupAndExecuteLanguageModelChain(
   let retryCount = 0;
   let lastError: Error | null = null;
   let tokensStreamed = 0;
-  let errorPrefix = "";
 
   while (retryCount < MAX_RETRIES) {
     try {
@@ -618,7 +608,6 @@ export async function setupAndExecuteLanguageModelChain(
         sendData({ siteId: siteConfig.siteId });
       }
 
-      console.log("[makechain] Building chain...");
       const chain = await makeChain(
         retriever,
         { model: modelName, temperature },
@@ -628,15 +617,14 @@ export async function setupAndExecuteLanguageModelChain(
         undefined,
         { model: rephraseModelName, temperature: rephraseTemperature }
       );
-      console.log("[makechain] Chain built.");
 
       // Format chat history for the language model
       const pastMessages = convertChatHistory(history);
 
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       let fullResponse = ""; // This will be populated by streaming tokens
       let firstTokenTime: number | null = null;
       let firstByteTime: number | null = null;
-      let firstTokenSent = false;
 
       // Create a promise that rejects after timeout
       const timeoutPromise = new Promise((_, reject) => {
@@ -645,7 +633,6 @@ export async function setupAndExecuteLanguageModelChain(
         }, TIMEOUT_MS);
       });
 
-      console.log("[makechain] Invoking chain...");
       const chainPromise = chain.invoke(
         {
           question: sanitizedQuestion,
@@ -655,19 +642,17 @@ export async function setupAndExecuteLanguageModelChain(
           callbacks: [
             {
               handleLLMNewToken(token: string) {
+                console.log(`[RAG] Sending token to frontend: token='${token.slice(0, 20)}...'`)
                 if (!firstTokenTime) {
                   firstTokenTime = Date.now();
                   firstByteTime = Date.now();
-                  // Prepend errorPrefix if set
-                  const tokenToSend = errorPrefix ? `${errorPrefix}\n${token}` : token;
                   sendData({
-                    token: tokenToSend,
+                    token,
                     timing: {
                       firstTokenGenerated: firstTokenTime,
                       ttfb: firstByteTime && startTime ? firstByteTime - startTime : undefined,
                     },
                   });
-                  firstTokenSent = true;
                 } else {
                   sendData({ token });
                 }
@@ -712,6 +697,7 @@ export async function setupAndExecuteLanguageModelChain(
       }
 
       sendData({ done: true, timing: finalTiming });
+      console.log('[RAG] Sent done event to frontend')
 
       // Use result.answer for fullResponse to ensure consistency, though fullResponse is also built by streaming.
       // result.sourceDocuments are the correctly filtered documents from makeChain.
@@ -719,18 +705,11 @@ export async function setupAndExecuteLanguageModelChain(
     } catch (error) {
       lastError = error as Error;
       retryCount++;
-      errorPrefix = `[BACKEND ERROR]: ${lastError?.message || lastError}`;
-      console.error(`[makechain] ERROR (attempt ${retryCount}):`, lastError);
-      // On error, send a token with the error message if not already sent
-      if (retryCount === MAX_RETRIES) {
-        // If we never sent a token, send the error as the first token
-        sendData({ token: errorPrefix });
-        sendData({ done: true, timing: {} });
-      }
       if (retryCount < MAX_RETRIES) {
-        console.warn(`[makechain] Retrying in ${RETRY_DELAY_MS}ms...`);
+        console.warn(`Attempt ${retryCount} failed. Retrying in ${RETRY_DELAY_MS}ms...`, error);
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
       } else {
+        console.error("All retry attempts failed:", error);
         throw lastError;
       }
     }
