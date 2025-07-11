@@ -49,7 +49,8 @@ Here's a breakdown of the tech stack used in the project:
     and smart merging for optimal chunk quality.
   - Document-level hashing strategy is implemented for Pinecone vector IDs to enable efficient bulk operations.
   - Scripts interact with a MySQL database (likely Wordpress).
-  - **PyMuPDF** replaces PyPDF2 for improved PDF processing and full-document text extraction.
+  - **pdfplumber** replaces PyPDF2 for improved PDF processing and full-document text extraction with superior layout
+    preservation.
 - **Testing:**
   - Jest is used for JavaScript/TypeScript testing[cite: 5].
   - **pytest** is used for Python testing with comprehensive coverage of data ingestion functionality.

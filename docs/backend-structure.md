@@ -230,7 +230,7 @@ Data is stored across multiple services:
   - `transcribe_and_ingest_media.py`: Main script orchestrating the process for various media types.
   - **Steps:**
     1. **Source Acquisition:** Fetches files from local paths, S3, or downloads from URLs.
-    2. **Preprocessing:** Extracts text from PDFs using PyMuPDF, transcribes audio/video.
+    2. **Preprocessing:** Extracts text from PDFs using pdfplumber, transcribes audio/video.
     3. **Chunking:** Uses spaCy for semantic paragraph-based chunking with dynamic sizing (225-450 word target range)
        which significantly outperforms fixed-size chunking. Adaptive token sizes based on content length with smart
        merging to achieve optimal word counts. Includes fallback to sentence-based chunking for texts without
