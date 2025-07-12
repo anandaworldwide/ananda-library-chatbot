@@ -382,7 +382,8 @@ export const makeChain = async (
       const allDocuments: Document[] = [];
       try {
 
-        console.error(`Error updating related questions:`, {
+        console.error('Error for testing purpoises');
+        console.error(`Error for testign purposes:`, {
           errorType: 'TEST',
           errorMessage: 'TESTING ERRORS',
           timestamp: new Date().toISOString(),
