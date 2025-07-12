@@ -382,13 +382,6 @@ export const makeChain = async (
       const allDocuments: Document[] = [];
       try {
 
-        console.error('Error for testing purpoises');
-        console.error(`Error for testign purposes:`, {
-          errorType: 'TEST',
-          errorMessage: 'TESTING ERRORS',
-          timestamp: new Date().toISOString(),
-        });
-
         if (sendData) sendData({ log: `[RAG] Retrieving documents: requested=${sourceCount}` });
         // If no libraries specified or they don't have weights, use a single query
         if (!includedLibraries || includedLibraries.length === 0) {
