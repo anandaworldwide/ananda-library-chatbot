@@ -274,12 +274,18 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         console.error(`ERROR: Backend is using incorrect site ID: ${data.siteId}. Expected: ${siteConfig.siteId}`);
       }
 
+      if (data.log) {
+        // eslint-disable-next-line no-console
+        console.log('[BACKEND]', data.log)
+      }
+
       // Capture timing information
       if (data.timing) {
         setTimingMetrics(data.timing);
       }
 
       if (data.token) {
+        
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
 
@@ -295,6 +301,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       }
 
       if (data.sourceDocs) {
+
         try {
           // DEBUG: Add extensive logging for sources debugging
           const receiveTimestamp = Date.now();
@@ -336,7 +343,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
             console.log(
               `✅ FRONTEND SOURCES DEBUG: Successfully updated state with ${immutableSourceDocs.length} sources`
             );
-          }, 100);
+          }, 0);
         } catch (error) {
           console.error("❌ FRONTEND SOURCES ERROR: Error handling sourceDocs:", error);
           console.error("❌ FRONTEND SOURCES ERROR: Raw data.sourceDocs:", data.sourceDocs);

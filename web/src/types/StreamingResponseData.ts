@@ -16,4 +16,5 @@ export interface StreamingResponseData {
     totalTokens?: number;
     firstTokenGenerated?: number;
   };
+  log?: string;
 }

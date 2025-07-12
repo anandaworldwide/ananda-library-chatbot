@@ -379,80 +379,74 @@ export const makeChain = async (
   // Runnable sequence for retrieving documents
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
-      // Performing standard retrieval within makeChain
       const allDocuments: Document[] = [];
+      try {
 
-      // If no libraries specified or they don't have weights, use a single query
-      if (!includedLibraries || includedLibraries.length === 0) {
-        const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, baseFilter);
-        allDocuments.push(...docs);
-      } else {
-        // Check if we have weights
-        const hasWeights = includedLibraries.some((lib) => typeof lib === "object" && lib !== null);
-
-        if (hasWeights) {
-          // Use the weighted distribution with parallel queries only when we have weights
-          // Create an array of retrieval promises to execute in parallel
-          const sourcesDistribution = calculateSources(
-            sourceCount,
-            includedLibraries as { name: string; weight?: number }[]
-          );
-          const retrievalPromises = sourcesDistribution
-            .filter(({ sources }) => sources > 0)
-            .map(async ({ name, sources }) => {
-              const docs = await retrieveDocumentsByLibrary(retriever, name, sources, input.question, baseFilter);
-
-              // Track logged libraries to prevent duplication
-              if (!loggedLibraries.has(name)) {
-                loggedLibraries.add(name);
-              }
-              return docs;
-            });
-
-          // Wait for all retrievals to complete in parallel
-          const docsArrays = await Promise.all(retrievalPromises);
-
-          // Combine all document arrays
-          docsArrays.forEach((docs) => {
-            allDocuments.push(...docs);
-          });
-        } else {
-          // If all libraries have equal weight or no weights, use a single query with library filter
-          // This avoids multiple parallel queries when not needed
-
-          // Extract library names for filtering
-          const libraryNames = includedLibraries.map((lib) => (typeof lib === "string" ? lib : lib.name));
-
-          let finalFilter: Record<string, unknown>;
-
-          // Use a cleaner $in filter structure for libraries instead of $or with multiple conditions
-          const libraryFilter = { library: { $in: libraryNames } };
-
-          // Combine with baseFilter if it exists
-          if (baseFilter) {
-            if ("$and" in baseFilter) {
-              // If baseFilter already has $and, add our library filter to it
-              finalFilter = {
-                ...baseFilter,
-                $and: [...(baseFilter.$and as Array<Record<string, unknown>>), libraryFilter],
-              };
-            } else {
-              // Otherwise create a new $and array with both filters
-              finalFilter = {
-                $and: [baseFilter, libraryFilter],
-              };
-            }
-          } else {
-            // No baseFilter, just use the library filter
-            finalFilter = libraryFilter;
-          }
-
-          const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, finalFilter);
+        if (sendData) sendData({ log: `[RAG] Retrieving documents: requested=${sourceCount}` });
+        // If no libraries specified or they don't have weights, use a single query
+        if (!includedLibraries || includedLibraries.length === 0) {
+          const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, baseFilter);
           allDocuments.push(...docs);
-        }
-      }
+        } else {
+          // Check if we have weights
+          const hasWeights = includedLibraries.some((lib) => typeof lib === "object" && lib !== null);
 
-      // Send retrieved documents if sendData is available
+          if (hasWeights) {
+            // Use the weighted distribution with parallel queries only when we have weights
+            const sourcesDistribution = calculateSources(
+              sourceCount,
+              includedLibraries as { name: string; weight?: number }[]
+            );
+            if (sendData) sendData({ log: `[RAG] Weighted source distribution: ${JSON.stringify(sourcesDistribution)}` });
+            const retrievalPromises = sourcesDistribution
+              .filter(({ sources }) => sources > 0)
+              .map(async ({ name, sources }) => {
+                try {
+                  const docs = await retrieveDocumentsByLibrary(retriever, name, sources, input.question, baseFilter);
+                  if (sendData) sendData({ log: `[RAG] Retrieved ${docs.length} docs from library: ${name}` });
+                  if (!loggedLibraries.has(name)) {
+                    loggedLibraries.add(name);
+                  }
+                  return docs;
+                } catch (err) {
+                  if (sendData) sendData({ log: `[RAG] Error retrieving from library: ${name} ${err}` });
+                  return [];
+                }
+              });
+
+            // Wait for all retrievals to complete in parallel
+            const docsArrays = await Promise.all(retrievalPromises);
+            docsArrays.forEach((docs) => {
+              allDocuments.push(...docs);
+            });
+          } else {
+            // If all libraries have equal weight or no weights, use a single query with library filter
+            const libraryNames = includedLibraries.map((lib) => (typeof lib === "string" ? lib : lib.name));
+            let finalFilter: Record<string, unknown>;
+            const libraryFilter = { library: { $in: libraryNames } };
+            if (baseFilter) {
+              if ("$and" in baseFilter) {
+                finalFilter = {
+                  ...baseFilter,
+                  $and: [...(baseFilter.$and as Array<Record<string, unknown>>), libraryFilter],
+                };
+              } else {
+                finalFilter = {
+                  $and: [baseFilter, libraryFilter],
+                };
+              }
+            } else {
+              finalFilter = libraryFilter;
+            }
+            const docs = await retriever.vectorStore.similaritySearch(input.question, sourceCount, finalFilter);
+            if (sendData) sendData({ log: `[RAG] Retrieved ${docs.length} docs from combined libraries` });
+            allDocuments.push(...docs);
+          }
+        }
+        if (sendData) sendData({ log: `[RAG] Documents retrieved: found=${allDocuments.length}` });
+      } catch (err) {
+        if (sendData) sendData({ log: `[RAG] Error retrieving documents: ${err}` });
+      }
       if (sendData) {
         // DEBUG: Add extensive logging for sources debugging
         try {
@@ -520,12 +514,9 @@ export const makeChain = async (
           sendData({ sourceDocs: [] });
         }
       }
-
-      // Resolve the document promise if resolveDocs is provided
       if (resolveDocs) {
         resolveDocs(allDocuments);
       }
-
       return allDocuments;
     },
     (docs: Document[]) => {
@@ -808,6 +799,8 @@ export async function setupAndExecuteLanguageModelChain(
       }
 
       sendData({ done: true, timing: finalTiming });
+      if (sendData) sendData({ log: '[RAG] Sent done event to frontend' });
+      else console.log('[RAG] Sent done event to frontend');
 
       // Use the streamed fullResponse as the authoritative answer since it's what was sent to the frontend
       // result.sourceDocuments are the correctly filtered documents from makeChain.
