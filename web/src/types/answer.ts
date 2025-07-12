@@ -45,6 +45,8 @@ export type Answer = {
   feedbackComment?: string;
   // Optional timestamp for feedback submission
   feedbackTimestamp?: Timestamp;
+  // Optional AI-generated restated question used for embeddings and related questions
+  restatedQuestion?: string;
 };
 
 // Structure for timestamp data

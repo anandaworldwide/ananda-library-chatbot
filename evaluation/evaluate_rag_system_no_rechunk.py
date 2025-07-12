@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Evaluates and compares RAG systems with different chunking strategies using original Pinecone chunks.
+Evaluates and compares RAG systems using original Pinecone chunks with embedding-based semantic similarity.
 
 Key Operations:
 - Loads configurations via a `--site` argument, setting environment variables dynamically.
@@ -8,15 +8,20 @@ Key Operations:
 - Processes a human-judged dataset (`evaluation_dataset_ananda.jsonl`) with queries and relevance scores.
 - For each query and system:
     - Retrieves top-K documents directly from Pinecone without re-chunking.
-    - Matches retrieved chunks to judged documents using `difflib.SequenceMatcher`.
+    - Matches retrieved chunks to judged documents using embedding-based semantic similarity.
     - Calculates Precision@K and NDCG@K.
     - Logs top-K chunks for manual review.
 - Reports average Precision@K, NDCG@K, retrieval times, and a comparison table.
+
+Key Improvement: Uses embedding-based semantic similarity with caching for fast evaluation.
+This approach captures semantic relevance and provides reliable performance metrics while avoiding
+redundant API calls through intelligent caching.
 
 Dependencies:
 - Populated Pinecone indexes are required.
 - Requires `en_core_web_sm` spaCy model (for compatibility, though not used for chunking).
 - Correct index dimensions are critical.
+- OpenAI API access for embedding generation.
 
 Future Improvements:
 - Add CLI arguments for selecting specific metrics.
@@ -25,12 +30,12 @@ Future Improvements:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 import time
 from collections import defaultdict
-from difflib import SequenceMatcher
 
 import numpy as np
 import openai
@@ -38,6 +43,7 @@ import spacy
 from openai import OpenAI
 from pinecone import NotFoundException, Pinecone
 from sklearn.metrics import ndcg_score
+from tqdm import tqdm
 
 from pyutil.env_utils import load_env
 
@@ -63,28 +69,95 @@ SITE_CONFIG_PATH = os.path.join(
     "config.json",
 )
 K = 5  # Evaluate top-K results
-SIMILARITY_THRESHOLD = 0.85  # Threshold for matching chunks
-LENIENT_SIMILARITY_THRESHOLD = 0.35  # More lenient threshold for fallback
+SIMILARITY_THRESHOLD = 0.85  # Strict threshold for embedding-based semantic similarity
+LENIENT_SIMILARITY_THRESHOLD = (
+    0.7  # Lenient threshold for embedding-based semantic similarity
+)
 
-# Define systems for evaluation
-SYSTEMS = [
-    {
-        "name": "current",
-        "index_env_var": "PINECONE_INDEX_NAME",
-        "embedding_model_env_var": "OPENAI_EMBEDDINGS_MODEL",
-        "dimension_env_var": "OPENAI_EMBEDDINGS_DIMENSION",
-        "description": "Current system (word-based chunking, 50% overlap)",
-    },
-    {
-        "name": "new",
-        "index_env_var": "PINECONE_INGEST_INDEX_NAME",
-        "embedding_model_env_var": "OPENAI_INGEST_EMBEDDINGS_MODEL",
-        "dimension_env_var": "OPENAI_INGEST_EMBEDDINGS_DIMENSION",
-        "description": "New system (spaCy-based chunking, ADA-002 1536)",
-    },
-]
+# Global embedding cache to avoid redundant API calls
+EMBEDDING_CACHE = {}
 
 # --- Helper Functions ---
+
+
+def build_system_description(index_name, embedding_model, dimension):
+    """Build a dynamic system description from environment variables."""
+    return f"{index_name} (model: {embedding_model}, dim: {dimension})"
+
+
+def get_systems_config():
+    """Get systems configuration with dynamic descriptions from environment variables."""
+    return [
+        {
+            "name": "current",
+            "index_env_var": "PINECONE_INDEX_NAME",
+            "embedding_model_env_var": "OPENAI_EMBEDDINGS_MODEL",
+            "dimension_env_var": "OPENAI_EMBEDDINGS_DIMENSION",
+            "description": build_system_description(
+                os.getenv("PINECONE_INDEX_NAME"),
+                os.getenv("OPENAI_EMBEDDINGS_MODEL"),
+                os.getenv("OPENAI_EMBEDDINGS_DIMENSION"),
+            ),
+        },
+        {
+            "name": "new",
+            "index_env_var": "PINECONE_INGEST_INDEX_NAME",
+            "embedding_model_env_var": "OPENAI_INGEST_EMBEDDINGS_MODEL",
+            "dimension_env_var": "OPENAI_INGEST_EMBEDDINGS_DIMENSION",
+            "description": build_system_description(
+                os.getenv("PINECONE_INGEST_INDEX_NAME"),
+                os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL"),
+                os.getenv("OPENAI_INGEST_EMBEDDINGS_DIMENSION"),
+            ),
+        },
+    ]
+
+
+def get_text_hash(text, model_name):
+    """Generate a hash key for caching embeddings based on text and model."""
+    combined = f"{model_name}:{text}"
+    return hashlib.md5(combined.encode("utf-8")).hexdigest()
+
+
+def precompute_embeddings(eval_data, embedding_models, openai_client):
+    """Pre-compute embeddings for all unique texts to avoid redundant API calls."""
+    print("Pre-computing embeddings to speed up evaluation...")
+    unique_texts = set()
+
+    # Collect all unique texts from queries and judged documents
+    for query, judged_docs in eval_data.items():
+        unique_texts.add(query)
+        for doc in judged_docs:
+            unique_texts.add(doc["document"])
+
+    unique_texts = list(unique_texts)  # Convert to list for tqdm
+    print(f"Found {len(unique_texts)} unique texts to embed")
+
+    # Pre-compute embeddings for each model
+    total_api_calls = 0
+    for model_name in embedding_models:
+        print(f"\nPre-computing embeddings for model: {model_name}")
+        cached_count = 0
+        api_count = 0
+
+        # Use tqdm for progress bar
+        with tqdm(total=len(unique_texts), desc=f"Embedding {model_name}") as pbar:
+            for text in unique_texts:
+                cache_key = get_text_hash(text, model_name)
+                if cache_key not in EMBEDDING_CACHE:
+                    embedding = get_embedding(text, model_name, openai_client)
+                    if embedding is not None:
+                        api_count += 1
+                else:
+                    cached_count += 1
+                pbar.update(1)
+
+        print(f"  Model {model_name}: {api_count} API calls, {cached_count} from cache")
+        total_api_calls += api_count
+
+    print(f"\nEmbedding cache populated with {len(EMBEDDING_CACHE)} entries")
+    print(f"Total API calls made: {total_api_calls}")
+    print("Starting evaluation with cached embeddings...\n")
 
 
 def load_site_config(site: str):
@@ -213,22 +286,57 @@ def load_evaluation_data(filepath=None):
 
 
 def get_embedding(text, model_name, openai_client):
-    """Generate embedding for text using OpenAI API."""
+    """Generate embedding for text using OpenAI API with caching."""
+    cache_key = get_text_hash(text, model_name)
+
+    # Check if embedding is already cached
+    if cache_key in EMBEDDING_CACHE:
+        return EMBEDDING_CACHE[cache_key]
+
     try:
         response = openai_client.embeddings.create(input=text, model=model_name)
-        return response.data[0].embedding
+        embedding = response.data[0].embedding
+
+        # Cache the result
+        EMBEDDING_CACHE[cache_key] = embedding
+        return embedding
     except Exception as e:
         print(f"ERROR generating embedding with {model_name}: {e}")
         return None
 
 
-def match_chunks(retrieved_chunk, judged_chunks):
-    """Match a retrieved chunk to judged chunks by content similarity."""
+def get_embedding_similarity(text1, text2, embedding_model, openai_client):
+    """Calculate semantic similarity between two texts using cached embeddings."""
+    try:
+        # Get embeddings for both texts (uses caching)
+        embedding1 = get_embedding(text1, embedding_model, openai_client)
+        embedding2 = get_embedding(text2, embedding_model, openai_client)
+
+        if embedding1 is None or embedding2 is None:
+            return 0.0
+
+        embedding1 = np.array(embedding1)
+        embedding2 = np.array(embedding2)
+
+        # Calculate cosine similarity
+        similarity = np.dot(embedding1, embedding2) / (
+            np.linalg.norm(embedding1) * np.linalg.norm(embedding2)
+        )
+        return float(similarity)
+    except Exception as e:
+        print(f"    ERROR calculating embedding similarity: {e}")
+        return 0.0
+
+
+def match_chunks(retrieved_chunk, judged_chunks, embedding_model, openai_client):
+    """Match a retrieved chunk to judged chunks by semantic similarity using embeddings."""
     best_match = None
     best_score = 0.0
     all_scores = []
     for judged in judged_chunks:
-        similarity = SequenceMatcher(None, retrieved_chunk, judged["document"]).ratio()
+        similarity = get_embedding_similarity(
+            retrieved_chunk, judged["document"], embedding_model, openai_client
+        )
         all_scores.append(similarity)
         if similarity > best_score:
             best_score = similarity
@@ -324,7 +432,9 @@ def evaluate_query_for_system(
         index, query, embedding_model, K, openai_client, library_filter
     )
     for doc in docs:
-        matched = match_chunks(doc["document"], judged_docs)
+        matched = match_chunks(
+            doc["document"], judged_docs, embedding_model, openai_client
+        )
         doc["relevance"] = matched["relevance"] if matched else 0.0
     precision = calculate_precision_at_k(docs, K)
     ndcg = calculate_ndcg_at_k(docs, K)
@@ -340,10 +450,10 @@ def evaluate_query_for_system(
     return {"precision": precision, "ndcg": ndcg}, time_taken, chunks_for_review
 
 
-def initialize_metrics_storage():
+def initialize_metrics_storage(systems):
     """Initialize metrics storage for both systems."""
-    metrics = {system["name"]: defaultdict(list) for system in SYSTEMS}
-    times = {system["name"]: [] for system in SYSTEMS}
+    metrics = {system["name"]: defaultdict(list) for system in systems}
+    times = {system["name"]: [] for system in systems}
     return metrics, times
 
 
@@ -366,11 +476,11 @@ def print_manual_review_report(retrieved_chunks):
             print(f"    Text: {chunk_info['chunk']}")
 
 
-def print_average_metrics_report(metrics, times, query_count):
+def print_average_metrics_report(metrics, times, query_count, systems):
     """Print average metrics for both systems."""
     print("\n--- Evaluation Results ---")
     print(f"Evaluated on {query_count} queries with K={K}")
-    for system in SYSTEMS:
+    for system in systems:
         avg_precision = (
             np.mean(metrics[system["name"]]["precision"])
             if metrics[system["name"]]["precision"]
@@ -388,12 +498,23 @@ def print_average_metrics_report(metrics, times, query_count):
         print(f"    Avg Retrieval Time: {avg_time:.4f} seconds")
 
 
-def print_comparison_table(metrics, times):
+def print_comparison_table(metrics, times, systems):
     """Print comparison table for both systems."""
     print("\n--- Comparison Table ---")
-    print(f"{'System':<60} {'Precision@K':<12} {'NDCG@K':<10} {'Time (s)':<10}")
-    print("-" * 92)
-    for system in SYSTEMS:
+
+    # Calculate the maximum description length to ensure proper alignment
+    max_desc_length = max(len(system["description"]) for system in systems)
+    # Add some padding and ensure minimum width
+    desc_width = max(max_desc_length + 5, 40)
+
+    # Calculate total table width
+    total_width = desc_width + 12 + 10 + 10 + 3  # +3 for spaces between columns
+
+    print(
+        f"{'System':<{desc_width}} {'Precision@K':<12} {'NDCG@K':<10} {'Time (s)':<10}"
+    )
+    print("-" * total_width)
+    for system in systems:
         avg_precision = (
             np.mean(metrics[system["name"]]["precision"])
             if metrics[system["name"]]["precision"]
@@ -406,7 +527,7 @@ def print_comparison_table(metrics, times):
         )
         avg_time = np.mean(times[system["name"]]) if times[system["name"]] else 0.0
         print(
-            f"{system['description']:<60} {avg_precision:<12.4f} {avg_ndcg:<10.4f} {avg_time:<10.4f}"
+            f"{system['description']:<{desc_width}} {avg_precision:<12.4f} {avg_ndcg:<10.4f} {avg_time:<10.4f}"
         )
 
 
@@ -428,8 +549,12 @@ def main():
     openai.api_key = os.getenv("OPENAI_API_KEY")
     openai_client = OpenAI()
     pinecone_client = get_pinecone_client()
+
+    # Get systems configuration with dynamic descriptions from environment variables
+    systems = get_systems_config()
+
     indexes = {}
-    for system in SYSTEMS:
+    for system in systems:
         index_name = os.getenv(system["index_env_var"])
         embedding_model = os.getenv(system["embedding_model_env_var"])
         dimension = int(os.getenv(system["dimension_env_var"]))
@@ -439,13 +564,21 @@ def main():
     eval_data = load_evaluation_data()
     if not eval_data:
         return
-    metrics, times = initialize_metrics_storage()
+
+    # Pre-compute embeddings for all unique texts to avoid redundant API calls
+    # This dramatically speeds up evaluation from ~4 hours to ~15 minutes
+    embedding_models = [
+        os.getenv(system["embedding_model_env_var"]) for system in systems
+    ]
+    precompute_embeddings(eval_data, embedding_models, openai_client)
+
+    metrics, times = initialize_metrics_storage(systems)
     retrieved_chunks = defaultdict(list)
     query_count = len(eval_data)
-    print(f"\nProcessing {query_count} queries...")
+    print(f"Processing {query_count} queries...")
     for processed_queries, (query, judged_docs) in enumerate(eval_data.items(), 1):
         print(f"  Query {processed_queries}/{query_count}: '{query[:50]}...'")
-        for system in SYSTEMS:
+        for system in systems:
             query_metrics, query_time, chunks = evaluate_query_for_system(
                 indexes[system["name"]],
                 query,
@@ -460,8 +593,8 @@ def main():
             )
             retrieved_chunks[(query, system["description"])] = chunks
     print_manual_review_report(retrieved_chunks)
-    print_average_metrics_report(metrics, times, query_count)
-    print_comparison_table(metrics, times)
+    print_average_metrics_report(metrics, times, query_count, systems)
+    print_comparison_table(metrics, times, systems)
 
 
 if __name__ == "__main__":

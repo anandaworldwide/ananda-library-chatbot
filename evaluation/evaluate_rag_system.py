@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 """
+⚠️  NOTE: This script uses textual similarity matching (difflib.SequenceMatcher) which has been proven
+    to be unreliable for RAG evaluation. It reports false performance drops and cannot capture semantic
+    relevance. This script needs to be updated with embedding-based semantic similarity before use.
+
+    For accurate evaluation, use bin/evaluate_rag_system_no_rechunk.py instead.
+
+    TODO: Update this script to use embedding-based similarity matching like compare_multiple_queries.py
+
 Evaluates and compares RAG systems with different chunking strategies for retrieval performance.
 
 Key Operations:

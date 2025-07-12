@@ -1,9 +1,9 @@
 {
   "ananda": {
-    "name": "The Ananda Chatbot",
-    "shortname": "Ananda Chatbot",
+    "name": "Luca, The Ananda Chatbot",
+    "shortname": "Luca",
     "tagline": "Explore, Discover, Learn – Uncover the treasures of our path.",
-    "greeting": "Hi GuruBuddy! How can I help you on our path today?",
+    "greeting": "Hi GuruBuddy! I'm Luca. How can I help you get closer to God today?",
     "welcome_popup_heading": "Welcome, Gurubhai!",
     "other_visitors_reference": "your Gurubhais",
     "chatPlaceholder": "How can I think of God more?",
@@ -21,12 +21,7 @@
       "master_swami": "Master and Swami",
       "whole_library": "All authors"
     },
-    "includedLibraries": [
-      "Ananda Library",
-      "Ananda Youtube",
-      "Treasures",
-      "The Bhaktan Files"
-    ],
+    "includedLibraries": ["Ananda Library", "Ananda Youtube", "Treasures", "The Bhaktan Files"],
     "libraryMappings": {
       "Ananda Youtube": {
         "displayName": "Ananda YouTube",

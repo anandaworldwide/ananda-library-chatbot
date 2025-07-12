@@ -64,6 +64,21 @@ const SourcesList: React.FC<SourcesListProps> = ({
   siteConfig,
   isSudoAdmin = false,
 }) => {
+  // DEBUG: Add logging for sources display debugging
+  React.useEffect(() => {
+    console.log(`🔍 SOURCELIST DEBUG: Component received ${sources.length} sources`);
+    if (sources.length === 0) {
+      console.log(`⚠️ SOURCELIST WARNING: No sources to display`);
+    } else {
+      console.log(`🔍 SOURCELIST DEBUG: First source:`, {
+        hasPageContent: !!sources[0]?.pageContent,
+        hasMetadata: !!sources[0]?.metadata,
+        type: sources[0]?.metadata?.type,
+        title: sources[0]?.metadata?.title,
+      });
+    }
+  }, [sources]);
+
   // State hooks
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set());
   const [showSourcesPopover, setShowSourcesPopover] = useState<boolean>(false);
@@ -200,6 +215,52 @@ const SourcesList: React.FC<SourcesListProps> = ({
     return <span className="text-black font-medium">{sourceTitle}</span>;
   };
 
+  // Render a PDF download button if pdf_s3_key exists
+  const renderPdfDownloadButton = (doc: Document<DocMetadata>) => {
+    if (!doc.metadata.pdf_s3_key) {
+      return null;
+    }
+
+    const handlePdfDownload = async (e: React.MouseEvent) => {
+      e.preventDefault();
+
+      try {
+        logEvent("download_pdf", "UI", doc.metadata.pdf_s3_key || "unknown");
+
+        // Call API to get signed URL
+        const response = await fetch("/api/getPdfSignedUrl", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ pdfS3Key: doc.metadata.pdf_s3_key }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to get download URL");
+        }
+
+        const { signedUrl } = await response.json();
+
+        // Open the signed URL in a new tab to trigger download
+        window.open(signedUrl, "_blank");
+      } catch (error) {
+        console.error("Error downloading PDF:", error);
+        // TODO: Show user-friendly error message
+      }
+    };
+
+    return (
+      <button
+        onClick={handlePdfDownload}
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 rounded-md transition-colors"
+      >
+        <span className="material-icons text-sm">download</span>
+        Download PDF
+      </button>
+    );
+  };
+
   // Render a "Go to source" button for text sources
   const renderGoToSourceButton = (doc: Document<DocMetadata>) => {
     const linkUrl = doc.metadata.source;
@@ -209,18 +270,16 @@ const SourcesList: React.FC<SourcesListProps> = ({
     }
 
     return (
-      <div className="mt-2 mb-3">
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            handleSourceClick(e as any, linkUrl);
-          }}
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors"
-        >
-          <span className="material-icons text-sm">open_in_new</span>
-          Go to source
-        </button>
-      </div>
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          handleSourceClick(e as any, linkUrl);
+        }}
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors"
+      >
+        <span className="material-icons text-sm">open_in_new</span>
+        Go to source
+      </button>
     );
   };
 
@@ -287,7 +346,10 @@ const SourcesList: React.FC<SourcesListProps> = ({
                     >
                       {doc.pageContent}
                     </ReactMarkdown>
-                    {renderGoToSourceButton(doc)}
+                    <div className="mt-2 mb-3 flex gap-2">
+                      {renderPdfDownloadButton(doc)}
+                      {renderGoToSourceButton(doc)}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -395,8 +457,11 @@ const SourcesList: React.FC<SourcesListProps> = ({
                   >
                     {doc.pageContent}
                   </ReactMarkdown>
-                  {/* Render Go to source button for text sources */}
-                  {renderGoToSourceButton(doc)}
+                  {/* Render PDF download and Go to source buttons */}
+                  <div className="mt-2 mb-3 flex gap-2">
+                    {renderPdfDownloadButton(doc)}
+                    {renderGoToSourceButton(doc)}
+                  </div>
                 </div>
               </details>
             );

@@ -1135,7 +1135,15 @@ export async function updateRelatedQuestionsBatch(batchSize: number): Promise<vo
   // 1. Generate ALL embeddings needed for this batch upfront.
   let allEmbeddings: number[][] = [];
   try {
-    const textsToEmbed = questions.map((q) => q.question || ""); // Ensure non-null strings
+    // Use restated question for embeddings if available, otherwise use original question
+    const textsToEmbed = questions.map((q) => {
+      const questionData = q as any;
+      const textForEmbedding = questionData.restatedQuestion || q.question || "";
+      if (questionData.restatedQuestion) {
+        console.log(`Using restated question for ${q.id}: "${questionData.restatedQuestion}"`);
+      }
+      return textForEmbedding;
+    });
     allEmbeddings = await getBatchEmbeddings(textsToEmbed);
 
     // Basic validation
@@ -1151,8 +1159,18 @@ export async function updateRelatedQuestionsBatch(batchSize: number): Promise<vo
 
   // 2. Upsert Embeddings for the current batch, providing the generated embeddings.
   try {
+    // Create a modified questions array that uses the same text that was embedded
+    const questionsForUpsert = questions.map((q) => {
+      const questionData = q as any;
+      const textForEmbedding = questionData.restatedQuestion || q.question || "";
+      return {
+        ...q,
+        question: textForEmbedding // Use the same text that was embedded
+      };
+    });
+    
     // Pass the pre-generated embeddings to upsertEmbeddings
-    await upsertEmbeddings(questions, allEmbeddings);
+    await upsertEmbeddings(questionsForUpsert, allEmbeddings);
   } catch (error) {
     console.error(
       "CRITICAL: Failed to upsert embeddings for batch. Aborting related question updates for this batch to prevent inconsistency.",
@@ -1174,8 +1192,12 @@ export async function updateRelatedQuestionsBatch(batchSize: number): Promise<vo
     // Linter error on next line is likely incorrect due to scope complexity.
     const queryEmbedding = allEmbeddings[index]; // Use the embeddings generated in Step 1
 
+    // Use the same text that was used for embedding generation
+    const questionData = question as any;
+    const textForEmbedding = questionData.restatedQuestion || question.question || "";
+
     // Basic validation before creating the promise
-    if (!question.id || !question.question || !queryEmbedding || queryEmbedding.length === 0) {
+    if (!question.id || !textForEmbedding || !queryEmbedding || queryEmbedding.length === 0) {
       console.warn(
         `Skipping Pinecone query for item ${question.id || "[NO_ID]"}: Missing data or failed query embedding.`
       );
@@ -1360,6 +1382,7 @@ export async function updateRelatedQuestions(
 
   // 1. Fetch the target question text from Firestore.
   let questionText: string;
+  let restatedQuestionText: string | null = null;
   let previousRelatedQuestions: RelatedQuestion[] = [];
   try {
     // Use firestoreGet for better error handling with retry logic for code 14 errors
@@ -1391,6 +1414,8 @@ export async function updateRelatedQuestions(
     }
 
     questionText = questionData.question;
+    // Get the restated question if available, otherwise use the original question
+    restatedQuestionText = questionData.restatedQuestion || null;
 
     // Capture the current related questions before calculating new ones
     previousRelatedQuestions = questionData.relatedQuestionsV2 || [];
@@ -1399,6 +1424,10 @@ export async function updateRelatedQuestions(
     throw error; // Re-throw original error.
   }
 
+  // Use restated question for embeddings if available, otherwise use original question
+  const textForEmbedding = restatedQuestionText || questionText;
+  console.log(`Using ${restatedQuestionText ? 'restated' : 'original'} question for embeddings: "${textForEmbedding}"`);
+
   // 2. Ensure the embedding for this question exists in Pinecone.
   // This involves generating and upserting the embedding. If it already exists, upsert updates it.
   try {
@@ -1406,7 +1435,7 @@ export async function updateRelatedQuestions(
     const now = Timestamp.now();
     const minimalAnswer: Answer = {
       id: questionId,
-      question: questionText,
+      question: textForEmbedding, // Use the text for embedding (restated or original)
       answer: "", // Not needed for embedding.
       // Firestore timestamp structure.
       timestamp: { _seconds: now.seconds, _nanoseconds: now.nanoseconds },
@@ -1427,7 +1456,7 @@ export async function updateRelatedQuestions(
   // Timer is inside findRelatedQuestionsPinecone
   const currentRelatedQuestions = await findRelatedQuestionsPinecone(
     questionId,
-    questionText,
+    textForEmbedding, // Use the text for embedding (restated or original)
     5 // Explicitly pass the desired final limit (5)
   );
 

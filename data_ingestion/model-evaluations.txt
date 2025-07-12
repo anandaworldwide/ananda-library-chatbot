@@ -1,0 +1,32 @@
+# Model evaluations
+
+## Historical model vs. Text embedding three large at 3072 dimensions
+
+PINECONE_INDEX_NAME=ananda-2025-06-17--ada-002
+OPENAI_EMBEDDINGS_MODEL=text-embedding-ada-002
+OPENAI_EMBEDDINGS_DIMENSION=1536
+
+PINECONE_INGEST_INDEX_NAME=ananda-2025-06-19--3-large
+OPENAI_INGEST_EMBEDDINGS_MODEL=text-embedding-3-large
+OPENAI_INGEST_EMBEDDINGS_DIMENSION=3072
+
+
+--- Evaluation Results ---
+Evaluated on 43 queries with K=5
+
+Current system (word-based chunking, 50% overlap):
+    Avg Precision@5: 0.7302
+    Avg NDCG@5:      0.8336
+    Avg Retrieval Time: 0.1054 seconds
+
+New system (spaCy-based chunking, ADA-002 1536):
+    Avg Precision@5: 0.5860
+    Avg NDCG@5:      0.7045
+    Avg Retrieval Time: 0.1059 seconds
+
+--- Comparison Table ---
+System                                                       Precision@K  NDCG@K     Time (s)
+--------------------------------------------------------------------------------------------
+
+Current system (word-based chunking, 50% overlap)            0.7302       0.8336     0.1054
+New system (spaCy-based chunking, ADA-002 1536)              0.5860       0.7045     0.1059

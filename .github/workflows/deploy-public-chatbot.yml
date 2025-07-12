@@ -23,5 +23,5 @@ jobs:
 
       - name: Deploy plugin folder via rsync
         run: |
-          rsync -avz --delete ./wordpress/plugins/ananda-ai-chatbot/ \
+          rsync -avz --delete --no-perms --no-owner --no-group --omit-dir-times ./wordpress/plugins/ananda-ai-chatbot/ \
             github-ananda-org@45.63.93.73:/home/master/applications/aghzsnrmqf/public_html/wp-content/plugins/ananda-ai-chatbot/

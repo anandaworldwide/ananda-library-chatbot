@@ -113,4 +113,4 @@ python -m pytest tests/test_integration_chunk_quality.py --site test
 - **LangChain**: Document processing pipeline
 - **Pinecone**: Vector database operations
 - **AssemblyAI**: Audio transcription service
-- **PyMuPDF**: PDF text extraction
+- **pdfplumber**: PDF text extraction with superior layout preservation

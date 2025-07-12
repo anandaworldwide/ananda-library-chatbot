@@ -1,6 +1,6 @@
 export type DocMetadata = {
   title: string;
-  'pdf.info.Title'?: string;
+  "pdf.info.Title"?: string;
   type: string;
   file_hash?: string;
   filename?: string;
@@ -9,4 +9,5 @@ export type DocMetadata = {
   url?: string; // for youtube
   album?: string;
   library: string;
+  pdf_s3_key?: string; // S3 key for PDF downloads
 };

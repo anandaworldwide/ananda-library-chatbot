@@ -30,40 +30,13 @@ from tqdm import tqdm
 from pyutil.env_utils import load_env
 
 
-def get_pinecone_stats(index_name, id_prefix=None, max_vectors=None):
+def collect_vector_ids(index, id_prefix, vectors_to_process):
     """
-    Retrieves and aggregates statistics from Pinecone vectors using systematic enumeration.
-    Uses index.list() + fetch() to avoid vector space clustering bias from query() approach.
-
-    Args:
-        index_name (str): Name of the Pinecone index to query
-        id_prefix (str, optional): Filter vectors by ID prefix
-        max_vectors (int, optional): Maximum number of vectors to process
+    Collect vector IDs using systematic enumeration.
     """
-    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    index = pc.Index(index_name)
-
-    stats = {"author": Counter(), "library": Counter(), "type": Counter()}
-
-    # Track unique documents per library
-    library_documents = {}  # library_name -> set of document identifiers
-
-    # Get index info
-    index_stats = index.describe_index_stats()
-    total_vectors = index_stats.total_vector_count
-
-    print(f"Index has {total_vectors:,} total vectors")
-
-    # Determine how many vectors to process
-    vectors_to_process = min(max_vectors or total_vectors, total_vectors)
-    print(f"Processing {vectors_to_process:,} vectors using systematic enumeration...")
-
-    # Phase 1: Collect all vector IDs using systematic enumeration
-    print("Phase 1: Collecting vector IDs...")
-    id_collection_start = time.time()
     all_ids = []
     ids_collected = 0
-    batch_size = 100  # Pinecone's max limit for index.list()
+    batch_size = 100
     api_calls_made = 0
 
     id_pbar = tqdm(total=vectors_to_process, desc="Collecting IDs")
@@ -88,10 +61,8 @@ def get_pinecone_stats(index_name, id_prefix=None, max_vectors=None):
                 if ids_collected >= vectors_to_process:
                     break
 
-            # Update progress bar by actual IDs collected in this batch
             id_pbar.update(page_ids_count)
 
-            # Check if we hit our limit
             if ids_collected >= vectors_to_process:
                 break
 
@@ -102,23 +73,34 @@ def get_pinecone_stats(index_name, id_prefix=None, max_vectors=None):
         print(f"Error during ID collection: {e}", flush=True)
         raise
 
-    if not all_ids:
-        print("No vectors found matching criteria")
-        return stats, {}
+    return all_ids, api_calls_made
 
-    id_collection_end = time.time()
-    id_collection_time = id_collection_end - id_collection_start
-    print(
-        f"Collected {len(all_ids):,} vector IDs in {id_collection_time:.1f}s using {api_calls_made} API calls"
-    )
-    print(
-        f"Average: {len(all_ids) / api_calls_made:.0f} IDs per API call, {len(all_ids) / id_collection_time:.0f} IDs per second"
-    )
 
-    # Phase 2: Fetch metadata in batches
-    print("Phase 2: Fetching metadata...")
-    metadata_fetch_start = time.time()
-    fetch_batch_size = 100  # Reduced from 1000 to avoid "Request-URI Too Large" error
+def process_vector_metadata(vector_id, vector_data, stats, library_documents):
+    metadata = vector_data.metadata or {}
+
+    if metadata:
+        for field in ["author", "library", "type"]:
+            if field in metadata:
+                stats[field][metadata[field]] += 1
+
+        library = metadata.get("library")
+        if library:
+            if library not in library_documents:
+                library_documents[library] = set()
+
+            doc_id = extract_document_identifier(vector_id, metadata)
+            if doc_id:
+                library_documents[library].add(doc_id)
+
+
+def fetch_and_process_metadata(index, all_ids, stats, library_documents):
+    """
+    Fetch metadata in batches and process statistics.
+    """
+    fetch_batch_size = (
+        20  # Reduced from 100 to avoid Request-URI Too Large errors with long IDs
+    )
     total_processed = 0
     fetch_api_calls = 0
 
@@ -126,34 +108,16 @@ def get_pinecone_stats(index_name, id_prefix=None, max_vectors=None):
 
     for i in range(0, len(all_ids), fetch_batch_size):
         batch_ids = all_ids[i : i + fetch_batch_size]
-
-        # Ensure IDs are strings (not nested lists or other types)
         batch_ids = [str(id_val) for id_val in batch_ids]
 
         try:
             fetch_result = index.fetch(ids=batch_ids)
             fetch_api_calls += 1
 
-            # Process the metadata from this batch
             for vector_id, vector_data in fetch_result.vectors.items():
-                metadata = vector_data.metadata or {}
-
-                if metadata:
-                    # Update counters for each metadata field if present
-                    for field in ["author", "library", "type"]:
-                        if field in metadata:
-                            stats[field][metadata[field]] += 1
-
-                    # Track unique documents for libraries
-                    library = metadata.get("library")
-                    if library:
-                        if library not in library_documents:
-                            library_documents[library] = set()
-
-                        # Extract unique document identifier
-                        doc_id = extract_document_identifier(vector_id, metadata)
-                        if doc_id:
-                            library_documents[library].add(doc_id)
+                process_vector_metadata(
+                    vector_id, vector_data, stats, library_documents
+                )
 
             total_processed += len(batch_ids)
             fetch_pbar.update(len(batch_ids))
@@ -163,13 +127,62 @@ def get_pinecone_stats(index_name, id_prefix=None, max_vectors=None):
             continue
 
     fetch_pbar.close()
+    return total_processed, fetch_api_calls
+
+
+def get_pinecone_stats(index_name, id_prefix=None, max_vectors=None):
+    """
+    Retrieves and aggregates statistics from Pinecone vectors using systematic enumeration.
+    Uses index.list() + fetch() to avoid vector space clustering bias from query() approach.
+
+    Args:
+        index_name (str): Name of the Pinecone index to query
+        id_prefix (str, optional): Filter vectors by ID prefix
+        max_vectors (int, optional): Maximum number of vectors to process
+    """
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    index = pc.Index(index_name)
+
+    stats = {"author": Counter(), "library": Counter(), "type": Counter()}
+
+    library_documents = {}
+
+    index_stats = index.describe_index_stats()
+    total_vectors = index_stats.total_vector_count
+
+    print(f"Index has {total_vectors:,} total vectors")
+
+    vectors_to_process = min(max_vectors or total_vectors, total_vectors)
+    print(f"Processing {vectors_to_process:,} vectors using systematic enumeration...")
+
+    print("Phase 1: Collecting vector IDs...")
+    id_collection_start = time.time()
+    all_ids, api_calls_made = collect_vector_ids(index, id_prefix, vectors_to_process)
+    id_collection_end = time.time()
+    id_collection_time = id_collection_end - id_collection_start
+
+    if not all_ids:
+        print("No vectors found matching criteria")
+        return stats, {}
+
+    print(
+        f"Collected {len(all_ids):,} vector IDs in {id_collection_time:.1f}s using {api_calls_made} API calls"
+    )
+    print(
+        f"Average: {len(all_ids) / api_calls_made:.0f} IDs per API call, {len(all_ids) / id_collection_time:.0f} IDs per second"
+    )
+
+    print("Phase 2: Fetching metadata...")
+    metadata_fetch_start = time.time()
+    total_processed, fetch_api_calls = fetch_and_process_metadata(
+        index, all_ids, stats, library_documents
+    )
     metadata_fetch_end = time.time()
     metadata_fetch_time = metadata_fetch_end - metadata_fetch_start
     print(
         f"Successfully processed metadata for {total_processed:,} vectors in {metadata_fetch_time:.1f}s using {fetch_api_calls} API calls"
     )
 
-    # Handle division by zero if no successful fetches occurred
     if fetch_api_calls > 0 and metadata_fetch_time > 0:
         print(
             f"Average: {total_processed / fetch_api_calls:.0f} vectors per API call, {total_processed / metadata_fetch_time:.0f} vectors per second"
@@ -177,7 +190,6 @@ def get_pinecone_stats(index_name, id_prefix=None, max_vectors=None):
     else:
         print("No successful metadata fetches - check for API errors above")
 
-    # Convert library documents to counts
     library_doc_counts = {lib: len(docs) for lib, docs in library_documents.items()}
 
     return stats, library_doc_counts
@@ -286,6 +298,8 @@ if __name__ == "__main__":
         index_name = os.getenv("PINECONE_INGEST_INDEX_NAME")
         if not index_name:
             raise ValueError("PINECONE_INGEST_INDEX_NAME environment variable not set.")
+
+    print(f"Using Pinecone database: {index_name}")
 
     start_time = time.time()
     stats, library_doc_counts = get_pinecone_stats(

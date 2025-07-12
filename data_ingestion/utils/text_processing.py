@@ -47,9 +47,51 @@ def remove_html_tags(text: str) -> str:
         for script_or_style in soup(["script", "style"]):
             script_or_style.decompose()
 
-        # Get text content, preserving paragraph structure
-        # BeautifulSoup's get_text() with separator='\n\n' preserves block elements as paragraphs
-        text = soup.get_text(separator="\n\n", strip=True)
+        # Handle block vs inline elements differently for proper text extraction
+        # Block elements should create paragraph breaks, inline elements should just add spaces
+        block_elements = soup.find_all(
+            [
+                "p",
+                "div",
+                "h1",
+                "h2",
+                "h3",
+                "h4",
+                "h5",
+                "h6",
+                "li",
+                "blockquote",
+                "article",
+                "section",
+            ]
+        )
+        for element in block_elements:
+            # Insert double newline after block elements
+            element.insert_after("\n\n")
+
+        # Add spaces around inline elements to preserve word boundaries
+        inline_elements = soup.find_all(
+            [
+                "strong",
+                "em",
+                "b",
+                "i",
+                "a",
+                "span",
+                "code",
+                "small",
+                "sup",
+                "sub",
+                "mark",
+            ]
+        )
+        for element in inline_elements:
+            # Insert space before and after inline elements
+            element.insert_before(" ")
+            element.insert_after(" ")
+
+        # Get text content without separator or strip to preserve inserted breaks and spaces
+        text = soup.get_text()
 
         # Normalize whitespace but preserve paragraph breaks (double newlines)
         # First, fix any excessive spacing within lines

@@ -321,7 +321,8 @@ export const makeChain = async (
   rephraseModelConfig: ModelConfig = {
     model: "gpt-3.5-turbo",
     temperature: 0.1,
-  }
+  },
+  privateSession: boolean = false
 ) => {
   const siteId = process.env.SITE_ID || "default";
   const configPath = path.join(process.cwd(), "site-config/config.json");
@@ -446,8 +447,71 @@ export const makeChain = async (
         if (sendData) sendData({ log: `[RAG] Error retrieving documents: ${err}` });
       }
       if (sendData) {
-        sendData({ log: `[RAG] Sending sourceDocs to frontend: count=${allDocuments.length}` });
-        sendData({ sourceDocs: allDocuments });
+        // DEBUG: Add extensive logging for sources debugging
+        try {
+          console.log(`🔍 SOURCES DEBUG: Retrieved ${allDocuments.length} documents`);
+
+          // Check for empty documents
+          if (allDocuments.length === 0) {
+            console.warn(
+              `⚠️ SOURCES WARNING: No documents retrieved for question: "${input.question.substring(0, 100)}..."`
+            );
+          }
+
+          // DEBUG: Check for problematic content that could break JSON serialization
+          const problematicSources = allDocuments.filter((doc, index) => {
+            try {
+              JSON.stringify(doc);
+              return false;
+            } catch (e) {
+              console.error(`❌ SOURCES ERROR: Document ${index} failed individual serialization:`, e);
+              console.error(`❌ SOURCES ERROR: Problematic document structure:`, {
+                hasPageContent: !!doc.pageContent,
+                pageContentLength: doc.pageContent?.length,
+                hasMetadata: !!doc.metadata,
+                metadataKeys: doc.metadata ? Object.keys(doc.metadata) : [],
+                metadataSize: doc.metadata ? JSON.stringify(doc.metadata).length : 0,
+              });
+              return true;
+            }
+          });
+
+          if (problematicSources.length > 0) {
+            console.error(`❌ SOURCES ERROR: ${problematicSources.length} documents have serialization issues`);
+          }
+
+          // Test JSON serialization before sending
+          const serializedTest = JSON.stringify(allDocuments);
+          const serializedSize = new Blob([serializedTest]).size;
+          console.log(`🔍 SOURCES DEBUG: Serialized sources size: ${serializedSize} bytes`);
+
+          if (serializedSize > 1000000) {
+            // 1MB threshold
+            console.warn(`⚠️ SOURCES WARNING: Large sources payload detected: ${serializedSize} bytes`);
+            console.warn(`⚠️ SOURCES WARNING: This could cause JSON serialization to fail in SSE transmission`);
+          }
+
+          // Test if sources can be parsed back
+          const parseTest = JSON.parse(serializedTest);
+          if (!Array.isArray(parseTest) || parseTest.length !== allDocuments.length) {
+            console.error(`❌ SOURCES ERROR: Serialization round-trip failed!`);
+          } else {
+            console.log(`✅ SOURCES DEBUG: Serialization test passed`);
+          }
+
+          sendData({ sourceDocs: allDocuments });
+          console.log(`✅ SOURCES DEBUG: Successfully sent ${allDocuments.length} sources to client`);
+        } catch (serializationError) {
+          console.error(`❌ SOURCES ERROR: Failed to serialize/send sources:`, serializationError);
+          console.error(`❌ SOURCES ERROR: This is likely THE BUG - answer will stream but sources will be missing`);
+          console.error(`❌ SOURCES ERROR: Error details:`, {
+            name: serializationError instanceof Error ? serializationError.name : "Unknown",
+            message: serializationError instanceof Error ? serializationError.message : String(serializationError),
+            documentCount: allDocuments.length,
+          });
+          // Send empty array as fallback
+          sendData({ sourceDocs: [] });
+        }
       }
       if (resolveDocs) {
         resolveDocs(allDocuments);
@@ -511,37 +575,53 @@ export const makeChain = async (
     fullAnswerGenerationChain, // This now takes the mapped input and produces { answer, sourceDocuments }
   ]);
 
+  // Store the restated question in a closure to be accessed later
+  let capturedRestatedQuestion = "";
+
   // Combine all chains into the final conversational retrieval QA chain
   const conversationalRetrievalQAChain = RunnableSequence.from([
     {
       question: async (input: AnswerChainInput) => {
-        // Debug: Log the original question
-        console.log(`🔍 ORIGINAL QUESTION: "${input.question}"`);
+        // Debug: Log the original question only if not in private mode
+        if (!privateSession) {
+          console.log(`🔍 ORIGINAL QUESTION: "${input.question}"`);
+        }
 
         // Check for social messages like "thanks" and bypass reformulation.
         // This is a fallback to catch the basic cases in case the CONDENSE_TEMPLATE does not handle it correctly.
         const simpleSocialPattern =
           /^(thanks|thank you|gracias|merci|danke|thank|thx|ty|thank u|muchas gracias|vielen dank|great|awesome|perfect|good|nice|ok|okay|got it|perfect|clear)[\s!.]*$/i;
         if (simpleSocialPattern.test(input.question.trim())) {
+          capturedRestatedQuestion = input.question; // Store for later
           return input.question; // Don't reformulate social messages
         }
 
         if (input.chat_history.trim() === "") {
+          capturedRestatedQuestion = input.question; // Store for later
           return input.question;
         }
 
         // Get the reformulated standalone question
         const standaloneQuestion = await standaloneQuestionChain.invoke(input);
 
-        // Debug: Show the result of reformulation
-        console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
+        // Debug: Show the result of reformulation only if not in private mode
+        if (!privateSession) {
+          console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
+        }
 
+        capturedRestatedQuestion = standaloneQuestion; // Store for later
         return standaloneQuestion;
       },
       chat_history: (input: AnswerChainInput) => input.chat_history,
-      modelInfo: () => ({ label, model, temperature }), // Pass model info through
     },
-    answerChain,
+    answerChain, // Use the answer chain directly to maintain streaming
+    // Add the restated question to the final result
+    (result: { answer: string; sourceDocuments: Document[] }) => {
+      return {
+        ...result,
+        question: capturedRestatedQuestion, // This is the restated question
+      };
+    },
   ]);
 
   return conversationalRetrievalQAChain;
@@ -556,12 +636,31 @@ export const makeComparisonChains = async (
   rephraseModelConfig: ModelConfig = {
     model: "gpt-3.5-turbo",
     temperature: 0.1,
-  }
+  },
+  privateSession: boolean = false
 ) => {
   try {
     const [chainA, chainB] = await Promise.all([
-      makeChain(retriever, { ...modelA, label: "A" }, undefined, undefined, undefined, undefined, rephraseModelConfig),
-      makeChain(retriever, { ...modelB, label: "B" }, undefined, undefined, undefined, undefined, rephraseModelConfig),
+      makeChain(
+        retriever,
+        { ...modelA, label: "A" },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        rephraseModelConfig,
+        privateSession
+      ),
+      makeChain(
+        retriever,
+        { ...modelB, label: "B" },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        rephraseModelConfig,
+        privateSession
+      ),
     ]);
 
     return { chainA, chainB };
@@ -580,8 +679,9 @@ export async function setupAndExecuteLanguageModelChain(
   sourceCount: number = 4,
   filter?: Record<string, unknown>,
   siteConfig?: AppSiteConfig | null,
-  startTime?: number
-): Promise<{ fullResponse: string; finalDocs: Document[] }> {
+  startTime?: number,
+  privateSession: boolean = false
+): Promise<{ fullResponse: string; finalDocs: Document[]; restatedQuestion: string }> {
   const TIMEOUT_MS = process.env.NODE_ENV === "test" ? 1000 : 30000;
   const RETRY_DELAY_MS = process.env.NODE_ENV === "test" ? 10 : 1000;
   const MAX_RETRIES = 3;
@@ -615,7 +715,8 @@ export async function setupAndExecuteLanguageModelChain(
         filter,
         sendData,
         undefined,
-        { model: rephraseModelName, temperature: rephraseTemperature }
+        { model: rephraseModelName, temperature: rephraseTemperature },
+        privateSession
       );
 
       // Format chat history for the language model
@@ -663,10 +764,11 @@ export async function setupAndExecuteLanguageModelChain(
         }
       );
 
-      // The result from chain.invoke will now be an object { answer: string, sourceDocuments: Document[] }
+      // The result from chain.invoke will now be an object { answer: string, sourceDocuments: Document[], question: string }
       const result = (await Promise.race([chainPromise, timeoutPromise])) as {
         answer: string;
         sourceDocuments: Document[];
+        question: string;
       };
 
       // Add warning logic here, after streaming is complete and result is aggregated
@@ -699,9 +801,14 @@ export async function setupAndExecuteLanguageModelChain(
       if (sendData) sendData({ log: '[RAG] Sent done event to frontend' });
       else console.log('[RAG] Sent done event to frontend');
 
-      // Use result.answer for fullResponse to ensure consistency, though fullResponse is also built by streaming.
+      // Use the streamed fullResponse as the authoritative answer since it's what was sent to the frontend
       // result.sourceDocuments are the correctly filtered documents from makeChain.
-      return { fullResponse: result.answer, finalDocs: result.sourceDocuments };
+      // result.question is the restated question from the chain
+      return {
+        fullResponse: fullResponse || result.answer, // Prefer streamed content, fallback to result.answer
+        finalDocs: result.sourceDocuments,
+        restatedQuestion: result.question,
+      };
     } catch (error) {
       lastError = error as Error;
       retryCount++;

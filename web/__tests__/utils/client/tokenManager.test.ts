@@ -1,51 +1,75 @@
 /**
  * Token Manager Unit Tests
  *
- * These tests verify that the token manager correctly handles authentication tokens:
- * 1. Fetches tokens from the web-token endpoint
- * 2. Caches tokens in memory
- * 3. Handles token expiration
- * 4. Handles login page special cases
+ * Comprehensive test suite for the token manager with >75% coverage:
+ * 1. Token fetching and caching
+ * 2. JWT parsing and expiration handling
+ * 3. Authentication state management
+ * 4. Retry logic and error handling
+ * 5. Login page special cases
+ * 6. Request authentication helpers
  */
 
-// Required for fetch mocking
-// Note: You may need to run: npm install --save-dev jest-fetch-mock
 import { enableFetchMocks } from 'jest-fetch-mock';
 enableFetchMocks();
 import fetchMock from 'jest-fetch-mock';
 
-// Import the module (the actual implementation will be mocked in each test)
-import { initializeTokenManager, getToken } from '@/utils/client/tokenManager';
+// Mock console methods to reduce test noise
+const consoleSpy = {
+  log: jest.spyOn(console, 'log').mockImplementation(() => {}),
+  error: jest.spyOn(console, 'error').mockImplementation(() => {}),
+};
 
-// Mock implementation to be customized for each test
-jest.mock('@/utils/client/tokenManager', () => {
-  return {
-    initializeTokenManager: jest.fn(),
-    getToken: jest.fn(),
-    withAuth: jest.fn(),
-    fetchWithAuth: jest.fn(),
-  };
-});
+// Helper to create a valid JWT token with custom expiration
+function createJwtToken(expirationSeconds?: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const exp = expirationSeconds ? now + expirationSeconds : now + 900; // Default 15 minutes
+  
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const payload = { exp, iat: now };
+  
+  const encodedHeader = btoa(JSON.stringify(header));
+  const encodedPayload = btoa(JSON.stringify(payload));
+  const signature = 'mock_signature';
+  
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
+}
 
 describe('Token Manager', () => {
-  // Store original window.location
   const originalLocation = window.location;
+  const originalDateNow = Date.now;
 
-  beforeEach(() => {
+  // Store module reference
+  let tokenManager: any;
+
+  beforeEach(async () => {
+    // Reset mocks
     fetchMock.resetMocks();
-    jest.clearAllMocks();
-
+    consoleSpy.log.mockClear();
+    consoleSpy.error.mockClear();
+    
     // Reset window.location
     Object.defineProperty(window, 'location', {
       configurable: true,
       enumerable: true,
-      value: { pathname: '/' },
+      value: {
+        pathname: '/',
+        href: 'http://localhost:3000/',
+      },
     });
+
+    // Reset time to a known value
+    Date.now = jest.fn(() => 1000000000); // Fixed timestamp
+    
+    // Clear module cache to reset internal state
+    jest.resetModules();
+    
+    // Import fresh module instance
+    tokenManager = require('@/utils/client/tokenManager');
   });
 
   afterEach(() => {
-    // Reset mocks after each test
-    jest.clearAllMocks();
+    Date.now = originalDateNow;
   });
 
   afterAll(() => {
@@ -55,317 +79,459 @@ describe('Token Manager', () => {
       enumerable: true,
       value: originalLocation,
     });
+    
+    // Restore console methods
+    consoleSpy.log.mockRestore();
+    consoleSpy.error.mockRestore();
   });
 
-  it('should fetch a token successfully', async () => {
-    // Mock successful fetch
-    fetchMock.mockResponseOnce(JSON.stringify({ token: 'valid-jwt-token' }));
+  describe('initializeTokenManager', () => {
+    it('should fetch and cache a valid token successfully', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
 
-    // Mock implementation for this test
-    (initializeTokenManager as jest.Mock).mockImplementation(async () => {
-      const response = await fetchMock('/api/web-token');
-      const data = await response.json();
-      return data.token;
+      const token = await tokenManager.initializeTokenManager();
+
+      expect(token).toBe(validToken);
+      expect(fetchMock).toHaveBeenCalledWith('/api/web-token', {
+        headers: { Referer: 'http://localhost:3000/' },
+      });
     });
 
-    const token = await initializeTokenManager();
+    it('should return cached token if still valid', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
 
-    expect(token).toBe('valid-jwt-token');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith('/api/web-token');
-  });
-
-  it('should cache tokens to avoid unnecessary requests', async () => {
-    // Mock successful fetch for the first call
-    fetchMock.mockResponseOnce(JSON.stringify({ token: 'valid-jwt-token' }));
-
-    // Mock cached token
-    let cachedToken: string | null = null;
-
-    // Mock implementation for this test
-    (initializeTokenManager as jest.Mock).mockImplementation(async () => {
-      if (cachedToken) return cachedToken;
-
-      const response = await fetchMock('/api/web-token');
-      const data = await response.json();
-      cachedToken = data.token;
-      return cachedToken;
-    });
-
-    (getToken as jest.Mock).mockImplementation(async () => {
-      if (cachedToken) return cachedToken;
-      return await initializeTokenManager();
-    });
-
-    // First call should fetch
-    await initializeTokenManager();
-
-    // Reset the mock between calls to verify it's not called again
-    fetchMock.resetMocks();
-
-    // Second call should use cached token
-    const token = await getToken();
-
-    expect(token).toBe('valid-jwt-token');
-    expect(fetchMock).toHaveBeenCalledTimes(0); // Should not fetch again
-  });
-
-  // Tests for the login page special handling
-
-  it('should not throw errors on login page when authentication fails', async () => {
-    // Set location to login page
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      enumerable: true,
-      value: { pathname: '/login' },
-    });
-
-    // Mock failed fetch with 401
-    fetchMock.mockResponseOnce(
-      JSON.stringify({ error: 'Authentication required' }),
-      {
-        status: 401,
-      },
-    );
-
-    // Mock implementation for this test
-    (initializeTokenManager as jest.Mock).mockImplementation(async () => {
-      const response = await fetchMock('/api/web-token');
-
-      // Special handling for login page
-      if (window.location.pathname === '/login') {
-        if (!response.ok) {
-          if (response.status === 401) {
-            return 'login-page-placeholder';
-          }
-        }
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch token: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.token;
-    });
-
-    // Should return placeholder token without throwing
-    const token = await initializeTokenManager();
-
-    expect(token).toBe('login-page-placeholder');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('should handle fetch network errors on login page', async () => {
-    // Set location to login page
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      enumerable: true,
-      value: { pathname: '/login' },
-    });
-
-    // Mock network error
-    fetchMock.mockRejectOnce(new Error('Network failed'));
-
-    // Mock implementation for this test
-    (initializeTokenManager as jest.Mock).mockImplementation(async () => {
-      try {
-        await fetchMock('/api/web-token');
-        return 'valid-jwt-token';
-      } catch (error) {
-        // Special handling for login page
-        if (window.location.pathname === '/login') {
-          return 'login-page-placeholder';
-        }
-        throw error;
-      }
-    });
-
-    // Should return placeholder token without throwing
-    const token = await initializeTokenManager();
-
-    expect(token).toBe('login-page-placeholder');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('should throw errors when not on login page', async () => {
-    // Set location to home page
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      enumerable: true,
-      value: { pathname: '/' },
-    });
-
-    // Mock failed fetch with 401
-    fetchMock.mockResponseOnce(
-      JSON.stringify({ error: 'Authentication required' }),
-      {
-        status: 401,
-      },
-    );
-
-    // Mock implementation for this test
-    (initializeTokenManager as jest.Mock).mockImplementation(async () => {
-      const response = await fetchMock('/api/web-token');
-
-      if (!response.ok) {
-        if (window.location.pathname === '/login' && response.status === 401) {
-          return 'login-page-placeholder';
-        }
-        throw new Error(`Failed to fetch token: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.token;
-    });
-
-    // Should throw error
-    await expect(initializeTokenManager()).rejects.toThrow(
-      'Failed to fetch token: 401',
-    );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('should handle different page paths correctly', async () => {
-    // Test various pages that aren't login
-    const nonLoginPages = ['/', '/answers', '/contact', '/dashboard'];
-
-    for (const path of nonLoginPages) {
-      // Reset mocks
-      jest.clearAllMocks();
+      // First call
+      await tokenManager.initializeTokenManager();
+      
       fetchMock.resetMocks();
+      
+      // Second call should use cache
+      const cachedToken = await tokenManager.initializeTokenManager();
+      
+      expect(cachedToken).toBe(validToken);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
 
-      // Set location
+    it('should handle concurrent initialization calls', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
+
+      // Make multiple concurrent calls
+      const promises = [
+        tokenManager.initializeTokenManager(),
+        tokenManager.initializeTokenManager(),
+        tokenManager.initializeTokenManager(),
+      ];
+
+      const results = await Promise.all(promises);
+
+      expect(results).toEqual([validToken, validToken, validToken]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return placeholder token on login page with 401 error', async () => {
       Object.defineProperty(window, 'location', {
         configurable: true,
-        enumerable: true,
-        value: { pathname: path },
+        value: { pathname: '/login', href: 'http://localhost:3000/login' },
       });
 
-      // Mock failed fetch with 401
-      fetchMock.mockResponseOnce(
-        JSON.stringify({ error: 'Authentication required' }),
-        {
-          status: 401,
+      fetchMock.mockResponseOnce('', { status: 401 });
+
+      const token = await tokenManager.initializeTokenManager();
+
+      expect(token).toBe('login-page-placeholder');
+      expect(consoleSpy.log).toHaveBeenCalledWith(
+        'No authentication on login page - this is expected'
+      );
+    });
+
+    it('should return placeholder token on login page with network error', async () => {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { pathname: '/login', href: 'http://localhost:3000/login' },
+      });
+
+      fetchMock.mockRejectOnce(new Error('Network error'));
+
+      const token = await tokenManager.initializeTokenManager();
+
+      expect(token).toBe('login-page-placeholder');
+      expect(consoleSpy.log).toHaveBeenCalledWith(
+        'Token fetch failed on login page, using placeholder token'
+      );
+    });
+
+    it('should redirect to login page on 401 error when not on login page', async () => {
+      const mockLocationAssign = jest.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          pathname: '/dashboard',
+          get href() { return 'http://localhost:3000/dashboard'; },
+          set href(url) { mockLocationAssign(url); },
         },
-      );
-
-      // Mock implementation for this test
-      (initializeTokenManager as jest.Mock).mockImplementation(async () => {
-        const response = await fetchMock('/api/web-token');
-
-        if (!response.ok) {
-          if (
-            window.location.pathname === '/login' &&
-            response.status === 401
-          ) {
-            return 'login-page-placeholder';
-          }
-          throw new Error(`Failed to fetch token: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.token;
       });
 
-      // Should throw error for non-login pages
-      await expect(initializeTokenManager()).rejects.toThrow(
-        'Failed to fetch token: 401',
+      fetchMock.mockResponseOnce('', { status: 401 });
+
+      const token = await tokenManager.initializeTokenManager();
+
+      expect(token).toBe('');
+      expect(mockLocationAssign).toHaveBeenCalledWith('/login?redirect=%2Fdashboard');
+    });
+
+    it('should throw error on non-401 HTTP errors', async () => {
+      fetchMock.mockResponseOnce('', { status: 500 });
+
+      await expect(tokenManager.initializeTokenManager()).rejects.toThrow('Failed to fetch token: 500');
+    });
+
+    it('should throw error when no token received', async () => {
+      fetchMock.mockResponseOnce(JSON.stringify({}));
+
+      await expect(tokenManager.initializeTokenManager()).rejects.toThrow('No token received from server');
+    });
+
+    it('should handle JWT parsing errors gracefully', async () => {
+      const invalidToken = 'invalid.jwt.token';
+      fetchMock.mockResponseOnce(JSON.stringify({ token: invalidToken }));
+
+      const token = await tokenManager.initializeTokenManager();
+
+      expect(token).toBe(invalidToken);
+      expect(consoleSpy.error).toHaveBeenCalledWith(
+        'Error parsing JWT token:',
+        expect.any(Error)
       );
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    }
-
-    // Reset again for login page test
-    jest.clearAllMocks();
-    fetchMock.resetMocks();
-
-    // Set location to login page
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      enumerable: true,
-      value: { pathname: '/login' },
     });
-
-    // Mock failed fetch with 401
-    fetchMock.mockResponseOnce(
-      JSON.stringify({ error: 'Authentication required' }),
-      {
-        status: 401,
-      },
-    );
-
-    // Mock implementation for login page test
-    (initializeTokenManager as jest.Mock).mockImplementation(async () => {
-      const response = await fetchMock('/api/web-token');
-
-      if (!response.ok) {
-        if (window.location.pathname === '/login' && response.status === 401) {
-          return 'login-page-placeholder';
-        }
-        throw new Error(`Failed to fetch token: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.token;
-    });
-
-    // Login page should return placeholder without throwing
-    const token = await initializeTokenManager();
-    expect(token).toBe('login-page-placeholder');
   });
 
-  it('should have different behavior for getToken vs initializeTokenManager', async () => {
-    // Set location to login page
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      enumerable: true,
-      value: { pathname: '/login' },
+  describe('getToken', () => {
+    it('should return cached token if valid', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
+
+      // Initialize first
+      await tokenManager.initializeTokenManager();
+      fetchMock.resetMocks();
+
+      // getToken should use cache
+      const token = await tokenManager.getToken();
+
+      expect(token).toBe(validToken);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    // Mock failed fetch with 401
-    fetchMock.mockResponseOnce(
-      JSON.stringify({ error: 'Authentication required' }),
-      {
-        status: 401,
-      },
-    );
+    it('should fetch new token if current one is near expiration', async () => {
+      // Create token that expires in 20 seconds (within buffer)
+      const expiredToken = createJwtToken(20);
+      const newToken = createJwtToken(900);
+      
+      fetchMock
+        .mockResponseOnce(JSON.stringify({ token: expiredToken }))
+        .mockResponseOnce(JSON.stringify({ token: newToken }));
 
-    // Mock cached token
-    let cachedToken: string | null = null;
+      // Initialize with short-lived token
+      await tokenManager.initializeTokenManager();
 
-    // Mock implementation for this test
-    (initializeTokenManager as jest.Mock).mockImplementation(async () => {
-      if (cachedToken) return cachedToken;
+      // getToken should fetch new token due to expiration buffer
+      const token = await tokenManager.getToken();
 
-      const response = await fetchMock('/api/web-token');
+      expect(token).toBe(newToken);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
 
-      if (!response.ok) {
-        if (window.location.pathname === '/login' && response.status === 401) {
-          cachedToken = 'login-page-placeholder';
-          return cachedToken;
-        }
-        throw new Error(`Failed to fetch token: ${response.status}`);
-      }
+    it('should wait for ongoing initialization', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
 
+      // Start initialization and getToken concurrently
+      const [initToken, getTokenResult] = await Promise.all([
+        tokenManager.initializeTokenManager(),
+        tokenManager.getToken(),
+      ]);
+
+      expect(initToken).toBe(validToken);
+      expect(getTokenResult).toBe(validToken);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('isAuthenticated', () => {
+    it('should return true for valid non-placeholder token', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
+
+      await tokenManager.initializeTokenManager();
+
+      expect(tokenManager.isAuthenticated()).toBe(true);
+    });
+
+    it('should return false for placeholder token', async () => {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { pathname: '/login', href: 'http://localhost:3000/login' },
+      });
+
+      fetchMock.mockResponseOnce('', { status: 401 });
+      await tokenManager.initializeTokenManager();
+
+      expect(tokenManager.isAuthenticated()).toBe(false);
+    });
+
+    it('should return false when no token exists', () => {
+      expect(tokenManager.isAuthenticated()).toBe(false);
+    });
+
+    it('should return false for expired token', async () => {
+      const expiredToken = createJwtToken(-100); // Expired 100 seconds ago
+      fetchMock.mockResponseOnce(JSON.stringify({ token: expiredToken }));
+
+      await tokenManager.initializeTokenManager();
+
+      expect(tokenManager.isAuthenticated()).toBe(false);
+    });
+  });
+
+  describe('withAuth', () => {
+    it('should add Authorization header to fetch options', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
+
+      await tokenManager.initializeTokenManager();
+
+      const options = await tokenManager.withAuth({ method: 'POST' });
+
+      expect(options).toEqual({
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
+      });
+    });
+
+    it('should preserve existing headers', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
+
+      await tokenManager.initializeTokenManager();
+
+      const options = await tokenManager.withAuth({
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      expect(options.headers).toEqual({
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${validToken}`,
+      });
+    });
+
+    it('should work with no initial options', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
+
+      await tokenManager.initializeTokenManager();
+
+      const options = await tokenManager.withAuth();
+
+      expect(options).toEqual({
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
+      });
+    });
+  });
+
+  describe('fetchWithAuth', () => {
+    it('should make authenticated request successfully', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock
+        .mockResponseOnce(JSON.stringify({ token: validToken })) // Token fetch
+        .mockResponseOnce(JSON.stringify({ data: 'success' })); // API call
+
+      await tokenManager.initializeTokenManager();
+
+      const response = await tokenManager.fetchWithAuth('/api/test');
       const data = await response.json();
-      cachedToken = data.token;
-      return cachedToken;
+
+      expect(data).toEqual({ data: 'success' });
+      expect(fetchMock).toHaveBeenCalledWith('/api/test', {
+        headers: { Authorization: `Bearer ${validToken}` },
+      });
     });
 
-    (getToken as jest.Mock).mockImplementation(async () => {
-      if (cachedToken) return cachedToken;
-      return await initializeTokenManager();
+    it('should retry on 401 error with token refresh', async () => {
+      const oldToken = createJwtToken(900);
+      const newToken = createJwtToken(900);
+      
+      fetchMock
+        .mockResponseOnce(JSON.stringify({ token: oldToken })) // Initial token
+        .mockResponseOnce('', { status: 401 }) // First API call fails
+        .mockResponseOnce(JSON.stringify({ token: newToken })) // New token fetch
+        .mockResponseOnce(JSON.stringify({ data: 'success' })); // Retry succeeds
+
+      await tokenManager.initializeTokenManager();
+
+      const response = await tokenManager.fetchWithAuth('/api/test');
+      const data = await response.json();
+
+      expect(data).toEqual({ data: 'success' });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(consoleSpy.log).toHaveBeenCalledWith(
+        'Auth failed on attempt 1, refreshing token...'
+      );
     });
 
-    // Initialize with placeholder
-    const initToken = await initializeTokenManager();
-    expect(initToken).toBe('login-page-placeholder');
+    it('should redirect to login after max auth retries', async () => {
+      const mockLocationAssign = jest.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          pathname: '/dashboard',
+          get href() { return 'http://localhost:3000/dashboard'; },
+          set href(url) { mockLocationAssign(url); },
+        },
+      });
 
-    // getToken should use the cached placeholder
-    const token = await getToken();
-    expect(token).toBe('login-page-placeholder');
+      const validToken = createJwtToken(900);
+      fetchMock
+        .mockResponseOnce(JSON.stringify({ token: validToken })) // Initial token
+        .mockResponse('', { status: 401 }); // All API calls fail with 401
 
-    // Should only fetch once
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+      await tokenManager.initializeTokenManager();
+
+      const response = await tokenManager.fetchWithAuth('/api/test');
+
+      expect(response.status).toBe(401);
+      expect(mockLocationAssign).toHaveBeenCalledWith('/login?redirect=%2Fdashboard');
+    });
+
+    it('should retry on network errors with exponential backoff', async () => {
+      // Set test environment for shorter delays
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'test';
+
+      const validToken = createJwtToken(900);
+      fetchMock
+        .mockResponseOnce(JSON.stringify({ token: validToken })) // Token fetch
+        .mockRejectOnce(new Error('Network error')) // First attempt fails
+        .mockRejectOnce(new Error('Network error')) // Second attempt fails
+        .mockResponseOnce(JSON.stringify({ data: 'success' })); // Third attempt succeeds
+
+      await tokenManager.initializeTokenManager();
+
+      const response = await tokenManager.fetchWithAuth('/api/test');
+      const data = await response.json();
+
+      expect(data).toEqual({ data: 'success' });
+      expect(consoleSpy.log).toHaveBeenCalledWith(
+        'Network error on attempt 1, retrying...'
+      );
+      expect(consoleSpy.log).toHaveBeenCalledWith(
+        'Network error on attempt 2, retrying...'
+      );
+
+      process.env.NODE_ENV = originalEnv;
+    });
+
+    it('should throw error after max network retries', async () => {
+      const validToken = createJwtToken(900);
+      fetchMock
+        .mockResponseOnce(JSON.stringify({ token: validToken })) // Token fetch
+        .mockReject(new Error('Network error')); // All API calls fail
+
+      await tokenManager.initializeTokenManager();
+
+      await expect(tokenManager.fetchWithAuth('/api/test')).rejects.toThrow('Network error');
+    });
+
+    it('should preserve request options in retries', async () => {
+      const validToken = createJwtToken(900);
+      const newToken = createJwtToken(900);
+      
+      fetchMock
+        .mockResponseOnce(JSON.stringify({ token: validToken })) // Initial token
+        .mockResponseOnce('', { status: 401 }) // First API call fails
+        .mockResponseOnce(JSON.stringify({ token: newToken })) // New token fetch
+        .mockResponseOnce(JSON.stringify({ data: 'success' })); // Retry succeeds
+
+      await tokenManager.initializeTokenManager();
+
+      const requestOptions = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      };
+
+      await tokenManager.fetchWithAuth('/api/test', requestOptions);
+
+      // Verify retry preserved the original options
+      expect(fetchMock).toHaveBeenCalledWith('/api/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${newToken}`,
+        },
+        body: JSON.stringify({ test: 'data' }),
+      });
+    });
+  });
+
+  describe('Edge Cases and Error Handling', () => {
+    it('should handle malformed JWT tokens', async () => {
+      const malformedToken = 'not.a.jwt';
+      fetchMock.mockResponseOnce(JSON.stringify({ token: malformedToken }));
+
+      const token = await tokenManager.initializeTokenManager();
+
+      expect(token).toBe(malformedToken);
+      expect(consoleSpy.error).toHaveBeenCalledWith(
+        'Error parsing JWT token:',
+        expect.any(Error)
+      );
+    });
+
+    it('should handle JWT with missing exp claim', async () => {
+      const header = { alg: 'HS256', typ: 'JWT' };
+      const payload = { iat: Math.floor(Date.now() / 1000) }; // No exp claim
+      
+      const encodedHeader = btoa(JSON.stringify(header));
+      const encodedPayload = btoa(JSON.stringify(payload));
+      const tokenWithoutExp = `${encodedHeader}.${encodedPayload}.signature`;
+
+      fetchMock.mockResponseOnce(JSON.stringify({ token: tokenWithoutExp }));
+
+      const token = await tokenManager.initializeTokenManager();
+
+      expect(token).toBe(tokenWithoutExp);
+      // Should default to 15 minutes from now when exp is missing
+    });
+
+    it('should reset initialization state on error', async () => {
+      fetchMock.mockRejectOnce(new Error('Network error'));
+
+      await expect(tokenManager.initializeTokenManager()).rejects.toThrow('Network error');
+
+      // Should be able to retry initialization
+      const validToken = createJwtToken(900);
+      fetchMock.mockResponseOnce(JSON.stringify({ token: validToken }));
+
+      const token = await tokenManager.initializeTokenManager();
+      expect(token).toBe(validToken);
+    });
+
+    it('should handle empty response body', async () => {
+      fetchMock.mockResponseOnce('');
+
+      await expect(tokenManager.initializeTokenManager()).rejects.toThrow();
+    });
+
+    it('should handle invalid JSON response', async () => {
+      fetchMock.mockResponseOnce('invalid json');
+
+      await expect(tokenManager.initializeTokenManager()).rejects.toThrow();
+    });
   });
 });

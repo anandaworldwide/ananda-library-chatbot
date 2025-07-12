@@ -278,8 +278,8 @@ class MarkdownProcessor:
                 f" ({len(scores)} scored, {len(ignored_docs)} ignored)"
             )
             if not self.args.force:
-                user_input = input("Process this file anyway? (y/n): ").lower()
-                if user_input != "y":
+                user_input = input("Process this file anyway? (Y/n): ").lower().strip()
+                if user_input and user_input != "y":
                     return False
         elif self.debug_mode:
             print(

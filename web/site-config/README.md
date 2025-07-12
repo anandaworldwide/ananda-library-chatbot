@@ -1,7 +1,7 @@
 # @site-config
 
-This directory contains configuration files for different sites and their associated chatbots.
-Each site has its own set of configurations and prompts.
+This directory contains configuration files for different sites and their associated chatbots. Each site has its own set
+of configurations and prompts.
 
 ## Structure
 
@@ -10,8 +10,8 @@ Each site has its own set of configurations and prompts.
 
 ## config.json
 
-This file contains site-specific configurations for different chatbots. Each site has its own
-object with various settings.
+This file contains site-specific configurations for different chatbots. Each site has its own object with various
+settings.
 
 ### Configuration Options
 
@@ -36,7 +36,8 @@ object with various settings.
 
 Each site has its own prompt configuration in the `prompts/` directory:
 
-- `ananda.json`: Configuration for Ananda chatbot
+- `ananda.json`: Configuration for Luca, the Ananda chatbot
+- `ananda-public.json`: Configuration for Vivek, the Ananda.org chatbot
 - `jairam.json`: Configuration for Free Joe Hunt chatbot
 - `crystal.json`: Configuration for Crystal Clarity chatbot
 
@@ -47,8 +48,8 @@ Each prompt configuration consists of:
 1. `variables`: Site-specific variables used in the prompts
 2. `templates`: Templates for different parts of the prompt, including the base template
 
-The base template for each site is stored in a separate text file (e.g., `ananda-base.txt`,
-`jairam-base.txt`, `crystal-prompt.txt`).
+The base template for each site is stored in a separate text file (e.g., `ananda-base.txt`, `jairam-base.txt`,
+`crystal-prompt.txt`).
 
 ## Usage
 
@@ -58,5 +59,4 @@ To add a new site or modify an existing one:
 2. Create or update the corresponding prompt configuration in `prompts/`
 3. If needed, create a new base template file for the site's prompts
 
-Ensure that all necessary fields are filled out in both the `config.json` and the prompt
-configuration files.
+Ensure that all necessary fields are filled out in both the `config.json` and the prompt configuration files.

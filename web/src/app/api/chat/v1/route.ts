@@ -330,7 +330,8 @@ async function saveOrUpdateDocument(
   finalDocuments: Document[], // Use the final documents
   collection: string,
   history: ChatMessage[],
-  clientIP: string
+  clientIP: string,
+  restatedQuestion: string
 ): Promise<string | null> {
   if (!db) {
     return null;
@@ -347,6 +348,7 @@ async function saveOrUpdateDocument(
     ip: clientIP,
     timestamp: fbadmin.firestore.FieldValue.serverTimestamp(), // Update timestamp on save/update
     relatedQuestionsV2: [], // Reset or handle related questions as needed
+    restatedQuestion: restatedQuestion,
   };
 
   try {
@@ -482,7 +484,12 @@ async function handleComparisonRequest(req: NextRequest, requestBody: Comparison
             temperature: requestBody.temperatureA,
             label: "A",
           },
-          sourceCount
+          sourceCount,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          requestBody.privateSession || false
         );
 
         const chainB = await makeChain(
@@ -492,7 +499,12 @@ async function handleComparisonRequest(req: NextRequest, requestBody: Comparison
             temperature: requestBody.temperatureB,
             label: "B",
           },
-          sourceCount
+          sourceCount,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          requestBody.privateSession || false
         );
 
         // Format chat history for each model
@@ -696,6 +708,45 @@ async function handleChatRequest(req: NextRequest) {
       const sendData = (data: StreamingResponseData) => {
         if (!isControllerClosed) {
           try {
+            // DEBUG: Add logging for sources debugging
+            if (data.sourceDocs) {
+              console.log(`🔍 SSE SOURCES DEBUG: Attempting to send ${data.sourceDocs.length} sources via SSE`);
+
+              // Test JSON stringification before sending
+              try {
+                const testSerialization = JSON.stringify(data);
+                const serializedSize = new Blob([testSerialization]).size;
+                console.log(`🔍 SSE SOURCES DEBUG: SSE payload size: ${serializedSize} bytes`);
+
+                if (serializedSize > 2000000) {
+                  // 2MB threshold for SSE
+                  console.warn(`⚠️ SSE SOURCES WARNING: Very large SSE payload: ${serializedSize} bytes`);
+                }
+              } catch (serializeError) {
+                console.error(`❌ SSE SOURCES ERROR: Failed to serialize SSE data:`, serializeError);
+                console.error(`❌ SSE SOURCES ERROR: This explains the bug - answer will stream but sources will fail`);
+                console.error(`❌ SSE SOURCES ERROR: Serialization error details:`, {
+                  name: serializeError instanceof Error ? serializeError.name : "Unknown",
+                  message: serializeError instanceof Error ? serializeError.message : String(serializeError),
+                  sourceCount: data.sourceDocs?.length || 0,
+                });
+                // Don't send sourceDocs if serialization fails
+                data = { ...data, sourceDocs: [] };
+                console.log(
+                  `🔍 SSE SOURCES DEBUG: Fallback - sending empty sources array, answer will still stream normally`
+                );
+              }
+            }
+
+            // DEBUG: Log the sequence of sources vs answer streaming
+            if (data.sourceDocs && !data.token) {
+              console.log(`🔍 SSE TIMING DEBUG: Sending sources BEFORE answer streaming begins`);
+            } else if (data.token && !data.sourceDocs) {
+              // This is normal answer streaming - no need to log every token
+            } else if (data.token && data.sourceDocs) {
+              console.log(`🔍 SSE TIMING DEBUG: Unusual - sending both token and sources simultaneously`);
+            }
+
             if (data.timing?.firstTokenGenerated && !timingMetrics.firstTokenGenerated) {
               timingMetrics.firstTokenGenerated = data.timing.firstTokenGenerated;
             }
@@ -728,7 +779,16 @@ async function handleChatRequest(req: NextRequest) {
               };
             }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+
+            // DEBUG: Log successful transmission
+            if (data.sourceDocs) {
+              console.log(`✅ SSE SOURCES DEBUG: Successfully sent ${data.sourceDocs.length} sources via SSE`);
+            }
           } catch (error) {
+            // DEBUG: Enhanced error logging
+            if (data.sourceDocs) {
+              console.error(`❌ SSE SOURCES ERROR: Failed to send sources via SSE:`, error);
+            }
             if (error instanceof TypeError && error.message.includes("Controller is already closed")) {
               isControllerClosed = true;
             } else {
@@ -759,7 +819,7 @@ async function handleChatRequest(req: NextRequest) {
         );
 
         // Execute the full chain
-        const { fullResponse, finalDocs } = await setupAndExecuteLanguageModelChain(
+        const { fullResponse, finalDocs, restatedQuestion } = await setupAndExecuteLanguageModelChain(
           retriever,
           sanitizedInput.question,
           sanitizedInput.history || [],
@@ -767,7 +827,8 @@ async function handleChatRequest(req: NextRequest) {
           sourceCount,
           filter,
           siteConfig,
-          timingMetrics.startTime
+          timingMetrics.startTime,
+          sanitizedInput.privateSession || false
         );
         // --- End of Encapsulated Call ---
 
@@ -782,7 +843,8 @@ async function handleChatRequest(req: NextRequest) {
               finalDocs,
               sanitizedInput.collection || "whole_library",
               sanitizedInput.history || [],
-              clientIP
+              clientIP,
+              restatedQuestion // Pass the restated question
             );
 
             if (savedDocId) {

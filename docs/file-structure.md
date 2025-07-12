@@ -49,6 +49,8 @@ ananda-library-chatbot/
 │
 ├── declarations/                 # TypeScript declaration files (.d.ts) for libraries without native types.
 │
+├── evaluation/                   # RAG system evaluation and performance testing scripts.
+│
 ├── hooks/                        # Custom React hooks for managing state and logic within components.
 │
 ├── instructions/                 # Contains instructions or documentation, like adding comments.
