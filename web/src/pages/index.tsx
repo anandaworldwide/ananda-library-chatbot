@@ -274,6 +274,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         console.error(`ERROR: Backend is using incorrect site ID: ${data.siteId}. Expected: ${siteConfig.siteId}`);
       }
 
+      if (data.log) {
+        // eslint-disable-next-line no-console
+        console.log('[BACKEND]', data.log)
+      }
+
       // Capture timing information
       if (data.timing) {
         setTimingMetrics(data.timing);
