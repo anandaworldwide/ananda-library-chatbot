@@ -10,8 +10,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 export async function getS3PdfSignedUrl(pdfS3Key: string): Promise<string> {
   try {
     // Get bucket name from environment variables
-    const bucketName =
-      process.env.NEXT_PUBLIC_S3_BUCKET_NAME || process.env.NEXT_PUBLIC_S3_AUDIO_BUCKET_NAME || "ananda-chatbot";
+    const bucketName = process.env.NEXT_PUBLIC_S3_BUCKET_NAME || "ananda-chatbot";
 
     // Create the GetObjectCommand for the PDF
     const command = new GetObjectCommand({
