@@ -34,6 +34,8 @@ For detailed information about the project architecture and functionality, pleas
 - [Security TODO](docs/SECURITY-TODO.md) - Planned security improvements and tasks
 - [Testing](docs/TESTS-README.md) - Testing framework and guidelines
 - [Testing TODO](docs/TESTS-TODO.md) - Planned testing improvements and tasks
+- [Prompt Management](docs/prompt-management.md) - Environment separation and promotion workflow for prompt templates
+- [Deployment Guide](docs/deployment-guide.md) - Prompt template deployment procedures and troubleshooting
 
 These documents provide comprehensive guidance for developers working on or extending the project.
 

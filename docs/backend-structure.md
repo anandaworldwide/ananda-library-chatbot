@@ -25,8 +25,41 @@ facilitate understanding and future development.
   - **Firestore:** NoSQL database used for storing chat logs, user data, votes, likes, cached related questions, and
     potentially ingestion queue state (`firestoreUtils.ts`, `services/firebase.ts`).
   - **Redis:** In-memory data store used primarily for API rate limiting (`redisUtils.ts`, `genericRateLimiter.ts`).
-  - **AWS S3:** Object storage used for hosting source audio files (`awsConfig.ts`, `data_ingestion/utils/s3_utils.py`).
+  - **AWS S3:** Object storage used for hosting source audio files and prompt templates with environment separation
+    (`awsConfig.ts`, `data_ingestion/utils/s3_utils.py`).
   - **AssemblyAI / Whisper:** Likely used for audio transcription within the Python ingestion scripts.
+
+### Prompt Template Storage
+
+The system supports two storage methods for prompt templates:
+
+**1. Source Tree Storage** (files in codebase):
+
+- **Path**: `web/site-config/prompts/template.txt`
+- **Configuration**: `"file": "template-name.txt"` (no `s3:` prefix)
+- **Use Case**: Public prompts that don't require privacy protection
+
+**2. S3 Storage** (environment-separated):
+
+- **Development Environment**: `s3://bucket/site-config/dev/prompts/`
+- **Production Environment**: `s3://bucket/site-config/prod/prompts/`
+- **Legacy Path**: `s3://bucket/site-config/prompts/` (maintained for backward compatibility)
+- **Configuration**: `"file": "s3:template-name.txt"` (with `s3:` prefix)
+- **Use Case**: Private/sensitive prompts requiring environment separation
+
+**Environment Detection Logic** (for S3-stored prompts only):
+
+1. Checks `NODE_ENV` environment variable
+2. Falls back to `VERCEL_ENV` for preview deployments (uses prod path)
+3. Defaults to 'dev' for safety
+
+**Prompt Management** (`web/scripts/manage-prompts.ts`):
+
+- Provides secure pull/push/edit/promote workflow for S3-stored prompts
+- Implements file locking to prevent conflicts
+- Automatic testing and rollback on failures
+- Interactive confirmation for production changes
+- **Note**: Source tree prompts are managed directly via filesystem edits
 
 ---
 
