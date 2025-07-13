@@ -44,15 +44,7 @@ Implement environment-specific S3 paths for prompt templates to separate develop
 - [ ] Plan removal of old templates after new code is deployed and verified
 - [ ] Consider moving old templates to archive path to preserve version history
 
-### [ ] 5. Testing and Validation
-
-- [ ] Test template loading in development environment
-- [ ] Test template loading in production environment
-- [ ] Verify preview environment uses prod templates
-- [ ] Test promotion workflow
-- [ ] Validate fallback behavior
-
-### [ ] 6. Documentation Updates
+### [ ] 5. Documentation Updates
 
 - [ ] Update README with new environment separation
 - [ ] Document promotion workflow
