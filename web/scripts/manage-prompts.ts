@@ -375,11 +375,12 @@ async function promotePrompt(filename: string, skipTests: boolean = false) {
     });
 
     const answer = await new Promise<string>((resolve) => {
-      rl.question("Do you want to proceed? (yes/no): ", resolve);
+      rl.question("Do you want to proceed? (yes/No): ", resolve);
     });
     rl.close();
 
-    if (answer.toLowerCase() !== "yes") {
+    const normalizedAnswer = answer.toLowerCase().trim();
+    if (normalizedAnswer !== "yes" && normalizedAnswer !== "y") {
       console.log("❌ Promotion cancelled by user");
       process.exit(0);
     }
@@ -680,10 +681,40 @@ async function main() {
       });
       break; // End of case 'push'
     }
-    case "edit":
-      await pullPrompt(filename);
+    case "edit": {
+      const localPath = path.join(STAGING_DIR, filename);
+
+      // Check if local file exists
+      try {
+        await fs.access(localPath);
+        // File exists - ask user if they want to overwrite
+        console.log(`⚠️  Local file ${filename} already exists in staging.`);
+
+        const readline = await import("readline");
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        const answer = await new Promise<string>((resolve) => {
+          rl.question("Do you want to overwrite with the remote version? (yes/No): ", resolve);
+        });
+        rl.close();
+
+        if (answer.toLowerCase() === "yes" || answer.toLowerCase() === "y") {
+          await pullPrompt(filename);
+          console.log("✅ Pulled fresh version from remote");
+        } else {
+          console.log("✅ Keeping local version");
+        }
+      } catch (error) {
+        // File doesn't exist - pull from remote
+        await pullPrompt(filename);
+      }
+
       await editPrompt(filename);
       break;
+    }
     case "diff":
       await diffPrompt(filename);
       break;
