@@ -124,8 +124,11 @@ function getPineconeIndexName(): string {
 
 // Constants defining the embedding model and its expected dimension.
 // Crucial for index creation and vector upsert consistency.
-const embeddingModel = "text-embedding-3-large";
-const embeddingDimension = 3072; // Must match the output dimension of the embeddingModel.
+// TODO: Make sure these constants always load from environment variables and never use defaults. It
+// might be necessary to move these constants into functions where they are being used rather than
+// having them at top level.
+const embeddingModel = process.env.OPENAI_EMBEDDINGS_MODEL || "text-embedding-3-large";
+const embeddingDimension = parseInt(process.env.OPENAI_EMBEDDINGS_DIMENSION || "3072");
 
 /**
  * Retrieves the Pinecone index instance, creating it if necessary.
@@ -1165,10 +1168,10 @@ export async function updateRelatedQuestionsBatch(batchSize: number): Promise<vo
       const textForEmbedding = questionData.restatedQuestion || q.question || "";
       return {
         ...q,
-        question: textForEmbedding // Use the same text that was embedded
+        question: textForEmbedding, // Use the same text that was embedded
       };
     });
-    
+
     // Pass the pre-generated embeddings to upsertEmbeddings
     await upsertEmbeddings(questionsForUpsert, allEmbeddings);
   } catch (error) {
@@ -1426,7 +1429,7 @@ export async function updateRelatedQuestions(
 
   // Use restated question for embeddings if available, otherwise use original question
   const textForEmbedding = restatedQuestionText || questionText;
-  console.log(`Using ${restatedQuestionText ? 'restated' : 'original'} question for embeddings: "${textForEmbedding}"`);
+  console.log(`Using ${restatedQuestionText ? "restated" : "original"} question for embeddings: "${textForEmbedding}"`);
 
   // 2. Ensure the embedding for this question exists in Pinecone.
   // This involves generating and upserting the embedding. If it already exists, upsert updates it.

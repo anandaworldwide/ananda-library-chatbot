@@ -1,14 +1,14 @@
-import 'openai/shims/node';
-import OpenAI from 'openai';
+import "openai/shims/node";
+import OpenAI from "openai";
 
 // Initialize OpenAI client with a fallback mock API key for testing
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'mock-api-key-for-testing',
+  apiKey: process.env.OPENAI_API_KEY || "mock-api-key-for-testing",
   dangerouslyAllowBrowser: true, // Necessary for Node.js test environments
 });
 
-// Use a recommended embedding model
-const EMBEDDING_MODEL = 'text-embedding-3-large';
+// Use embedding model from environment variable
+const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDINGS_MODEL || "text-embedding-3-large";
 
 /**
  * Calculates the cosine similarity between two vectors.
@@ -18,7 +18,7 @@ const EMBEDDING_MODEL = 'text-embedding-3-large';
  */
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
-    throw new Error('Vectors must have the same dimension');
+    throw new Error("Vectors must have the same dimension");
   }
 
   let dotProduct = 0;
@@ -47,32 +47,30 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
  * @returns A promise that resolves to the embedding vector (array of numbers).
  */
 export async function getEmbedding(text: string): Promise<number[]> {
+  if (!process.env.OPENAI_EMBEDDINGS_DIMENSION) {
+    throw new Error("OPENAI_EMBEDDINGS_DIMENSION environment variable is not set");
+  }
+
   // Replace newlines with spaces, as recommended by OpenAI
-  const cleanedText = text.replace(/\n/g, ' ').trim();
+  const cleanedText = text.replace(/\n/g, " ").trim();
 
   if (!cleanedText) {
     // Handle empty strings to avoid API errors - return a zero vector or handle as needed
     // The dimension depends on the model, text-embedding-3-large uses process.env.OPENAI_EMBEDDINGS_DIMENSION || 1536
-    console.warn('Attempted to embed an empty string. Returning zero vector.');
-    const dimensions = parseInt(
-      process.env.OPENAI_EMBEDDINGS_DIMENSION || '1536',
-      10,
-    ); // Dimension for text-embedding-3-large
+    console.warn("Attempted to embed an empty string. Returning zero vector.");
+    const dimensions = parseInt(process.env.OPENAI_EMBEDDINGS_DIMENSION, 10);
     return Array(dimensions).fill(0);
   }
 
   // Return mock embeddings if using the mock API key
   if (process.env.OPENAI_API_KEY === undefined) {
-    console.warn('Using mock embeddings for testing');
+    console.warn("Using mock embeddings for testing");
     // Generate deterministic mock embeddings based on text length
-    const dimensions = parseInt(
-      process.env.OPENAI_EMBEDDINGS_DIMENSION || '1536',
-      10,
-    );
+    const dimensions = parseInt(process.env.OPENAI_EMBEDDINGS_DIMENSION, 10);
     return Array(dimensions)
       .fill(0)
       .map(
-        (_, i) => ((cleanedText.length * i) % 100) / 100, // Creates values between 0 and 1
+        (_, i) => ((cleanedText.length * i) % 100) / 100 // Creates values between 0 and 1
       );
   }
 
@@ -86,13 +84,11 @@ export async function getEmbedding(text: string): Promise<number[]> {
     if (response.data && response.data[0] && response.data[0].embedding) {
       return response.data[0].embedding;
     } else {
-      throw new Error('Invalid response structure from OpenAI API');
+      throw new Error("Invalid response structure from OpenAI API");
     }
   } catch (error) {
-    console.error('Error getting embedding from OpenAI:', error);
+    console.error("Error getting embedding from OpenAI:", error);
     // Re-throw the error to fail the test
-    throw new Error(
-      `Failed to get embedding: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new Error(`Failed to get embedding: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

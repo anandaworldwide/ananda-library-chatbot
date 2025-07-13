@@ -109,6 +109,18 @@ async function streamToString(stream: Readable): Promise<string> {
   });
 }
 
+// Determines the prompt environment based on NODE_ENV
+function getPromptEnvironment(): string {
+  const nodeEnv = process.env.NODE_ENV;
+
+  // Production and preview environments use prod templates
+  if (nodeEnv === "production" || process.env.VERCEL_ENV === "preview") {
+    return "prod";
+  }
+
+  return "dev";
+}
+
 // Retrieves template content from S3 bucket with error handling
 async function loadTextFileFromS3(bucket: string, key: string): Promise<string> {
   try {
@@ -146,7 +158,9 @@ async function processTemplate(
       }
       const startTime = Date.now();
       const s3Path = template.file.slice(3); // Remove 's3:' prefix
-      content = await loadTextFileFromS3(process.env.S3_BUCKET_NAME, `site-config/prompts/${s3Path}`);
+      const envPath = getPromptEnvironment();
+      const s3Key = `site-config/${envPath}/prompts/${s3Path}`;
+      content = await loadTextFileFromS3(process.env.S3_BUCKET_NAME, s3Key);
       console.log(`Loading S3 file took ${Date.now() - startTime}ms`);
     } else {
       // Load from local filesystem
