@@ -24,6 +24,7 @@
 
 # Standard library imports
 import argparse
+import csv
 import hashlib
 import json
 import logging
@@ -31,6 +32,7 @@ import os
 import re
 import sqlite3
 import sys
+import tempfile
 import time
 import traceback
 from dataclasses import dataclass
@@ -45,7 +47,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
-from readability import Document  # Added import
+from readability import Document
 
 # Import shared utility
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -143,22 +145,27 @@ class WebsiteCrawler:
         self.crawl_frequency_days = self.config.get("crawl_frequency_days", 14)
         self.crawl_delay_seconds = self.config.get("crawl_delay_seconds", 1)
 
+        # CSV mode configuration
+        self.csv_export_url = self.config.get("csv_export_url")
+        self.csv_modified_days_threshold = self.config.get(
+            "csv_modified_days_threshold", 1
+        )
+        self.csv_mode_enabled = bool(self.csv_export_url)
+
+        # Track if we've completed initial full crawl
+        self.initial_crawl_completed = False
+
         if self.debug:
             logging.info(
                 "Debug mode enabled - detailed logging and screenshots will be saved"
             )
 
-        # Initialize robots.txt parser
-        self.robots_parser = RobotFileParser()
-        robots_url = f"{self.start_url.rstrip('/')}/robots.txt"
-        self.robots_parser.set_url(robots_url)
-        try:
-            self.robots_parser.read()
-            logging.info(f"Successfully loaded robots.txt from {robots_url}")
-        except Exception as e:
-            logging.error(f"Could not load robots.txt from {robots_url}: {e}")
-            # Set to None to indicate robots.txt couldn't be loaded
-            self.robots_parser = None
+        # Initialize robots.txt parser with 24-hour caching
+        self.robots_url = f"{self.start_url.rstrip('/')}/robots.txt"
+        self.robots_parser = None
+        self.robots_cache_timestamp = None
+        self.robots_cache_duration_hours = 24
+        self._load_robots_txt()
 
         # Initialize shared text splitter with historical configuration for web content
         # Historical: 1000 chars (~250 tokens) with 200 chars (~50 tokens, 20% overlap)
@@ -198,8 +205,17 @@ class WebsiteCrawler:
             status TEXT DEFAULT 'pending',
             retry_count INTEGER DEFAULT 0,
             retry_after TIMESTAMP,
-            failure_type TEXT
+            failure_type TEXT,
+            priority INTEGER DEFAULT 0
         )""")
+
+        # Create CSV tracking table if it doesn't exist (simplified - only tracks initial crawl completion)
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS csv_tracking (
+            id INTEGER PRIMARY KEY,
+            initial_crawl_completed BOOLEAN DEFAULT 0
+        )""")
+
         self.conn.commit()
 
         # Track URL being processed
@@ -230,6 +246,34 @@ class WebsiteCrawler:
         if hasattr(self, "conn") and self.conn:
             self.conn.close()
 
+    def _is_robots_cache_expired(self) -> bool:
+        """Check if robots.txt cache has expired (24 hours)."""
+        if self.robots_cache_timestamp is None:
+            return True
+
+        cache_age = datetime.now() - self.robots_cache_timestamp
+        return cache_age > timedelta(hours=self.robots_cache_duration_hours)
+
+    def _load_robots_txt(self):
+        """Load or reload robots.txt with caching."""
+        try:
+            self.robots_parser = RobotFileParser()
+            self.robots_parser.set_url(self.robots_url)
+            self.robots_parser.read()
+            self.robots_cache_timestamp = datetime.now()
+            logging.info(f"Successfully loaded robots.txt from {self.robots_url}")
+        except Exception as e:
+            logging.error(f"Could not load robots.txt from {self.robots_url}: {e}")
+            # Set to None to indicate robots.txt couldn't be loaded
+            self.robots_parser = None
+            self.robots_cache_timestamp = None
+
+    def _ensure_robots_cache_fresh(self):
+        """Ensure robots.txt cache is fresh, reload if expired."""
+        if self._is_robots_cache_expired():
+            logging.info("Robots.txt cache expired, reloading...")
+            self._load_robots_txt()
+
     def add_url_to_queue(self, url: str, priority: int = 0):
         """Add URL to crawl queue if not already present"""
         normalized_url = self.normalize_url(url)
@@ -239,10 +283,10 @@ class WebsiteCrawler:
             self.cursor.execute(
                 """
             INSERT OR IGNORE INTO crawl_queue 
-            (url, next_crawl, crawl_frequency, status) 
-            VALUES (?, datetime('now'), ?, 'pending')
+            (url, next_crawl, crawl_frequency, status, priority) 
+            VALUES (?, datetime('now'), ?, 'pending', ?)
             """,
-                (normalized_url, self.crawl_frequency_days),
+                (normalized_url, self.crawl_frequency_days, priority),
             )
             return True
         except Exception as e:
@@ -290,6 +334,7 @@ class WebsiteCrawler:
             )
             AND (next_crawl IS NULL OR next_crawl <= datetime('now'))
             ORDER BY 
+                priority DESC,           -- Highest priority first
                 status = 'pending' DESC,  -- Prioritize pending URLs first
                 last_crawl IS NULL DESC,  -- Then new URLs
                 retry_count ASC,         -- Then URLs with fewer retries
@@ -490,6 +535,7 @@ class WebsiteCrawler:
             "total": 0,
             "pending_retry": 0,  # URLs waiting to be retried
             "avg_retry_count": 0,  # Average retry count for URLs with retries
+            "high_priority": 0,  # URLs with priority > 0
         }
         try:
             # Get counts by status
@@ -512,6 +558,13 @@ class WebsiteCrawler:
             AND retry_after > datetime('now')
             """)
             stats["pending_retry"] = self.cursor.fetchone()[0]
+
+            # Count high priority URLs
+            self.cursor.execute("""
+            SELECT COUNT(*) FROM crawl_queue 
+            WHERE priority > 0
+            """)
+            stats["high_priority"] = self.cursor.fetchone()[0]
 
             # Get average retry count for URLs with retries
             self.cursor.execute("""
@@ -582,7 +635,8 @@ class WebsiteCrawler:
                 logging.debug(f"Skipping external domain: {domain}")
                 return False
 
-            # Check robots.txt compliance
+            # Check robots.txt compliance (refresh cache if needed)
+            self._ensure_robots_cache_fresh()
             if self.robots_parser:
                 if not self.robots_parser.can_fetch(USER_AGENT, url):
                     logging.debug(f"Robots.txt disallows crawling: {url}")
@@ -613,6 +667,9 @@ class WebsiteCrawler:
                 ".rar",
                 ".mp3",
                 ".mp4",
+                ".m4a",  # Added missing audio format
+                ".wav",  # Added missing audio format
+                ".aac",  # Added missing audio format
                 ".avi",
                 ".mov",
                 ".wmv",
@@ -1052,6 +1109,279 @@ class WebsiteCrawler:
         # If never seen before or hash has changed, process it
         return bool(not result or not result[0] or result[0] != current_hash)
 
+    def parse_csv_date(self, date_str: str) -> datetime | None:
+        """Parse CSV date format like '2025-07-13 12:45:35' to datetime object"""
+        try:
+            # Handle format "2025-07-13 12:45:35" - ISO-like format
+            return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            try:
+                # Try alternative format without seconds "2025-07-13 12:45"
+                return datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+            except ValueError:
+                try:
+                    # Try legacy format "7/12/25 8:45" - assuming MM/DD/YY HH:MM
+                    return datetime.strptime(date_str, "%m/%d/%y %H:%M")
+                except ValueError:
+                    logging.warning(f"Could not parse CSV date: {date_str}")
+                    return None
+
+    def download_csv_data(self, browser=None) -> list[dict] | None:
+        """Download and parse CSV data using existing Playwright browser context"""
+        if not self.csv_export_url:
+            return None
+
+        # If no browser context provided, we can't download CSV
+        if not browser:
+            logging.error("No browser context provided for CSV download")
+            return None
+
+        try:
+            logging.info(
+                f"Downloading CSV data with existing browser from: {self.csv_export_url}"
+            )
+
+            # Create a new page in the existing browser context
+            page = browser.new_page()
+            page.set_extra_http_headers({"User-Agent": USER_AGENT})
+
+            try:
+                # First, visit the main site to establish a session
+                logging.info(f"Establishing session by visiting: {self.start_url}")
+                main_response = page.goto(self.start_url, timeout=15000)
+
+                if main_response and main_response.status < 400:
+                    logging.info("Session established successfully")
+                    # Wait a moment for any session setup
+                    page.wait_for_timeout(2000)
+                else:
+                    logging.warning(
+                        f"Failed to establish session: HTTP {main_response.status if main_response else 'No response'}"
+                    )
+
+                # Set up download handling
+                download_info = {"content": None, "error": None}
+
+                def handle_download(download):
+                    try:
+                        # Save to temporary path and read content
+                        with tempfile.NamedTemporaryFile(
+                            mode="w+b", delete=False
+                        ) as tmp_file:
+                            download.save_as(tmp_file.name)
+                            tmp_file.seek(0)
+                            with open(tmp_file.name, encoding="utf-8") as f:
+                                download_info["content"] = f.read()
+                            logging.info(
+                                f"Downloaded file: {download.suggested_filename}"
+                            )
+                            # Clean up temp file
+                            os.unlink(tmp_file.name)
+                    except Exception as e:
+                        download_info["error"] = str(e)
+                        logging.error(f"Error handling download: {e}")
+
+                # Listen for downloads
+                page.on("download", handle_download)
+
+                # Now navigate to CSV URL with established session
+                logging.info("Accessing CSV export URL with session...")
+
+                try:
+                    page.goto(self.csv_export_url, timeout=30000)
+
+                    # If we get here without download, try to get page content
+                    if not download_info["content"] and not download_info["error"]:
+                        # Wait a moment for potential download
+                        page.wait_for_timeout(3000)
+
+                        if not download_info["content"]:
+                            # No download occurred, try to get page content
+                            content = page.content()
+
+                            # Try to get the raw text content instead of HTML
+                            try:
+                                text_content = page.evaluate(
+                                    "() => document.body.textContent || document.body.innerText || ''"
+                                )
+                                if text_content.strip() and "," in text_content:
+                                    content = text_content
+                                else:
+                                    # Fallback to page content and extract from HTML
+                                    from bs4 import BeautifulSoup
+
+                                    soup = BeautifulSoup(content, "html.parser")
+                                    content = soup.get_text()
+                            except Exception:
+                                # If text extraction fails, use HTML content as fallback
+                                pass
+
+                            download_info["content"] = content
+
+                except Exception as e:
+                    if "Download is starting" in str(e):
+                        # This is expected - wait for download to complete
+                        logging.info("Download detected, waiting for completion...")
+                        page.wait_for_timeout(5000)
+                    else:
+                        raise e
+
+                # Check if we got content from download or page
+                content = download_info["content"]
+                if download_info["error"]:
+                    raise Exception(f"Download error: {download_info['error']}")
+
+                if not content or not content.strip():
+                    raise Exception("Empty response from CSV URL")
+
+                # Parse CSV
+                csv_reader = csv.DictReader(content.splitlines())
+                csv_data = list(csv_reader)
+
+                if not csv_data:
+                    raise Exception("No data rows found in CSV")
+
+                logging.info(
+                    f"Successfully downloaded {len(csv_data)} CSV records using existing browser"
+                )
+                self.update_csv_tracking(success=True)
+                return csv_data
+
+            finally:
+                page.close()
+
+        except Exception as e:
+            error_msg = f"Failed to download CSV data with existing browser: {e}"
+            logging.error(error_msg)
+            self.update_csv_tracking(csv_error=error_msg)
+            return None
+
+    def process_csv_data(self, csv_data: list[dict]) -> int:
+        """Process CSV data and add modified URLs to queue with high priority"""
+        if not csv_data:
+            return 0
+
+        cutoff_date = datetime.now() - timedelta(days=self.csv_modified_days_threshold)
+        added_count = 0
+
+        for row in csv_data:
+            try:
+                # Extract data from CSV row
+                url = row.get("URL", "").strip()
+                modified_date_str = row.get("Modified Date", "").strip()
+
+                if not url or not modified_date_str:
+                    continue
+
+                # Parse modified date
+                modified_date = self.parse_csv_date(modified_date_str)
+                if not modified_date:
+                    continue
+
+                # Check if modified within threshold
+                if modified_date < cutoff_date:
+                    continue
+
+                # Ensure URL has scheme
+                full_url = ensure_scheme(url)
+
+                # Check if URL should be crawled
+                if not self.is_valid_url(full_url) or self.should_skip_url(full_url):
+                    logging.debug(
+                        f"Skipping CSV URL due to validation/skip rules: {full_url}"
+                    )
+                    continue
+
+                # Add to queue with high priority
+                if self.add_url_to_queue(full_url, priority=10):
+                    added_count += 1
+                    logging.debug(
+                        f"Added CSV URL to queue: {full_url} (modified: {modified_date_str})"
+                    )
+
+            except Exception as e:
+                logging.warning(f"Error processing CSV row {row}: {e}")
+                continue
+
+        logging.info(f"Added {added_count} URLs from CSV data to crawl queue")
+        return added_count
+
+    def update_csv_tracking(self, csv_error: str | None = None, success: bool = False):
+        """Update CSV tracking table with latest status (simplified - no timestamp tracking)"""
+        # This method now only logs the results, no database updates needed
+        if success:
+            logging.info("CSV processing completed successfully")
+        elif csv_error:
+            logging.error(f"CSV processing failed: {csv_error}")
+        # No database updates needed - we just check CSV once per hour when system wakes up
+
+    def should_check_csv(self) -> bool:
+        """Check if CSV should be processed (simplified - always check if initial crawl is complete)"""
+        if not self.csv_mode_enabled:
+            return False
+
+        # Only check CSV if initial crawl is completed
+        return self.is_initial_crawl_completed()
+
+    def mark_initial_crawl_completed(self):
+        """Mark that the initial full crawl has been completed"""
+        try:
+            self.cursor.execute("SELECT id FROM csv_tracking LIMIT 1")
+            tracking_record = self.cursor.fetchone()
+
+            if tracking_record:
+                self.cursor.execute(
+                    """
+                    UPDATE csv_tracking 
+                    SET initial_crawl_completed = 1
+                    WHERE id = ?
+                """,
+                    (tracking_record[0],),
+                )
+            else:
+                self.cursor.execute("""
+                    INSERT INTO csv_tracking 
+                    (initial_crawl_completed)
+                    VALUES (1)
+                """)
+
+            self.conn.commit()
+            self.initial_crawl_completed = True
+            logging.info(
+                "Marked initial crawl as completed - CSV mode will now activate"
+            )
+
+        except Exception as e:
+            logging.error(f"Error marking initial crawl completed: {e}")
+
+    def is_initial_crawl_completed(self) -> bool:
+        """Check if initial crawl has been completed"""
+        try:
+            self.cursor.execute("""
+                SELECT initial_crawl_completed 
+                FROM csv_tracking 
+                LIMIT 1
+            """)
+            result = self.cursor.fetchone()
+            return bool(result and result[0])
+        except Exception as e:
+            logging.error(f"Error checking initial crawl status: {e}")
+            return False
+
+    def check_and_process_csv(self, browser=None) -> int:
+        """Check if CSV should be processed and do it if needed"""
+        if not self.should_check_csv():
+            return 0
+
+        csv_data = self.download_csv_data(browser)
+        if csv_data is None:
+            return 0
+
+        added_count = self.process_csv_data(csv_data)
+        self.update_csv_tracking(success=True)
+
+        return added_count
+
 
 def sanitize_for_id(text: str) -> str:
     """Sanitize text for use in Pinecone vector IDs"""
@@ -1266,6 +1596,7 @@ def _handle_browser_restart(
         f"- Total {stats['visited']} visited pages of {stats['total']} total ({round(stats['visited'] / stats['total'] * 100 if stats['total'] > 0 else 0)}% success)\n"
         f"- Success rate last {batch_attempts} attempts: {round(batch_success_rate)}%\n"
         f"- Total {stats['pending']} pending, {stats['failed']} failed, {stats['pending_retry']} awaiting retry\n"
+        f"- High priority URLs: {stats['high_priority']}\n"
         f"- Average retries per URL with retries: {stats['avg_retry_count']}\n"
         f"--- End Stats ---"
     )
@@ -1512,28 +1843,58 @@ def _handle_crawl_loop_iteration(
 
     url = crawler.get_next_url_to_crawl()
     if not url:
-        logging.info("No URLs ready for processing. Sleeping for four hours...")
-        exit_requested = _graceful_sleep(
-            60 * 60 * 4
-        )  # 4 hours with 10-second intervals
-        if exit_requested:
-            logging.info("Exit was requested during sleep")
+        # Check if we should mark initial crawl as completed
+        if crawler.csv_mode_enabled and not crawler.is_initial_crawl_completed():
+            stats = crawler.get_queue_stats()
+            if stats["pending"] == 0:  # No more pending URLs
+                crawler.mark_initial_crawl_completed()
+                logging.info("Initial crawl completed - CSV mode now active")
+
+        # Check for CSV updates before going to sleep (high priority)
+        if crawler.csv_mode_enabled:
+            try:
+                csv_added_count = crawler.check_and_process_csv(browser)
+                if csv_added_count > 0:
+                    logging.info(
+                        f"CSV check added {csv_added_count} URLs to high-priority queue"
+                    )
+                    # Re-check for URLs after CSV processing - process them immediately
+                    url = crawler.get_next_url_to_crawl()
+                    if url:
+                        logging.info(f"Found CSV URL to process immediately: {url}")
+                        # Fall through to normal processing instead of sleeping
+                    else:
+                        logging.info(
+                            "CSV check completed but no URLs ready for processing"
+                        )
+            except Exception as e:
+                logging.error(f"Error during CSV check: {e}")
+
+        # Only sleep if we still don't have a URL to process
+        if not url:
+            logging.info("No URLs ready for processing. Sleeping for one hour...")
+            exit_requested = _graceful_sleep(
+                60 * 60 * 1
+            )  # 1 hour with 10-second intervals
+            if exit_requested:
+                logging.info("Exit was requested during sleep")
+                return (
+                    pages_processed,
+                    pages_since_restart,
+                    True,
+                    False,
+                    (browser, page, batch_start_time, batch_results),
+                )
+
+            logging.info("Sleep completed - continuing loop...")
+
             return (
                 pages_processed,
                 pages_since_restart,
-                True,
+                False,
                 False,
                 (browser, page, batch_start_time, batch_results),
             )
-
-        logging.info("Sleep completed normally, continuing loop...")
-        return (
-            pages_processed,
-            pages_since_restart,
-            False,
-            False,
-            (browser, page, batch_start_time, batch_results),
-        )
 
     if pages_since_restart >= PAGES_PER_RESTART:
         browser, page, batch_start_time, batch_results = _handle_browser_restart(
@@ -1681,7 +2042,7 @@ def handle_fresh_start(args: argparse.Namespace) -> None:
         print("\n⚠️  WARNING: Fresh start will delete the existing database file:")
         print(f"   {db_file_to_delete}")
         print(
-            f"   This will remove all crawl history and queue state for site '{args.site}'."
+            f"   This will remove all crawl history, queue state, and CSV tracking data for site '{args.site}'."
         )
 
         response = input("\nProceed with deletion? [y/N]: ").strip().lower()
@@ -1820,6 +2181,15 @@ def main():
 
     try:
         logging.info(f"Starting crawl of {start_url} for site '{args.site}'")
+        if crawler.csv_mode_enabled:
+            logging.info(
+                f"CSV mode enabled - will check {crawler.csv_export_url} once per hour when system wakes up"
+            )
+            logging.info(
+                f"CSV modified threshold: {crawler.csv_modified_days_threshold} days"
+            )
+        else:
+            logging.info("CSV mode disabled - no CSV export URL configured")
         run_crawl_loop(crawler, pinecone_index, args)
     except SystemExit:
         logging.info("Exiting due to SystemExit signal.")

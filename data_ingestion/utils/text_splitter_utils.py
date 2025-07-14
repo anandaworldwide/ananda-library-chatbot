@@ -1069,7 +1069,7 @@ class SpacyTextSplitter:
 
             # Log document-level metrics with FIXED chunking parameters
             self.logger.info(
-                f"Processing document (ID: {document_id}): {word_count} words, "
+                f"Processing document - ID: {document_id} - {word_count} words, "
                 f"original length: {original_length} chars, cleaned: {cleaned_length} chars"
             )
 

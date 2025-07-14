@@ -10,6 +10,7 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
+from urllib.error import URLError
 
 from crawler.website_crawler import WebsiteCrawler, ensure_scheme, load_config
 
@@ -78,6 +79,37 @@ class TestCrawlerConfig(unittest.TestCase):
             self.assertEqual(config["skip_patterns"], ["pattern1", "pattern2"])
             self.assertEqual(config["crawl_frequency_days"], 14)
 
+    @patch("crawler.website_crawler.Path")
+    def test_load_config_with_csv_options(self, mock_path):
+        """Test loading configuration with CSV-related options."""
+        # Set up the mock path to point to our temp directory
+        mock_path.return_value.parent.return_value = Path(self.temp_dir)
+
+        # Config data with CSV options
+        csv_config_data = {
+            "domain": "example.com",
+            "skip_patterns": ["pattern1", "pattern2"],
+            "crawl_frequency_days": 14,
+            "csv_export_url": "https://example.com/export.csv",
+            "csv_check_interval_hours": 2,
+            "csv_modified_days_threshold": 3,
+        }
+
+        # Patch the open function to use our temp file
+        with patch(
+            "builtins.open",
+            new_callable=unittest.mock.mock_open,
+            read_data=json.dumps(csv_config_data),
+        ):
+            config = load_config(self.site_id)
+
+            # Verify config was loaded correctly
+            self.assertIsNotNone(config)
+            self.assertEqual(config["domain"], "example.com")
+            self.assertEqual(config["csv_export_url"], "https://example.com/export.csv")
+            self.assertEqual(config["csv_check_interval_hours"], 2)
+            self.assertEqual(config["csv_modified_days_threshold"], 3)
+
 
 class TestSQLiteIntegration(BaseWebsiteCrawlerTest):
     """Test cases for SQLite database integration."""
@@ -145,10 +177,34 @@ class TestSQLiteIntegration(BaseWebsiteCrawlerTest):
             "retry_count",
             "retry_after",
             "failure_type",
+            "priority",  # New column for priority support
         }
         self.assertTrue(
             required_columns.issubset(columns),
             f"Missing columns: {required_columns - columns}",
+        )
+        crawler.close()
+
+    def test_csv_tracking_table_creation(self):
+        """Test that CSV tracking table is created with proper schema."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Verify CSV tracking table structure
+        cursor = crawler.conn.cursor()
+        cursor.execute("PRAGMA table_info(csv_tracking)")
+        columns_info = cursor.fetchall()
+        columns = {row[1] for row in columns_info}
+
+        required_columns = {
+            "id",
+            "last_csv_check",
+            "last_csv_success",
+            "csv_error",
+            "initial_crawl_completed",
+        }
+        self.assertTrue(
+            required_columns.issubset(columns),
+            f"Missing CSV tracking columns: {required_columns - columns}",
         )
         crawler.close()
 
@@ -168,6 +224,41 @@ class TestSQLiteIntegration(BaseWebsiteCrawlerTest):
 
         self.assertEqual(len(rows), 1, "Should have one pending URL after seeding")
         self.assertEqual(rows[0][0], expected_start_url)
+
+        crawler.close()
+
+    def test_url_operations_with_priority(self):
+        """Test URL queue operations with priority support."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        test_urls = [
+            (crawler.normalize_url("https://example.com/page1"), 0),  # Normal priority
+            (crawler.normalize_url("https://example.com/page2"), 5),  # Medium priority
+            (crawler.normalize_url("https://example.com/page3"), 10),  # High priority
+        ]
+
+        for url, priority in test_urls:
+            crawler.add_url_to_queue(url, priority=priority)
+
+        cursor = crawler.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM crawl_queue WHERE status = 'pending'")
+        # Seeded URL + 3 test URLs
+        self.assertEqual(cursor.fetchone()[0], len(test_urls) + 1)
+
+        # Verify priority values are stored correctly
+        cursor.execute(
+            "SELECT url, priority FROM crawl_queue WHERE priority > 0 ORDER BY priority DESC"
+        )
+        priority_rows = cursor.fetchall()
+
+        self.assertEqual(
+            len(priority_rows), 3
+        )  # Three URLs with priority > 0 (including seeded URL with priority 1)
+
+        # Check that high priority URL comes first
+        self.assertEqual(priority_rows[0][1], 10)  # Highest priority
+        self.assertEqual(priority_rows[1][1], 5)  # Medium priority
+        self.assertEqual(priority_rows[2][1], 1)  # Seeded URL priority
 
         crawler.close()
 
@@ -201,7 +292,7 @@ class TestSQLiteIntegration(BaseWebsiteCrawlerTest):
             test_urls[1], "failed", error_msg="Temporary connection error"
         )
 
-        # Manually advance time for retry_after to pass for test_urls[1]
+        # Manually advance time for retry_after to pass for test_urls[2]
         # This depends on the default retry logic (e.g., 5 minutes)
         # For simplicity, we'll assume page3 (test_urls[2]) has its next_crawl due now.
         crawler.cursor.execute(
@@ -210,8 +301,339 @@ class TestSQLiteIntegration(BaseWebsiteCrawlerTest):
         )
         crawler.conn.commit()
 
+        # The seeded URL has priority 1, so it will be returned first
+        # Let's mark it as visited so we can test getting test_urls[2]
+        seeded_url = crawler.normalize_url(crawler.start_url)
+        crawler.mark_url_status(seeded_url, "visited", content_hash="seeded")
+
         next_url_to_crawl = crawler.get_next_url_to_crawl()
         self.assertEqual(next_url_to_crawl, test_urls[2])
+
+        crawler.close()
+
+
+class TestCSVFunctionality(BaseWebsiteCrawlerTest):
+    """Test cases for CSV functionality."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()  # Set up environment variables
+        self.temp_dir = tempfile.mkdtemp()
+        self.site_id = "test-site"
+        self.site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            "csv_export_url": "https://example.com/export.csv",
+            "csv_check_interval_hours": 1,
+            "csv_modified_days_threshold": 1,
+        }
+
+        self.path_patcher = patch("crawler.website_crawler.Path")
+        mock_path_constructor = self.path_patcher.start()
+        mock_path_constructor.return_value.parent.return_value = Path(self.temp_dir)
+
+        self.original_sqlite_connect = sqlite3.connect
+        self.connect_patcher = patch("sqlite3.connect")
+        mock_sqlite_connect = self.connect_patcher.start()
+        mock_sqlite_connect.side_effect = (
+            lambda db_path_arg: self.original_sqlite_connect(":memory:")
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        self.path_patcher.stop()
+        self.connect_patcher.stop()
+        shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
+
+    def test_csv_mode_enabled_detection(self):
+        """Test that CSV mode is properly detected when CSV URL is configured."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        self.assertTrue(crawler.csv_mode_enabled)
+        self.assertEqual(crawler.csv_export_url, "https://example.com/export.csv")
+        self.assertEqual(crawler.csv_check_interval_hours, 1)
+        self.assertEqual(crawler.csv_modified_days_threshold, 1)
+
+        crawler.close()
+
+    def test_csv_mode_disabled_detection(self):
+        """Test that CSV mode is disabled when no CSV URL is configured."""
+        config_without_csv = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            # No CSV configuration
+        }
+
+        crawler = WebsiteCrawler(self.site_id, config_without_csv)
+
+        self.assertFalse(crawler.csv_mode_enabled)
+        self.assertIsNone(crawler.csv_export_url)
+
+        crawler.close()
+
+    def test_parse_csv_date(self):
+        """Test CSV date parsing functionality."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Test valid date formats
+        test_cases = [
+            ("7/12/25 8:45", datetime(2025, 7, 12, 8, 45)),
+            ("12/31/24 23:59", datetime(2024, 12, 31, 23, 59)),
+            ("1/1/25 0:00", datetime(2025, 1, 1, 0, 0)),
+        ]
+
+        for date_str, expected_datetime in test_cases:
+            with self.subTest(date_str=date_str):
+                result = crawler.parse_csv_date(date_str)
+                self.assertEqual(result, expected_datetime)
+
+        # Test invalid date format
+        invalid_result = crawler.parse_csv_date("invalid-date")
+        self.assertIsNone(invalid_result)
+
+        crawler.close()
+
+    @patch("crawler.website_crawler.urlopen")
+    def test_download_csv_data_success(self, mock_urlopen):
+        """Test successful CSV data download."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Mock CSV content
+        csv_content = """URL,Modified Date,Post Title
+https://example.com/page1,7/12/25 8:45,Test Page 1
+https://example.com/page2,7/13/25 9:30,Test Page 2
+"""
+
+        # Mock urlopen response as context manager
+        mock_response = Mock()
+        mock_response.read.return_value = csv_content.encode("utf-8")
+        mock_response.__enter__ = Mock(return_value=mock_response)
+        mock_response.__exit__ = Mock(return_value=None)
+        mock_urlopen.return_value = mock_response
+
+        result = crawler.download_csv_data()
+
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["URL"], "https://example.com/page1")
+        self.assertEqual(result[0]["Modified Date"], "7/12/25 8:45")
+        self.assertEqual(result[0]["Post Title"], "Test Page 1")
+
+        crawler.close()
+
+    @patch("crawler.website_crawler.urlopen")
+    def test_download_csv_data_failure(self, mock_urlopen):
+        """Test CSV data download failure handling."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Mock network error
+        mock_urlopen.side_effect = URLError("Network error")
+
+        result = crawler.download_csv_data()
+
+        self.assertIsNone(result)
+
+        # Verify error was logged to CSV tracking
+        cursor = crawler.conn.cursor()
+        cursor.execute("SELECT csv_error FROM csv_tracking LIMIT 1")
+        error_record = cursor.fetchone()
+        self.assertIsNotNone(error_record)
+        self.assertIn("Network error", error_record[0])
+
+        crawler.close()
+
+    def test_process_csv_data(self):
+        """Test processing CSV data and adding URLs to queue."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Create test CSV data with recent and old dates
+        now = datetime.now()
+        recent_date = now - timedelta(hours=12)  # Within threshold
+        old_date = now - timedelta(days=3)  # Outside threshold
+
+        csv_data = [
+            {
+                "URL": "https://example.com/recent-page",
+                "Modified Date": recent_date.strftime("%m/%d/%y %H:%M"),
+                "Post Title": "Recent Post",
+            },
+            {
+                "URL": "https://example.com/old-page",
+                "Modified Date": old_date.strftime("%m/%d/%y %H:%M"),
+                "Post Title": "Old Post",
+            },
+            {
+                "URL": "https://external.com/page",  # External domain
+                "Modified Date": recent_date.strftime("%m/%d/%y %H:%M"),
+                "Post Title": "External Post",
+            },
+        ]
+
+        added_count = crawler.process_csv_data(csv_data)
+
+        # Should only add recent URL from same domain
+        self.assertEqual(added_count, 1)
+
+        # Verify URL was added with high priority
+        cursor = crawler.conn.cursor()
+        normalized_url = crawler.normalize_url("https://example.com/recent-page")
+        cursor.execute(
+            """
+            SELECT url, priority FROM crawl_queue 
+            WHERE url = ? AND priority > 0
+        """,
+            (normalized_url,),
+        )
+
+        result = cursor.fetchone()
+        self.assertIsNotNone(result)
+        self.assertEqual(result[1], 10)  # High priority
+
+        crawler.close()
+
+    def test_update_csv_tracking(self):
+        """Test CSV tracking table updates."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Test successful update
+        crawler.update_csv_tracking(success=True)
+
+        cursor = crawler.conn.cursor()
+        cursor.execute(
+            "SELECT last_csv_check, last_csv_success, csv_error FROM csv_tracking LIMIT 1"
+        )
+        result = cursor.fetchone()
+
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result[0])  # last_csv_check
+        self.assertIsNotNone(result[1])  # last_csv_success
+        self.assertIsNone(result[2])  # csv_error should be None
+
+        # Test error update
+        crawler.update_csv_tracking(csv_error="Test error")
+
+        cursor.execute("SELECT csv_error FROM csv_tracking LIMIT 1")
+        error_result = cursor.fetchone()
+        self.assertEqual(error_result[0], "Test error")
+
+        crawler.close()
+
+    def test_should_check_csv_timing(self):
+        """Test CSV check timing logic."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Should check when no tracking record exists
+        self.assertTrue(crawler.should_check_csv())
+
+        # Mark initial crawl as completed
+        crawler.mark_initial_crawl_completed()
+
+        # Should check after initial crawl is completed (but timing record exists now)
+        # The mark_initial_crawl_completed() creates a record with last_csv_check = now
+        # So we need to clear that to test the timing logic properly
+        cursor = crawler.conn.cursor()
+        cursor.execute("UPDATE csv_tracking SET last_csv_check = NULL")
+        crawler.conn.commit()
+
+        # Now should check after initial crawl is completed
+        self.assertTrue(crawler.should_check_csv())
+
+        # Update tracking with recent check
+        crawler.update_csv_tracking(success=True)
+
+        # Should not check immediately after recent check
+        self.assertFalse(crawler.should_check_csv())
+
+        # Manually update to simulate time passing
+        cursor = crawler.conn.cursor()
+        old_time = (datetime.now() - timedelta(hours=2)).isoformat()
+        cursor.execute(
+            """
+            UPDATE csv_tracking 
+            SET last_csv_check = ?
+        """,
+            (old_time,),
+        )
+        crawler.conn.commit()
+
+        # Should check after interval has passed
+        self.assertTrue(crawler.should_check_csv())
+
+        crawler.close()
+
+    def test_should_not_check_csv_before_initial_crawl(self):
+        """Test that CSV checking is disabled before initial crawl completion."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Create tracking record but don't mark initial crawl as completed
+        crawler.update_csv_tracking(success=True)
+
+        # Should not check CSV before initial crawl is completed
+        self.assertFalse(crawler.should_check_csv())
+
+        crawler.close()
+
+    def test_mark_initial_crawl_completed(self):
+        """Test marking initial crawl as completed."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Initially not completed
+        self.assertFalse(crawler.is_initial_crawl_completed())
+
+        # Mark as completed
+        crawler.mark_initial_crawl_completed()
+
+        # Should now be completed
+        self.assertTrue(crawler.is_initial_crawl_completed())
+        self.assertTrue(crawler.initial_crawl_completed)
+
+        # Verify in database
+        cursor = crawler.conn.cursor()
+        cursor.execute("SELECT initial_crawl_completed FROM csv_tracking LIMIT 1")
+        result = cursor.fetchone()
+        self.assertEqual(result[0], 1)
+
+        crawler.close()
+
+    @patch("crawler.website_crawler.urlopen")
+    def test_check_and_process_csv_integration(self, mock_urlopen):
+        """Test integrated CSV check and processing."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Mark initial crawl as completed
+        crawler.mark_initial_crawl_completed()
+
+        # Clear the last_csv_check timestamp so CSV processing can happen immediately
+        cursor = crawler.conn.cursor()
+        cursor.execute("UPDATE csv_tracking SET last_csv_check = NULL")
+        crawler.conn.commit()
+
+        # Mock CSV content
+        now = datetime.now()
+        recent_date = now - timedelta(hours=12)
+        csv_content = f"""URL,Modified Date,Post Title
+https://example.com/recent-page,{recent_date.strftime("%m/%d/%y %H:%M")},Recent Post
+"""
+
+        mock_response = Mock()
+        mock_response.read.return_value = csv_content.encode("utf-8")
+        mock_response.__enter__ = Mock(return_value=mock_response)
+        mock_response.__exit__ = Mock(return_value=None)
+        mock_urlopen.return_value = mock_response
+
+        # Should process CSV and add URLs
+        added_count = crawler.check_and_process_csv()
+
+        self.assertEqual(added_count, 1)
+
+        # Verify tracking was updated
+        cursor = crawler.conn.cursor()
+        cursor.execute("SELECT last_csv_success FROM csv_tracking LIMIT 1")
+        result = cursor.fetchone()
+        self.assertIsNotNone(result[0])
 
         crawler.close()
 
@@ -495,6 +917,60 @@ class TestDaemonBehavior(BaseWebsiteCrawlerTest):
 
         # Verify that sleep was called due to no URLs
         mock_time_sleep.assert_called()
+
+        crawler.close()
+
+    @patch("time.sleep")
+    @patch("crawler.website_crawler.sync_playwright")
+    def test_daemon_csv_check_during_sleep(self, mock_sync_playwright, mock_time_sleep):
+        """Test that CSV checking occurs during daemon sleep periods."""
+        # Configure CSV mode
+        csv_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+            "csv_export_url": "https://example.com/export.csv",
+            "csv_check_interval_hours": 1,
+            "csv_modified_days_threshold": 1,
+        }
+
+        crawler = WebsiteCrawler(self.site_id, csv_config)
+
+        # Mark initial crawl as completed
+        crawler.mark_initial_crawl_completed()
+
+        # Empty the queue to trigger sleep
+        crawler.cursor.execute("DELETE FROM crawl_queue")
+        crawler.conn.commit()
+
+        # Mock CSV check to add URLs
+        with (
+            patch.object(
+                crawler, "check_and_process_csv", return_value=2
+            ) as mock_csv_check,
+            patch.object(crawler, "get_next_url_to_crawl", return_value=None),
+        ):
+            mock_args = MagicMock()
+            mock_args.stop_after = None
+
+            with patch("crawler.website_crawler.is_exiting") as mock_is_exiting:
+                effect_count = 0
+
+                def exit_requested_side_effect():
+                    nonlocal effect_count
+                    effect_count += 1
+                    return effect_count > 2
+
+                mock_is_exiting.side_effect = exit_requested_side_effect
+
+                with patch("os.getenv") as mock_getenv:
+                    mock_getenv.return_value = "test-index"
+                    from crawler.website_crawler import run_crawl_loop
+
+                    run_crawl_loop(crawler, MagicMock(), mock_args)
+
+        # Verify CSV check was called
+        mock_csv_check.assert_called()
 
         crawler.close()
 
@@ -935,6 +1411,161 @@ class TestRobotsTxtCompliance(BaseWebsiteCrawlerTest):
         # Should return True since robots.txt check is skipped
         self.assertTrue(result)
         self.assertIsNone(crawler.robots_parser)
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_cache_initialization(self, mock_robot_parser_class):
+        """Test robots.txt cache is properly initialized."""
+        mock_parser = Mock()
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Verify cache timestamp is set after successful initialization
+        self.assertIsNotNone(crawler.robots_cache_timestamp)
+        self.assertEqual(crawler.robots_cache_duration_hours, 24)
+        self.assertEqual(crawler.robots_url, "https://example.com/robots.txt")
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_cache_not_expired(self, mock_robot_parser_class):
+        """Test robots.txt cache is not reloaded when still fresh."""
+        mock_parser = Mock()
+        mock_parser.can_fetch.return_value = True
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Reset call count after initialization
+        mock_robot_parser_class.reset_mock()
+        mock_parser.read.reset_mock()
+
+        # Make multiple URL validation calls
+        crawler.is_valid_url("https://example.com/page1")
+        crawler.is_valid_url("https://example.com/page2")
+        crawler.is_valid_url("https://example.com/page3")
+
+        # Verify robots.txt was not reloaded
+        mock_robot_parser_class.assert_not_called()
+        mock_parser.read.assert_not_called()
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    @patch("crawler.website_crawler.datetime")
+    def test_robots_txt_cache_expired_reload(
+        self, mock_datetime, mock_robot_parser_class
+    ):
+        """Test robots.txt cache is reloaded when expired."""
+        # Set up datetime mocks
+        initial_time = datetime(2024, 1, 1, 12, 0, 0)
+        expired_time = datetime(2024, 1, 2, 13, 0, 0)  # 25 hours later
+
+        mock_datetime.now.side_effect = [initial_time, expired_time, expired_time]
+        mock_datetime.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+
+        mock_parser = Mock()
+        mock_parser.can_fetch.return_value = True
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Verify initial cache timestamp
+        self.assertEqual(crawler.robots_cache_timestamp, initial_time)
+
+        # Reset call count after initialization
+        mock_robot_parser_class.reset_mock()
+        mock_parser.read.reset_mock()
+
+        # Make URL validation call after cache expiry
+        crawler.is_valid_url("https://example.com/page1")
+
+        # Verify robots.txt was reloaded
+        mock_robot_parser_class.assert_called_once()
+        mock_parser.read.assert_called_once()
+        self.assertEqual(crawler.robots_cache_timestamp, expired_time)
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    @patch("crawler.website_crawler.datetime")
+    def test_robots_txt_cache_reload_failure(
+        self, mock_datetime, mock_robot_parser_class
+    ):
+        """Test robots.txt cache reload failure handling."""
+        # Set up datetime mocks
+        initial_time = datetime(2024, 1, 1, 12, 0, 0)
+        expired_time = datetime(2024, 1, 2, 13, 0, 0)  # 25 hours later
+
+        mock_datetime.now.side_effect = [initial_time, expired_time]
+        mock_datetime.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+
+        # First call succeeds, second call fails
+        mock_parser = Mock()
+        mock_parser.can_fetch.return_value = True
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Verify initial success
+        self.assertIsNotNone(crawler.robots_parser)
+        self.assertEqual(crawler.robots_cache_timestamp, initial_time)
+
+        # Set up second parser to fail
+        mock_parser_2 = Mock()
+        mock_parser_2.read.side_effect = Exception("Network error")
+        mock_robot_parser_class.return_value = mock_parser_2
+
+        # Make URL validation call after cache expiry
+        result = crawler.is_valid_url("https://example.com/page1")
+
+        # Should still return True (fallback behavior)
+        self.assertTrue(result)
+        # Parser should be None after failed reload
+        self.assertIsNone(crawler.robots_parser)
+        # Cache timestamp should be None after failed reload
+        self.assertIsNone(crawler.robots_cache_timestamp)
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_cache_expiry_check(self, mock_robot_parser_class):
+        """Test robots.txt cache expiry check logic."""
+        mock_parser = Mock()
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Test cache not expired (fresh)
+        self.assertFalse(crawler._is_robots_cache_expired())
+
+        # Test cache expired (manually set old timestamp)
+        old_timestamp = datetime.now() - timedelta(hours=25)
+        crawler.robots_cache_timestamp = old_timestamp
+        self.assertTrue(crawler._is_robots_cache_expired())
+
+        # Test no cache timestamp (should be expired)
+        crawler.robots_cache_timestamp = None
+        self.assertTrue(crawler._is_robots_cache_expired())
+        crawler.close()
+
+    @patch("crawler.website_crawler.RobotFileParser")
+    def test_robots_txt_cache_custom_duration(self, mock_robot_parser_class):
+        """Test robots.txt cache with custom duration."""
+        mock_parser = Mock()
+        mock_robot_parser_class.return_value = mock_parser
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Set custom cache duration
+        crawler.robots_cache_duration_hours = 12  # 12 hours instead of 24
+
+        # Test cache not expired (within 12 hours)
+        recent_timestamp = datetime.now() - timedelta(hours=6)
+        crawler.robots_cache_timestamp = recent_timestamp
+        self.assertFalse(crawler._is_robots_cache_expired())
+
+        # Test cache expired (after 12 hours)
+        old_timestamp = datetime.now() - timedelta(hours=13)
+        crawler.robots_cache_timestamp = old_timestamp
+        self.assertTrue(crawler._is_robots_cache_expired())
         crawler.close()
 
 

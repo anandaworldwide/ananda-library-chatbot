@@ -1,5 +1,8 @@
 {
   "domain": "ananda.org",
+  "csv_export_url": "http://www.ananda.org/?export_modified_posts=1",
+  "csv_check_interval_hours": 1,
+  "csv_modified_days_threshold": 1,
   "skip_patterns": [
     "^/search/",
     "^/login/",
