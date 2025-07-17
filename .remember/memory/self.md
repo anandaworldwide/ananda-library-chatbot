@@ -178,3 +178,30 @@ for attr in tag.attrs:
         or attr.startswith("aria-")):
         del tag.attrs[attr]  # Remove attribute but keep the tag
 ```
+
+### 10. Mobile Safari Download Issues
+
+**Problem**: `window.open()` doesn't reliably trigger file downloads on mobile Safari (iPhone/iPad). The window opens but no download occurs.
+
+**Wrong**: Using `window.open()` for programmatic downloads.
+
+```typescript
+// Doesn't work on mobile Safari
+window.open(signedUrl, "_blank");
+```
+
+**Correct**: Create temporary link element with download attribute and programmatically click it.
+
+```typescript
+// Works reliably on mobile Safari
+const link = document.createElement("a");
+link.href = signedUrl;
+link.download = filename || "document.pdf";
+link.style.display = "none";
+
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+```
+
+**Pattern**: For any programmatic file downloads, use the temporary link approach instead of `window.open()` to ensure mobile compatibility.
