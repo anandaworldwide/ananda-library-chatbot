@@ -9,6 +9,7 @@
     "chatPlaceholder": "How can I think of God more?",
     "allowedFrontEndDomains": [
       "ask.anandalibrary.org",
+      "luca.ananda.org",
       "**-ananda-web-services-projects.vercel.app",
       "localhost:3000",
       "127.0.0.1:3000"
