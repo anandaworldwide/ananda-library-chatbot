@@ -178,3 +178,31 @@ for attr in tag.attrs:
         or attr.startswith("aria-")):
         del tag.attrs[attr]  # Remove attribute but keep the tag
 ```
+
+### 10. Vector ID Format Change Breaking Document Counting
+
+**Problem**: The `vector_db_stats.py` script was showing chunks and documents as nearly equal numbers, which is incorrect since documents are split into multiple chunks.
+
+**Root Cause**: The vector ID format changed from 6 parts to 7 parts:
+- **Old format**: `{type}||{library}||{source}||{title}||{author}||{chunk_index}`
+- **New format**: `{content_type}||{library}||{source_location}||{sanitized_title}||{sanitized_author}||{document_hash}||{chunk_index}`
+
+The key issue is that `document_hash` is now chunk-specific (includes `chunk_text`), so each chunk has a different hash.
+
+**Wrong**: Removing only the chunk_index for document identification:
+```python
+if len(parts) >= 6:
+    doc_id = "||".join(parts[:-1])  # Still includes chunk-specific hash
+```
+
+**Correct**: Remove both document_hash and chunk_index for proper document identification:
+```python
+if len(parts) >= 7:
+    # Use first 5 parts: {content_type}||{library}||{source_location}||{sanitized_title}||{sanitized_author}
+    doc_id = "||".join(parts[:5])  # Excludes chunk-specific hash and index
+elif len(parts) >= 6:
+    # Fallback for older format
+    doc_id = "||".join(parts[:-1])
+```
+
+**Pattern**: When vector ID formats change, always verify what makes a document unique vs. what makes a chunk unique.

@@ -199,7 +199,10 @@ def extract_document_identifier(vector_id, metadata):
     """
     Extract a unique document identifier from vector ID or metadata.
 
-    Vector ID format appears to be: {type}||{library}||{source}||{title}||{author}||{doc_hash}||{chunk_index}
+    Current vector ID format: {content_type}||{library}||{source_location}||{sanitized_title}||{sanitized_author}||{document_hash}||{chunk_index}
+
+    Since document_hash is chunk-specific (includes chunk_text), we need to exclude both
+    document_hash and chunk_index to get a proper document identifier.
 
     Args:
         vector_id: The vector ID string
@@ -212,9 +215,13 @@ def extract_document_identifier(vector_id, metadata):
         # Try to extract from vector ID first (most reliable)
         if "||" in vector_id:
             parts = vector_id.split("||")
-            if len(parts) >= 6:
-                # Use everything except the last part (chunk index)
-                # Format: {type}||{library}||{source}||{title}||{author}||{doc_hash}
+            if len(parts) >= 7:
+                # Use first 5 parts: {content_type}||{library}||{source_location}||{sanitized_title}||{sanitized_author}
+                # Exclude both document_hash and chunk_index since document_hash is chunk-specific
+                doc_id = "||".join(parts[:5])
+                return doc_id
+            elif len(parts) >= 6:
+                # Fallback for older 6-part format: {type}||{library}||{source}||{title}||{author}||{chunk_index}
                 doc_id = "||".join(parts[:-1])
                 return doc_id
 
