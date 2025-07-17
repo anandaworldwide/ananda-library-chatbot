@@ -205,3 +205,5 @@ document.body.removeChild(link);
 ```
 
 **Pattern**: For any programmatic file downloads, use the temporary link approach instead of `window.open()` to ensure mobile compatibility.
+
+**Cross-Browser Compatibility**: This fix works across all iOS browsers (Safari, Chrome, Firefox, Edge) because Apple requires all iOS browsers to use WebKit as their rendering engine. The programmatic link clicking approach with the `download` attribute is well-supported across WebKit-based browsers and specifically addresses mobile browser restrictions on programmatic window opening and file downloads.
