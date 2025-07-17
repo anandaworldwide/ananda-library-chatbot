@@ -242,8 +242,17 @@ const SourcesList: React.FC<SourcesListProps> = ({
 
         const { signedUrl } = await response.json();
 
-        // Open the signed URL in a new tab to trigger download
-        window.open(signedUrl, "_blank");
+        // Create a temporary link element to trigger download
+        // This approach works reliably on mobile Safari (iPhone/iPad)
+        const link = document.createElement("a");
+        link.href = signedUrl;
+        link.download = doc.metadata.title || "document.pdf";
+        link.style.display = "none";
+        
+        // Append to document, click, then remove
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       } catch (error) {
         console.error("Error downloading PDF:", error);
         // TODO: Show user-friendly error message
