@@ -29,7 +29,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { RunnableSequence, RunnablePassthrough } from "@langchain/core/runnables";
-import { StringOutputParser } from "@langchain/core/output_parsers";
 import type { Document } from "langchain/document";
 import { VectorStoreRetriever } from "@langchain/core/vectorstores";
 import fs from "fs/promises";
@@ -39,9 +38,11 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 import { StreamingResponseData } from "@/types/StreamingResponseData";
 import { PineconeStore } from "@langchain/pinecone";
+
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import { SiteConfig as AppSiteConfig } from "@/types/siteConfig";
 import { ChatMessage, convertChatHistory } from "@/utils/shared/chatHistory";
+import { NextRequest } from "next/server";
 import { sendOpsAlert } from "./emailOps";
 
 // S3 client for loading remote templates and configurations
@@ -53,6 +54,8 @@ const s3Client = new S3Client({
 type AnswerChainInput = {
   question: string;
   chat_history: string;
+  context?: any; // Added for tool execution results
+  tool_messages?: any[]; // Added for tool execution messages
 };
 
 export type CollectionKey = "master_swami" | "whole_library";
@@ -123,6 +126,7 @@ function getPromptEnvironment(): string {
 }
 
 // Retrieves template content from S3 bucket with error handling
+// TODO: add caching to this function
 async function loadTextFileFromS3(bucket: string, key: string): Promise<string> {
   try {
     const response = await s3Client.send(
@@ -343,6 +347,70 @@ async function retrieveDocumentsByLibrary(
   return documents;
 }
 
+/**
+ * Detects if a question has location-related intent
+ * @param question - The user's question
+ * @returns boolean indicating if location tools should be used
+ */
+export function hasLocationIntent(question: string): boolean {
+  const locationKeywords = [
+    // Direct location queries
+    "near me",
+    "nearby",
+    "closest",
+    "nearest",
+    "in my area",
+    "around here",
+    "where can i find",
+    "where is",
+    "where are",
+    "location of",
+    "find a",
+    // Center-specific queries
+    "center near",
+    "group near",
+    "community near",
+    "meeting near",
+    "ananda center",
+    "meditation center",
+    "spiritual center",
+    // Geographic references
+    "directions to",
+    "address of",
+    // Distance queries
+    "how far",
+    "miles from",
+    "drive to",
+    "travel to",
+  ];
+
+  const questionLower = question.toLowerCase();
+
+  // Check for explicit location keywords
+  const hasKeywords = locationKeywords.some((keyword) => questionLower.includes(keyword.trim()));
+
+  // Check for pattern: "center in [location]" or "group in [location]"
+  // but make it more specific to avoid false matches
+  const locationPattern = /(center|group|community|meeting|class)\s+(in|at|near)\s+([A-Z][a-z]+|[a-z]+\s+[A-Z][a-z]+)/i;
+  const hasLocationPattern = locationPattern.test(question);
+
+  // Check for "near" followed by a proper noun (likely a location) but be more restrictive
+  // Only match if "near" is followed by a capitalized word that looks like a place name
+  const nearLocationPattern = /\bnear\s+[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]+)*/;
+  const hasNearLocation = nearLocationPattern.test(question);
+
+  // Additional check: if question contains "in" followed by what looks like a place name
+  const inLocationPattern = /\bin\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/;
+  const hasInLocation =
+    inLocationPattern.test(question) &&
+    // But exclude common phrases that aren't locations
+    !/(in\s+general|in\s+particular|in\s+this|in\s+that|in\s+life|in\s+mind|in\s+heart|in\s+spirit)/i.test(
+      questionLower
+    );
+
+  return hasKeywords || hasLocationPattern || hasNearLocation || hasInLocation;
+}
+
 // Main chain creation function that sets up the complete conversational QA system
 // Supports multiple models, weighted library access, and site-specific configurations
 export const makeChain = async (
@@ -356,28 +424,54 @@ export const makeChain = async (
     model: "gpt-3.5-turbo",
     temperature: 0.1,
   },
-  privateSession: boolean = false
+  privateSession: boolean = false,
+  geoTools: any[] = [],
+  request?: NextRequest,
+  siteConfig?: AppSiteConfig | null,
+  originalQuestion?: string // Add this parameter to pass the original question
 ) => {
-  const siteId = process.env.SITE_ID || "default";
-  const configPath = path.join(process.cwd(), "site-config/config.json");
-  const siteConfig = JSON.parse(await fs.readFile(configPath, "utf8"));
-
   const { model, temperature, label } = modelConfig;
   let answerModel: BaseLanguageModel; // Renamed for clarity
   let rephraseModel: BaseLanguageModel; // New model for rephrasing
 
-  // If includedLibraries has weights, then preserves weighted objects for proportional source
-  // retrieval. Otherwise, it
-  const includedLibraries: Array<string | { name: string; weight?: number }> =
-    siteConfig[siteId]?.includedLibraries || [];
+  // Get site ID from siteConfig if available
+  const siteId = siteConfig?.siteId || process.env.SITE_ID;
+  if (!siteId) {
+    throw new Error("Site ID is required but not provided in siteConfig or SITE_ID environment variable");
+  }
+
+  // Get included libraries from siteConfig if available
+  const includedLibraries: Array<string | { name: string; weight?: number }> = siteConfig?.includedLibraries || [];
 
   try {
     // Initialize the answer generation model
-    answerModel = new ChatOpenAI({
+    const baseAnswerModel = new ChatOpenAI({
       temperature,
       modelName: model,
       streaming: true,
-    }) as BaseLanguageModel;
+    });
+
+    // ✅ CONDITIONAL TOOL BINDING: Only bind geo tools if location intent is detected
+    const shouldUseGeoTools = originalQuestion && hasLocationIntent(originalQuestion);
+
+    if (shouldUseGeoTools && geoTools.length > 0 && request) {
+      // Bind tools to the model - LangChain will handle tool execution automatically
+      answerModel = baseAnswerModel.bind({
+        tools: geoTools,
+        tool_choice: "auto", // Let AI decide when to use tools
+      }) as BaseLanguageModel;
+
+      console.log(
+        "✅ Geo-awareness tools conditionally bound to OpenAI model for location query:",
+        originalQuestion?.substring(0, 100)
+      );
+    } else {
+      answerModel = baseAnswerModel as BaseLanguageModel;
+
+      if (originalQuestion) {
+        console.log("🔍 GEO DEBUG: No location intent detected in question:", originalQuestion?.substring(0, 100));
+      }
+    }
 
     // Initialize the rephrasing model (faster, lighter)
     rephraseModel = new ChatOpenAI({
@@ -488,16 +582,12 @@ Error details: ${errorString}`,
     /\${(context|chat_history|question)}/g,
     (match, key) => `{${key}}`
   );
-  const answerPrompt = ChatPromptTemplate.fromTemplate(templateWithReplacedVars);
+  const answerPrompt = ChatPromptTemplate.fromTemplate(`{context}\n\n${templateWithReplacedVars}`);
 
   // Rephrase the initial question into a dereferenced standalone question based on
   // the chat history to allow effective vectorstore querying.
   // Use the faster rephraseModel for standalone question generation
-  const standaloneQuestionChain = RunnableSequence.from([
-    condenseQuestionPrompt,
-    rephraseModel,
-    new StringOutputParser(),
-  ]);
+  const standaloneQuestionChain = RunnableSequence.from([condenseQuestionPrompt, rephraseModel]);
 
   // Track libraries we've already logged to prevent duplicates
   const loggedLibraries = new Set<string>();
@@ -697,14 +787,12 @@ Error details: ${errorString}`,
   // This chain takes PromptDataType, selects necessary fields for the prompt, and generates a string answer
   const generationChainThatTakesPromptData = RunnableSequence.from([
     (input: PromptDataType) => ({
-      // Select fields for answerPrompt
       context: input.context,
       chat_history: input.chat_history,
       question: input.question,
     }),
     answerPrompt,
     answerModel,
-    new StringOutputParser(),
   ]);
 
   // Chain to prepare input for generationChain and combine its output with sourceDocuments
@@ -755,7 +843,7 @@ Error details: ${errorString}`,
           return input.question; // Don't reformulate social messages
         }
 
-        if (input.chat_history.trim() === "") {
+        if (input.chat_history.length === 0) {
           capturedRestatedQuestion = input.question; // Store for later
           return input.question;
         }
@@ -798,7 +886,8 @@ export const makeComparisonChains = async (
     model: "gpt-3.5-turbo",
     temperature: 0.1,
   },
-  privateSession: boolean = false
+  privateSession: boolean = false,
+  siteConfig?: AppSiteConfig | null
 ) => {
   try {
     const [chainA, chainB] = await Promise.all([
@@ -810,7 +899,11 @@ export const makeComparisonChains = async (
         undefined,
         undefined,
         rephraseModelConfig,
-        privateSession
+        privateSession,
+        [], // No geo tools for comparison chains
+        undefined, // No request for comparison chains
+        siteConfig,
+        undefined // No original question for comparison chains
       ),
       makeChain(
         retriever,
@@ -820,7 +913,11 @@ export const makeComparisonChains = async (
         undefined,
         undefined,
         rephraseModelConfig,
-        privateSession
+        privateSession,
+        [], // No geo tools for comparison chains
+        undefined, // No request for comparison chains
+        siteConfig,
+        undefined // No original question for comparison chains
       ),
     ]);
 
@@ -842,7 +939,8 @@ export async function setupAndExecuteLanguageModelChain(
   filter?: Record<string, unknown>,
   siteConfig?: AppSiteConfig | null,
   startTime?: number,
-  privateSession: boolean = false
+  privateSession: boolean = false,
+  request?: NextRequest
 ): Promise<{ fullResponse: string; finalDocs: Document[]; restatedQuestion: string }> {
   const TIMEOUT_MS = process.env.NODE_ENV === "test" ? 1000 : 30000;
   const RETRY_DELAY_MS = process.env.NODE_ENV === "test" ? 10 : 1000;
@@ -871,6 +969,24 @@ export async function setupAndExecuteLanguageModelChain(
         sendData({ siteId: siteConfig.siteId });
       }
 
+      // Check if geo-awareness is enabled for this site
+      // Note: siteConfig is already the specific site's config from loadSiteConfigSync()
+      const isGeoEnabled = siteConfig?.enableGeoAwareness || false;
+
+      // Prepare geo-awareness tools if enabled
+      let geoTools: any[] = [];
+      if (isGeoEnabled && request) {
+        if (sendData) {
+          sendData({ log: "[GEO] Geo-awareness tools bound to AI model", toolResponse: true });
+        }
+
+        // Import tools dynamically to avoid circular dependencies
+        const { TOOL_DEFINITIONS } = await import("./tools");
+        geoTools = TOOL_DEFINITIONS;
+      } else {
+        console.log("🔍 GEO DEBUG: NOT binding tools - isGeoEnabled:", isGeoEnabled, "request:", !!request);
+      }
+
       const chain = await makeChain(
         retriever,
         { model: modelName, temperature },
@@ -879,7 +995,11 @@ export async function setupAndExecuteLanguageModelChain(
         sendData,
         undefined,
         { model: rephraseModelName, temperature: rephraseTemperature },
-        privateSession
+        privateSession,
+        geoTools,
+        request,
+        siteConfig,
+        sanitizedQuestion // Pass original question for intent detection
       );
 
       // Format chat history for the language model
@@ -922,20 +1042,175 @@ export async function setupAndExecuteLanguageModelChain(
                 fullResponse += token;
                 tokensStreamed += token.length;
               },
+              async handleToolStart(tool: any, input: string) {
+                console.log(`🔧 Tool called: ${tool.name} with input: ${JSON.stringify(input)}`);
+                if (sendData) {
+                  sendData({ log: `[TOOL] Calling ${tool.name}`, toolResponse: true });
+                }
+              },
+              async handleToolEnd(output: string) {
+                console.log(`🔧 Tool output: ${output}`);
+                if (sendData) {
+                  sendData({ log: `[TOOL] Tool execution completed`, toolResponse: true });
+                }
+              },
+              async handleToolError(error: Error) {
+                console.error(`🔧 Tool error: ${error.message}`);
+                if (sendData) {
+                  sendData({ log: `[TOOL] Tool error: ${error.message}`, toolResponse: true });
+                }
+              },
             } as Partial<BaseCallbackHandler>,
           ],
         }
       );
 
-      // The result from chain.invoke will now be an object { answer: string, sourceDocuments: Document[], question: string }
+      // The result from chain.invoke will now be an object { answer: AIMessageChunk, sourceDocuments: Document[], question: string }
       const result = (await Promise.race([chainPromise, timeoutPromise])) as {
-        answer: string;
+        answer: any; // AIMessageChunk object with content property
         sourceDocuments: Document[];
         question: string;
       };
 
+      // Handle tool calls with proper loop
+      if (result.answer && result.answer.tool_calls && result.answer.tool_calls.length > 0) {
+        console.log("🔧 Starting tool execution loop");
+
+        const { executeTool } = await import("./tools");
+        const { ToolMessage } = await import("@langchain/core/messages");
+
+        let currentResponse = result.answer;
+        const allToolMessages = [];
+        const maxIterations = 5; // Prevent infinite loops
+        let iteration = 0;
+
+        while (currentResponse.tool_calls && currentResponse.tool_calls.length > 0 && iteration < maxIterations) {
+          iteration++;
+          console.log(
+            `🔧 Tool execution iteration ${iteration}, processing ${currentResponse.tool_calls.length} tool calls`
+          );
+
+          // Execute all tool calls in this iteration
+          const toolResults = [];
+          for (const toolCall of currentResponse.tool_calls) {
+            try {
+              console.log(`🔧 Executing tool: ${toolCall.name} with args:`, toolCall.args);
+              const toolResult = await executeTool(toolCall.name, toolCall.args, request!);
+              toolResults.push({
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(toolResult),
+              });
+              console.log(`✅ Tool ${toolCall.name} executed successfully:`, toolResult);
+            } catch (error) {
+              console.error(`❌ Tool ${toolCall.name} failed:`, error);
+              toolResults.push({
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+              });
+            }
+          }
+
+          // Create tool messages for this iteration
+          const toolMessages = toolResults.map(
+            (result) =>
+              new ToolMessage({
+                content: result.content,
+                tool_call_id: result.tool_call_id,
+              })
+          );
+
+          allToolMessages.push(...toolMessages);
+
+          // Call OpenAI again with tool results - NO SOURCES to avoid confusion
+          console.log(`🔧 Sending tool results back to AI (iteration ${iteration})`);
+
+          // Create a tool-free model for final response (no tools binding)
+          const { ChatOpenAI } = await import("@langchain/openai");
+          const toolFreeModel = new ChatOpenAI({
+            temperature: temperature,
+            modelName: modelName,
+            streaming: true,
+          });
+
+          // Create messages for the tool-free model
+          const { HumanMessage, AIMessage, SystemMessage } = await import("@langchain/core/messages");
+
+          // Get the system prompt for the tool-free model
+          const systemPrompt = await getFullTemplate(siteConfig?.siteId || "ananda-public");
+
+          // Create a proper conversation structure with system prompt
+          const messages = [
+            new SystemMessage(systemPrompt),
+            new HumanMessage(sanitizedQuestion),
+            new AIMessage({ content: "", tool_calls: currentResponse.tool_calls }),
+            ...allToolMessages,
+          ];
+
+          // Debug: Log what we're sending to the AI
+          console.log(
+            "🔧 DEBUG: Tool messages being sent to AI:",
+            JSON.stringify(
+              allToolMessages.map((msg) => ({
+                content: msg.content,
+                tool_call_id: msg.tool_call_id,
+              })),
+              null,
+              2
+            )
+          );
+
+          // Get final response from tool-free model with streaming
+          const toolResponse = await toolFreeModel.invoke(messages, {
+            callbacks: [
+              {
+                handleLLMNewToken(token: string) {
+                  if (!firstTokenTime) {
+                    firstTokenTime = Date.now();
+                    firstByteTime = Date.now();
+                    sendData({
+                      token,
+                      timing: {
+                        firstTokenGenerated: firstTokenTime,
+                        ttfb: firstByteTime && startTime ? firstByteTime - startTime : undefined,
+                      },
+                    });
+                  } else {
+                    sendData({ token });
+                  }
+                  fullResponse += token;
+                  tokensStreamed += token.length;
+                },
+              } as Partial<BaseCallbackHandler>,
+            ],
+          });
+
+          currentResponse = toolResponse;
+          console.log(`✅ Tool response received for iteration ${iteration}`);
+        }
+
+        if (iteration >= maxIterations) {
+          console.warn(`⚠️ Tool execution loop reached max iterations (${maxIterations})`);
+        }
+
+        result.answer = currentResponse;
+        console.log(`✅ Tool execution loop completed after ${iteration} iterations`);
+      }
+
       // Add warning logic here, after streaming is complete and result is aggregated
-      if (result.answer.includes("I don't have any specific information")) {
+      const resultForDebug = {
+        answer: result.answer,
+        question: result.question,
+      };
+      console.log("🔍 DEBUG: result object:", JSON.stringify(resultForDebug, null, 2));
+      console.log("🔍 DEBUG: result.answer type:", typeof result.answer);
+      console.log("🔍 DEBUG: result.answer value:", result.answer);
+
+      if (
+        result.answer &&
+        result.answer.content &&
+        typeof result.answer.content === "string" &&
+        result.answer.content.includes("I don't have any specific information")
+      ) {
         const modelInfoForWarning = siteConfig?.modelName || modelName || "unknown"; // Get model name
         const warningMsg = `Warning: AI response from model ${modelInfoForWarning} indicates no relevant information was found for question: "${sanitizedQuestion.substring(0, 100)}..."`;
         console.warn(warningMsg);
@@ -967,7 +1242,7 @@ export async function setupAndExecuteLanguageModelChain(
       // result.sourceDocuments are the correctly filtered documents from makeChain.
       // result.question is the restated question from the chain
       return {
-        fullResponse: fullResponse || result.answer, // Prefer streamed content, fallback to result.answer
+        fullResponse: fullResponse || result.answer.content, // Prefer streamed content, fallback to result.answer.content
         finalDocs: result.sourceDocuments,
         restatedQuestion: result.question,
       };

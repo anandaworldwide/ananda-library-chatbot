@@ -179,6 +179,55 @@ describe("makeChain", () => {
   let mockHandleLLMEnd: jest.Mock;
   let mockHandleLLMError: jest.Mock;
 
+  // Mock siteConfig
+  const mockSiteConfig = {
+    siteId: "test-site",
+    shortname: "test",
+    name: "Test Site",
+    tagline: "Test tagline",
+    greeting: "Test greeting",
+    parent_site_url: "https://test.com",
+    parent_site_name: "Test Parent",
+    help_url: "https://help.test.com",
+    help_text: "Test help",
+    collectionConfig: {
+      whole_library: "Whole Library",
+      master_swami: "Master Swami",
+    },
+    libraryMappings: {
+      "test-library": {
+        displayName: "Test Library",
+        url: "https://test.com",
+      },
+    },
+    enableSuggestedQueries: true,
+    enableMediaTypeSelection: true,
+    enableAuthorSelection: true,
+    welcome_popup_heading: "Welcome",
+    other_visitors_reference: "other visitors",
+    loginImage: null,
+    chatPlaceholder: "Ask a question...",
+    header: {
+      logo: "test-logo.png",
+      navItems: [],
+    },
+    footer: {
+      links: [],
+    },
+    requireLogin: false,
+    allowPrivateSessions: true,
+    allowAllAnswersPage: true,
+    npsSurveyFrequencyDays: 30,
+    queriesPerUserPerDay: 100,
+    showSourceContent: true,
+    showVoting: true,
+    includedLibraries: [
+      { name: "library1", weight: 2 },
+      { name: "library2", weight: 1 },
+    ],
+    enableGeoAwareness: false,
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -313,7 +362,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Verify that the chain was created
@@ -354,7 +406,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Verify that the chain was created
@@ -396,7 +451,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Directly invoke the sendData function to simulate the chain
@@ -421,7 +479,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Invoke with a follow-up question
@@ -460,7 +521,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      true // privateSession = true
+      true, // privateSession = true
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Verify that the chain was created successfully with the privateSession parameter
@@ -495,7 +559,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession = false
+      false, // privateSession = false
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Verify that the chain was created successfully with the privateSession parameter
@@ -583,7 +650,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Check filesystem was used
@@ -638,7 +708,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Manually trigger a call to mockS3Send to ensure it's called
@@ -687,7 +760,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Manually trigger sendData to simulate error handling
@@ -724,7 +800,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       customRephraseModelConfig,
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Check that ChatOpenAI was initialized with custom params for answer generation
@@ -765,7 +844,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Manually trigger getRelevantDocuments
@@ -788,7 +870,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Manually call resolveDocs to simulate the chain resolving documents
@@ -838,7 +923,10 @@ describe("makeChain", () => {
         sendData,
         resolveDocs,
         undefined, // rephraseModelConfig
-        false // privateSession
+        false, // privateSession
+        [], // geoTools
+        undefined, // request
+        mockSiteConfig // siteConfig
       );
 
       // Test that the chain properly handles question conversion
@@ -878,7 +966,10 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false // privateSession
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
     );
 
     // Verify that the chain was created successfully

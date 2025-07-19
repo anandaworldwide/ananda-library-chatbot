@@ -158,7 +158,8 @@
     "hideSources": true,
     "temperature": 0.3,
     "modelName": "gpt-4o-mini",
-    "showRelatedQuestions": false
+    "showRelatedQuestions": false,
+    "enableGeoAwareness": true
   },
   "jairam": {
     "name": "The Free Joe Hunt Chatbot",
