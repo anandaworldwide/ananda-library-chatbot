@@ -161,7 +161,8 @@ async function processTemplate(
       const envPath = getPromptEnvironment();
       const s3Key = `site-config/${envPath}/prompts/${s3Path}`;
       content = await loadTextFileFromS3(process.env.S3_BUCKET_NAME, s3Key);
-      console.log(`Loading S3 file took ${Date.now() - startTime}ms`);
+      const loadTime = Date.now() - startTime;
+      console.log(`Loading S3 file took ${loadTime}ms`);
     } else {
       // Load from local filesystem
       content = await loadTextFile(path.join(basePath, template.file));
@@ -366,7 +367,9 @@ export const makeChain = async (
       streaming: false, // No need for streaming here
     }) as BaseLanguageModel;
   } catch (error) {
-    console.error(`Failed to initialize models:`, error);
+    const errorMsg = `Failed to initialize models: ${error}`;
+    console.error(errorMsg, error);
+    if (sendData) sendData({ log: errorMsg });
     throw new Error(`Model initialization failed for ${label || model}`);
   }
 
@@ -464,13 +467,15 @@ export const makeChain = async (
       if (sendData) {
         // DEBUG: Add extensive logging for sources debugging
         try {
-          console.log(`🔍 SOURCES DEBUG: Retrieved ${allDocuments.length} documents`);
+          const debugMsg1 = `🔍 SOURCES DEBUG: Retrieved ${allDocuments.length} documents`;
+          console.log(debugMsg1);
+          sendData({ log: debugMsg1 });
 
           // Check for empty documents
           if (allDocuments.length === 0) {
-            console.warn(
-              `⚠️ SOURCES WARNING: No documents retrieved for question: "${input.question.substring(0, 100)}..."`
-            );
+            const warningMsg = `⚠️ SOURCES WARNING: No documents retrieved for question: "${input.question.substring(0, 100)}..."`;
+            console.warn(warningMsg);
+            sendData({ log: warningMsg });
           }
 
           // DEBUG: Check for problematic content that could break JSON serialization
@@ -479,51 +484,79 @@ export const makeChain = async (
               JSON.stringify(doc);
               return false;
             } catch (e) {
-              console.error(`❌ SOURCES ERROR: Document ${index} failed individual serialization:`, e);
-              console.error(`❌ SOURCES ERROR: Problematic document structure:`, {
+              const errorMsg1 = `❌ SOURCES ERROR: Document ${index} failed individual serialization: ${e}`;
+              console.error(errorMsg1);
+              sendData({ log: errorMsg1 });
+              
+              const errorMsg2 = `❌ SOURCES ERROR: Problematic document structure: ${JSON.stringify({
                 hasPageContent: !!doc.pageContent,
                 pageContentLength: doc.pageContent?.length,
                 hasMetadata: !!doc.metadata,
                 metadataKeys: doc.metadata ? Object.keys(doc.metadata) : [],
                 metadataSize: doc.metadata ? JSON.stringify(doc.metadata).length : 0,
-              });
+              })}`;
+              console.error(errorMsg2);
+              sendData({ log: errorMsg2 });
               return true;
             }
           });
 
           if (problematicSources.length > 0) {
-            console.error(`❌ SOURCES ERROR: ${problematicSources.length} documents have serialization issues`);
+            const errorMsg = `❌ SOURCES ERROR: ${problematicSources.length} documents have serialization issues`;
+            console.error(errorMsg);
+            sendData({ log: errorMsg });
           }
 
           // Test JSON serialization before sending
           const serializedTest = JSON.stringify(allDocuments);
           const serializedSize = new Blob([serializedTest]).size;
-          console.log(`🔍 SOURCES DEBUG: Serialized sources size: ${serializedSize} bytes`);
+          const debugMsg2 = `🔍 SOURCES DEBUG: Serialized sources size: ${serializedSize} bytes`;
+          console.log(debugMsg2);
+          sendData({ log: debugMsg2 });
 
           if (serializedSize > 1000000) {
             // 1MB threshold
-            console.warn(`⚠️ SOURCES WARNING: Large sources payload detected: ${serializedSize} bytes`);
-            console.warn(`⚠️ SOURCES WARNING: This could cause JSON serialization to fail in SSE transmission`);
+            const warningMsg1 = `⚠️ SOURCES WARNING: Large sources payload detected: ${serializedSize} bytes`;
+            console.warn(warningMsg1);
+            sendData({ log: warningMsg1 });
+            
+            const warningMsg2 = `⚠️ SOURCES WARNING: This could cause JSON serialization to fail in SSE transmission`;
+            console.warn(warningMsg2);
+            sendData({ log: warningMsg2 });
           }
 
           // Test if sources can be parsed back
           const parseTest = JSON.parse(serializedTest);
           if (!Array.isArray(parseTest) || parseTest.length !== allDocuments.length) {
-            console.error(`❌ SOURCES ERROR: Serialization round-trip failed!`);
+            const errorMsg = `❌ SOURCES ERROR: Serialization round-trip failed!`;
+            console.error(errorMsg);
+            sendData({ log: errorMsg });
           } else {
-            console.log(`✅ SOURCES DEBUG: Serialization test passed`);
+            const successMsg = `✅ SOURCES DEBUG: Serialization test passed`;
+            console.log(successMsg);
+            sendData({ log: successMsg });
           }
 
           sendData({ sourceDocs: allDocuments });
-          console.log(`✅ SOURCES DEBUG: Successfully sent ${allDocuments.length} sources to client`);
+          const successMsg2 = `✅ SOURCES DEBUG: Successfully sent ${allDocuments.length} sources to client`;
+          console.log(successMsg2);
+          sendData({ log: successMsg2 });
         } catch (serializationError) {
-          console.error(`❌ SOURCES ERROR: Failed to serialize/send sources:`, serializationError);
-          console.error(`❌ SOURCES ERROR: This is likely THE BUG - answer will stream but sources will be missing`);
-          console.error(`❌ SOURCES ERROR: Error details:`, {
+          const errorMsg1 = `❌ SOURCES ERROR: Failed to serialize/send sources: ${serializationError}`;
+          console.error(errorMsg1);
+          sendData({ log: errorMsg1 });
+          
+          const errorMsg2 = `❌ SOURCES ERROR: This is likely THE BUG - answer will stream but sources will be missing`;
+          console.error(errorMsg2);
+          sendData({ log: errorMsg2 });
+          
+          const errorMsg3 = `❌ SOURCES ERROR: Error details: ${JSON.stringify({
             name: serializationError instanceof Error ? serializationError.name : "Unknown",
             message: serializationError instanceof Error ? serializationError.message : String(serializationError),
             documentCount: allDocuments.length,
-          });
+          })}`;
+          console.error(errorMsg3);
+          sendData({ log: errorMsg3 });
           // Send empty array as fallback
           sendData({ sourceDocs: [] });
         }
@@ -599,7 +632,9 @@ export const makeChain = async (
       question: async (input: AnswerChainInput) => {
         // Debug: Log the original question only if not in private mode
         if (!privateSession) {
-          console.log(`🔍 ORIGINAL QUESTION: "${input.question}"`);
+          const debugMsg = `🔍 ORIGINAL QUESTION: "${input.question}"`;
+          console.log(debugMsg);
+          if (sendData) sendData({ log: debugMsg });
         }
 
         // Check for social messages like "thanks" and bypass reformulation.
@@ -621,7 +656,9 @@ export const makeChain = async (
 
         // Debug: Show the result of reformulation only if not in private mode
         if (!privateSession) {
-          console.log(`🔍 REFORMULATED TO: "${standaloneQuestion}"`);
+          const debugMsg = `🔍 REFORMULATED TO: "${standaloneQuestion}"`;
+          console.log(debugMsg);
+          if (sendData) sendData({ log: debugMsg });
         }
 
         capturedRestatedQuestion = standaloneQuestion; // Store for later
@@ -680,7 +717,8 @@ export const makeComparisonChains = async (
 
     return { chainA, chainB };
   } catch (error) {
-    console.error("Failed to create comparison chains:", error);
+    const errorMsg = `Failed to create comparison chains: ${error}`;
+    console.error(errorMsg, error);
     throw new Error("Failed to initialize one or both models for comparison");
   }
 };
@@ -719,6 +757,7 @@ export async function setupAndExecuteLanguageModelChain(
         if (siteConfig.siteId !== expectedSiteId) {
           const error = `Error: Backend is using incorrect site ID: ${siteConfig.siteId}. Expected: ${expectedSiteId}`;
           console.error(error);
+          sendData({ log: error });
         }
         sendData({ siteId: siteConfig.siteId });
       }
@@ -789,9 +828,9 @@ export async function setupAndExecuteLanguageModelChain(
       // Add warning logic here, after streaming is complete and result is aggregated
       if (result.answer.includes("I don't have any specific information")) {
         const modelInfoForWarning = siteConfig?.modelName || modelName || "unknown"; // Get model name
-        console.warn(
-          `Warning: AI response from model ${modelInfoForWarning} indicates no relevant information was found for question: "${sanitizedQuestion.substring(0, 100)}..."`
-        );
+        const warningMsg = `Warning: AI response from model ${modelInfoForWarning} indicates no relevant information was found for question: "${sanitizedQuestion.substring(0, 100)}..."`;
+        console.warn(warningMsg);
+        sendData({ log: warningMsg });
         // Optionally, send a warning to the client if needed, though this is after `done:true` has been sent.
         // sendData({ warning: "AI response indicates no relevant information found." });
       }
@@ -813,8 +852,7 @@ export async function setupAndExecuteLanguageModelChain(
       }
 
       sendData({ done: true, timing: finalTiming });
-      if (sendData) sendData({ log: '[RAG] Sent done event to frontend' });
-      else console.log('[RAG] Sent done event to frontend');
+      sendData({ log: '[RAG] Sent done event to frontend' });
 
       // Use the streamed fullResponse as the authoritative answer since it's what was sent to the frontend
       // result.sourceDocuments are the correctly filtered documents from makeChain.
@@ -828,10 +866,14 @@ export async function setupAndExecuteLanguageModelChain(
       lastError = error as Error;
       retryCount++;
       if (retryCount < MAX_RETRIES) {
-        console.warn(`Attempt ${retryCount} failed. Retrying in ${RETRY_DELAY_MS}ms...`, error);
+        const warningMsg = `Attempt ${retryCount} failed. Retrying in ${RETRY_DELAY_MS}ms...`;
+        console.warn(warningMsg, error);
+        sendData({ log: warningMsg });
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
       } else {
-        console.error("All retry attempts failed:", error);
+        const errorMsg = "All retry attempts failed";
+        console.error(errorMsg, error);
+        sendData({ log: errorMsg });
         throw lastError;
       }
     }
