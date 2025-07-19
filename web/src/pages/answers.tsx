@@ -12,24 +12,24 @@
  * - JWT authentication with React Query
  */
 
-import Layout from '@/components/layout';
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { checkUserLikes } from '@/services/likeService';
-import { getOrCreateUUID } from '@/utils/client/uuid';
-import { useRouter } from 'next/router';
-import { logEvent } from '@/utils/client/analytics';
-import React from 'react';
-import { GetServerSideProps } from 'next';
-import AnswerItem from '@/components/AnswerItem';
-import { SiteConfig } from '@/types/siteConfig';
-import { loadSiteConfig } from '@/utils/server/loadSiteConfig';
-import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
-import { NextApiRequest, NextApiResponse } from 'next';
-import { useSudo } from '@/contexts/SudoContext';
-import { SudoProvider } from '@/contexts/SudoContext';
-import { useAnswers } from '@/hooks/useAnswers';
-import { useMutation } from '@tanstack/react-query';
-import { queryFetch } from '@/utils/client/reactQueryConfig';
+import Layout from "@/components/layout";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { checkUserLikes } from "@/services/likeService";
+import { getOrCreateUUID } from "@/utils/client/uuid";
+import { useRouter } from "next/router";
+import { logEvent } from "@/utils/client/analytics";
+import React from "react";
+import { GetServerSideProps } from "next";
+import AnswerItem from "@/components/AnswerItem";
+import { SiteConfig } from "@/types/siteConfig";
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
+import { getSudoCookie } from "@/utils/server/sudoCookieUtils";
+import { NextApiRequest, NextApiResponse } from "next";
+import { useSudo } from "@/contexts/SudoContext";
+import { SudoProvider } from "@/contexts/SudoContext";
+import { useAnswers } from "@/hooks/useAnswers";
+import { useMutation } from "@tanstack/react-query";
+import { queryFetch } from "@/utils/client/reactQueryConfig";
 
 interface AllAnswersProps {
   siteConfig: SiteConfig | null;
@@ -41,10 +41,10 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
 
   // Parse query parameters
   const urlPage = router.query.page ? Number(router.query.page) : 1;
-  const urlSortBy = router.query.sortBy || 'mostRecent';
+  const urlSortBy = router.query.sortBy || "mostRecent";
 
   // UI state
-  const [sortBy, setSortBy] = useState<string>('mostRecent');
+  const [sortBy, setSortBy] = useState<string>("mostRecent");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isSortByInitialized, setIsSortByInitialized] = useState(false);
   const [isChangingPage, setIsChangingPage] = useState(false);
@@ -60,8 +60,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
 
   // State for delayed spinner
   const [showDelayedSpinner, setShowDelayedSpinner] = useState(false);
-  const [showExtendedLoadingMessage, setShowExtendedLoadingMessage] =
-    useState(false);
+  const [showExtendedLoadingMessage, setShowExtendedLoadingMessage] = useState(false);
 
   // Use React Query for data fetching with JWT authentication
   const { data, isLoading, error } = useAnswers(currentPage, sortBy, {
@@ -113,22 +112,20 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   const deleteMutation = useMutation({
     mutationFn: async (answerId: string) => {
       const response = await queryFetch(`/api/answers?answerId=${answerId}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
       if (!response.ok) {
         const responseData = await response.json();
-        throw new Error(
-          'Failed to delete answer (' + responseData.message + ')',
-        );
+        throw new Error("Failed to delete answer (" + responseData.message + ")");
       }
       return response.json();
     },
     onSuccess: (data, answerId) => {
-      logEvent('delete_answer', 'Admin', answerId);
+      logEvent("delete_answer", "Admin", answerId);
     },
     onError: (error) => {
-      console.error('Error deleting answer:', error);
-      alert('Failed to delete answer. Please try again.');
+      console.error("Error deleting answer:", error);
+      alert("Failed to delete answer. Please try again.");
     },
   });
 
@@ -136,19 +133,19 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   const saveScrollPosition = () => {
     const scrollY = window.scrollY;
     if (scrollY > 0) {
-      sessionStorage.setItem('answersScrollPosition', scrollY.toString());
+      sessionStorage.setItem("answersScrollPosition", scrollY.toString());
     }
   };
 
   const getSavedScrollPosition = () => {
-    const savedPosition = sessionStorage.getItem('answersScrollPosition');
+    const savedPosition = sessionStorage.getItem("answersScrollPosition");
     return savedPosition ? parseInt(savedPosition, 10) : 0;
   };
 
   const scrollToTop = () => {
     window.scrollTo({
       top: 0,
-      behavior: 'auto',
+      behavior: "auto",
     });
     // Force a reflow to ensure the scroll is applied immediately
     void document.body.offsetHeight;
@@ -165,9 +162,9 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     const handleBeforeUnload = () => {
       saveScrollPosition();
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, []);
 
@@ -176,9 +173,9 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     const handlePopState = () => {
       setIsRestoringScroll(true);
     };
-    window.addEventListener('popstate', handlePopState);
+    window.addEventListener("popstate", handlePopState);
     return () => {
-      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener("popstate", handlePopState);
     };
   }, []);
 
@@ -189,10 +186,10 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
       setTimeout(() => {
         window.scrollTo({
           top: savedPosition,
-          behavior: 'auto',
+          behavior: "auto",
         });
         setIsRestoringScroll(false);
-        sessionStorage.removeItem('answersScrollPosition');
+        sessionStorage.removeItem("answersScrollPosition");
       }, 100);
     }
   }, [isRestoringScroll, isLoading, initialLoadComplete]);
@@ -201,7 +198,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   useEffect(() => {
     if (router.isReady) {
       const pageFromUrl = Number(urlPage) || 1;
-      const sortByFromUrl = (urlSortBy as string) || 'mostRecent';
+      const sortByFromUrl = (urlSortBy as string) || "mostRecent";
 
       setSortBy(sortByFromUrl);
       setCurrentPage(pageFromUrl);
@@ -213,33 +210,33 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   const updateUrl = useCallback(
     (page: number, sortBy: string) => {
       if (router.isReady) {
-        let path = '/answers';
+        let path = "/answers";
         const params = new URLSearchParams();
 
         if (page !== 1) {
-          params.append('page', page.toString());
+          params.append("page", page.toString());
         }
 
-        if (sortBy !== 'mostRecent') {
-          params.append('sortBy', sortBy);
+        if (sortBy !== "mostRecent") {
+          params.append("sortBy", sortBy);
         }
 
         if (params.toString()) {
-          path += '?' + params.toString();
+          path += "?" + params.toString();
         }
 
         // Use router.push() to create browser history entries for back button navigation
         router.push(
           {
-            pathname: '/answers',
+            pathname: "/answers",
             query: { page: page.toString(), sortBy },
           },
           path,
-          { shallow: true },
+          { shallow: true }
         );
       }
     },
-    [router],
+    [router]
   );
 
   // Update URL when sort order changes
@@ -250,14 +247,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
         updateUrl(currentPage, sortBy);
       }
     }
-  }, [
-    sortBy,
-    currentPage,
-    router.isReady,
-    isSortByInitialized,
-    router.query.sortBy,
-    updateUrl,
-  ]);
+  }, [sortBy, currentPage, router.isReady, isSortByInitialized, router.query.sortBy, updateUrl]);
 
   // Fetch like statuses for answers
   useEffect(() => {
@@ -272,12 +262,8 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
         // Important: replace the state entirely, don't merge with previous
         setLikeStatuses(statuses);
       } catch (error) {
-        console.error('Error fetching like statuses:', error);
-        setLikeError(
-          error instanceof Error
-            ? error.message
-            : 'An error occurred while checking likes.',
-        );
+        console.error("Error fetching like statuses:", error);
+        setLikeError(error instanceof Error ? error.message : "An error occurred while checking likes.");
         setTimeout(() => setLikeError(null), 5000); // Clear error after 5 seconds
       }
     };
@@ -298,18 +284,16 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
       });
 
       // Log the event
-      logEvent('like_answer', 'Engagement', answerId);
+      logEvent("like_answer", "Engagement", answerId);
     } catch (error) {
-      setLikeError(
-        error instanceof Error ? error.message : 'An error occurred',
-      );
+      setLikeError(error instanceof Error ? error.message : "An error occurred");
       setTimeout(() => setLikeError(null), 3000);
     }
   };
 
   // Handle answer deletion (for sudo users only)
   const handleDelete = (answerId: string) => {
-    if (confirm('Are you sure you want to delete this answer?')) {
+    if (confirm("Are you sure you want to delete this answer?")) {
       deleteMutation.mutate(answerId);
     }
   };
@@ -322,7 +306,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
       setCurrentPage(1);
       updateUrl(1, newSortBy);
       setIsChangingPage(true);
-      logEvent('change_sort', 'UI', newSortBy);
+      logEvent("change_sort", "UI", newSortBy);
 
       // With React Query, we don't need to manually call fetch as it will
       // automatically refetch when dependencies change. However, we need to
@@ -338,7 +322,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     navigator.clipboard.writeText(url).then(() => {
       setLinkCopied(answerId);
       setTimeout(() => setLinkCopied(null), 2000);
-      logEvent('copy_link', 'Engagement', `Answer ID: ${answerId}`);
+      logEvent("copy_link", "Engagement", `Answer ID: ${answerId}`);
     });
   };
 
@@ -349,9 +333,9 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
     scrollToTop();
     setIsChangingPage(true);
     setCurrentPage(newPage);
-    sessionStorage.removeItem('answersScrollPosition');
+    sessionStorage.removeItem("answersScrollPosition");
     updateUrl(newPage, sortBy);
-    logEvent('change_answers_page', 'UI', `page:${newPage}`);
+    logEvent("change_answers_page", "UI", `page:${newPage}`);
 
     // React Query will handle the data fetching when currentPage changes
     // We just need to reset some UI state
@@ -379,16 +363,31 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
           <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center">
-                <span className="text-gray-700 mr-2">Sort by:</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => handleSortChange(e.target.value)}
-                  className="border rounded p-1"
-                  disabled={isLoading || !isSortByInitialized}
-                >
-                  <option value="mostRecent">Most Recent</option>
-                  <option value="mostPopular">Most Popular</option>
-                </select>
+                <span className="text-gray-700 mr-4">Sort by:</span>
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                  <button
+                    onClick={() => handleSortChange("mostRecent")}
+                    disabled={isLoading || !isSortByInitialized}
+                    className={`px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      sortBy === "mostRecent"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100"
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    Most Recent
+                  </button>
+                  <button
+                    onClick={() => handleSortChange("mostPopular")}
+                    disabled={isLoading || !isSortByInitialized}
+                    className={`px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 border-l ${
+                      sortBy === "mostPopular"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100"
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    Most Popular
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -400,15 +399,14 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
               <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
               <p className="text-lg text-gray-600 mt-4">
                 {showExtendedLoadingMessage
-                  ? 'Still loading... This is taking longer than expected.'
+                  ? "Still loading... This is taking longer than expected."
                   : showDelayedSpinner
-                    ? 'Still loading...'
-                    : 'Loading...'}
+                    ? "Still loading..."
+                    : "Loading..."}
               </p>
               {showExtendedLoadingMessage && (
                 <p className="text-sm text-gray-500 mt-2 max-w-md text-center">
-                  We were unable to load the content. You can try refreshing the
-                  page if this continues.
+                  We were unable to load the content. You can try refreshing the page if this continues.
                 </p>
               )}
 
@@ -426,9 +424,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
               {/* Error state */}
               {error && (
                 <div className="text-red-500 text-center my-6">
-                  {error instanceof Error
-                    ? error.message
-                    : 'Error loading answers'}
+                  {error instanceof Error ? error.message : "Error loading answers"}
                 </div>
               )}
 
@@ -485,16 +481,10 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
         </div>
 
         {/* Error messages */}
-        {likeError && (
-          <div className="text-red-500 text-sm mt-2 text-center">
-            {likeError}
-          </div>
-        )}
+        {likeError && <div className="text-red-500 text-sm mt-2 text-center">{likeError}</div>}
         {deleteMutation.isError && (
           <div className="text-red-500 text-sm mt-2 text-center">
-            {deleteMutation.error instanceof Error
-              ? deleteMutation.error.message
-              : 'Failed to delete answer'}
+            {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Failed to delete answer"}
           </div>
         )}
       </Layout>
@@ -504,7 +494,7 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
 
 // Server-side props to load site configuration and check permissions
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  const siteId = process.env.SITE_ID || 'default';
+  const siteId = process.env.SITE_ID || "default";
   const siteConfig = await loadSiteConfig(siteId);
 
   if (!siteConfig) {
