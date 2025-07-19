@@ -82,6 +82,33 @@ const SourcesList: React.FC<SourcesListProps> = ({
   // State hooks
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set());
   const [showSourcesPopover, setShowSourcesPopover] = useState<boolean>(false);
+  const [showAccessInterstitial, setShowAccessInterstitial] = useState<boolean>(false);
+  const [currentSourceUrl, setCurrentSourceUrl] = useState<string>("");
+  const [currentSourceDoc, setCurrentSourceDoc] = useState<Document<DocMetadata> | null>(null);
+
+  // Helper function to check if user has disabled the access interstitial
+  const shouldShowAccessInterstitial = useCallback(() => {
+    try {
+      const preference = localStorage.getItem("hideAccessInterstitial");
+      return preference !== "true";
+    } catch {
+      // If localStorage is not available, always show the interstitial
+      return true;
+    }
+  }, []);
+
+  // Helper function to handle "don't show again" preference
+  const handleDontShowAgain = useCallback((dontShow: boolean) => {
+    try {
+      if (dontShow) {
+        localStorage.setItem("hideAccessInterstitial", "true");
+      } else {
+        localStorage.removeItem("hideAccessInterstitial");
+      }
+    } catch {
+      // Ignore localStorage errors - interstitial will continue to show
+    }
+  }, []);
 
   // Callback hooks
   const renderAudioPlayer = useCallback((doc: Document<DocMetadata>, index: number, isExpanded: boolean) => {
@@ -170,8 +197,8 @@ const SourcesList: React.FC<SourcesListProps> = ({
   };
 
   // Handle clicking on a source link
-  const handleSourceClick = (e: React.MouseEvent<HTMLAnchorElement>, source: string) => {
-    e.preventDefault(); // Prevent default link behavior
+  const handleSourceClick = (e: React.MouseEvent<HTMLAnchorElement> | any, source: string) => {
+    e.preventDefault && e.preventDefault(); // Prevent default link behavior if preventDefault exists
     logEvent("click_source", "UI", source);
     window.open(source, "_blank", "noopener,noreferrer"); // Open link manually
   };
@@ -248,7 +275,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
         link.href = signedUrl;
         link.download = doc.metadata.title || "document.pdf";
         link.style.display = "none";
-        
+
         // Append to document, click, then remove
         document.body.appendChild(link);
         link.click();
@@ -278,12 +305,24 @@ const SourcesList: React.FC<SourcesListProps> = ({
       return null;
     }
 
+    const handleGoToSource = (e: React.MouseEvent) => {
+      e.preventDefault();
+
+      // Check if user wants to skip the interstitial
+      if (!shouldShowAccessInterstitial()) {
+        handleSourceClick(e as any, linkUrl);
+        return;
+      }
+
+      // Show the access interstitial
+      setCurrentSourceUrl(linkUrl);
+      setCurrentSourceDoc(doc);
+      setShowAccessInterstitial(true);
+    };
+
     return (
       <button
-        onClick={(e) => {
-          e.preventDefault();
-          handleSourceClick(e as any, linkUrl);
-        }}
+        onClick={handleGoToSource}
         className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors"
       >
         <span className="material-icons text-sm">open_in_new</span>
@@ -476,6 +515,111 @@ const SourcesList: React.FC<SourcesListProps> = ({
             );
           })}
         </div>
+      )}
+
+      {/* Access Interstitial Popup */}
+      {showAccessInterstitial && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50" onClick={() => setShowAccessInterstitial(false)} />
+
+          {/* Interstitial Modal */}
+          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-50 max-w-md w-full mx-4">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Access to Source</h3>
+              <button onClick={() => setShowAccessInterstitial(false)} className="text-gray-400 hover:text-gray-600">
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-gray-600 mb-4">
+                This content comes from the Ananda Library. Choose the option that applies to you:
+              </p>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    handleSourceClick({} as any, currentSourceUrl);
+                    setShowAccessInterstitial(false);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 text-left bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors"
+                >
+                  <span className="material-icons">library_books</span>
+                  <div>
+                    <div className="font-medium">I have access to the Ananda Library</div>
+                    <div className="text-sm text-blue-600">Go to source on Ananda Library</div>
+                  </div>
+                </button>
+
+                {currentSourceDoc && (
+                  <button
+                    onClick={async () => {
+                      setShowAccessInterstitial(false);
+                      // Trigger PDF download if available
+                      if (currentSourceDoc.metadata.pdf_s3_key) {
+                        try {
+                          logEvent("download_pdf", "UI", currentSourceDoc.metadata.pdf_s3_key || "unknown");
+
+                          const response = await fetch("/api/getPdfSignedUrl", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ pdfS3Key: currentSourceDoc.metadata.pdf_s3_key }),
+                          });
+
+                          if (!response.ok) {
+                            throw new Error("Failed to get download URL");
+                          }
+
+                          const { signedUrl } = await response.json();
+
+                          // Create a temporary link element to trigger download
+                          const link = document.createElement("a");
+                          link.href = signedUrl;
+                          link.download = currentSourceDoc.metadata.title || "document.pdf";
+                          link.style.display = "none";
+
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        } catch (error) {
+                          console.error("Error downloading PDF:", error);
+                        }
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 p-3 text-left bg-green-50 hover:bg-green-100 text-green-700 rounded-md transition-colors"
+                    disabled={!currentSourceDoc?.metadata.pdf_s3_key}
+                  >
+                    <span className="material-icons">download</span>
+                    <div>
+                      <div className="font-medium">I don't have access to the Ananda Library</div>
+                      <div className="text-sm text-green-600">
+                        {currentSourceDoc?.metadata.pdf_s3_key
+                          ? "Download PDF instead"
+                          : "PDF not available for this source"}
+                      </div>
+                    </div>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-gray-200 pt-4">
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  onChange={(e) => {
+                    handleDontShowAgain(e.target.checked);
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                Don't show me this pop-up again
+              </label>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

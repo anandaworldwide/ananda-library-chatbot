@@ -250,12 +250,85 @@ describe("SourcesList", () => {
     expect(goToSourceButton).toBeInTheDocument();
     expect(goToSourceButton.tagName).toBe("BUTTON");
 
-    // Click the button should open the source
+    // Click the button should show the access interstitial
     fireEvent.click(goToSourceButton);
+
+    // Should show the access interstitial popup
+    expect(screen.getByText("Access to Source")).toBeInTheDocument();
+    expect(
+      screen.getByText("This content comes from the Ananda Library. Choose the option that applies to you:")
+    ).toBeInTheDocument();
+
+    // Should show both access options
+    expect(screen.getByText("I have access to the Ananda Library")).toBeInTheDocument();
+    expect(screen.getByText("I don't have access to the Ananda Library")).toBeInTheDocument();
+
+    // Click the "I have access" button should open the source link
+    const hasAccessButton = screen.getByText("I have access to the Ananda Library").closest("button")!;
+    fireEvent.click(hasAccessButton);
 
     // Should open the source link
     expect(mockOpen).toHaveBeenCalledWith("https://test.com/document", "_blank", "noopener,noreferrer");
     expect(analyticsModule.logEvent).toHaveBeenCalledWith("click_source", "UI", "https://test.com/document");
+  });
+
+  it("allows users to skip the access interstitial with 'don't show again' option", () => {
+    // Mock localStorage
+    const mockSetItem = jest.fn();
+    const mockGetItem = jest.fn().mockReturnValue(null);
+    Object.defineProperty(window, "localStorage", {
+      value: {
+        getItem: mockGetItem,
+        setItem: mockSetItem,
+        removeItem: jest.fn(),
+      },
+      writable: true,
+    });
+
+    render(<SourcesList sources={[textSource]} />);
+
+    // First expand the text source
+    const expandButton = screen.getByText("Test Document").closest("summary")!;
+    fireEvent.click(expandButton);
+
+    // Click the Go to source button
+    const goToSourceButton = screen.getByText("Go to source");
+    fireEvent.click(goToSourceButton);
+
+    // Should show the interstitial
+    expect(screen.getByText("Access to Source")).toBeInTheDocument();
+
+    // Check the "don't show again" checkbox
+    const dontShowAgainCheckbox = screen.getByLabelText("Don't show me this pop-up again") as HTMLInputElement;
+    fireEvent.click(dontShowAgainCheckbox);
+
+    // Should have called localStorage.setItem
+    expect(mockSetItem).toHaveBeenCalledWith("hideAccessInterstitial", "true");
+
+    // Close the modal and test that future clicks skip the interstitial
+    const closeButton = screen.getByText("close").closest("button")!;
+    fireEvent.click(closeButton);
+
+    // Mock localStorage to return 'true' for hideAccessInterstitial
+    mockGetItem.mockReturnValue("true");
+
+    // Clear the current DOM and re-render with the localStorage preference set
+    document.body.innerHTML = "";
+    render(<SourcesList sources={[textSource]} />);
+
+    // Expand the source again
+    const expandButton2 = screen.getByText("Test Document").closest("summary")!;
+    fireEvent.click(expandButton2);
+
+    // Click Go to source - should skip interstitial and go directly to source
+    const goToSourceButton2 = screen.getByText("Go to source");
+    fireEvent.click(goToSourceButton2);
+
+    // Should NOT show the interstitial this time
+    expect(screen.queryByText("Access to Source")).not.toBeInTheDocument();
+
+    // Should open the source link directly
+    expect(mockOpen).toHaveBeenCalledWith("https://test.com/document", "_blank", "noopener,noreferrer");
   });
 
   it("does not make audio source titles clickable to prevent accidental downloads", () => {
