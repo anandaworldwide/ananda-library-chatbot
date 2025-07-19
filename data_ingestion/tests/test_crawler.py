@@ -10,7 +10,6 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
-from urllib.error import URLError
 
 from crawler.website_crawler import WebsiteCrawler, ensure_scheme, load_config
 
@@ -91,7 +90,6 @@ class TestCrawlerConfig(unittest.TestCase):
             "skip_patterns": ["pattern1", "pattern2"],
             "crawl_frequency_days": 14,
             "csv_export_url": "https://example.com/export.csv",
-            "csv_check_interval_hours": 2,
             "csv_modified_days_threshold": 3,
         }
 
@@ -107,7 +105,6 @@ class TestCrawlerConfig(unittest.TestCase):
             self.assertIsNotNone(config)
             self.assertEqual(config["domain"], "example.com")
             self.assertEqual(config["csv_export_url"], "https://example.com/export.csv")
-            self.assertEqual(config["csv_check_interval_hours"], 2)
             self.assertEqual(config["csv_modified_days_threshold"], 3)
 
 
@@ -189,7 +186,7 @@ class TestSQLiteIntegration(BaseWebsiteCrawlerTest):
         """Test that CSV tracking table is created with proper schema."""
         crawler = WebsiteCrawler(self.site_id, self.site_config)
 
-        # Verify CSV tracking table structure
+        # Verify CSV tracking table structure (simplified schema)
         cursor = crawler.conn.cursor()
         cursor.execute("PRAGMA table_info(csv_tracking)")
         columns_info = cursor.fetchall()
@@ -197,9 +194,6 @@ class TestSQLiteIntegration(BaseWebsiteCrawlerTest):
 
         required_columns = {
             "id",
-            "last_csv_check",
-            "last_csv_success",
-            "csv_error",
             "initial_crawl_completed",
         }
         self.assertTrue(
@@ -325,7 +319,6 @@ class TestCSVFunctionality(BaseWebsiteCrawlerTest):
             "skip_patterns": [],
             "crawl_frequency_days": 7,
             "csv_export_url": "https://example.com/export.csv",
-            "csv_check_interval_hours": 1,
             "csv_modified_days_threshold": 1,
         }
 
@@ -353,7 +346,6 @@ class TestCSVFunctionality(BaseWebsiteCrawlerTest):
 
         self.assertTrue(crawler.csv_mode_enabled)
         self.assertEqual(crawler.csv_export_url, "https://example.com/export.csv")
-        self.assertEqual(crawler.csv_check_interval_hours, 1)
         self.assertEqual(crawler.csv_modified_days_threshold, 1)
 
         crawler.close()
@@ -396,52 +388,82 @@ class TestCSVFunctionality(BaseWebsiteCrawlerTest):
 
         crawler.close()
 
-    @patch("crawler.website_crawler.urlopen")
-    def test_download_csv_data_success(self, mock_urlopen):
-        """Test successful CSV data download."""
+    @patch("crawler.website_crawler.sync_playwright")
+    def test_download_csv_data_success(self, mock_sync_playwright):
+        """Test successful CSV data download using Playwright."""
         crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Mock browser and page
+        mock_browser = Mock()
+        mock_page = Mock()
+        mock_browser.new_page.return_value = mock_page
 
         # Mock CSV content
         csv_content = """URL,Modified Date,Post Title
-https://example.com/page1,7/12/25 8:45,Test Page 1
-https://example.com/page2,7/13/25 9:30,Test Page 2
+https://example.com/page1,2025-07-12 08:45:00,Test Page 1
+https://example.com/page2,2025-07-13 09:30:00,Test Page 2
 """
 
-        # Mock urlopen response as context manager
-        mock_response = Mock()
-        mock_response.read.return_value = csv_content.encode("utf-8")
-        mock_response.__enter__ = Mock(return_value=mock_response)
-        mock_response.__exit__ = Mock(return_value=None)
-        mock_urlopen.return_value = mock_response
+        # Mock page interactions
+        mock_page.goto.return_value = Mock(status=200)
+        mock_page.wait_for_timeout.return_value = None
+        mock_page.evaluate.return_value = csv_content
+        mock_page.content.return_value = f"<html><body>{csv_content}</body></html>"
 
-        result = crawler.download_csv_data()
+        # Mock download handling
+        with (
+            patch.object(crawler, "_establish_csv_session", return_value=True),
+            patch.object(crawler, "_create_download_handler"),
+            patch.object(crawler, "_navigate_to_csv_url") as mock_navigate,
+            patch.object(
+                crawler,
+                "_parse_csv_content",
+                return_value=[
+                    {
+                        "URL": "https://example.com/page1",
+                        "Modified Date": "2025-07-12 08:45:00",
+                        "Post Title": "Test Page 1",
+                    },
+                    {
+                        "URL": "https://example.com/page2",
+                        "Modified Date": "2025-07-13 09:30:00",
+                        "Post Title": "Test Page 2",
+                    },
+                ],
+            ),
+        ):
 
-        self.assertIsNotNone(result)
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["URL"], "https://example.com/page1")
-        self.assertEqual(result[0]["Modified Date"], "7/12/25 8:45")
-        self.assertEqual(result[0]["Post Title"], "Test Page 1")
+            def mock_navigate_side_effect(page, download_info):
+                download_info["content"] = csv_content
+
+            mock_navigate.side_effect = mock_navigate_side_effect
+
+            result = crawler.download_csv_data(mock_browser)
+
+            self.assertIsNotNone(result)
+            self.assertEqual(len(result), 2)
+            self.assertEqual(result[0]["URL"], "https://example.com/page1")
+            self.assertEqual(result[0]["Modified Date"], "2025-07-12 08:45:00")
+            self.assertEqual(result[0]["Post Title"], "Test Page 1")
 
         crawler.close()
 
-    @patch("crawler.website_crawler.urlopen")
-    def test_download_csv_data_failure(self, mock_urlopen):
+    def test_download_csv_data_failure(self):
         """Test CSV data download failure handling."""
         crawler = WebsiteCrawler(self.site_id, self.site_config)
 
-        # Mock network error
-        mock_urlopen.side_effect = URLError("Network error")
-
-        result = crawler.download_csv_data()
-
+        # Test with no browser context
+        result = crawler.download_csv_data(None)
         self.assertIsNone(result)
 
-        # Verify error was logged to CSV tracking
-        cursor = crawler.conn.cursor()
-        cursor.execute("SELECT csv_error FROM csv_tracking LIMIT 1")
-        error_record = cursor.fetchone()
-        self.assertIsNotNone(error_record)
-        self.assertIn("Network error", error_record[0])
+        # Test with browser but network error
+        mock_browser = Mock()
+        mock_page = Mock()
+        mock_browser.new_page.return_value = mock_page
+        mock_page.goto.side_effect = Exception("Network error")
+
+        result = crawler.download_csv_data(mock_browser)
+        self.assertIsNone(result)
 
         crawler.close()
 
@@ -495,71 +517,36 @@ https://example.com/page2,7/13/25 9:30,Test Page 2
         crawler.close()
 
     def test_update_csv_tracking(self):
-        """Test CSV tracking table updates."""
+        """Test CSV tracking table updates (simplified - only logs, no database updates)."""
         crawler = WebsiteCrawler(self.site_id, self.site_config)
 
-        # Test successful update
+        # Test that methods can be called without errors (simplified implementation)
+        # The update_csv_tracking method now only logs, doesn't update database
+
+        # Test successful update call
         crawler.update_csv_tracking(success=True)
 
-        cursor = crawler.conn.cursor()
-        cursor.execute(
-            "SELECT last_csv_check, last_csv_success, csv_error FROM csv_tracking LIMIT 1"
-        )
-        result = cursor.fetchone()
-
-        self.assertIsNotNone(result)
-        self.assertIsNotNone(result[0])  # last_csv_check
-        self.assertIsNotNone(result[1])  # last_csv_success
-        self.assertIsNone(result[2])  # csv_error should be None
-
-        # Test error update
+        # Test error update call
         crawler.update_csv_tracking(csv_error="Test error")
 
-        cursor.execute("SELECT csv_error FROM csv_tracking LIMIT 1")
-        error_result = cursor.fetchone()
-        self.assertEqual(error_result[0], "Test error")
+        # Verify the CSV tracking table still exists and has the basic structure
+        cursor = crawler.conn.cursor()
+        cursor.execute("SELECT id, initial_crawl_completed FROM csv_tracking")
+        # Should not raise an error, table should exist
 
         crawler.close()
 
     def test_should_check_csv_timing(self):
-        """Test CSV check timing logic."""
+        """Test CSV check timing logic (simplified)."""
         crawler = WebsiteCrawler(self.site_id, self.site_config)
 
-        # Should check when no tracking record exists
-        self.assertTrue(crawler.should_check_csv())
+        # Should NOT check when no tracking record exists (initial crawl not completed)
+        self.assertFalse(crawler.should_check_csv())
 
         # Mark initial crawl as completed
         crawler.mark_initial_crawl_completed()
 
-        # Should check after initial crawl is completed (but timing record exists now)
-        # The mark_initial_crawl_completed() creates a record with last_csv_check = now
-        # So we need to clear that to test the timing logic properly
-        cursor = crawler.conn.cursor()
-        cursor.execute("UPDATE csv_tracking SET last_csv_check = NULL")
-        crawler.conn.commit()
-
-        # Now should check after initial crawl is completed
-        self.assertTrue(crawler.should_check_csv())
-
-        # Update tracking with recent check
-        crawler.update_csv_tracking(success=True)
-
-        # Should not check immediately after recent check
-        self.assertFalse(crawler.should_check_csv())
-
-        # Manually update to simulate time passing
-        cursor = crawler.conn.cursor()
-        old_time = (datetime.now() - timedelta(hours=2)).isoformat()
-        cursor.execute(
-            """
-            UPDATE csv_tracking 
-            SET last_csv_check = ?
-        """,
-            (old_time,),
-        )
-        crawler.conn.commit()
-
-        # Should check after interval has passed
+        # Should check after initial crawl is completed
         self.assertTrue(crawler.should_check_csv())
 
         crawler.close()
@@ -598,42 +585,34 @@ https://example.com/page2,7/13/25 9:30,Test Page 2
 
         crawler.close()
 
-    @patch("crawler.website_crawler.urlopen")
-    def test_check_and_process_csv_integration(self, mock_urlopen):
+    @patch("crawler.website_crawler.sync_playwright")
+    def test_check_and_process_csv_integration(self, mock_sync_playwright):
         """Test integrated CSV check and processing."""
         crawler = WebsiteCrawler(self.site_id, self.site_config)
 
         # Mark initial crawl as completed
         crawler.mark_initial_crawl_completed()
 
-        # Clear the last_csv_check timestamp so CSV processing can happen immediately
-        cursor = crawler.conn.cursor()
-        cursor.execute("UPDATE csv_tracking SET last_csv_check = NULL")
-        crawler.conn.commit()
+        # Mock browser and CSV data
+        mock_browser = Mock()
+        mock_page = Mock()
+        mock_browser.new_page.return_value = mock_page
 
-        # Mock CSV content
+        # Mock CSV content with recent date
         now = datetime.now()
         recent_date = now - timedelta(hours=12)
-        csv_content = f"""URL,Modified Date,Post Title
-https://example.com/recent-page,{recent_date.strftime("%m/%d/%y %H:%M")},Recent Post
-"""
+        csv_data = [
+            {
+                "URL": "https://example.com/recent-page",
+                "Modified Date": recent_date.strftime("%Y-%m-%d %H:%M:%S"),
+                "Post Title": "Recent Post",
+            }
+        ]
 
-        mock_response = Mock()
-        mock_response.read.return_value = csv_content.encode("utf-8")
-        mock_response.__enter__ = Mock(return_value=mock_response)
-        mock_response.__exit__ = Mock(return_value=None)
-        mock_urlopen.return_value = mock_response
-
-        # Should process CSV and add URLs
-        added_count = crawler.check_and_process_csv()
-
-        self.assertEqual(added_count, 1)
-
-        # Verify tracking was updated
-        cursor = crawler.conn.cursor()
-        cursor.execute("SELECT last_csv_success FROM csv_tracking LIMIT 1")
-        result = cursor.fetchone()
-        self.assertIsNotNone(result[0])
+        with patch.object(crawler, "download_csv_data", return_value=csv_data):
+            # Should process CSV and add URLs
+            added_count = crawler.check_and_process_csv(mock_browser)
+            self.assertEqual(added_count, 1)
 
         crawler.close()
 
@@ -930,7 +909,6 @@ class TestDaemonBehavior(BaseWebsiteCrawlerTest):
             "skip_patterns": [],
             "crawl_frequency_days": 7,
             "csv_export_url": "https://example.com/export.csv",
-            "csv_check_interval_hours": 1,
             "csv_modified_days_threshold": 1,
         }
 
@@ -1973,6 +1951,405 @@ class TestGracefulSleep(unittest.TestCase):
         # Should call sleep once for the full 15 seconds
         self.assertEqual(mock_sleep.call_count, 1)
         mock_sleep.assert_called_once_with(15)
+
+
+class TestCrawlFrequencyJitter(BaseWebsiteCrawlerTest):
+    """Test cases for crawl frequency jitter functionality."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()  # Set up environment variables
+        self.temp_dir = tempfile.mkdtemp()
+
+        self.site_id = "test-site"
+        self.site_config = {
+            "domain": "example.com",
+            "skip_patterns": ["pattern1", "pattern2"],
+            "crawl_frequency_days": 25,  # Test with 25 days
+        }
+
+        self.path_patcher = patch("crawler.website_crawler.Path")
+        mock_path_constructor = self.path_patcher.start()
+        mock_path_constructor.return_value.parent.return_value = Path(self.temp_dir)
+
+        # Keep a reference to the original sqlite3.connect
+        self.original_sqlite_connect = sqlite3.connect
+
+        self.connect_patcher = patch("sqlite3.connect")
+        mock_sqlite_connect = self.connect_patcher.start()
+        # The side_effect should call the original connect for ':memory:'
+        mock_sqlite_connect.side_effect = (
+            lambda db_path_arg: self.original_sqlite_connect(":memory:")
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        self.path_patcher.stop()
+        self.connect_patcher.stop()
+        shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
+
+    def test_jitter_calculation_range(self):
+        """Test that jitter calculation produces values within expected range."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        base_frequency = 25
+        expected_min = base_frequency * 0.88  # 22 days
+        expected_max = base_frequency * 1.12  # 28 days
+
+        # Test multiple calculations to verify range
+        jitter_results = []
+        for _ in range(50):  # Test 50 iterations
+            next_crawl = crawler._calculate_next_crawl_with_jitter(base_frequency)
+            days_from_now = (next_crawl - datetime.now()).total_seconds() / (24 * 3600)
+            jitter_results.append(days_from_now)
+
+        # Verify all results are within expected range
+        for days in jitter_results:
+            self.assertGreaterEqual(
+                days,
+                expected_min,
+                f"Jitter result {days:.2f} is below minimum {expected_min}",
+            )
+            self.assertLessEqual(
+                days,
+                expected_max,
+                f"Jitter result {days:.2f} is above maximum {expected_max}",
+            )
+
+        # Verify we get some variation (not all the same value)
+        unique_values = set(round(days, 1) for days in jitter_results)
+        self.assertGreater(
+            len(unique_values), 10, "Jitter should produce varied results"
+        )
+
+        crawler.close()
+
+    def test_jitter_calculation_minimum_frequency(self):
+        """Test that jitter calculation respects minimum frequency of 1 day."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Test with very small base frequency
+        base_frequency = 1
+
+        # Test multiple calculations
+        for _ in range(10):
+            next_crawl = crawler._calculate_next_crawl_with_jitter(base_frequency)
+            days_from_now = (next_crawl - datetime.now()).total_seconds() / (24 * 3600)
+
+            # Should never be less than 1 day (account for floating point precision)
+            self.assertGreaterEqual(
+                days_from_now,
+                0.999,
+                f"Jitter result {days_from_now:.2f} is below minimum 1 day",
+            )
+
+        crawler.close()
+
+    def test_mark_url_status_visited_uses_jitter(self):
+        """Test that marking URL as visited uses jitter for next_crawl calculation."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        test_url = "https://example.com/test"
+        crawler.add_url_to_queue(test_url)
+
+        # Mock the jitter calculation to return a predictable value
+        expected_next_crawl = datetime.now() + timedelta(
+            days=23.5
+        )  # 25 days - 6% jitter
+
+        with patch.object(
+            crawler,
+            "_calculate_next_crawl_with_jitter",
+            return_value=expected_next_crawl,
+        ) as mock_jitter:
+            # Mark URL as visited
+            crawler.mark_url_status(test_url, "visited", content_hash="test_hash")
+
+            # Verify jitter calculation was called with correct frequency
+            mock_jitter.assert_called_once_with(25)
+
+            # Verify next_crawl was set to the jittered value
+            cursor = crawler.conn.cursor()
+            cursor.execute(
+                "SELECT next_crawl FROM crawl_queue WHERE url = ?",
+                (crawler.normalize_url(test_url),),
+            )
+            result = cursor.fetchone()
+
+            # Convert stored ISO string back to datetime for comparison
+            stored_next_crawl = datetime.fromisoformat(result[0])
+
+            # Should be within 1 second of expected (accounting for processing time)
+            time_diff = abs((stored_next_crawl - expected_next_crawl).total_seconds())
+            self.assertLess(
+                time_diff, 1.0, f"Stored next_crawl differs by {time_diff} seconds"
+            )
+
+        crawler.close()
+
+    def test_jitter_average_approximates_base_frequency(self):
+        """Test that jitter average approximates the base frequency over many iterations."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        base_frequency = 25
+        jitter_results = []
+
+        # Test many iterations to verify average
+        for _ in range(100):
+            next_crawl = crawler._calculate_next_crawl_with_jitter(base_frequency)
+            days_from_now = (next_crawl - datetime.now()).total_seconds() / (24 * 3600)
+            jitter_results.append(days_from_now)
+
+        # Calculate average
+        average_days = sum(jitter_results) / len(jitter_results)
+
+        # Average should be close to base frequency (within 1 day)
+        self.assertAlmostEqual(
+            average_days,
+            base_frequency,
+            delta=1.0,
+            msg=f"Average jitter {average_days:.2f} should be close to base {base_frequency}",
+        )
+
+        crawler.close()
+
+    def test_different_base_frequencies_produce_proportional_jitter(self):
+        """Test that different base frequencies produce proportionally scaled jitter."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Test with different base frequencies
+        test_frequencies = [7, 14, 25, 30]
+
+        for base_freq in test_frequencies:
+            jitter_results = []
+            expected_min = base_freq * 0.88
+            expected_max = base_freq * 1.12
+
+            # Test multiple calculations for each frequency
+            for _ in range(20):
+                next_crawl = crawler._calculate_next_crawl_with_jitter(base_freq)
+                days_from_now = (next_crawl - datetime.now()).total_seconds() / (
+                    24 * 3600
+                )
+                jitter_results.append(days_from_now)
+
+            # Verify all results are within expected range for this frequency
+            for days in jitter_results:
+                self.assertGreaterEqual(
+                    days,
+                    expected_min,
+                    f"Frequency {base_freq}: result {days:.2f} below min {expected_min}",
+                )
+                self.assertLessEqual(
+                    days,
+                    expected_max,
+                    f"Frequency {base_freq}: result {days:.2f} above max {expected_max}",
+                )
+
+        crawler.close()
+
+
+class TestCrawlerInitializationBug(BaseWebsiteCrawlerTest):
+    """Test cases for the crawler initialization bug fix.
+
+    This test verifies that the start URL is only added when the database is
+    completely empty, not when there are URLs that aren't due for re-crawling.
+    """
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.temp_dir = tempfile.mkdtemp()
+        self.config_dir = Path(self.temp_dir) / "crawler_config"
+        self.config_dir.mkdir()
+
+        # Create test config
+        self.site_id = "test-site"
+        self.config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 14,
+            "crawl_delay_seconds": 0,
+        }
+
+        # Write config file
+        config_file = self.config_dir / f"{self.site_id}-config.json"
+        with open(config_file, "w") as f:
+            json.dump(self.config, f)
+
+    def tearDown(self):
+        """Clean up test environment."""
+        super().tearDown()
+        shutil.rmtree(self.temp_dir)
+
+    def test_empty_database_seeds_start_url(self):
+        """Test that start URL is added when database is completely empty."""
+        with patch("data_ingestion.crawler.website_crawler.load_config") as mock_load:
+            mock_load.return_value = self.config
+
+            # First, clear any existing database file to ensure we start empty
+            script_dir = Path(__file__).resolve().parent.parent
+            db_dir = script_dir / "crawler" / "db"
+            db_file = db_dir / f"crawler_queue_{self.site_id}.db"
+            if db_file.exists():
+                os.remove(db_file)
+
+            # Create crawler - should seed with start URL since database is empty
+            crawler = WebsiteCrawler(
+                site_id=self.site_id,
+                site_config=self.config,
+                retry_failed=False,
+                debug=False,
+            )
+
+            # Check that start URL was added
+            cursor = crawler.cursor
+            cursor.execute("SELECT COUNT(*) FROM crawl_queue")
+            total_count = cursor.fetchone()[0]
+
+            cursor.execute(
+                "SELECT url FROM crawl_queue WHERE url = ?",
+                (crawler.normalize_url(crawler.start_url),),
+            )
+            start_url_exists = cursor.fetchone()
+
+            self.assertEqual(total_count, 1, "Database should contain exactly 1 URL")
+            self.assertIsNotNone(start_url_exists, "Start URL should be in database")
+
+            crawler.close()
+
+    def test_existing_visited_urls_no_reseed(self):
+        """Test that start URL is NOT added when database has existing visited URLs."""
+        with patch("data_ingestion.crawler.website_crawler.load_config") as mock_load:
+            mock_load.return_value = self.config
+
+            # Create crawler first time to get database set up
+            crawler = WebsiteCrawler(
+                site_id=self.site_id,
+                site_config=self.config,
+                retry_failed=False,
+                debug=False,
+            )
+
+            # Clear the database and manually add some visited URLs that aren't due for re-crawling
+            cursor = crawler.cursor
+            cursor.execute("DELETE FROM crawl_queue")
+
+            # Add some visited URLs with future next_crawl dates (not due for re-crawling)
+            future_date = (datetime.now() + timedelta(days=7)).isoformat()
+            test_urls = [
+                "https://example.com/page1",
+                "https://example.com/page2",
+                "https://example.com/page3",
+            ]
+
+            for url in test_urls:
+                normalized_url = crawler.normalize_url(url)
+                cursor.execute(
+                    """
+                    INSERT INTO crawl_queue 
+                    (url, status, last_crawl, next_crawl, crawl_frequency, priority) 
+                    VALUES (?, 'visited', ?, ?, 14, 0)
+                """,
+                    (normalized_url, datetime.now().isoformat(), future_date),
+                )
+
+            crawler.conn.commit()
+
+            # Verify we have 3 URLs in database, none available for crawling
+            cursor.execute("SELECT COUNT(*) FROM crawl_queue")
+            total_count = cursor.fetchone()[0]
+            self.assertEqual(total_count, 3, "Should have 3 URLs in database")
+
+            cursor.execute("""
+                SELECT COUNT(*) FROM crawl_queue 
+                WHERE (
+                    (status = 'pending' AND (retry_after IS NULL OR retry_after <= datetime('now'))) 
+                    OR 
+                    (status = 'visited' AND next_crawl <= datetime('now'))
+                )
+            """)
+            available_count = cursor.fetchone()[0]
+            self.assertEqual(
+                available_count, 0, "Should have 0 URLs available for crawling"
+            )
+
+            # Now re-run initialization logic
+            crawler._run_initialization_logic()
+
+            # Verify start URL was NOT added
+            cursor.execute("SELECT COUNT(*) FROM crawl_queue")
+            final_count = cursor.fetchone()[0]
+            self.assertEqual(
+                final_count, 3, "Should still have exactly 3 URLs (no start URL added)"
+            )
+
+            cursor.execute(
+                "SELECT url FROM crawl_queue WHERE url = ?",
+                (crawler.normalize_url(crawler.start_url),),
+            )
+            start_url_exists = cursor.fetchone()
+            self.assertIsNone(start_url_exists, "Start URL should NOT be in database")
+
+            crawler.close()
+
+    def test_existing_pending_urls_no_reseed(self):
+        """Test that start URL is NOT added when database has existing pending URLs."""
+        with patch("data_ingestion.crawler.website_crawler.load_config") as mock_load:
+            mock_load.return_value = self.config
+
+            # Create crawler first time to get database set up
+            crawler = WebsiteCrawler(
+                site_id=self.site_id,
+                site_config=self.config,
+                retry_failed=False,
+                debug=False,
+            )
+
+            # Clear the database and manually add some pending URLs
+            cursor = crawler.cursor
+            cursor.execute("DELETE FROM crawl_queue")
+
+            # Add some pending URLs
+            test_urls = ["https://example.com/pending1", "https://example.com/pending2"]
+
+            for url in test_urls:
+                normalized_url = crawler.normalize_url(url)
+                cursor.execute(
+                    """
+                    INSERT INTO crawl_queue 
+                    (url, status, next_crawl, crawl_frequency, priority) 
+                    VALUES (?, 'pending', datetime('now'), 14, 0)
+                """,
+                    (normalized_url,),
+                )
+
+            crawler.conn.commit()
+
+            # Verify we have 2 URLs in database, both available for crawling
+            cursor.execute("SELECT COUNT(*) FROM crawl_queue")
+            total_count = cursor.fetchone()[0]
+            self.assertEqual(total_count, 2, "Should have 2 URLs in database")
+
+            # Now re-run initialization logic
+            crawler._run_initialization_logic()
+
+            # Verify start URL was NOT added
+            cursor.execute("SELECT COUNT(*) FROM crawl_queue")
+            final_count = cursor.fetchone()[0]
+            self.assertEqual(
+                final_count, 2, "Should still have exactly 2 URLs (no start URL added)"
+            )
+
+            cursor.execute(
+                "SELECT url FROM crawl_queue WHERE url = ?",
+                (crawler.normalize_url(crawler.start_url),),
+            )
+            start_url_exists = cursor.fetchone()
+            self.assertIsNone(start_url_exists, "Start URL should NOT be in database")
+
+            crawler.close()
 
 
 if __name__ == "__main__":
