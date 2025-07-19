@@ -2225,6 +2225,30 @@ def _handle_no_url_processing(
         )
 
     logging.info("Sleep completed - continuing loop...")
+
+    # CRITICAL FIX: Refresh database connection after long sleep
+    # SQLite connections can become stale after extended periods
+    try:
+        # Test the connection with a simple query
+        crawler.cursor.execute("SELECT 1")
+        crawler.cursor.fetchone()
+    except Exception as e:
+        logging.warning(f"Database connection stale after sleep, refreshing: {e}")
+        try:
+            # Close the old connection
+            if hasattr(crawler, "conn") and crawler.conn:
+                crawler.conn.close()
+
+            # Recreate the connection
+            import sqlite3
+
+            crawler.conn = sqlite3.connect(str(crawler.db_file))
+            crawler.conn.row_factory = sqlite3.Row
+            crawler.cursor = crawler.conn.cursor()
+            logging.info("Database connection refreshed successfully")
+        except Exception as refresh_error:
+            logging.error(f"Failed to refresh database connection: {refresh_error}")
+
     return (
         pages_processed,
         pages_since_restart,
