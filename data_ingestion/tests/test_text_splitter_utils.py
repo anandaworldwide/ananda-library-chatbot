@@ -1,6 +1,20 @@
+from unittest.mock import patch
+
 import pytest
 
 from data_ingestion.utils.text_splitter_utils import Document, SpacyTextSplitter
+
+# Module-level patch to set the environment variable for all tests
+pytestmark = pytest.mark.usefixtures("mock_embedding_model")
+
+
+@pytest.fixture(autouse=True)
+def mock_embedding_model():
+    """Automatically mock the embedding model environment variable for all tests."""
+    with patch.dict(
+        "os.environ", {"OPENAI_INGEST_EMBEDDINGS_MODEL": "text-embedding-ada-002"}
+    ):
+        yield
 
 
 @pytest.fixture
@@ -492,15 +506,10 @@ def test_overlap_with_different_separators():
 
 
 class TestTokenizationBugFixes:
-    """Test cases for the tokenization bug fixes and token limit enforcement."""
+    """Test cases for specific tokenization bugs that were discovered and fixed."""
 
     def test_chunks_should_never_exceed_target_token_limit(self):
-        """
-        Test that no chunk should ever exceed the target token limit of 600 tokens.
-
-        This test reproduces the bug where chunks can reach 9000+ tokens due to
-        inconsistent tokenization between spaCy (for counting) and tiktoken (for validation).
-        """
+        """Test that chunks never exceed the target token limit."""
         splitter = SpacyTextSplitter()
 
         # Create text that would produce chunks near the limit
@@ -555,12 +564,7 @@ class TestTokenizationBugFixes:
         print(f"Maximum tokens found in any chunk: {max_tokens_found}")
 
     def test_tokenization_consistency_between_spacy_and_tiktoken(self):
-        """
-        Test that demonstrates the tokenization inconsistency bug.
-
-        This test shows that spaCy and tiktoken can produce different token counts
-        for the same text, which causes the overlap logic to miscalculate.
-        """
+        """Test that spaCy and tiktoken tokenization are handled consistently."""
         splitter = SpacyTextSplitter()
 
         # Text with punctuation that might be tokenized differently
@@ -598,13 +602,7 @@ class TestTokenizationBugFixes:
             pytest.skip(f"spaCy not available for tokenization comparison: {e}")
 
     def test_overlap_respects_token_budget(self):
-        """
-        Test that overlap application respects the available token budget.
-
-        This test verifies that when adding overlap to a chunk, the overlap
-        logic correctly calculates available token budget and either applies
-        appropriate overlap or skips it when the chunk is already at the limit.
-        """
+        """Test that overlap calculation respects available token budget."""
         splitter = SpacyTextSplitter()
 
         # Create two chunks where the first is smaller and the second has room for overlap
@@ -653,13 +651,57 @@ class TestTokenizationBugFixes:
                 # No overlap was applied, which is fine if the chunk was already large
                 print("No overlap applied (chunk already at or near limit)")
 
-    def test_extreme_case_with_very_large_chunks(self):
-        """
-        Test with chunks that are designed to be very close to the base limit.
+    def test_overlap_off_by_one_error_fixed(self):
+        """Test that the off-by-one error in overlap logic is fixed.
 
-        This test verifies that the system handles large chunks gracefully and
-        doesn't create chunks that are excessively large (like 9000+ tokens).
+        Previously, the overlap logic didn't account for the space character
+        added during concatenation, causing warnings like:
+        "Overlap would exceed target token limit (251 > 250)"
         """
+        # Create a splitter with exact token limits
+        splitter = SpacyTextSplitter(
+            chunk_size=250,  # target_chunk_size = 250
+            chunk_overlap=50,
+            log_summary_on_split=False,
+        )
+
+        # Create text that will definitely produce multiple chunks
+        # Each paragraph should be around 200 tokens to ensure we get multiple chunks
+        paragraph = (
+            "This is a test sentence with enough content to create a meaningful chunk. "
+            * 30
+        )  # ~600 tokens
+        text = paragraph + "\n\n" + paragraph + "\n\n" + paragraph
+
+        # Split the text
+        chunks = splitter.split_text(text, document_id="test_off_by_one")
+
+        # Verify that no chunk exceeds the target token limit
+        for i, chunk in enumerate(chunks):
+            token_count = len(splitter._tokenize_text(chunk))
+            assert token_count <= 250, (
+                f"Chunk {i} has {token_count} tokens, exceeds limit of 250"
+            )
+
+        # Verify that we have multiple chunks (overlap should be applied)
+        assert len(chunks) > 1, "Should have multiple chunks for overlap testing"
+
+        # Verify that overlap was successfully applied to chunks after the first
+        for i in range(1, len(chunks)):
+            # The chunk should contain content from the previous chunk
+            prev_chunk = chunks[i - 1]
+            current_chunk = chunks[i]
+
+            # Extract some words from the end of the previous chunk
+            prev_words = prev_chunk.split()[-5:]  # Last 5 words
+            current_start = " ".join(current_chunk.split()[:10])  # First 10 words
+
+            # At least one word from the previous chunk should appear in the current chunk
+            overlap_found = any(word in current_start for word in prev_words)
+            assert overlap_found, f"No overlap found between chunks {i - 1} and {i}"
+
+    def test_extreme_case_with_very_large_chunks(self):
+        """Test handling of extreme cases with very large chunks."""
         splitter = SpacyTextSplitter()
 
         # Create text that will produce chunks close to the base limit

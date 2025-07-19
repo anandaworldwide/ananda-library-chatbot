@@ -5,11 +5,13 @@ across different data ingestion scripts to ensure consistent chunking behavior.
 """
 
 import logging
+import os
 import re
 import time
 from typing import Any
 
 import spacy
+import tiktoken
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -245,6 +247,24 @@ class SpacyTextSplitter:
         self.metrics = ChunkingMetrics()
         self.log_summary_on_split = log_summary_on_split
 
+    def _get_embedding_model(self) -> str:
+        """
+        Get the embedding model name from environment variables.
+
+        Returns:
+            str: The embedding model name
+
+        Raises:
+            ValueError: If OPENAI_INGEST_EMBEDDINGS_MODEL environment variable is not set
+        """
+        model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+        if not model_name:
+            raise ValueError(
+                "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set. "
+                "Please set it to the OpenAI embedding model name (e.g., text-embedding-3-large)"
+            )
+        return model_name
+
     def _ensure_nlp(self):
         """
         Ensure spaCy model is loaded, downloading if necessary.
@@ -311,7 +331,8 @@ class SpacyTextSplitter:
             # Use tiktoken for consistent token counting with OpenAI embeddings
             import tiktoken
 
-            encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
+            model_name = self._get_embedding_model()
+            encoding = tiktoken.encoding_for_model(model_name)
             # Get token IDs and convert back to strings for compatibility
             token_ids = encoding.encode(text)
             # Convert token IDs back to token strings
@@ -1416,27 +1437,27 @@ class SpacyTextSplitter:
             if i > 0:
                 # Calculate how much overlap we can add without exceeding target token limit
                 chunk_tokens = len(self._tokenize_text(chunk))
-                max_overlap_tokens = self.target_chunk_size - chunk_tokens
+                # Account for the space character that will be added during concatenation
+                space_tokens = len(self._tokenize_text(" "))
+                max_overlap_tokens = (
+                    self.target_chunk_size - chunk_tokens - space_tokens
+                )
 
                 if max_overlap_tokens > 0:
-                    # Use consistent tokenization (tiktoken) for overlap calculation
-                    prev_chunk_tokens = self._tokenize_text(chunks[i - 1])
-                    # Use the minimum of: configured overlap, available previous tokens, and token budget
-                    actual_overlap = min(
-                        self.chunk_overlap, len(prev_chunk_tokens), max_overlap_tokens
-                    )
-                    overlap_tokens = prev_chunk_tokens[-actual_overlap:]
-
-                    # Convert tokens back to text properly
-                    # Since we're working with tiktoken token strings, we need to reconstruct carefully
-                    # The safest approach is to re-tokenize the previous chunk and take the last N tokens
+                    # Use tiktoken directly for consistent tokenization
                     try:
-                        import tiktoken
+                        model_name = self._get_embedding_model()
+                        encoding = tiktoken.encoding_for_model(model_name)
 
-                        encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
-
-                        # Re-tokenize the previous chunk to get proper token IDs
+                        # Tokenize the previous chunk to get token IDs
                         prev_chunk_token_ids = encoding.encode(chunks[i - 1])
+
+                        # Use the minimum of: configured overlap, available previous tokens, and token budget
+                        actual_overlap = min(
+                            self.chunk_overlap,
+                            len(prev_chunk_token_ids),
+                            max_overlap_tokens,
+                        )
 
                         # Take the last N token IDs for overlap
                         overlap_token_ids = prev_chunk_token_ids[-actual_overlap:]
@@ -1444,10 +1465,17 @@ class SpacyTextSplitter:
                         # Use tiktoken's decode to properly reconstruct text
                         overlap_text = encoding.decode(overlap_token_ids).strip()
                     except (ImportError, Exception) as e:
-                        # Fallback to simple join if tiktoken fails
+                        # Fallback to _tokenize_text method if tiktoken fails
                         self.logger.warning(
-                            f"Failed to properly decode tiktoken tokens: {e}"
+                            f"Failed to use tiktoken for overlap calculation: {e}"
                         )
+                        prev_chunk_tokens = self._tokenize_text(chunks[i - 1])
+                        actual_overlap = min(
+                            self.chunk_overlap,
+                            len(prev_chunk_tokens),
+                            max_overlap_tokens,
+                        )
+                        overlap_tokens = prev_chunk_tokens[-actual_overlap:]
                         overlap_text = " ".join(overlap_tokens).strip()
                     overlapped_chunk = overlap_text + " " + chunk
 
