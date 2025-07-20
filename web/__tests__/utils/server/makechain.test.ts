@@ -81,6 +81,14 @@ jest.mock("fs/promises");
 jest.mock("path");
 jest.mock("@langchain/openai");
 jest.mock("@aws-sdk/client-s3");
+
+// Mock the entire AWS SES module to avoid configuration issues
+jest.mock("@aws-sdk/client-ses", () => ({
+  SESClient: jest.fn().mockImplementation(() => ({
+    send: jest.fn().mockResolvedValue({}),
+  })),
+  SendEmailCommand: jest.fn().mockImplementation((params) => ({ input: params })),
+}));
 jest.mock("@langchain/core/output_parsers", () => ({
   StringOutputParser: jest.fn().mockImplementation(() => ({
     parse: jest.fn().mockImplementation((input) => input),
@@ -194,6 +202,14 @@ describe("makeChain", () => {
     // Set environment variables
     process.env.AWS_REGION = "us-west-1";
     process.env.S3_BUCKET_NAME = "test-bucket";
+
+    // Prevent AWS SDK from trying to load config files
+    process.env.AWS_CONFIG_FILE = "";
+    process.env.AWS_SHARED_CREDENTIALS_FILE = "";
+    process.env.AWS_PROFILE = "";
+    process.env.AWS_ACCESS_KEY_ID = "test-access-key";
+    process.env.AWS_SECRET_ACCESS_KEY = "test-secret-key";
+    process.env.AWS_DEFAULT_REGION = "us-west-1";
 
     // Mock S3 response
     mockS3Send.mockImplementation((command) => {

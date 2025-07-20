@@ -4,6 +4,8 @@
  * with exponential backoff retry logic and timeout protection.
  */
 
+import { sendOpsAlert } from "./emailOps";
+
 // Firestore operation timeout (ms) - just under Vercel's 15s limit
 const FIRESTORE_OPERATION_TIMEOUT = 14000;
 
@@ -117,6 +119,38 @@ export async function retryOnCode14<T>(
           continue;
         }
 
+        // If it's a code 14 error and we've exhausted retries, send ops alert
+        if (isCode14Error(error) && attempt >= maxRetries) {
+          const contextStr = context ? ` (${context})` : "";
+          try {
+            await sendOpsAlert(
+              `CRITICAL: Firestore Database Connection Failure`,
+              `Firestore operation "${operationName}${contextStr}" failed after ${maxRetries} retry attempts with Code 14 (UNAVAILABLE) errors.
+
+This indicates persistent database connectivity issues that are preventing core functionality including:
+- Saving chat logs and user interactions
+- User authentication and session management
+- Vote tracking and analytics
+- Related questions processing
+
+IMMEDIATE ACTION REQUIRED: Check Firestore service status and connection health.`,
+              {
+                error: error instanceof Error ? error : new Error(String(error)),
+                context: {
+                  operationName,
+                  context,
+                  maxRetries,
+                  lastAttempt: attempt,
+                  errorType: "firestore_code_14",
+                  timestamp: new Date().toISOString(),
+                },
+              }
+            );
+          } catch (emailError) {
+            console.error("Failed to send Firestore ops alert:", emailError);
+          }
+        }
+
         // If it's a code 14 error and we've exhausted retries, or it's a different error, throw it
         throw error;
       }
@@ -132,6 +166,38 @@ export async function retryOnCode14<T>(
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
+      }
+
+      // If it's a code 14 error and we've exhausted retries, send ops alert
+      if (isCode14Error(error) && attempt >= maxRetries) {
+        const contextStr = context ? ` (${context})` : "";
+        try {
+          await sendOpsAlert(
+            `CRITICAL: Firestore Database Connection Failure`,
+            `Firestore operation "${operationName}${contextStr}" failed after ${maxRetries} retry attempts with Code 14 (UNAVAILABLE) errors.
+
+This indicates persistent database connectivity issues that are preventing core functionality including:
+- Saving chat logs and user interactions  
+- User authentication and session management
+- Vote tracking and analytics
+- Related questions processing
+
+IMMEDIATE ACTION REQUIRED: Check Firestore service status and connection health.`,
+            {
+              error: error instanceof Error ? error : new Error(String(error)),
+              context: {
+                operationName,
+                context,
+                maxRetries,
+                lastAttempt: attempt,
+                errorType: "firestore_code_14",
+                timestamp: new Date().toISOString(),
+              },
+            }
+          );
+        } catch (emailError) {
+          console.error("Failed to send Firestore ops alert:", emailError);
+        }
       }
 
       // If it's a code 14 error and we've exhausted retries, or it's a different error, throw it

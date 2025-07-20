@@ -42,6 +42,7 @@ import { PineconeStore } from "@langchain/pinecone";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import { SiteConfig as AppSiteConfig } from "@/types/siteConfig";
 import { ChatMessage, convertChatHistory } from "@/utils/shared/chatHistory";
+import { sendOpsAlert } from "./emailOps";
 
 // S3 client for loading remote templates and configurations
 const s3Client = new S3Client({
@@ -138,6 +139,24 @@ async function loadTextFileFromS3(bucket: string, key: string): Promise<string> 
     return await streamToString(response.Body as Readable);
   } catch (error) {
     console.error(`Failed to load from S3: ${bucket}/${key}`, error);
+
+    // Send ops alert for S3 loading failures
+    try {
+      await sendOpsAlert("S3 load failure", `Failed to load from S3: ${bucket}/${key}`, {
+        error: error as Error,
+        context: {
+          operation: "load",
+          bucket,
+          key,
+          function: "loadTextFileFromS3",
+          template: key.includes("prompts/") ? "prompt template" : "configuration file",
+        },
+        stack: (error as Error).stack,
+      });
+    } catch (emailError) {
+      console.error("Failed to send ops alert for S3 error:", emailError);
+    }
+
     return "";
   }
 }
@@ -370,6 +389,96 @@ export const makeChain = async (
     const errorMsg = `Failed to initialize models: ${error}`;
     console.error(errorMsg, error);
     if (sendData) sendData({ log: errorMsg });
+
+    // Send ops alert for OpenAI model initialization failures
+    try {
+      const errorString = error instanceof Error ? error.message : String(error);
+
+      // Check if this is a quota/billing related error
+      const isQuotaError =
+        errorString.includes("429") ||
+        errorString.includes("quota") ||
+        errorString.includes("billing") ||
+        errorString.includes("insufficient_quota") ||
+        errorString.includes("rate_limit");
+
+      if (isQuotaError) {
+        await sendOpsAlert(
+          `CRITICAL: OpenAI API Quota/Billing Issue`,
+          `OpenAI model initialization failed due to quota or billing issues.
+
+This prevents the system from:
+- Initializing chat models for response generation
+- Processing user queries
+- Generating embeddings
+- All AI-powered functionality
+
+Models affected:
+- Answer model: ${model} (temperature: ${temperature})
+- Rephrase model: ${rephraseModelConfig.model} (temperature: ${rephraseModelConfig.temperature})
+
+IMMEDIATE ACTION REQUIRED:
+1. Check OpenAI account billing status
+2. Verify payment methods and account standing
+3. Review and increase quota limits if needed
+4. Check API key permissions and validity
+
+Error details: ${errorString}`,
+          {
+            error: error instanceof Error ? error : new Error(String(error)),
+            context: {
+              errorType: "openai_model_init_quota_failure",
+              answerModel: model,
+              rephraseModel: rephraseModelConfig.model,
+              temperature,
+              rephraseTemperature: rephraseModelConfig.temperature,
+              label,
+              timestamp: new Date().toISOString(),
+              operation: "makeChain_model_initialization",
+            },
+          }
+        );
+      } else {
+        await sendOpsAlert(
+          `CRITICAL: OpenAI Model Initialization Failure`,
+          `OpenAI model initialization failed during chain setup.
+
+This prevents the system from:
+- Creating language model chains
+- Processing user queries
+- Generating AI responses
+- All chat functionality
+
+Models affected:
+- Answer model: ${model} (temperature: ${temperature})
+- Rephrase model: ${rephraseModelConfig.model} (temperature: ${rephraseModelConfig.temperature})
+
+IMMEDIATE ACTION REQUIRED:
+1. Check OpenAI API service status
+2. Verify API keys and configuration
+3. Check network connectivity to OpenAI endpoints
+4. Review model availability and permissions
+
+Error details: ${errorString}`,
+          {
+            error: error instanceof Error ? error : new Error(String(error)),
+            context: {
+              errorType: "openai_model_init_failure",
+              answerModel: model,
+              rephraseModel: rephraseModelConfig.model,
+              temperature,
+              rephraseTemperature: rephraseModelConfig.temperature,
+              label,
+              timestamp: new Date().toISOString(),
+              operation: "makeChain_model_initialization",
+            },
+          }
+        );
+      }
+    } catch (emailError) {
+      console.error("Failed to send OpenAI model initialization ops alert:", emailError);
+    }
+
     throw new Error(`Model initialization failed for ${label || model}`);
   }
 
@@ -398,7 +507,6 @@ export const makeChain = async (
     async (input: AnswerChainInput) => {
       const allDocuments: Document[] = [];
       try {
-
         if (sendData) sendData({ log: `[RAG] Retrieving documents: requested=${sourceCount}` });
         // If no libraries specified or they don't have weights, use a single query
         if (!includedLibraries || includedLibraries.length === 0) {
@@ -414,7 +522,8 @@ export const makeChain = async (
               sourceCount,
               includedLibraries as { name: string; weight?: number }[]
             );
-            if (sendData) sendData({ log: `[RAG] Weighted source distribution: ${JSON.stringify(sourcesDistribution)}` });
+            if (sendData)
+              sendData({ log: `[RAG] Weighted source distribution: ${JSON.stringify(sourcesDistribution)}` });
             const retrievalPromises = sourcesDistribution
               .filter(({ sources }) => sources > 0)
               .map(async ({ name, sources }) => {
@@ -487,7 +596,7 @@ export const makeChain = async (
               const errorMsg1 = `❌ SOURCES ERROR: Document ${index} failed individual serialization: ${e}`;
               console.error(errorMsg1);
               sendData({ log: errorMsg1 });
-              
+
               const errorMsg2 = `❌ SOURCES ERROR: Problematic document structure: ${JSON.stringify({
                 hasPageContent: !!doc.pageContent,
                 pageContentLength: doc.pageContent?.length,
@@ -519,7 +628,7 @@ export const makeChain = async (
             const warningMsg1 = `⚠️ SOURCES WARNING: Large sources payload detected: ${serializedSize} bytes`;
             console.warn(warningMsg1);
             sendData({ log: warningMsg1 });
-            
+
             const warningMsg2 = `⚠️ SOURCES WARNING: This could cause JSON serialization to fail in SSE transmission`;
             console.warn(warningMsg2);
             sendData({ log: warningMsg2 });
@@ -545,11 +654,11 @@ export const makeChain = async (
           const errorMsg1 = `❌ SOURCES ERROR: Failed to serialize/send sources: ${serializationError}`;
           console.error(errorMsg1);
           sendData({ log: errorMsg1 });
-          
+
           const errorMsg2 = `❌ SOURCES ERROR: This is likely THE BUG - answer will stream but sources will be missing`;
           console.error(errorMsg2);
           sendData({ log: errorMsg2 });
-          
+
           const errorMsg3 = `❌ SOURCES ERROR: Error details: ${JSON.stringify({
             name: serializationError instanceof Error ? serializationError.name : "Unknown",
             message: serializationError instanceof Error ? serializationError.message : String(serializationError),
@@ -852,7 +961,7 @@ export async function setupAndExecuteLanguageModelChain(
       }
 
       sendData({ done: true, timing: finalTiming });
-      sendData({ log: '[RAG] Sent done event to frontend' });
+      sendData({ log: "[RAG] Sent done event to frontend" });
 
       // Use the streamed fullResponse as the authoritative answer since it's what was sent to the frontend
       // result.sourceDocuments are the correctly filtered documents from makeChain.

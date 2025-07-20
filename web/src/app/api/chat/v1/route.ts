@@ -66,6 +66,7 @@ import { ChatMessage, convertChatHistory } from "@/utils/shared/chatHistory";
 import * as corsMiddleware from "@/utils/server/corsMiddleware";
 import { determineActiveMediaTypes } from "@/utils/determineActiveMediaTypes";
 import { firestoreSet, firestoreAdd } from "@/utils/server/firestoreRetryUtils";
+import { sendOpsAlert } from "@/utils/server/emailOps";
 
 export const runtime = "nodejs";
 export const maxDuration = 240;
@@ -405,9 +406,68 @@ function handleError(error: unknown, sendData: (data: StreamingResponseData) => 
         error:
           "The site has exceeded its current quota with OpenAI, please tell an admin to check the plan and billing details.",
       });
+
+      // Send ops alert for OpenAI quota exhaustion
+      sendOpsAlert(
+        `CRITICAL: OpenAI API Quota Exhausted`,
+        `OpenAI API returned a 429 (quota exceeded) error during chat request processing.
+
+This indicates that the OpenAI API usage limits have been reached, preventing:
+- Chat response generation
+- Document embedding creation
+- Question reformulation
+- All AI-powered functionality
+
+IMMEDIATE ACTION REQUIRED: 
+1. Check OpenAI account billing and usage limits
+2. Upgrade plan or increase quota limits
+3. Monitor API usage patterns
+
+Error context: ${error.message}`,
+        {
+          error,
+          context: {
+            errorType: "openai_quota_exhaustion",
+            httpStatus: 429,
+            timestamp: new Date().toISOString(),
+            apiEndpoint: "/api/chat/v1",
+          },
+        }
+      ).catch((emailError) => {
+        console.error("Failed to send OpenAI quota ops alert:", emailError);
+      });
     } else if (error.message.includes("Pinecone")) {
       sendData({
         error: `Error connecting to Pinecone: ${error.message}`,
+      });
+
+      // Send ops alert for Pinecone connection failures
+      sendOpsAlert(
+        `CRITICAL: Pinecone Vector Database Connection Failure`,
+        `Pinecone vector database connection failed during chat request processing.
+
+This prevents the system from:
+- Retrieving relevant documents for user queries
+- Performing semantic search operations
+- Accessing the knowledge base
+- Generating contextual responses
+
+IMMEDIATE ACTION REQUIRED:
+1. Check Pinecone service status and connectivity
+2. Verify API keys and environment configuration
+3. Check network connectivity to Pinecone endpoints
+
+Error details: ${error.message}`,
+        {
+          error,
+          context: {
+            errorType: "pinecone_connection_failure",
+            timestamp: new Date().toISOString(),
+            apiEndpoint: "/api/chat/v1",
+          },
+        }
+      ).catch((emailError) => {
+        console.error("Failed to send Pinecone ops alert:", emailError);
       });
     } else {
       sendData({ error: error.message || "Something went wrong" });

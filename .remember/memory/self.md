@@ -181,7 +181,8 @@ for attr in tag.attrs:
 
 ### 10. Mobile Safari Download Issues
 
-**Problem**: `window.open()` doesn't reliably trigger file downloads on mobile Safari (iPhone/iPad). The window opens but no download occurs.
+**Problem**: `window.open()` doesn't reliably trigger file downloads on mobile Safari (iPhone/iPad). The window opens
+but no download occurs.
 
 **Wrong**: Using `window.open()` for programmatic downloads.
 
@@ -204,6 +205,43 @@ link.click();
 document.body.removeChild(link);
 ```
 
-**Pattern**: For any programmatic file downloads, use the temporary link approach instead of `window.open()` to ensure mobile compatibility.
+**Pattern**: For any programmatic file downloads, use the temporary link approach instead of `window.open()` to ensure
+mobile compatibility.
 
-**Cross-Browser Compatibility**: This fix works across all iOS browsers (Safari, Chrome, Firefox, Edge) because Apple requires all iOS browsers to use WebKit as their rendering engine. The programmatic link clicking approach with the `download` attribute is well-supported across WebKit-based browsers and specifically addresses mobile browser restrictions on programmatic window opening and file downloads.
+**Cross-Browser Compatibility**: This fix works across all iOS browsers (Safari, Chrome, Firefox, Edge) because Apple
+requires all iOS browsers to use WebKit as their rendering engine. The programmatic link clicking approach with the
+`download` attribute is well-supported across WebKit-based browsers and specifically addresses mobile browser
+restrictions on programmatic window opening and file downloads.
+
+### 11. Avoid Dynamic Imports for Error Handling
+
+**Problem**: Using dynamic imports (`await import()`) for error handling creates sloppy, hard-to-follow code patterns.
+
+**Wrong**: Dynamic import in error handling block.
+
+```typescript
+// Sloppy - dynamic import in catch block
+try {
+  const { sendS3OpsAlert } = await import("./emailOps");
+  await sendS3OpsAlert("load", bucket, key, error);
+} catch (emailError) {
+  console.error("Failed to send ops alert:", emailError);
+}
+```
+
+**Correct**: Use proper static imports at the top of the file.
+
+```typescript
+// Clean - static import at top
+import { sendS3OpsAlert } from "./emailOps";
+
+// Later in error handling
+try {
+  await sendS3OpsAlert("load", bucket, key, error);
+} catch (emailError) {
+  console.error("Failed to send ops alert:", emailError);
+}
+```
+
+**Pattern**: Always use static imports for dependencies that are used in error handling or other critical paths. Dynamic
+imports should only be used for code splitting and lazy loading scenarios, not for error handling utilities.
