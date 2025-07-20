@@ -29,6 +29,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { RunnableSequence, RunnablePassthrough } from "@langchain/core/runnables";
+import { StringOutputParser } from "@langchain/core/output_parsers";
 import type { Document } from "langchain/document";
 import { VectorStoreRetriever } from "@langchain/core/vectorstores";
 import fs from "fs/promises";
@@ -587,7 +588,11 @@ Error details: ${errorString}`,
   // Rephrase the initial question into a dereferenced standalone question based on
   // the chat history to allow effective vectorstore querying.
   // Use the faster rephraseModel for standalone question generation
-  const standaloneQuestionChain = RunnableSequence.from([condenseQuestionPrompt, rephraseModel]);
+  const standaloneQuestionChain = RunnableSequence.from([
+    condenseQuestionPrompt,
+    rephraseModel,
+    new StringOutputParser(),
+  ]);
 
   // Track libraries we've already logged to prevent duplicates
   const loggedLibraries = new Set<string>();
