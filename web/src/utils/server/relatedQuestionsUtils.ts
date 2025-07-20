@@ -1349,9 +1349,13 @@ export async function updateRelatedQuestionsBatch(batchSize: number): Promise<vo
     }
   } // End of chunk loop
 
-  console.log(
-    `Batch finished. Successfully updated related questions for ${updatedCount} items, encountered errors for ${errorCount} items (including commit failures and Pinecone query issues).`
-  );
+  if (errorCount > 0) {
+    console.log(
+      `Batch finished. Successfully updated related questions for ${updatedCount} items, encountered errors for ${errorCount} items (including commit failures and Pinecone query issues).`
+    );
+  } else {
+    console.log(`Batch finished. Successfully updated related questions for ${updatedCount} items.`);
+  }
 }
 
 // --- Single Question Update ---
