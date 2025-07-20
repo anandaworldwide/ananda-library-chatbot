@@ -91,7 +91,7 @@ export default function Login({ siteConfig }: LoginProps) {
       </form>
       {siteConfig?.siteId === 'ananda' && (
         <p className="mt-4 text-center">
-          You can get the password from&nbsp;
+          Those with Ananda Library access can get the password from&nbsp;
           <a
             href="https://www.anandalibrary.org/content/ai-chatbot-intro/"
             className="text-blue-500 underline"
