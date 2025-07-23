@@ -355,7 +355,7 @@ async function retrieveDocumentsByLibrary(
  */
 export function hasLocationIntent(question: string): boolean {
   const locationKeywords = [
-    // Direct location queries
+    // Direct personal location queries
     "near me",
     "nearby",
     "closest",
@@ -367,14 +367,6 @@ export function hasLocationIntent(question: string): boolean {
     "where are",
     "location of",
     "find a",
-    // Center-specific queries
-    "center near",
-    "group near",
-    "community near",
-    "meeting near",
-    "ananda center",
-    "meditation center",
-    "spiritual center",
     // Geographic references
     "directions to",
     "address of",
@@ -383,6 +375,11 @@ export function hasLocationIntent(question: string): boolean {
     "miles from",
     "drive to",
     "travel to",
+    // Additional proximity terms
+    "close to",
+    "around",
+    "near my location",
+    "anywhere near",
   ];
 
   const questionLower = question.toLowerCase();
@@ -390,18 +387,32 @@ export function hasLocationIntent(question: string): boolean {
   // Check for explicit location keywords
   const hasKeywords = locationKeywords.some((keyword) => questionLower.includes(keyword.trim()));
 
-  // Check for pattern: "center in [location]" or "group in [location]"
-  // but make it more specific to avoid false matches
-  const locationPattern = /(center|group|community|meeting|class)\s+(in|at|near)\s+([A-Z][a-z]+|[a-z]+\s+[A-Z][a-z]+)/i;
-  const hasLocationPattern = locationPattern.test(question);
-
-  // Check for "near" followed by a proper noun (likely a location) but be more restrictive
-  // Only match if "near" is followed by a capitalized word that looks like a place name
-  const nearLocationPattern = /\bnear\s+[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]+)*/;
+  // Check for "near" followed by a proper noun (likely a location), "my location", or "me"
+  const nearLocationPattern = /\bnear\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]+)*|my\s+location|me\b)/;
   const hasNearLocation = nearLocationPattern.test(question);
 
+  // Exclude questions about Ananda centers that can be answered from knowledge base
+  const isAnandaCenterQuery =
+    questionLower.includes("ananda") &&
+    (questionLower.includes("center") || questionLower.includes("community") || questionLower.includes("group"));
+
+  // If it's an Ananda center query with a specific location, let the knowledge base handle it first
+  // Only use geo tools for more personal/proximity-based queries
+  if (isAnandaCenterQuery && hasNearLocation) {
+    // Only trigger geo tools for very specific proximity queries
+    const isProximityQuery =
+      questionLower.includes("closest") ||
+      questionLower.includes("nearest") ||
+      questionLower.includes("near me") ||
+      questionLower.includes("miles from") ||
+      questionLower.includes("directions") ||
+      questionLower.includes("where is") ||
+      questionLower.includes("where are");
+    return isProximityQuery;
+  }
+
   // Additional check: if question contains "in" followed by what looks like a place name
-  const inLocationPattern = /\bin\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/;
+  const inLocationPattern = /\bin\s+(?:the\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/;
   const hasInLocation =
     inLocationPattern.test(question) &&
     // But exclude common phrases that aren't locations
@@ -409,7 +420,16 @@ export function hasLocationIntent(question: string): boolean {
       questionLower
     );
 
-  return hasKeywords || hasLocationPattern || hasNearLocation || hasInLocation;
+  // Detect inputs that appear to be standalone geographic locations, e.g. "Belmont, California" or "Port Townsend, ME"
+  // This helps catch follow-up messages where the user simply provides a place name without contextual keywords.
+  // Unicode-aware pattern allowing non-ASCII letters, accents, hyphens and apostrophes.
+  // Accepts inputs like "São Paulo, Brazil", "München", "Bangalore, India", or just "Belmont".
+  // Uses Unicode property escapes so the RegExp must have the "u" flag.
+  const standaloneLocationPattern = /^[\p{L}][\p{L}\p{M}\s'\-]*(?:,\s*[\p{L}][\p{L}\p{M}\s'\-]*)*\.?$/u;
+
+  const looksLikeLocationOnly = standaloneLocationPattern.test(question.trim());
+
+  return hasKeywords || hasInLocation || hasNearLocation || looksLikeLocationOnly;
 }
 
 // Main chain creation function that sets up the complete conversational QA system
@@ -466,6 +486,12 @@ export const makeChain = async (
         "✅ Geo-awareness tools conditionally bound to OpenAI model for location query:",
         originalQuestion?.substring(0, 100)
       );
+
+      // NEW: Notify frontend immediately that location search is underway
+      if (sendData) {
+        // Send a standalone token so the frontend can display a persistent hint
+        sendData({ token: "Searching locations...\n" });
+      }
     } else {
       answerModel = baseAnswerModel as BaseLanguageModel;
 

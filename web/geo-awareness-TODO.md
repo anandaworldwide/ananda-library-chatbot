@@ -121,7 +121,7 @@ const isLocationQuery = /\b(near|nearest|center)\b/i.test(question);
 
 ### Natural Response Flow
 
-```
+```cat
 User: "Are there any meditation centers near me?"
 ↓
 AI detects location intent → calls get_user_location
