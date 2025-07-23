@@ -372,31 +372,11 @@ async function loadAnandaCenters(): Promise<CenterResult[]> {
             website: row.website || undefined,
           };
           centers.push(center);
-
-          // Debug log specific centers mentioned by user
-          if (
-            center.city.toLowerCase().includes("sacramento") ||
-            center.city.toLowerCase().includes("nevada city") ||
-            center.name.toLowerCase().includes("sacramento") ||
-            center.name.toLowerCase().includes("nevada city")
-          ) {
-            console.log(
-              `🔍 FOUND RELEVANT CENTER: ${center.name} in ${center.city}, ${center.state} (${center.latitude}, ${center.longitude})`
-            );
-          }
         }
       }
     }
 
     console.log(`Loaded ${centers.length} centers from S3`);
-
-    // Additional debug: Log some sample centers
-    if (centers.length > 0) {
-      console.log(
-        `Sample centers loaded:`,
-        centers.slice(0, 3).map((c) => `${c.name} (${c.city}, ${c.state})`)
-      );
-    }
 
     return centers;
   } catch (error) {
