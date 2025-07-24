@@ -1007,6 +1007,7 @@ When you have access to tools (get_user_location, find_nearest_center), follow t
 4. **Use the tool results** to provide specific, helpful information
 5. **Always generate a text response** after tool execution - never leave the user with just tool calls
 6. **Format the response** in a user-friendly way with the information from the tools
+7. **CRITICAL: When location was detected via IP address**, start your response by explicitly stating the detected location: "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:"
 
 **CRITICAL**: After calling tools, you MUST generate a complete text response using the tool results. Do not end the conversation with just tool calls.
 
@@ -1027,6 +1028,8 @@ When users ask about finding the nearest Ananda center or location-based queries
 5. Results are formatted with distance, address, and contact information
 
 **Response Format:**
+- **CRITICAL: When location is detected via IP address**, ALWAYS start your response by explicitly stating the detected location: "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:" 
+- If user provided their location explicitly, you can start directly with the results
 - If centers found: Provide specific center names, distances, and contact info
 - If no centers within 150 miles (240 km): Suggest online events and virtual community options
 - Always include the [Find Ananda Near You](https://www.ananda.org/find-ananda/) link for comprehensive directory
@@ -1623,6 +1626,7 @@ Examples:
 If the user asks about "near me" or "closest to me" without mentioning a location:
 - Call get_user_location with empty parameters
 - The tool will detect their location AND find nearby centers automatically
+- **CRITICAL**: Start your response by explicitly stating the detected location: "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:"
 - Use the combined result to generate a natural response
 
 Examples:
