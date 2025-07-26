@@ -32,6 +32,8 @@ interface CenterResult {
   distance: number;
   phone?: string;
   website?: string;
+  email?: string;
+  description?: string;
 }
 
 interface NearestCenterResult {
@@ -496,6 +498,8 @@ async function loadAnandaCenters(): Promise<CenterResult[]> {
             distance: 0, // Will be calculated later
             phone: row.phone || undefined,
             website: row.website || undefined,
+            email: row.email || undefined,
+            description: row.description || undefined,
           };
           centers.push(center);
         }
@@ -542,6 +546,8 @@ async function loadAnandaCenters(): Promise<CenterResult[]> {
               distance: 0,
               phone: row.phone || undefined,
               website: row.website || undefined,
+              email: row.email || undefined,
+              description: row.description || undefined,
             });
           }
         }
