@@ -401,12 +401,37 @@ export const makeChain = async (
 
     // ✅ CONDITIONAL TOOL BINDING: Only bind geo tools if location intent is detected
     let shouldUseGeoTools = false;
+    let locationIntentLatency = 0;
+
     if (originalQuestion && siteConfig?.enableGeoAwareness && geoTools.length > 0) {
+      const intentDetectionStart = Date.now();
       try {
         shouldUseGeoTools = await hasLocationIntentAsync(originalQuestion);
+        locationIntentLatency = Date.now() - intentDetectionStart;
+
+        // 📊 COMPREHENSIVE GEO-AWARENESS LOGGING
+        console.log(`🌍 GEO-AWARENESS METRICS:`, {
+          siteId,
+          query: originalQuestion?.substring(0, 100),
+          locationIntentDetected: shouldUseGeoTools,
+          detectionLatency: `${locationIntentLatency}ms`,
+          toolsAvailable: geoTools.length,
+          timestamp: new Date().toISOString(),
+        });
       } catch (error) {
+        locationIntentLatency = Date.now() - intentDetectionStart;
         console.warn("⚠️ Error in semantic location intent detection:", error);
         console.warn("Falling back to disabled geo-awareness");
+
+        // 🚨 ERROR LOGGING FOR GEO-AWARENESS
+        console.error(`🌍 GEO-AWARENESS ERROR:`, {
+          siteId,
+          query: originalQuestion?.substring(0, 100),
+          error: error instanceof Error ? error.message : String(error),
+          detectionLatency: `${locationIntentLatency}ms`,
+          timestamp: new Date().toISOString(),
+        });
+
         shouldUseGeoTools = false;
       }
     }
@@ -431,8 +456,18 @@ export const makeChain = async (
     } else {
       answerModel = baseAnswerModel as BaseLanguageModel;
 
+      // 📊 NO TOOLS BOUND LOGGING
       if (originalQuestion && siteConfig?.enableGeoAwareness) {
-        console.log("🔍 GEO DEBUG: No location intent detected in question:", originalQuestion?.substring(0, 100));
+        console.log(`🔍 GEO-TOOLS NOT BOUND:`, {
+          siteId,
+          query: originalQuestion?.substring(0, 100),
+          locationIntentDetected: shouldUseGeoTools,
+          toolsAvailable: geoTools.length,
+          requestAvailable: !!request,
+          reason: !shouldUseGeoTools ? "no_location_intent" : !request ? "no_request_object" : "no_tools_available",
+          locationIntentLatency: `${locationIntentLatency}ms`,
+          timestamp: new Date().toISOString(),
+        });
       }
     }
 

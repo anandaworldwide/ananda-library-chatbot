@@ -6,7 +6,7 @@
  *
  * Usage:
  *   await initializeLocationIntentDetector('ananda-public')
- *   const isLocation = hasLocationIntent('Where is the nearest center?')
+ *   const isLocation = await hasLocationIntentAsync('Where is the nearest center?')
  *
  * Architecture:
  * - Loads site-specific embeddings from web/private/location-intent/{site}-embeddings.json
@@ -164,30 +164,6 @@ async function generateQueryEmbedding(query: string): Promise<number[]> {
     console.error("❌ Error generating query embedding:", error);
     throw new Error(`Failed to generate embedding: ${error}`);
   }
-}
-
-/**
- * Detect if a query has location intent using semantic similarity
- *
- * This function uses contrastive scoring:
- * - Calculates max similarity to positive location intent seeds
- * - Calculates max similarity to negative non-location seeds
- * - Returns true if positive similarity > 0.45 AND positive exceeds negative by > 0.1
- *
- * @param query - User query to analyze
- * @returns true if query has location intent, false otherwise
- */
-export function hasLocationIntent(query: string): boolean {
-  // If embeddings not loaded, fall back to disabled detection
-  if (!cachedEmbeddings) {
-    return false;
-  }
-
-  // This is a synchronous wrapper - the actual implementation would need to be async
-  // For now, we'll throw an error to indicate this needs to be called differently
-  throw new Error(
-    `hasLocationIntent must be called asynchronously. Use hasLocationIntentAsync instead. Query: "${query}"`
-  );
 }
 
 /**

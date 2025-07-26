@@ -677,30 +677,90 @@ export const toolImplementations = {
     args: { userProvidedLocation?: string },
     request: NextRequest
   ): Promise<{ location: LocationResult | null; centers: NearestCenterResult }> {
-    console.log("🔧 TOOL DEBUG: get_user_location called with args:", args);
+    const toolStartTime = Date.now();
+
+    // 📊 TOOL EXECUTION START LOGGING
+    console.log(`🔧 TOOL EXECUTION START:`, {
+      toolName: "get_user_location",
+      args: args,
+      timestamp: new Date().toISOString(),
+      requestHeaders: {
+        "x-vercel-ip-city": request.headers.get("x-vercel-ip-city"),
+        "x-vercel-ip-country": request.headers.get("x-vercel-ip-country"),
+        "user-agent": request.headers.get("user-agent")?.substring(0, 100),
+      },
+    });
 
     let locationResult: LocationResult | null = null;
+    let geocodingLatency = 0;
+    let ipGeolocationLatency = 0;
+    let centerSearchLatency = 0;
 
     // If user provided a location, geocode it
     if (args.userProvidedLocation) {
+      const geocodeStart = Date.now();
       const result = await geocodeLocation(args.userProvidedLocation);
+      geocodingLatency = Date.now() - geocodeStart;
+
       if (result) {
         locationResult = result;
+        console.log(`✅ GEOCODING SUCCESS:`, {
+          input: args.userProvidedLocation,
+          result: `${result.city}, ${result.country}`,
+          coordinates: `${result.latitude}, ${result.longitude}`,
+          latency: `${geocodingLatency}ms`,
+        });
       } else {
-        console.warn("⚠️ Geocoding failed for user location");
+        console.warn(`❌ GEOCODING FAILED:`, {
+          input: args.userProvidedLocation,
+          latency: `${geocodingLatency}ms`,
+        });
       }
     }
 
     // Otherwise, try to get location from IP
     if (!locationResult) {
-      console.log("🔧 TOOL DEBUG: No user location provided or geocoding failed, trying IP geolocation");
+      const ipStart = Date.now();
       const ipResult = await getLocationFromIP(request);
+      ipGeolocationLatency = Date.now() - ipStart;
+
       locationResult = ipResult;
+
+      if (locationResult) {
+        console.log(`✅ IP GEOLOCATION SUCCESS:`, {
+          result: `${locationResult.city}, ${locationResult.country}`,
+          coordinates: `${locationResult.latitude}, ${locationResult.longitude}`,
+          latency: `${ipGeolocationLatency}ms`,
+        });
+      } else {
+        console.warn(`❌ IP GEOLOCATION FAILED:`, {
+          latency: `${ipGeolocationLatency}ms`,
+        });
+      }
     }
 
     // If we have location coordinates, find nearby centers
     if (locationResult && locationResult.latitude && locationResult.longitude) {
+      const centerSearchStart = Date.now();
       const centersResult = await findNearestCenters(locationResult.latitude, locationResult.longitude);
+      centerSearchLatency = Date.now() - centerSearchStart;
+
+      const totalLatency = Date.now() - toolStartTime;
+
+      // 📊 TOOL EXECUTION SUCCESS LOGGING
+      console.log(`✅ TOOL EXECUTION COMPLETE:`, {
+        toolName: "get_user_location",
+        success: true,
+        location: `${locationResult.city}, ${locationResult.country}`,
+        centersFound: centersResult.centers.length,
+        performance: {
+          geocodingLatency: `${geocodingLatency}ms`,
+          ipGeolocationLatency: `${ipGeolocationLatency}ms`,
+          centerSearchLatency: `${centerSearchLatency}ms`,
+          totalLatency: `${totalLatency}ms`,
+        },
+        timestamp: new Date().toISOString(),
+      });
 
       return {
         location: locationResult,
@@ -709,7 +769,21 @@ export const toolImplementations = {
     }
 
     // If no location found, return empty result
-    console.warn("❌ TOOL DEBUG: No location found, returning fallback message");
+    const totalLatency = Date.now() - toolStartTime;
+
+    // 📊 TOOL EXECUTION FAILURE LOGGING
+    console.warn(`❌ TOOL EXECUTION FAILED:`, {
+      toolName: "get_user_location",
+      success: false,
+      reason: "no_location_found",
+      performance: {
+        geocodingLatency: `${geocodingLatency}ms`,
+        ipGeolocationLatency: `${ipGeolocationLatency}ms`,
+        totalLatency: `${totalLatency}ms`,
+      },
+      timestamp: new Date().toISOString(),
+    });
+
     return {
       location: null,
       centers: {
