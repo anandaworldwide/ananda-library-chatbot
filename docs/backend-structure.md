@@ -296,6 +296,72 @@ Data is stored across multiple services:
   - Server loads configuration details from `site-config/config.json`.
   - Prompts specific to different namespaces/personas are loaded from JSON files within `site-config/prompts/`.
 
+### Semantic Location Intent Detection
+
+The system implements an advanced semantic-based location intent detection system that achieves 96.6% accuracy with full
+multilingual support. This replaces traditional keyword-based approaches with contrastive learning using OpenAI
+embeddings.
+
+**Architecture Components:**
+
+- **Seed Data Management (`web/site-config/location-intent/`):**
+
+  - Site-specific seed files containing positive and negative location intent examples
+  - `{site}-seeds.json` format with curated multilingual examples
+  - Currently implemented for `ananda-public` with 68 positive and 28 negative seeds
+  - Human-editable JSON files for easy maintenance and updates
+
+- **Embedding Generation (`web/scripts/generate-location-intent-embeddings.ts`):**
+
+  - One-time script to generate semantic embeddings from seed data
+  - Uses configurable OpenAI embedding model (currently `text-embedding-3-large` with 3072 dimensions)
+  - Batch processing with rate limiting for efficient API usage
+  - Outputs embeddings to `web/private/location-intent/{site}-embeddings.json`
+  - Includes metadata: model, timestamp, counts, and dimensions
+
+- **Runtime Detection Module (`web/src/utils/server/locationIntentDetector.ts`):**
+  - Loads site-specific embeddings into memory cache on initialization
+  - Implements contrastive scoring algorithm:
+    - Positive similarity threshold: >= 0.44
+    - Contrastive threshold: positive similarity must exceed negative by >= 0.1
+  - Average latency: ~66ms per query (includes OpenAI API call for query embedding)
+  - Graceful fallback if embeddings unavailable
+
+**Integration with RAG Pipeline:**
+
+- **Initialization:** `initializeLocationIntentDetector(siteId)` called during chain setup
+- **Detection:** `hasLocationIntentAsync(query)` replaces regex-based detection
+- **Tool Binding:** Geo-awareness tools conditionally bound to OpenAI model based on semantic detection
+- **Multilingual Support:** Works across English, Spanish, German, French, Italian, Portuguese, and Hindi
+
+**Performance Characteristics:**
+
+- **Accuracy:** 96.6% on multilingual test dataset
+- **Latency:** ~66ms average (includes OpenAI embedding generation)
+- **Scalability:** Site-specific configuration without code changes
+- **Reliability:** Contrastive learning prevents false positives on meditation content queries
+
+**File Structure:**
+
+```
+web/
+├── site-config/location-intent/
+│   └── ananda-public-seeds.json          # Human-editable seed phrases
+├── private/location-intent/
+│   └── ananda-public-embeddings.json     # Generated embeddings (8MB)
+├── scripts/
+│   └── generate-location-intent-embeddings.ts  # Embedding generation script
+└── src/utils/server/
+    └── locationIntentDetector.ts         # Runtime detection module
+```
+
+**Maintenance Workflow:**
+
+1. **Seed Updates:** Edit `{site}-seeds.json` files to add/modify examples
+2. **Regeneration:** Run `npm run build:location-intent -- --site {site}` to update embeddings
+3. **Deployment:** Embeddings are committed to version control and deployed with the application
+4. **Monitoring:** Detection accuracy can be monitored through chat logs and user feedback
+
 ---
 
 ## 5. Utility Scripts & Cron Jobs

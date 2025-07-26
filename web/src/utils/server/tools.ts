@@ -447,8 +447,6 @@ async function loadAnandaCenters(): Promise<CenterResult[]> {
     const siteId = process.env.SITE_ID || "ananda";
     const s3Key = `site-config/location/${siteId}-locations.csv`;
 
-    console.log(`Loading location data from S3: ${bucketName}/${s3Key}`);
-
     const response = await s3Client.send(
       new GetObjectCommand({
         Bucket: bucketName,
@@ -464,7 +462,6 @@ async function loadAnandaCenters(): Promise<CenterResult[]> {
 
     // Parse CSV with proper handling of multi-line quoted fields
     const rows = parseCSVContent(csvContent);
-    console.log(`CSV has ${rows.length} rows`);
 
     if (rows.length < 2) {
       console.log("CSV file has insufficient data");
@@ -473,7 +470,6 @@ async function loadAnandaCenters(): Promise<CenterResult[]> {
 
     // Parse the header row
     const headers = rows[0].map((h: string) => h.trim().toLowerCase());
-    console.log(`CSV headers: ${headers.join(", ")}`);
 
     const centers: CenterResult[] = [];
     for (let i = 1; i < rows.length; i++) {
@@ -505,8 +501,6 @@ async function loadAnandaCenters(): Promise<CenterResult[]> {
         }
       }
     }
-
-    console.log(`Loaded ${centers.length} centers from S3`);
 
     return centers;
   } catch (error) {
@@ -618,21 +612,16 @@ export const toolImplementations = {
     request: NextRequest
   ): Promise<{ location: LocationResult | null; centers: NearestCenterResult }> {
     console.log("🔧 TOOL DEBUG: get_user_location called with args:", args);
-    console.log("🔧 TOOL DEBUG: request object type:", typeof request);
-    console.log("🔧 TOOL DEBUG: request is NextRequest:", request instanceof NextRequest);
-    console.log("🔧 TOOL DEBUG: request has headers:", !!request?.headers);
 
     let locationResult: LocationResult | null = null;
 
     // If user provided a location, geocode it
     if (args.userProvidedLocation) {
-      console.log("🔧 TOOL DEBUG: User provided location:", args.userProvidedLocation);
       const result = await geocodeLocation(args.userProvidedLocation);
       if (result) {
-        console.log("✅ TOOL DEBUG: Geocoding successful for user location");
         locationResult = result;
       } else {
-        console.warn("⚠️ TOOL DEBUG: Geocoding failed for user location");
+        console.warn("⚠️ Geocoding failed for user location");
       }
     }
 
@@ -645,7 +634,6 @@ export const toolImplementations = {
 
     // If we have location coordinates, find nearby centers
     if (locationResult && locationResult.latitude && locationResult.longitude) {
-      console.log("✅ TOOL DEBUG: Have location coordinates, finding nearby centers");
       const centersResult = await findNearestCenters(locationResult.latitude, locationResult.longitude);
 
       return {
@@ -717,13 +705,6 @@ export const toolImplementations = {
  * @returns Promise<any>
  */
 export async function executeTool(toolName: string, args: any, request: NextRequest): Promise<any> {
-  console.log("🔧 EXECUTETOOL DEBUG: Called with:", {
-    toolName,
-    requestType: typeof request,
-    hasHeaders: !!request?.headers,
-    isNextRequest: request instanceof NextRequest,
-  });
-
   const tool = toolImplementations[toolName as keyof typeof toolImplementations];
 
   if (!tool) {

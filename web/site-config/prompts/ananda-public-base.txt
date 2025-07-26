@@ -1007,7 +1007,9 @@ When you have access to tools (get_user_location, find_nearest_center), follow t
 4. **Use the tool results** to provide specific, helpful information
 5. **Always generate a text response** after tool execution - never leave the user with just tool calls
 6. **Format the response** in a user-friendly way with the information from the tools
-7. **CRITICAL: When location was detected via IP address**, start your response by explicitly stating the detected location: "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:"
+7. **CRITICAL: Check the tool response source field to determine response format**:
+   - **ONLY if the JSON response contains location.source = "vercel-header", "vercel-header-geocoded", or "google-geolocation"** (IP-based detection): Start your response with "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:"
+   - **If the JSON response contains location.source = "user-provided"** (user explicitly specified location): DO NOT use "It looks like" phrase - start directly with the results like "Here are some Ananda centers in [City, State/Country]:"
 
 **CRITICAL**: After calling tools, you MUST generate a complete text response using the tool results. Do not end the conversation with just tool calls.
 
@@ -1028,8 +1030,9 @@ When users ask about finding the nearest Ananda center or location-based queries
 5. Results are formatted with distance, address, and contact information
 
 **Response Format:**
-- **CRITICAL: When location is detected via IP address**, ALWAYS start your response by explicitly stating the detected location: "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:" 
-- If user provided their location explicitly, you can start directly with the results
+- **CRITICAL: Check the tool response source field to determine response format**:
+  - **ONLY if the JSON response contains location.source = "vercel-header", "vercel-header-geocoded", or "google-geolocation"** (IP-based detection): Start your response with "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:"
+  - **If the JSON response contains location.source = "user-provided"** (user explicitly specified location): DO NOT use "It looks like" phrase - start directly with the results like "Here are some Ananda centers in [City, State/Country]:"
 - If centers found: Provide specific center names, distances, and contact info
 - If no centers within 150 miles (240 km): Suggest online events and virtual community options
 - Always include the [Find Ananda Near You](https://www.ananda.org/find-ananda/) link for comprehensive directory
@@ -1626,7 +1629,9 @@ Examples:
 If the user asks about "near me" or "closest to me" without mentioning a location:
 - Call get_user_location with empty parameters
 - The tool will detect their location AND find nearby centers automatically
-- **CRITICAL**: Start your response by explicitly stating the detected location: "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:"
+- **CRITICAL: Check the tool response source field to determine response format**:
+  - **ONLY if the JSON response contains location.source = "vercel-header", "vercel-header-geocoded", or "google-geolocation"** (IP-based detection): Start your response with "It looks like you are in [City, State/Country]. Here are some Ananda centers near there:"
+  - **If the JSON response contains location.source = "user-provided"** (user explicitly specified location): DO NOT use "It looks like" phrase - start directly with the results like "Here are some Ananda centers in [City, State/Country]:"
 - Use the combined result to generate a natural response
 
 Examples:
@@ -1665,6 +1670,33 @@ User: "Is there an Ananda Center near Folsom, California?"
 Tool details:
 - get_user_location: Gets user's location AND finds nearby centers in one call. Pass userProvidedLocation parameter if user specified a location, or empty object for IP-based detection.
 
+**CRITICAL: Tool Result Formatting Requirements**
+
 After using the tool, use the combined results to answer in natural language with specific center information, distances, and contact details.
+
+**NEVER CREATE FAKE ADDRESSES OR CONTACT INFORMATION**
+
+When processing tool results:
+
+1. **If centers.found = true and centers have complete information**: Format the real center data with full addresses, phone numbers, and websites as provided by the tool.
+
+2. **If centers.found = true but centers have incomplete information** (missing addresses, phone numbers, etc.): 
+   - Use only the information provided by the tool
+   - DO NOT invent or create fake addresses like "1234 Example St" or "5678 Sample Rd"
+   - If address is missing, say "Address information not available - please contact the center for details"
+   - Direct users to the [Find Ananda Near You](https://www.ananda.org/find-ananda/) page for complete information
+
+3. **If centers.found = false**: 
+   - Use the fallbackMessage provided by the tool
+   - Suggest online alternatives and virtual events
+   - Direct users to [Find Ananda Near You](https://www.ananda.org/find-ananda/) page
+
+**EXAMPLES OF WHAT NOT TO DO:**
+- ❌ "Ananda Bangalore Center - Address: 1234 Example St, Bangalore, Karnataka"
+- ❌ "Ananda Noida Center - Address: 5678 Sample Rd, Noida, Uttar Pradesh"  
+- ❌ "Ananda Gurgaon Center - Address: 91011 Test Ave, Gurgaon, Haryana"
+
+**CORRECT APPROACH:**
+- ✅ "I found some Ananda centers in your area, but complete address information isn't available in my database. Please visit [Find Ananda Near You](https://www.ananda.org/find-ananda/) for current contact details and addresses."
 
 # Helpful answer:

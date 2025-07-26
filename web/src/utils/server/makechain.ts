@@ -38,6 +38,7 @@ import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 import { StreamingResponseData } from "@/types/StreamingResponseData";
+import { initializeLocationIntentDetector, hasLocationIntentAsync } from "@/utils/server/locationIntentDetector";
 import { PineconeStore } from "@langchain/pinecone";
 
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
@@ -348,90 +349,6 @@ async function retrieveDocumentsByLibrary(
   return documents;
 }
 
-/**
- * Detects if a question has location-related intent
- * @param question - The user's question
- * @returns boolean indicating if location tools should be used
- */
-export function hasLocationIntent(question: string): boolean {
-  const locationKeywords = [
-    // Direct personal location queries
-    "near me",
-    "nearby",
-    "closest",
-    "nearest",
-    "in my area",
-    "around here",
-    "where can i find",
-    "where is",
-    "where are",
-    "location of",
-    "find a",
-    // Geographic references
-    "directions to",
-    "address of",
-    // Distance queries
-    "how far",
-    "miles from",
-    "drive to",
-    "travel to",
-    // Additional proximity terms
-    "close to",
-    "around",
-    "near my location",
-    "anywhere near",
-  ];
-
-  const questionLower = question.toLowerCase();
-
-  // Check for explicit location keywords
-  const hasKeywords = locationKeywords.some((keyword) => questionLower.includes(keyword.trim()));
-
-  // Check for "near" followed by a proper noun (likely a location), "my location", or "me"
-  const nearLocationPattern = /\bnear\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]+)*|my\s+location|me\b)/;
-  const hasNearLocation = nearLocationPattern.test(question);
-
-  // Exclude questions about Ananda centers that can be answered from knowledge base
-  const isAnandaCenterQuery =
-    questionLower.includes("ananda") &&
-    (questionLower.includes("center") || questionLower.includes("community") || questionLower.includes("group"));
-
-  // If it's an Ananda center query with a specific location, let the knowledge base handle it first
-  // Only use geo tools for more personal/proximity-based queries
-  if (isAnandaCenterQuery && hasNearLocation) {
-    // Only trigger geo tools for very specific proximity queries
-    const isProximityQuery =
-      questionLower.includes("closest") ||
-      questionLower.includes("nearest") ||
-      questionLower.includes("near me") ||
-      questionLower.includes("miles from") ||
-      questionLower.includes("directions") ||
-      questionLower.includes("where is") ||
-      questionLower.includes("where are");
-    return isProximityQuery;
-  }
-
-  // Additional check: if question contains "in" followed by what looks like a place name
-  const inLocationPattern = /\bin\s+(?:the\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/;
-  const hasInLocation =
-    inLocationPattern.test(question) &&
-    // But exclude common phrases that aren't locations
-    !/(in\s+general|in\s+particular|in\s+this|in\s+that|in\s+life|in\s+mind|in\s+heart|in\s+spirit)/i.test(
-      questionLower
-    );
-
-  // Detect inputs that appear to be standalone geographic locations, e.g. "Belmont, California" or "Port Townsend, ME"
-  // This helps catch follow-up messages where the user simply provides a place name without contextual keywords.
-  // Unicode-aware pattern allowing non-ASCII letters, accents, hyphens and apostrophes.
-  // Accepts inputs like "São Paulo, Brazil", "München", "Bangalore, India", or just "Belmont".
-  // Uses Unicode property escapes so the RegExp must have the "u" flag.
-  const standaloneLocationPattern = /^[\p{L}][\p{L}\p{M}\s'\-]*(?:,\s*[\p{L}][\p{L}\p{M}\s'\-]*)*\.?$/u;
-
-  const looksLikeLocationOnly = standaloneLocationPattern.test(question.trim());
-
-  return hasKeywords || hasInLocation || hasNearLocation || looksLikeLocationOnly;
-}
-
 // Main chain creation function that sets up the complete conversational QA system
 // Supports multiple models, weighted library access, and site-specific configurations
 export const makeChain = async (
@@ -465,6 +382,16 @@ export const makeChain = async (
   const includedLibraries: Array<string | { name: string; weight?: number }> = siteConfig?.includedLibraries || [];
 
   try {
+    // Initialize location intent detector if geo-awareness is enabled
+    if (siteConfig?.enableGeoAwareness && siteId) {
+      try {
+        await initializeLocationIntentDetector(siteId);
+      } catch (error) {
+        console.warn(`⚠️ Failed to initialize location intent detector for site '${siteId}':`, error);
+        console.warn("Geo-awareness will be disabled for this session");
+      }
+    }
+
     // Initialize the answer generation model
     const baseAnswerModel = new ChatOpenAI({
       temperature,
@@ -473,7 +400,16 @@ export const makeChain = async (
     });
 
     // ✅ CONDITIONAL TOOL BINDING: Only bind geo tools if location intent is detected
-    const shouldUseGeoTools = originalQuestion && hasLocationIntent(originalQuestion);
+    let shouldUseGeoTools = false;
+    if (originalQuestion && siteConfig?.enableGeoAwareness && geoTools.length > 0) {
+      try {
+        shouldUseGeoTools = await hasLocationIntentAsync(originalQuestion);
+      } catch (error) {
+        console.warn("⚠️ Error in semantic location intent detection:", error);
+        console.warn("Falling back to disabled geo-awareness");
+        shouldUseGeoTools = false;
+      }
+    }
 
     if (shouldUseGeoTools && geoTools.length > 0 && request) {
       // Bind tools to the model - LangChain will handle tool execution automatically
@@ -495,7 +431,7 @@ export const makeChain = async (
     } else {
       answerModel = baseAnswerModel as BaseLanguageModel;
 
-      if (originalQuestion) {
+      if (originalQuestion && siteConfig?.enableGeoAwareness) {
         console.log("🔍 GEO DEBUG: No location intent detected in question:", originalQuestion?.substring(0, 100));
       }
     }
@@ -1153,7 +1089,6 @@ export async function setupAndExecuteLanguageModelChain(
           allToolMessages.push(...toolMessages);
 
           // Call OpenAI again with tool results - NO SOURCES to avoid confusion
-          console.log(`🔧 Sending tool results back to AI (iteration ${iteration})`);
 
           // Create a tool-free model for final response (no tools binding)
           const { ChatOpenAI } = await import("@langchain/openai");
@@ -1176,19 +1111,6 @@ export async function setupAndExecuteLanguageModelChain(
             new AIMessage({ content: "", tool_calls: currentResponse.tool_calls }),
             ...allToolMessages,
           ];
-
-          // Debug: Log what we're sending to the AI
-          console.log(
-            "🔧 DEBUG: Tool messages being sent to AI:",
-            JSON.stringify(
-              allToolMessages.map((msg) => ({
-                content: msg.content,
-                tool_call_id: msg.tool_call_id,
-              })),
-              null,
-              2
-            )
-          );
 
           // Get final response from tool-free model with streaming
           const toolResponse = await toolFreeModel.invoke(messages, {
@@ -1226,15 +1148,6 @@ export async function setupAndExecuteLanguageModelChain(
         result.answer = currentResponse;
         console.log(`✅ Tool execution loop completed after ${iteration} iterations`);
       }
-
-      // Add warning logic here, after streaming is complete and result is aggregated
-      const resultForDebug = {
-        answer: result.answer,
-        question: result.question,
-      };
-      console.log("🔍 DEBUG: result object:", JSON.stringify(resultForDebug, null, 2));
-      console.log("🔍 DEBUG: result.answer type:", typeof result.answer);
-      console.log("🔍 DEBUG: result.answer value:", result.answer);
 
       if (
         result.answer &&
