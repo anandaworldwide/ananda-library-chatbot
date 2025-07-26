@@ -1458,7 +1458,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const messageContent = document.createElement("div");
       messageContent.className = "aichatbot-message-content";
-      messageContent.innerHTML = "<p>Hi, I'm Vivek. Ask me anything.</p>";
+      messageContent.innerHTML = `<p>Hi, I'm Vivek!</p><p>I can help you with spiritual questions, finding Ananda resources, or locating centers and meditation groups near you.</p>
+<p>What would you like to know?</p>`;
 
       welcomeMessage.appendChild(messageContent);
       messages.appendChild(welcomeMessage);
