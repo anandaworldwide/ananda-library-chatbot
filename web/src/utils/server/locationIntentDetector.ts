@@ -58,7 +58,12 @@ export async function initializeLocationIntentDetector(siteId: string): Promise<
   });
 
   // Load site-specific embeddings - resolve path relative to web directory
-  const embeddingsPath = path.join(process.cwd(), "private", "location-intent", `${siteId}-embeddings.json`);
+  // Try both web/private and private paths to handle different working directories
+  let embeddingsPath = path.join(process.cwd(), "web", "private", "location-intent", `${siteId}-embeddings.json`);
+
+  if (!existsSync(embeddingsPath)) {
+    embeddingsPath = path.join(process.cwd(), "private", "location-intent", `${siteId}-embeddings.json`);
+  }
 
   if (!existsSync(embeddingsPath)) {
     console.warn(`⚠️ Location intent embeddings not found for site '${siteId}' at ${embeddingsPath}`);
@@ -218,7 +223,7 @@ export async function hasLocationIntentAsync(query: string): Promise<boolean> {
     // Use contrastive scoring thresholds from research
     // Lowered from 0.44 to 0.37 to better catch multilingual location queries like Hindi
     const positiveThreshold = 0.37;
-    const contrastiveThreshold = 0.1;
+    const contrastiveThreshold = 0.0;
     const contrastiveScore = maxPositiveSimilarity - maxNegativeSimilarity;
 
     const isLocation = maxPositiveSimilarity >= positiveThreshold && contrastiveScore >= contrastiveThreshold;

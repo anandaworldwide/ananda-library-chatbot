@@ -94,6 +94,14 @@ describe("Location Intent Detector", () => {
   });
 
   it("should handle OpenAI API errors gracefully", async () => {
+    // First, set up OpenAI to throw an error before initialization
+    const { OpenAI } = jest.requireMock("openai");
+    OpenAI.mockImplementationOnce(() => ({
+      embeddings: {
+        create: jest.fn().mockRejectedValue(new Error("API Error")),
+      },
+    }));
+
     const mockEmbeddingData = {
       model: "text-embedding-3-large",
       timestamp: "2024-01-01T00:00:00.000Z",
@@ -108,14 +116,6 @@ describe("Location Intent Detector", () => {
     mockFs.readFileSync.mockReturnValue(JSON.stringify(mockEmbeddingData));
 
     await initializeLocationIntentDetector("test-site");
-
-    // Mock OpenAI to throw an error for this specific test
-    const { OpenAI } = jest.requireMock("openai");
-    OpenAI.mockImplementationOnce(() => ({
-      embeddings: {
-        create: jest.fn().mockRejectedValue(new Error("API Error")),
-      },
-    }));
 
     const result = await hasLocationIntentAsync("Where is the nearest center?");
     expect(result).toBe(false);
