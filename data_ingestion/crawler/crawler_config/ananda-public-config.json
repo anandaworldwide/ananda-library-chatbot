@@ -1,8 +1,7 @@
 {
   "domain": "ananda.org",
   "csv_export_url": "http://www.ananda.org/?export_modified_posts=1",
-  "csv_check_interval_hours": 1,
-  "csv_modified_days_threshold": 1,
+  "csv_modified_days_threshold": 10,
   "skip_patterns": [
     "^/search/",
     "^/login/",
@@ -14,8 +13,9 @@
     "^/autobiography$",
     "^/free-inspiration/books/efl$",
     "^/ask/answerer/",
-    "^/video/locations/"
+    "^/video/locations/",
+    "^/__"
   ],
-  "crawl_frequency_days": 7,
+  "crawl_frequency_days": 25,
   "crawl_delay_seconds": 1
 }

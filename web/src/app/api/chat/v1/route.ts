@@ -549,7 +549,10 @@ async function handleComparisonRequest(req: NextRequest, requestBody: Comparison
           undefined,
           undefined,
           undefined,
-          requestBody.privateSession || false
+          requestBody.privateSession || false,
+          [], // No geo tools for comparison mode
+          undefined, // No request for comparison mode
+          siteConfig
         );
 
         const chainB = await makeChain(
@@ -564,7 +567,10 @@ async function handleComparisonRequest(req: NextRequest, requestBody: Comparison
           undefined,
           undefined,
           undefined,
-          requestBody.privateSession || false
+          requestBody.privateSession || false,
+          [], // No geo tools for comparison mode
+          undefined, // No request for comparison mode
+          siteConfig
         );
 
         // Format chat history for each model
@@ -888,7 +894,8 @@ async function handleChatRequest(req: NextRequest) {
           filter,
           siteConfig,
           timingMetrics.startTime,
-          sanitizedInput.privateSession || false
+          sanitizedInput.privateSession || false,
+          req // Pass the request object for geo-awareness
         );
         // --- End of Encapsulated Call ---
 

@@ -4,7 +4,7 @@
  */
 
 export interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
 }
 
@@ -13,49 +13,34 @@ export type ChatHistory =
   | undefined;
 
 /**
- * Converts ChatMessage[] format to the format needed for the LLM prompt.
- * Returns a formatted string with Human/Assistant prefixes.
+ * Converts ChatMessage[] format to string format for LangChain templates.
+ * Returns a formatted string representation of the conversation.
  */
 export function convertChatHistory(history: ChatHistory): string {
-  if (!history) return '';
+  if (!history || !Array.isArray(history)) return "";
 
-  if (
-    Array.isArray(history) &&
-    history.length > 0 &&
-    typeof history[0] === 'object' &&
-    'role' in history[0]
-  ) {
-    // Pair up user and assistant messages
-    let formattedHistory = '';
-    for (let i = 0; i < history.length; i += 2) {
-      if (i + 1 >= history.length) break; // Skip incomplete pairs
+  return history
+    .map((message) => {
+      const role = message.role === "user" ? "Human" : "Assistant";
+      return `${role}: ${message.content}`;
+    })
+    .join("\n");
+}
 
-      const userMessage = history[i] as ChatMessage;
-      const assistantMessage = history[i + 1] as ChatMessage;
-
-      // Check if we have a valid user-assistant pair
-      if (
-        userMessage?.role === 'user' &&
-        assistantMessage?.role === 'assistant'
-      ) {
-        formattedHistory += `Human: ${userMessage.content}\nAssistant: ${assistantMessage.content}\n`;
-      }
-    }
-    return formattedHistory.trim();
-  }
-
-  return '';
+/**
+ * Converts ChatMessage[] format to string format for LangChain templates.
+ * Same as convertChatHistory - kept for backward compatibility.
+ */
+export function convertChatHistoryToString(history: ChatHistory): string {
+  return convertChatHistory(history);
 }
 
 /**
  * Creates a role-based chat history from input and output strings
  */
-export function createChatMessages(
-  userInput: string,
-  assistantOutput: string,
-): ChatMessage[] {
+export function createChatMessages(userInput: string, assistantOutput: string): ChatMessage[] {
   return [
-    { role: 'user', content: userInput },
-    { role: 'assistant', content: assistantOutput },
+    { role: "user", content: userInput },
+    { role: "assistant", content: assistantOutput },
   ];
 }

@@ -2,9 +2,9 @@
   "metadata": {
     "created_at": "2025-06-30T16:42:39.594447",
     "evaluation_type": "dual_system_word_docs",
-    "total_evaluations": 109,
+    "total_evaluations": 126,
     "total_skipped": 5,
-    "last_updated": "2025-07-12T08:59:48.200218"
+    "last_updated": "2025-07-16T08:52:33.635690"
   },
   "evaluations": {
     "qGF8pzUgIJe4cH834nOs_doc0_3-Small": {
@@ -883,11 +883,147 @@
       "document_text": "\" As a bright light shining in the midst of darkness, so was Yogananda ' s presence in this world. Such a great soul comes on earth only rarely, when there is a real need among men.\" -His Holiness the Shankaracharya of Kanchipuram Born in 1893, Yogananda was the first yoga master of India to take up permanent residence in the West. Yogananda arrived in America in 1920 and traveled throughout the country on what he called his \" spiritual campaigns.\" Hundreds of thousands filled the largest halls in major cities to see the yoga master from India. Yogananda continued to lecture and write up to his passing in 1952. Yogananda ' s initial impact on Western culture was truly impressive. His lasting spiritual legacy has been even greater. His Autobiography of a Yogi",
       "system": "3-Large"
     },
-    "gF7tAV9b1AehhZO48gD0_doc9_3-Large": "skip"
+    "gF7tAV9b1AehhZO48gD0_doc9_3-Large": "skip",
+    "EWfsqte3eP25jcdEga7p_doc0_3-Small": {
+      "score": 1,
+      "doc_score": 0.641156793,
+      "timestamp": "2025-07-16T08:52:33.622100",
+      "judge": "Hriman",
+      "document_text": "gave me that job. And of course, when I talk to somebody, I try to talk his language. And so in doing that, I can reach you in ways that most of his writings, Autobiography of a Yogi, I think most have reached you, didn't it? I read it. I attempted to read it a couple of times, but I could not get through it. Well, I am amazed. To me, that book was the greatest book in the world. Anyway, the truth is that I do speak modern English and I do speak clearly. And all I can say beyond that is that I am grateful if I do reach you. But I don't repeat my words from anybody else. They're my words from my experience. And the teachings are his, but they're put in my way. And I have spent many years trying to think, how can I make this teaching so clear that nobody ",
+      "system": "3-Small"
+    },
+    "EWfsqte3eP25jcdEga7p_doc1_3-Large": {
+      "score": 2,
+      "doc_score": 0.639857233,
+      "timestamp": "2025-07-16T08:52:33.622186",
+      "judge": "Hriman",
+      "document_text": "\"I am from Persia, and I'm familiar with the quatrain to which this gentleman has referred. I grant that it isn't true to Fitzgerald's translation, but it is completely true to the original Persian of Omar Khayyam.\" This uncanny ability to communicate with, or in, languages that he didn't know appeared once more in my association with him. In 1954, I was speaking with Seora Cuaron, the wife of our center leader in Mexico City. She told me in Spanish, \"I once had a one-hour interview with Master. He didn't know any Spanish, and as you can see, I don't know any English. And yet, somehow, we understood each other perfectly! I still don't know how it happened.\" It was in Encinitas that Paramhansa Yogananda wrote Autobiography of a Yogi . It was probably here also that he wrote most, if not all, of his commentaries on the New Testament and the early part of his commentaries on the Bhagavad Gita.",
+      "system": "3-Large"
+    },
+    "EWfsqte3eP25jcdEga7p_doc3_3-Small": {
+      "score": 1,
+      "doc_score": 0.638314486,
+      "timestamp": "2025-07-16T08:52:33.622196",
+      "judge": "Hriman",
+      "document_text": "impossible for me to doubt that its author believed implicitly every word he wrote. Never before had I encountered a spirit so clearly truthful, so filled with goodness and joy. Every page seemed radiant with light. As I read Autobiography of a Yogi , I alternated between tears and laughter: tears of pure joy; laughter of even greater joy! For three days I scarcely ate or slept. When I walked it was almost atiptoe, as if in an ecstatic dream. What this book described, finally, was the highest of sciences, Kriya Yoga, a technique that enables the seeker to advance rapidly on the path of meditation. I, who wanted so desperately to learn how to meditate, felt all the excitement of one who has found a treasure map, the treasure in this case being a divine one, buried deep within my own being! Autobiography of a Yogi remains the greatest book I have ever read. One perusal of it was enough to change my whole life. From that time on, my break with the past was complete. I resolved in the smallest detail to follow Paramhansa Yogananda's teaching.",
+      "system": "3-Small"
+    },
+    "EWfsqte3eP25jcdEga7p_doc5_3-Small": {
+      "score": 2,
+      "doc_score": 0.643345475,
+      "timestamp": "2025-07-16T08:52:33.622200",
+      "judge": "Hriman",
+      "document_text": "An Illustrious Beginning Autobiography of a Yogi was the first book ever written in English that is \"about yogis, by a yogi.\" First published by The Philosophical Library, one of America's oldest publishers of scholarly material for the general public, Yogananda's Autobiography was listed in 1946 alongside works by Charles Darwin, Franklin D. Roosevelt, and George Bernard Shaw. The book created an immediate sensation. In 1947, Newsweek described it as \"... a fascinating and clearly annotated study of a religious way of life, ingeniously described in the lush style of the Orient.\" The San Francisco Chronicle reported that, \"Yogananda presents a convincing case for yoga, and those who 'came to scoff' may remain to pray.\" Columbia University's scholarly journal, the Review of Religion",
+      "system": "3-Small"
+    },
+    "EWfsqte3eP25jcdEga7p_doc6_3-Small": {
+      "score": 3,
+      "doc_score": 0.631857812,
+      "timestamp": "2025-07-16T08:52:33.622202",
+      "judge": "Hriman",
+      "document_text": "being is motivated by two desires: to escape pain and to find happiness. Both desires could be fulfilled through the practice of Self-realization. The book was a particular favorite of Swamiji's, and Crystal Clarity was about to publish it. The writing style, though, was cumbersome. Swamiji assumed it was because Master had just been learning English. Later he found out that Master didn't write the book himself, but gave an outline of his ideas to a disciple who was fluent in English and could write it for him. Swamiji decided to polish the writing, but soon realized that a complete rewrite was needed-ghostwriting for Master as the other disciple had done. In Autobiography of a Yogi , it says that Lahiri Mahasaya, when interpreting scriptures, would sometimes tell a disciple, \"Please expound the holy stanzas as the meaning occurs to you. I will guide your thoughts, that the right interpretation be uttered.\" In this way, even though Lahiri himself did not write any books, many of his teachings were written down and published. \"All my writing has been guided",
+      "system": "3-Small"
+    },
+    "EWfsqte3eP25jcdEga7p_doc7_3-Large": {
+      "score": 1,
+      "doc_score": 0.638153851,
+      "timestamp": "2025-07-16T08:52:33.622204",
+      "judge": "Hriman",
+      "document_text": "know. Over the years, he became fluent in English. But then, before his coming to America, he felt quite awkward about writing in English. So, thinking about this thing a year ago, I thought, well, indeed, Yogananda didn't write it. Dhirananda was the ghostwriter. I've always loved the book, but I haven't liked the way it was presented. Maybe I could do what I've done. After all, I wrote many stories about him in my book, The Path. I edited his book, The Rubaiyat of Omar Khayyam Explained. I put out a book of Essence of Self-Realization, which is of Yogananda's sayings. And my whole life has been dedicated not only to teaching Yogananda's teachings, but specifically to expounding on the concepts in this book. It's sort of the spine, you might say, ",
+      "system": "3-Large"
+    },
+    "EWfsqte3eP25jcdEga7p_doc8_3-Large": {
+      "score": 2,
+      "doc_score": 0.664063692,
+      "timestamp": "2025-07-16T08:52:33.622207",
+      "judge": "Hriman",
+      "document_text": "to promulgate his teachings to the whole world. And he wrote this outline in Bengali. He didn't know English, really. But he wrote it in Bengali and asked a disciple of his who knew English to write it for him. And so Dhirananda wrote the book, but as a ghostwriter. It was Yogananda's book. I mean, you are the person inside your clothes, you're not the clothes you wear. And the book is really the person who has the ideas of it, not necessarily the clothes for which it's tailored. The writing was very pedantic and very too scholarly and not at all like Yogananda. But he took Yogananda's ideas and put them into at least a form of English, which Yogananda at that time didn't know. Over the years, he became fluent in English. But then, before his coming to America, he felt quite ",
+      "system": "3-Large"
+    },
+    "EWfsqte3eP25jcdEga7p_doc9_3-Large": {
+      "score": 2,
+      "doc_score": 0.661332,
+      "timestamp": "2025-07-16T08:52:33.622213",
+      "judge": "Hriman",
+      "document_text": "An Illustrious Beginning Autobiography of a Yogi was the first book ever written in English that is \"about yogis, by a yogi.\" First published by The Philosophical Library, one of America's oldest publishers of scholarly material for the general public, Yogananda's Autobiography was listed in 1946 alongside works by Charles Darwin, Franklin D. Roosevelt, and George Bernard Shaw. The book created an immediate sensation. In 1947, Newsweek described it as \"... a fascinating and clearly annotated study of a religious way of life, ingeniously described in the lush style of the Orient.\" The San Francisco Chronicle reported that, \"Yogananda presents a convincing case for yoga, and those who 'came to scoff' may remain to pray.\" Columbia University's scholarly journal, the Review of Religion",
+      "system": "3-Large"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc0_3-Small": {
+      "score": 3,
+      "doc_score": 0.529639125,
+      "timestamp": "2025-07-16T08:52:33.635492",
+      "judge": "Hriman",
+      "document_text": ". It might be thoughts that keep coming when we're trying to accomplish a task or sit to meditate: \"Why did he do that to me?\" \"Why did they say that to me?\" \"I don't want to feel this way.\" Some people live so embroiled in negative emotions-anger, worry, fear, hatred, jealousy, grief, pride, resentment- that an agitated consciousness seems normal. Fortunately, devotees have a meditation practice. The more we meditate, the more we begin to live in that calm inner center. When emotional agitation pulls us out of it, we recognize the need to do something to regain our inner calm. Step back/disengage After recognizing the agitation, do whatever you need to do to get out of the emotional whirlpool. Choose a technique: Do deep breathing. Silently chant \"Aum Guru\" or some other mantra. Focus at the spiritual eye and pray for calmness. Look at a photo of the Guru, especially the Guru's eyes. If possible, change your environment so that you're disengaged from the outer stimulus that pushed you over the edge in the first place.",
+      "system": "3-Small"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc1_3-Large": {
+      "score": 2,
+      "doc_score": 0.572938323,
+      "timestamp": "2025-07-16T08:52:33.635506",
+      "judge": "Hriman",
+      "document_text": "the feelings in your heart. Know that this is where restlessness starts, whether in meditation or in daily life. 2. Catch your emotional reactions quickly! As with other skills, the more you practice this, the more adept you will become. 3. First, shift your feelings into neutral, neither positive nor negative. The heart is the pivotal point from which the energy can flow in either an upward and expansive direction or a downward and contractive one. As in a car, you need to shift into neutral before you can move into forward or reverse. During my meditation, the relaxation and regular breathing shifted me into neutral, and from there I could redirect my energy upward. 4. If you want deeper meditations, change from thinking to observing: Watch the breath, listen to AUM, feel the Kriya currents, or look into the light of the spiritual eye. The spiritual states we yearn for lie behind the fringe of the mind. 5. Being able to control the reactive process imparts two huge benefits: the power to remain even-minded and cheerful, and the ability to choose to be happy in all situations. Let us follow Swami Kriyananda",
+      "system": "3-Large"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc2_3-Large": {
+      "score": 3,
+      "doc_score": 0.574250638,
+      "timestamp": "2025-07-16T08:52:33.635508",
+      "judge": "Hriman",
+      "document_text": "to develop that feeling, that ability to relax when you meditate deeply and become very peaceful inside. Then later in your daily actions, some people think that meditation is a means of sort of divorcing you from reality, putting you out of touch with life and so on. The opposite is true. I don't know how people can cope. Who don't meditate, I just don't know how they can even live. Meditation is that which will help you to be able under any circumstance to act and react appropriately. And in this case, very often, in fact, it will happen. You will feel, if you notice yourself becoming agitated because of anything that anyone said or anything that happened to you or whatever, you will notice that, first of all, there is an agitation in the feelings of your heart. I don't mean the physical heart, although that may be affected too if the emotion is very strong. But it",
+      "system": "3-Large"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc3_3-Small": {
+      "score": 3,
+      "doc_score": 0.528115153,
+      "timestamp": "2025-07-16T08:52:33.635510",
+      "judge": "Hriman",
+      "document_text": "Find an \"expert\" on sitting postures to help you find a way to sit upright comfortably Energize more frequently Get a massage or chiropractic help Pray for guidance as to what to do to overcome any physical challenges in meditation Ending your Meditations Bow to the altar Say an affirmation for the day from Affirmations for Self Healing or Do it Now Healing prayers, keep a list at or near your altar Write in your spiritual journal Be sure to have a transition activity which is calming Listen to a chanting or other spiritual music tape Pray to have each moment of your day blessed (morning) and guided Write down any perceptions you have had and want to remember Pray to find a way to serve others today as a channel of the Divine Start a chant, a mantra or japa (continuous repetition of a name of God) in your head to go on all day/night Take a moment to think of all your blessings and what you are grateful for in your life",
+      "system": "3-Small"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc4_3-Small": {
+      "score": 3,
+      "doc_score": 0.534970582,
+      "timestamp": "2025-07-16T08:52:33.635512",
+      "judge": "Hriman",
+      "document_text": "Teach me not to drug myself with the opiate of restlessness. Each day I will meditate more deeply than yesterday. Each tomorrow I will meditate more deeply than today. Today, with the soft touch of intuition, I will tune my soul radio and rid my mind of static restlessness, that I may hear Thy voice of cosmic vibration, the music of atoms, and the melody of love vibrating in my superconsciousness. I will find perpetual celestial happiness within. Peace will reign in silence, or in the midst of activities. Let me hear Thy voice, O God, in the cave of meditation.",
+      "system": "3-Small"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc5_3-Small": {
+      "score": 3,
+      "doc_score": 0.533275366,
+      "timestamp": "2025-07-16T08:52:33.635514",
+      "judge": "Hriman",
+      "document_text": "meditate. But, through the proper use of will power, anyone can overcome restlessness and achieve major progress in meditation. In my own struggle to meditate deeply, I've learned a few things that may prove helpful Seclusion: a turning point My first real breakthrough in my battle against mental restlessness came during one of my early weeklong seclusions at Ananda Village. Seclusions are usually a time for going deeper in meditation, but I began mine in a discouraged state. Certain recurring, negative thoughts had followed me into seclusion. Whenever I tried to meditate, I was assailed by thoughts of my imperfections as a devotee and the notion that I wasn't \"good enough\" to meditate well. After two days of this, I became so desperate to escape the tyranny of my mind that I decided to take charge. When the discouraging thoughts began again, out loud I shouted, \"Stop it, get out!\" Then, out loud and with strong will power, I started instructing myself in the basic steps of meditation.",
+      "system": "3-Small"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc6_3-Small": {
+      "score": 3,
+      "doc_score": 0.521413207,
+      "timestamp": "2025-07-16T08:52:33.635516",
+      "judge": "Hriman",
+      "document_text": "Teach me, O Spirit, by meditation, to stop the storm of breath, the skipping of my mental restlessness, and all the sensory disturbances that rage on the lake of my mind. Let the magic wand of my intuition halt the gale of passions and unnecessary desires. In the rippleless lake of my mind, then, let me behold the undistorted reflection of the moon of my soul, glistening ever with the reflected light of Thy presence.",
+      "system": "3-Small"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc8_3-Large": {
+      "score": 3,
+      "doc_score": 0.59495759,
+      "timestamp": "2025-07-16T08:52:33.635518",
+      "judge": "Hriman",
+      "document_text": ". It might be thoughts that keep coming when we're trying to accomplish a task or sit to meditate: \"Why did he do that to me?\" \"Why did they say that to me?\" \"I don't want to feel this way.\" Some people live so embroiled in negative emotions-anger, worry, fear, hatred, jealousy, grief, pride, resentment- that an agitated consciousness seems normal. Fortunately, devotees have a meditation practice. The more we meditate, the more we begin to live in that calm inner center. When emotional agitation pulls us out of it, we recognize the need to do something to regain our inner calm. Step back/disengage After recognizing the agitation, do whatever you need to do to get out of the emotional whirlpool. Choose a technique: Do deep breathing. Silently chant \"Aum Guru\" or some other mantra. Focus at the spiritual eye and pray for calmness. Look at a photo of the Guru, especially the Guru's eyes. If possible, change your environment so that you're disengaged from the outer stimulus that pushed you over the edge in the first place.",
+      "system": "3-Large"
+    },
+    "CQiD9rSSvxRYUINYk5FT_doc9_3-Large": {
+      "score": 3,
+      "doc_score": 0.585137606,
+      "timestamp": "2025-07-16T08:52:33.635520",
+      "judge": "Hriman",
+      "document_text": "spiritual eye and pray for calmness. Look at a photo of the Guru, especially the Guru's eyes. If possible, change your environment so that you're disengaged from the outer stimulus that pushed you over the edge in the first place. Separate yourself from the person or persons who upset you. Unplug from the media so you're not reminded of the economic stresses that worry you, or the undefined fears of disaster that haunt your subconscious. Remove yourself from the surroundings that remind you of the loss of a pet or loved one. I have found that the calming techniques are usually more effective if I can get a little space from what upset me in the first place. Redirect the energy One of the problems I experienced in trying to draw on God's presence was that my efforts were plagued by low energy. My mind would get distracted, my prayers would be half-hearted, or I would slip into a subconscious state.",
+      "system": "3-Large"
+    }
   },
   "judges": {
     "Hriman": {
-      "documents_evaluated": 69,
+      "documents_evaluated": 86,
       "queries_handled": [
         "qGF8pzUgIJe4cH834nOs",
         "GAsQmuMh3czMdqTsbY6M",
@@ -897,7 +1033,9 @@
         "FDNqJL6kGszttSS4kVFy",
         "JGNqNXdGGu5SiA0b5DDj",
         "7YZSwIFlaNRCnAOVVVFx",
-        "gF7tAV9b1AehhZO48gD0"
+        "gF7tAV9b1AehhZO48gD0",
+        "EWfsqte3eP25jcdEga7p",
+        "CQiD9rSSvxRYUINYk5FT"
       ]
     },
     "Gyandev": {
@@ -1001,6 +1139,20 @@
       "documents_evaluated": 5,
       "documents_skipped": 1,
       "processed_at": "2025-07-12T08:59:48.199980"
+    },
+    "EWfsqte3eP25jcdEga7p": {
+      "query_text": "Why is the Autobiography of a Yogi written with such English?",
+      "judge": "Hriman",
+      "documents_evaluated": 8,
+      "documents_skipped": 0,
+      "processed_at": "2025-07-16T08:52:33.622218"
+    },
+    "CQiD9rSSvxRYUINYk5FT": {
+      "query_text": "Write a prompt for me that would help me learn to meditate more deeply when I am feeling upset",
+      "judge": "Hriman",
+      "documents_evaluated": 9,
+      "documents_skipped": 0,
+      "processed_at": "2025-07-16T08:52:33.635524"
     }
   }
 }

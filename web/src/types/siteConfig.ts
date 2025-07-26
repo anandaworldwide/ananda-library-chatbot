@@ -48,7 +48,7 @@ export interface SiteConfig {
   showSourceContent: boolean;
   showVoting: boolean;
   includedLibraries?: Array<string | { name: string; weight?: number }>; // Updated
-  enabledMediaTypes?: ('text' | 'audio' | 'youtube')[];
+  enabledMediaTypes?: ("text" | "audio" | "youtube")[];
   enableModelComparison?: boolean;
   showSourceCountSelector?: boolean;
   hideSources?: boolean;
@@ -56,4 +56,5 @@ export interface SiteConfig {
   temperature?: number; // Added for LLM temperature setting
   modelName?: string; // Added for LLM model selection
   showRelatedQuestions?: boolean; // Added to control visibility of related questions
+  enableGeoAwareness?: boolean; // Added for geo-awareness functionality
 }

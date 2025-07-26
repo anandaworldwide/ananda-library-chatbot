@@ -1,4 +1,4 @@
-import { Document } from 'langchain/document';
+import { Document } from "langchain/document";
 
 export interface StreamingResponseData {
   token?: string;
@@ -9,6 +9,7 @@ export interface StreamingResponseData {
   model?: string;
   siteId?: string;
   warning?: string;
+  toolResponse?: boolean; // Flag to indicate this response came from tool execution
   timing?: {
     ttfb?: number;
     total?: number;
