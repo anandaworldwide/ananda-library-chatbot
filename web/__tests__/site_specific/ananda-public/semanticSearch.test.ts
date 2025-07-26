@@ -921,6 +921,186 @@ testRunner("Vivek Response Semantic Validation (ananda-public)", () => {
     );
   });
 
+  describe("Geo-Awareness Tests", () => {
+    // Test geo-awareness functionality with location-specific queries
+    test.concurrent("should provide specific location information for city-based center queries", async () => {
+      console.log(`Running test: should provide specific location information for city-based center queries`);
+      const query = "Are there any Ananda centers in Portland, Oregon?";
+      const expectedResponseCanonical = [
+        "Here are Ananda centers near Portland, Oregon: Ananda Portland with specific address, phone number, and website information.",
+        "I found these Ananda centers near Portland: Ananda Portland located at a specific address with contact details.",
+        "Yes, there are Ananda centers near Portland, Oregon. Here's what I found: Ananda Portland with full contact information.",
+      ];
+      const unexpectedResponseCanonical = [
+        "Ananda has locations worldwide. To find information, please visit our Find Ananda Near You page.", // Generic response
+        "You can check the Ananda website for center locations.", // Generic redirect
+        "I'm tuned to answer questions related to Ananda.", // Rejection
+      ];
+
+      const actualResponse = await getVivekResponse(query);
+      const actualEmbedding = await getEmbedding(actualResponse);
+
+      const expectedEmbeddings = await Promise.all(expectedResponseCanonical.map(getEmbedding));
+      const unexpectedEmbeddings = await Promise.all(unexpectedResponseCanonical.map(getEmbedding));
+
+      const similarityToExpected = getMaxSimilarity(actualEmbedding, expectedEmbeddings);
+      const similarityToUnexpected = getMaxSimilarity(actualEmbedding, unexpectedEmbeddings);
+
+      console.log(
+        `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to Expected (Specific Info): ${similarityToExpected}\nSimilarity to Unexpected (Generic): ${similarityToUnexpected}`
+      );
+
+      expect(similarityToExpected).toBeGreaterThan(0.65);
+      expect(similarityToUnexpected).toBeLessThan(0.7);
+      // Should contain the Find Ananda link as fallback
+      expect(actualResponse).toContain("https://www.ananda.org/find-ananda/");
+    });
+
+    test.concurrent("should handle 'near me' queries with IP-based location detection", async () => {
+      console.log(`Running test: should handle 'near me' queries with IP-based location detection`);
+      const query = "What's the closest Ananda center to me?";
+      const expectedResponseCanonical = [
+        "Based on your location, here are the closest Ananda centers with distances and contact information.",
+        "I found nearby Ananda centers based on your location. Here are the closest ones with specific details.",
+        "The closest Ananda centers to your location are listed below with distances and contact information.",
+      ];
+      const unexpectedResponseCanonical = [
+        "I need you to specify your location to find nearby centers.", // Should detect location automatically
+        "Please tell me your city so I can find centers near you.", // Should use IP detection
+        "I'm tuned to answer questions related to Ananda.", // Rejection
+      ];
+
+      const actualResponse = await getVivekResponse(query);
+      const actualEmbedding = await getEmbedding(actualResponse);
+
+      const expectedEmbeddings = await Promise.all(expectedResponseCanonical.map(getEmbedding));
+      const unexpectedEmbeddings = await Promise.all(unexpectedResponseCanonical.map(getEmbedding));
+
+      const similarityToExpected = getMaxSimilarity(actualEmbedding, expectedEmbeddings);
+      const similarityToUnexpected = getMaxSimilarity(actualEmbedding, unexpectedEmbeddings);
+
+      console.log(
+        `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to Expected (Location Detected): ${similarityToExpected}\nSimilarity to Unexpected (Location Request): ${similarityToUnexpected}`
+      );
+
+      expect(similarityToExpected).toBeGreaterThan(0.65);
+      expect(similarityToUnexpected).toBeLessThan(0.65);
+    });
+
+    test.concurrent("should distinguish between no centers found vs system issues", async () => {
+      console.log(`Running test: should distinguish between no centers found vs system issues`);
+      // Query for a remote location unlikely to have nearby centers
+      const query = "Are there any Ananda centers in Antarctica?";
+
+      const noCentersFoundResponses = [
+        "No Ananda centers found within 150 miles of your location. You might want to check out Ananda's virtual events and online community!",
+        "I couldn't find any Ananda centers near Antarctica. You might want to explore Ananda's online resources and virtual events.",
+        "There are no Ananda centers within 150 miles of Antarctica, but you can connect with Ananda through online programs.",
+      ];
+
+      const systemIssueResponses = [
+        "I'm currently unable to access the latest center location data due to a temporary system issue.",
+        "Sorry, I encountered a temporary issue while searching for nearby Ananda centers.",
+      ];
+
+      const actualResponse = await getVivekResponse(query);
+      const actualEmbedding = await getEmbedding(actualResponse);
+
+      const noCentersEmbeddings = await Promise.all(noCentersFoundResponses.map(getEmbedding));
+      const systemIssueEmbeddings = await Promise.all(systemIssueResponses.map(getEmbedding));
+
+      const similarityToNoCenters = getMaxSimilarity(actualEmbedding, noCentersEmbeddings);
+      const similarityToSystemIssue = getMaxSimilarity(actualEmbedding, systemIssueEmbeddings);
+
+      console.log(
+        `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to No Centers: ${similarityToNoCenters}\nSimilarity to System Issue: ${similarityToSystemIssue}`
+      );
+
+      // For a remote location like Antarctica, we expect either:
+      // 1. A "no centers found" message (normal case)
+      // 2. A system issue message (if S3 is down)
+
+      const containsSystemIssueKeywords =
+        /temporary system issue|temporary issue|system issue|unable to access.*data/i.test(actualResponse);
+
+      if (containsSystemIssueKeywords) {
+        // System issue detected - should be similar to system issue responses
+        expect(similarityToSystemIssue).toBeGreaterThan(0.7);
+      } else {
+        // Normal case - should be similar to "no centers found" responses
+        expect(similarityToNoCenters).toBeGreaterThan(0.6);
+        // Should mention online alternatives or virtual events
+        expect(actualResponse).toMatch(/online|virtual|community|events/i);
+      }
+    });
+
+    test.concurrent("should provide international location support", async () => {
+      console.log(`Running test: should provide international location support`);
+      const query = "Is there an Ananda center in London, UK?";
+      const expectedResponseCanonical = [
+        "Here are Ananda centers near London, UK: Ananda United Kingdom in Devizes, Wiltshire with website and contact information.",
+        "I found these Ananda centers near London: Ananda United Kingdom located in Devizes, Wiltshire, United Kingdom.",
+        "Yes, there are Ananda centers near London. Here's what I found: Ananda United Kingdom with full contact details.",
+      ];
+      const unexpectedResponseCanonical = [
+        "I can only help with locations in the United States.", // Should support international
+        "Please specify a US location.", // Should work internationally
+        "I'm tuned to answer questions related to Ananda.", // Rejection
+      ];
+
+      const actualResponse = await getVivekResponse(query);
+      const actualEmbedding = await getEmbedding(actualResponse);
+
+      const expectedEmbeddings = await Promise.all(expectedResponseCanonical.map(getEmbedding));
+      const unexpectedEmbeddings = await Promise.all(unexpectedResponseCanonical.map(getEmbedding));
+
+      const similarityToExpected = getMaxSimilarity(actualEmbedding, expectedEmbeddings);
+      const similarityToUnexpected = getMaxSimilarity(actualEmbedding, unexpectedEmbeddings);
+
+      console.log(
+        `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to Expected (International Support): ${similarityToExpected}\nSimilarity to Unexpected (US Only): ${similarityToUnexpected}`
+      );
+
+      expect(similarityToExpected).toBeGreaterThan(0.65);
+      expect(similarityToUnexpected).toBeLessThan(0.6);
+      // Should contain reference to UK or international center
+      expect(actualResponse).toMatch(/United Kingdom|UK|Devizes|Wiltshire|anandauk\.org/i);
+    });
+
+    test.concurrent("should handle meditation group queries as location-based", async () => {
+      console.log(`Running test: should handle meditation group queries as location-based`);
+      const query = "Are there any meditation groups in San Francisco?";
+      const expectedResponseCanonical = [
+        "Here are Ananda meditation groups and centers near San Francisco with specific location and contact information.",
+        "I found these Ananda meditation groups near San Francisco: specific centers with addresses and contact details.",
+        "Yes, there are Ananda meditation groups in the San Francisco area. Here are the details:",
+      ];
+      const unexpectedResponseCanonical = [
+        "What type of meditation groups are you looking for?", // Should assume Ananda groups
+        "Please clarify what kind of groups you want.", // Should not ask for clarification
+        "I need more information about the type of groups.", // Should proceed with Ananda assumption
+      ];
+
+      const actualResponse = await getVivekResponse(query);
+      const actualEmbedding = await getEmbedding(actualResponse);
+
+      const expectedEmbeddings = await Promise.all(expectedResponseCanonical.map(getEmbedding));
+      const unexpectedEmbeddings = await Promise.all(unexpectedResponseCanonical.map(getEmbedding));
+
+      const similarityToExpected = getMaxSimilarity(actualEmbedding, expectedEmbeddings);
+      const similarityToUnexpected = getMaxSimilarity(actualEmbedding, unexpectedEmbeddings);
+
+      console.log(
+        `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to Expected (Direct Answer): ${similarityToExpected}\nSimilarity to Unexpected (Clarification): ${similarityToUnexpected}`
+      );
+
+      expect(similarityToExpected).toBeGreaterThan(0.65);
+      expect(similarityToUnexpected).toBeLessThan(0.6);
+      // Should not ask for clarification about group type
+      expect(actualResponse).not.toMatch(/what type|what kind|clarify|more information about.*type/i);
+    });
+  });
+
   describe("Unrelated Questions", () => {
     const unrelatedTestCases = [
       {

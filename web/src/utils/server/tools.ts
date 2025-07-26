@@ -10,6 +10,7 @@ import { NextRequest } from "next/server";
 import { s3Client } from "./awsConfig";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
+import { sendOpsAlert } from "./emailOps";
 
 // Types for tool responses
 interface LocationResult {
@@ -434,20 +435,22 @@ async function getLocationFromIP(request: NextRequest): Promise<LocationResult |
   }
 }
 
+// Track S3 loading errors for user-friendly messages
+let lastS3Error: { type: "missing" | "error" | null; message?: string } = { type: null };
+
 /**
  * Loads Ananda centers from S3 CSV file
  * @returns Promise<CenterResult[]>
  */
 async function loadAnandaCenters(): Promise<CenterResult[]> {
+  const bucketName = process.env.S3_BUCKET_NAME;
+  const siteId = process.env.SITE_ID || "ananda";
+  const s3Key = `site-config/location/${siteId}-locations.csv`;
+
   try {
-    const bucketName = process.env.S3_BUCKET_NAME;
     if (!bucketName) {
       throw new Error("S3_BUCKET_NAME environment variable not configured");
     }
-
-    // Load from S3 with site-specific path
-    const siteId = process.env.SITE_ID || "ananda";
-    const s3Key = `site-config/location/${siteId}-locations.csv`;
 
     const response = await s3Client.send(
       new GetObjectCommand({
@@ -509,6 +512,52 @@ async function loadAnandaCenters(): Promise<CenterResult[]> {
     return centers;
   } catch (error) {
     console.error("Error loading Ananda centers from S3:", error);
+
+    // Send ops alert for S3 errors, especially NoSuchKey
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (errorMessage.includes("NoSuchKey") || errorMessage.includes("The specified key does not exist")) {
+      lastS3Error = {
+        type: "missing",
+        message:
+          "I'm currently unable to access the latest center location data due to a temporary system issue. Please try again in a few minutes, or visit ananda.org to find Ananda centers near you.",
+      };
+
+      await sendOpsAlert(
+        "S3 Location Data Missing - Geo-Awareness Failing",
+        `Critical: S3 location data file is missing, causing geo-awareness tools to fail.
+
+S3 Key: ${s3Key}
+Bucket: ${bucketName}
+Site ID: ${process.env.SITE_ID || "unknown"}
+
+This will cause location-based queries to return empty results or fallback to incomplete local data.
+
+IMMEDIATE ACTION REQUIRED:
+1. Check if the CSV file exists at the correct S3 path
+2. Verify the file was uploaded during deployment
+3. Check S3 bucket permissions and access
+4. Restore from backup if file was accidentally deleted
+
+Impact: All geo-awareness functionality is degraded until resolved.`,
+        {
+          error: error instanceof Error ? error : new Error(String(error)),
+          context: {
+            s3Key,
+            bucketName,
+            siteId: process.env.SITE_ID || "unknown",
+            operation: "loadAnandaCenters",
+            timestamp: new Date().toISOString(),
+          },
+        }
+      );
+    } else {
+      lastS3Error = {
+        type: "error",
+        message:
+          "Sorry, I encountered a temporary issue while searching for nearby Ananda centers. Please try again in a few minutes or visit ananda.org to find center information.",
+      };
+    }
 
     // Fallback to local file if S3 fails (for development)
     try {
@@ -585,17 +634,28 @@ async function findNearestCenters(
       .slice(0, maxResults);
 
     if (centersWithDistance.length > 0) {
+      // Clear any previous error since we found centers
+      lastS3Error = { type: null };
       return {
         found: true,
         centers: centersWithDistance,
       };
     } else {
-      return {
-        found: false,
-        centers: [],
-        fallbackMessage:
-          "No Ananda centers found within 150 miles of your location. You might want to check out Ananda's virtual events and online community!",
-      };
+      // Check if we have no centers due to S3 error or just distance
+      if (lastS3Error.type && lastS3Error.message) {
+        return {
+          found: false,
+          centers: [],
+          fallbackMessage: lastS3Error.message,
+        };
+      } else {
+        return {
+          found: false,
+          centers: [],
+          fallbackMessage:
+            "No Ananda centers found within 150 miles of your location. You might want to check out Ananda's virtual events and online community!",
+        };
+      }
     }
   } catch (error) {
     console.error("Error finding nearest centers:", error);
