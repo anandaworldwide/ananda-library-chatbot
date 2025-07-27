@@ -409,15 +409,17 @@ export const makeChain = async (
         shouldUseGeoTools = await hasLocationIntentAsync(originalQuestion);
         locationIntentLatency = Date.now() - intentDetectionStart;
 
-        // 📊 COMPREHENSIVE GEO-AWARENESS LOGGING
-        console.log(`🌍 GEO-AWARENESS METRICS:`, {
-          siteId,
-          query: originalQuestion?.substring(0, 100),
-          locationIntentDetected: shouldUseGeoTools,
-          detectionLatency: `${locationIntentLatency}ms`,
-          toolsAvailable: geoTools.length,
-          timestamp: new Date().toISOString(),
-        });
+        if (shouldUseGeoTools) {
+          // 📊 COMPREHENSIVE GEO-AWARENESS LOGGING
+          console.log(`🌍 GEO-AWARENESS METRICS:`, {
+            siteId,
+            query: originalQuestion?.substring(0, 100),
+            locationIntentDetected: shouldUseGeoTools,
+            detectionLatency: `${locationIntentLatency}ms`,
+            toolsAvailable: geoTools.length,
+            timestamp: new Date().toISOString(),
+          });
+        }
       } catch (error) {
         locationIntentLatency = Date.now() - intentDetectionStart;
         console.warn("⚠️ Error in semantic location intent detection:", error);
@@ -458,16 +460,7 @@ export const makeChain = async (
 
       // 📊 NO TOOLS BOUND LOGGING
       if (originalQuestion && siteConfig?.enableGeoAwareness) {
-        console.log(`🔍 GEO-TOOLS NOT BOUND:`, {
-          siteId,
-          query: originalQuestion?.substring(0, 100),
-          locationIntentDetected: shouldUseGeoTools,
-          toolsAvailable: geoTools.length,
-          requestAvailable: !!request,
-          reason: !shouldUseGeoTools ? "no_location_intent" : !request ? "no_request_object" : "no_tools_available",
-          locationIntentLatency: `${locationIntentLatency}ms`,
-          timestamp: new Date().toISOString(),
-        });
+        console.log(`🔍 GEO-TOOLS not bound: No location intent detected`);
       }
     }
 
@@ -836,6 +829,8 @@ Error details: ${errorString}`,
           if (sendData) sendData({ log: debugMsg });
         }
 
+        // TODO: Possibly remove this. Simple social pattern code. There was a query where someone said,
+        // "Thank you. Would you please add me to the mailing list?" And it just said, "You're welcome."
         // Check for social messages like "thanks" and bypass reformulation.
         // This is a fallback to catch the basic cases in case the CONDENSE_TEMPLATE does not handle it correctly.
         const simpleSocialPattern =
@@ -857,7 +852,6 @@ Error details: ${errorString}`,
         if (!privateSession) {
           const debugMsg = `🔍 REFORMULATED TO: "${standaloneQuestion}"`;
           console.log(debugMsg);
-          if (sendData) sendData({ log: debugMsg });
         }
 
         capturedRestatedQuestion = standaloneQuestion; // Store for later
@@ -985,8 +979,6 @@ export async function setupAndExecuteLanguageModelChain(
         // Import tools dynamically to avoid circular dependencies
         const { TOOL_DEFINITIONS } = await import("./tools");
         geoTools = TOOL_DEFINITIONS;
-      } else {
-        console.log("🔍 GEO DEBUG: NOT binding tools - isGeoEnabled:", isGeoEnabled, "request:", !!request);
       }
 
       const chain = await makeChain(
