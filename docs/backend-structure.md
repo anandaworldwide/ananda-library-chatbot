@@ -324,7 +324,7 @@ embeddings.
   - Implements contrastive scoring algorithm:
     - Positive similarity threshold: >= 0.44
     - Contrastive threshold: positive similarity must exceed negative by >= 0.1
-  - Average latency: ~66ms per query (includes OpenAI API call for query embedding)
+  - Average latency: ~250ms per query (includes OpenAI API call for query embedding)
   - Graceful fallback if embeddings unavailable
 
 **Integration with RAG Pipeline:**
@@ -337,7 +337,7 @@ embeddings.
 **Performance Characteristics:**
 
 - **Accuracy:** 96.6% on multilingual test dataset
-- **Latency:** ~66ms average (includes OpenAI embedding generation)
+- **Latency:** ~250ms average (includes OpenAI embedding generation)
 - **Scalability:** Site-specific configuration without code changes
 - **Reliability:** Contrastive learning prevents false positives on meditation content queries
 
