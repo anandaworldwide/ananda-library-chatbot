@@ -89,13 +89,6 @@ export async function initializeLocationIntentDetector(siteId: string): Promise<
     // Cache embeddings and site ID
     cachedEmbeddings = embeddingData;
     cachedSiteId = siteId;
-
-    console.log(`✅ Location intent detector initialized for site '${siteId}'`);
-    console.log(`  Model: ${embeddingData.model}`);
-    console.log(`  Positive embeddings: ${embeddingData.positiveCount}`);
-    console.log(`  Negative embeddings: ${embeddingData.negativeCount}`);
-    console.log(`  Dimensions: ${embeddingData.embeddingDimensions}`);
-    console.log(`  Generated: ${embeddingData.timestamp}`);
   } catch (error) {
     console.error(`❌ Error loading location intent embeddings for site '${siteId}':`, error);
     throw new Error(`Failed to load location intent embeddings: ${error}`);
