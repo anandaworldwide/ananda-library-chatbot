@@ -300,58 +300,44 @@ async function getEmbedding(text: string): Promise<number[]> {
  * @throws {Error} If Pinecone index is not available, SITE_ID is missing, or upsert fails.
  */
 export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?: number[][]): Promise<void> {
-  console.log(`[DEBUG upsertEmbeddings] Called with ${questions.length} questions.`, {
-    questionIds: questions.map((q) => q.id).join(", ") || "No IDs",
-    hasProvidedEmbeddings: !!providedEmbeddings,
-  });
-
   // Ensure Pinecone client and index are ready.
   await initializeClients();
   if (!pineconeIndex || !currentPineconeIndexName) {
-    console.error("[DEBUG upsertEmbeddings] Pinecone index not available for upsert.");
     throw new Error("Pinecone index not available for upsert.");
   }
 
   // Retrieve the current SITE_ID for embedding metadata. This is crucial for multi-tenant filtering.
   const currentSiteId = process.env.SITE_ID;
   if (!currentSiteId) {
-    console.error("[DEBUG upsertEmbeddings] SITE_ID environment variable is not set.");
     throw new Error("upsertEmbeddings: SITE_ID environment variable is not set.");
   }
-  console.log(`[DEBUG upsertEmbeddings] Using SITE_ID: ${currentSiteId}`);
 
   // Filter out invalid questions
   const validQuestions = questions.filter((q) => q.id && q.question && typeof q.question === "string");
 
   if (validQuestions.length === 0) {
-    console.warn("[DEBUG upsertEmbeddings] No valid questions to process for embeddings.");
+    console.warn("No valid questions to process for embeddings.");
     return;
   }
-  console.log(`[DEBUG upsertEmbeddings] Processing ${validQuestions.length} valid questions.`);
 
   try {
     let embeddings: number[][];
 
     if (providedEmbeddings) {
-      console.log(`[DEBUG upsertEmbeddings] Using ${providedEmbeddings.length} provided embeddings.`);
       // Validate provided embeddings
       if (providedEmbeddings.length !== validQuestions.length) {
         const errorMsg = `upsertEmbeddings: Mismatch between questions (${validQuestions.length}) and provided embeddings (${providedEmbeddings.length}).`;
-        console.error(`[DEBUG upsertEmbeddings] ${errorMsg}`);
         throw new Error(errorMsg);
       }
       embeddings = providedEmbeddings;
     } else {
-      console.log("[DEBUG upsertEmbeddings] Generating embeddings for valid questions.");
       // Generate embeddings if not provided
       const textsToEmbed = validQuestions.map((q) => q.question);
       // Timer for batch embeddings is within getBatchEmbeddings itself
       embeddings = await getBatchEmbeddings(textsToEmbed);
-      console.log(`[DEBUG upsertEmbeddings] Generated ${embeddings.length} embeddings.`);
       // Basic validation after internal generation
       if (embeddings.length !== validQuestions.length) {
         const errorMsg = `upsertEmbeddings: Mismatch after internal generation between questions (${validQuestions.length}) and embeddings (${embeddings.length}).`;
-        console.error(`[DEBUG upsertEmbeddings] ${errorMsg}`);
         throw new Error(errorMsg);
       }
     }
@@ -366,9 +352,6 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
       if (embedding && embedding.length > 0) {
         // Extract metadata for debugging
         const titleForMetadata = q.question.substring(0, 140);
-        console.log(
-          `[DEBUG upsertEmbeddings] Preparing vector for question ID: ${q.id}, title snippet: "${titleForMetadata}"`
-        );
 
         // Construct the vector object for Pinecone
         vectors.push({
@@ -381,28 +364,22 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
           },
         });
       } else {
-        console.warn(`[DEBUG upsertEmbeddings] Skipping vector for question ID: ${q.id} due to empty embedding.`);
+        console.warn(`Skipping vector for question ID: ${q.id} due to empty embedding.`);
       }
     }
 
     // If no valid vectors were generated, exit early.
     if (vectors.length === 0) {
-      console.log("[DEBUG upsertEmbeddings] No valid embeddings generated for upsert in this batch.");
       return;
     }
-    console.log(`[DEBUG upsertEmbeddings] Prepared ${vectors.length} vectors for upsert.`);
 
     // Upsert vectors to Pinecone in batches
     const batchSize = 100; // Pinecone recommends batch sizes of 100 or fewer
-    console.log(`[DEBUG upsertEmbeddings] Upserting vectors in batches of ${batchSize}.`);
     for (let i = 0; i < vectors.length; i += batchSize) {
       const batch = vectors.slice(i, i + batchSize);
       // Perform the upsert operation for the current batch
       const batchNum = Math.floor(i / batchSize) + 1;
       const totalBatches = Math.ceil(vectors.length / batchSize);
-      console.log(
-        `[DEBUG upsertEmbeddings] Processing batch ${batchNum}/${totalBatches}, size: ${batch.length}. IDs: ${batch.map((v) => v.id).join(", ")}`
-      );
 
       // Add retry logic for Pinecone upsert
       const maxUpsertRetries = 3;
@@ -411,54 +388,30 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
 
       for (let attempt = 1; attempt <= maxUpsertRetries; attempt++) {
         try {
-          console.log(`[DEBUG upsertEmbeddings] Attempt ${attempt}/${maxUpsertRetries} to upsert batch ${batchNum}.`);
-          const upsertResponse = await pineconeIndex.upsert(batch);
-          console.log(
-            `[DEBUG upsertEmbeddings] Batch ${batchNum} upsert attempt ${attempt} response:`,
-            JSON.stringify(upsertResponse, null, 2)
-          );
+          await pineconeIndex.namespace("").upsert(batch);
 
           // Add a small delay here to allow Pinecone a moment to process the upsert
           const verificationDelayMs = 500; // 500ms delay
-          console.log(
-            `[DEBUG upsertEmbeddings] Waiting ${verificationDelayMs}ms before verification fetch for batch ${batchNum}, attempt ${attempt}.`
-          );
           await new Promise((resolve) => setTimeout(resolve, verificationDelayMs));
 
           // Verify the upsert by fetching the first vector
           if (batch.length > 0) {
             const firstId = batch[0].id;
-            console.log(`[DEBUG upsertEmbeddings] Verifying upsert for batch ${batchNum} by fetching ID: ${firstId}.`);
-            const verifyResponse = await pineconeIndex.fetch([firstId]);
-            const record = verifyResponse.records[firstId];
-            const { values, ...otherFields } = record || {};
-            console.log(
-              `[DEBUG upsertEmbeddings] Verification fetch response for ID ${firstId}:`,
-              `Found record with ${values?.length || 0} values and metadata:`,
-              JSON.stringify(otherFields, null, 2)
-            );
+            const verifyResponse = await pineconeIndex.namespace("").fetch([firstId]);
 
             if (!verifyResponse.records[firstId]) {
-              console.error(
-                `[DEBUG upsertEmbeddings] VERIFICATION FAILED for batch ${batchNum} - ID ${firstId} not found in Pinecone after upsert attempt ${attempt}. Records found: ${Object.keys(verifyResponse.records).length}`
-              );
               // Continue to retry if verification fails within attempts
             } else {
-              console.log(`[DEBUG upsertEmbeddings] Verification SUCCESS for batch ${batchNum}, ID ${firstId} found.`);
               upsertSuccess = true;
               break; // Exit retry loop on successful verification
             }
           } else {
             // If batch was empty (should not happen with current logic but good to handle)
-            console.log(`[DEBUG upsertEmbeddings] Batch ${batchNum} was empty, no verification needed.`);
             upsertSuccess = true;
             break;
           }
         } catch (upsertError: any) {
-          console.error(
-            `[DEBUG upsertEmbeddings] Error during upsert attempt ${attempt} for batch ${batchNum}:`,
-            upsertError
-          );
+          console.error(`Error during upsert attempt ${attempt} for batch ${batchNum}:`, upsertError);
           // Check for retryable errors
           const errorMessage = String(upsertError?.message || upsertError);
           const causedBy = upsertError?.cause ? String(upsertError.cause?.message || upsertError.cause) : "";
@@ -472,14 +425,11 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
             causedBy.includes("EBUSY");
 
           if (isRetryableError && attempt < maxUpsertRetries) {
-            console.log(
-              `[DEBUG upsertEmbeddings] Retrying upsert for batch ${batchNum}/${totalBatches} after ${upsertRetryDelay}ms (attempt ${attempt}/${maxUpsertRetries})...`
-            );
             await new Promise((resolve) => setTimeout(resolve, upsertRetryDelay));
             upsertRetryDelay *= 2; // Exponential backoff
           } else {
             console.error(
-              `[DEBUG upsertEmbeddings] Non-retryable error or max retries reached for batch ${batchNum} upsert (attempt ${attempt}/${maxUpsertRetries}):`,
+              `Non-retryable error or max retries reached for batch ${batchNum} upsert (attempt ${attempt}/${maxUpsertRetries}):`,
               upsertError
             );
             // If verification failed on the last attempt, this is where we'd note it.
@@ -491,22 +441,15 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
 
       if (!upsertSuccess) {
         // This means all upsert attempts (including verification) failed for the batch
-        const errorMsg = `[DEBUG upsertEmbeddings] All ${maxUpsertRetries} upsert/verification attempts failed for batch ${batchNum}/${totalBatches}. First ID in batch: ${batch.length > 0 ? batch[0].id : "N/A"}.`;
+        const errorMsg = `All ${maxUpsertRetries} upsert/verification attempts failed for batch ${batchNum}/${totalBatches}. First ID in batch: ${batch.length > 0 ? batch[0].id : "N/A"}.`;
         console.error(errorMsg);
-        throw new Error(
-          errorMsg // More specific error
-        );
-      } else {
-        console.log(`[DEBUG upsertEmbeddings] Batch ${batchNum}/${totalBatches} successfully upserted and verified.`);
+        throw new Error(errorMsg);
       }
     }
-    console.log("[DEBUG upsertEmbeddings] All batches processed.");
   } catch (error) {
     // Log and rethrow errors encountered during the Pinecone upsert operation
-    console.error("[DEBUG upsertEmbeddings] Error during overall upsertEmbeddings process:", error);
+    console.error("Error during overall upsertEmbeddings process:", error);
     throw error;
-  } finally {
-    console.log("[DEBUG upsertEmbeddings] Exiting function.");
   }
 }
 
@@ -673,7 +616,7 @@ export async function findRelatedQuestionsPinecone(
     let attempt = 1;
     for (attempt = 1; attempt <= maxSourceMetaRetries; attempt++) {
       try {
-        const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
+        const sourceFetchResponse = await pineconeIndex.namespace("").fetch([questionId]);
 
         // Check if the questionId exists in the records
         if (!sourceFetchResponse.records[questionId]) {
@@ -728,7 +671,7 @@ export async function findRelatedQuestionsPinecone(
         const finalDelayMs = process.env.NODE_ENV === "test" ? 10 : 5000; // Much shorter final delay in test
         await new Promise((resolve) => setTimeout(resolve, finalDelayMs));
 
-        const finalFetchResponse = await pineconeIndex.fetch([questionId]);
+        const finalFetchResponse = await pineconeIndex.namespace("").fetch([questionId]);
 
         const refreshedRecord = finalFetchResponse.records[questionId];
         if (refreshedRecord?.metadata?.title && typeof refreshedRecord.metadata.title === "string") {
@@ -758,7 +701,7 @@ export async function findRelatedQuestionsPinecone(
 
     for (let attempt = 1; attempt <= maxQueryRetries; attempt++) {
       try {
-        queryResponse = await pineconeIndex.query(pineconeQuery);
+        queryResponse = await pineconeIndex.namespace("").query(pineconeQuery);
         querySuccess = true;
         break;
       } catch (queryError: any) {
@@ -899,7 +842,7 @@ async function findRelatedQuestionsPineconeWithEmbedding(
 
     for (let attempt = 1; attempt <= maxMetadataRetries; attempt++) {
       try {
-        const sourceFetchResponse = await pineconeIndex.fetch([questionId]);
+        const sourceFetchResponse = await pineconeIndex.namespace("").fetch([questionId]);
         const sourceRecord = sourceFetchResponse.records[questionId];
         if (sourceRecord?.metadata?.title && typeof sourceRecord.metadata.title === "string") {
           sourceMetadataTitle = sourceRecord.metadata.title;
@@ -958,7 +901,7 @@ async function findRelatedQuestionsPineconeWithEmbedding(
 
     for (let attempt = 1; attempt <= maxQueryRetries; attempt++) {
       try {
-        queryResponse = await pineconeIndex.query(pineconeQuery);
+        queryResponse = await pineconeIndex.namespace("").query(pineconeQuery);
         querySuccess = true;
         break;
       } catch (queryError: any) {
@@ -1142,9 +1085,6 @@ export async function updateRelatedQuestionsBatch(batchSize: number): Promise<vo
     const textsToEmbed = questions.map((q) => {
       const questionData = q as any;
       const textForEmbedding = questionData.restatedQuestion || q.question || "";
-      if (questionData.restatedQuestion) {
-        console.log(`Using restated question for ${q.id}: "${questionData.restatedQuestion}"`);
-      }
       return textForEmbedding;
     });
     allEmbeddings = await getBatchEmbeddings(textsToEmbed);
