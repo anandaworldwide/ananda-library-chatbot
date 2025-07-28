@@ -201,6 +201,7 @@ Data is stored across multiple services:
     - `publishedDate`: Publication date.
     - `s3Key`: Path to the audio file in S3 (for audio sources).
     - `startSecond`, `endSecond`: Timestamps for audio/video chunks.
+    - `access_level`: Access control classification (default: "public", or e.g. restricted: "kriyaban").
 
 - **Redis:**
 
@@ -210,6 +211,86 @@ Data is stored across multiple services:
 - **AWS S3:**
   - Stores raw media files (primarily audio `.mp3`, `.wav`) processed during data ingestion. File paths are stored in
     Pinecone metadata (`s3Key`).
+
+### Access Control Metadata
+
+The system implements **access level-based content filtering** to exclude restricted content (e.g., Kriyaban-only
+material) from search results based on site configuration.
+
+**Metadata Field:**
+
+- **`access_level`**: String field in Pinecone vector metadata
+  - **Default value**: `"public"` (implicit for most content)
+  - **Restricted values**: `"kriyaban"` for Kriyaban-only content
+  - **Extensible**: Additional levels (e.g., `"admin"`, `"staff"`) can be added without code changes
+
+**Site Configuration (`web/site-config/config.json`):**
+
+```json
+{
+  "ananda": {
+    "excludedAccessLevels": ["kriyaban"],
+    "accessLevelPathMap": {
+      "kriyaban": ["Kriyaban Only"]
+    }
+  }
+}
+```
+
+**Data-Driven Access Control:**
+
+- **`excludedAccessLevels`**: Array of access levels to exclude from search results
+- **`accessLevelPathMap`**: Maps access levels to file path patterns for automatic classification during ingestion
+- **Path Matching**: Case-insensitive substring matching against file paths
+- **Multi-Site Support**: Each site can define its own access restrictions independently
+
+**Implementation Components:**
+
+1. **Ingestion Pipeline (`data_ingestion/`):**
+
+   - **Path Analysis**: `pyutil/site_config_utils.py` provides `determine_access_level()` function
+   - **Automatic Classification**: Files containing "Kriyaban Only" in path → `access_level="kriyaban"`
+   - **Default Behavior**: All other content → `access_level="public"` (implicit)
+   - **Integration**: `transcribe_and_ingest_media.py` applies access levels during vector upsert
+
+2. **Query Filtering (`web/src/app/api/chat/v1/route.ts`):**
+
+   - **Filter Generation**: `setupPineconeAndFilter()` creates Pinecone filters
+   - **Exclusion Logic**: `{ access_level: { $nin: excludedAccessLevels } }`
+   - **Combined Filters**: Access level restrictions combined with media type and collection filters
+   - **Site-Specific**: Only applies to sites with configured `excludedAccessLevels`
+
+3. **Migration Support (`bin/tag_kriyaban_vectors.py`):**
+   - **Bulk Tagging**: Script to retroactively tag existing vectors
+   - **Path-Based Identification**: Matches file paths containing "Kriyaban Only"
+   - **Batch Processing**: Handles large vector sets with progress tracking
+   - **Verification**: Confirms successful tagging with detailed logging
+
+**Filter Structure Example:**
+
+```typescript
+// Generated Pinecone filter for ananda site
+{
+  $and: [
+    { type: { $in: ["audio", "text"] } }, // Media type filter
+    { library: { $eq: "Treasures" } }, // Collection filter
+    { access_level: { $nin: ["kriyaban"] } }, // Access level exclusion
+  ];
+}
+```
+
+**Security Considerations:**
+
+- **Server-Side Enforcement**: Access control applied at the vector database query level
+- **No Client-Side Filtering**: Restricted content never reaches the client
+- **Metadata Integrity**: Access levels set during ingestion and immutable during queries
+- **Site Isolation**: Each site's access restrictions are independent and configurable
+
+**Testing Coverage:**
+
+- **Unit Tests**: `web/__tests__/api/chat/v1/accessLevelFiltering.test.ts`
+- **Integration Tests**: `web/__tests__/api/chat/v1/kriyabanIntegration.test.ts`
+- **Configuration Tests**: `__tests__/utils/server/siteConfigUtils.test.ts`
 
 ---
 

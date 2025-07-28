@@ -251,6 +251,12 @@ async function setupPineconeAndFilter(
   // Add media type filter
   filter.$and.push({ type: { $in: activeTypes } });
 
+  // Add access level exclusion filter if configured
+  const excludedAccessLevels = (siteConfig as any).excludedAccessLevels;
+  if (excludedAccessLevels && Array.isArray(excludedAccessLevels) && excludedAccessLevels.length > 0) {
+    filter.$and.push({ access_level: { $nin: excludedAccessLevels } });
+  }
+
   // Apply collection-specific filters only if the collection exists in siteConfig
   if (siteConfig.collectionConfig && siteConfig.collectionConfig[collection]) {
     // Apply collection-specific filters based on the collection name

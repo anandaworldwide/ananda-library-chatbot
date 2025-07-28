@@ -80,6 +80,7 @@ from data_ingestion.utils.pinecone_utils import clear_library_vectors
 from data_ingestion.utils.s3_utils import S3UploadError, upload_to_s3
 from pyutil.env_utils import load_env
 from pyutil.logging_utils import configure_logging
+from pyutil.site_config_utils import determine_access_level, load_site_config
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +388,7 @@ def _process_and_store_transcription(
     default_author,
     library_name,
     s3_key,
+    site_config,
 ):
     """
     Processes transcription into chunks and stores in Pinecone.
@@ -448,6 +450,13 @@ def _process_and_store_transcription(
                 content_type = "video" if is_youtube_video else "audio"
                 source_identifier = url if is_youtube_video else s3_key
 
+                # Load site configuration and determine access level
+                access_level = determine_access_level(file_path, site_config)
+
+                logger.debug(
+                    f"Determined access_level='{access_level}' for file: {file_path}"
+                )
+
                 store_in_pinecone(
                     pinecone_index,
                     chunks,
@@ -458,6 +467,7 @@ def _process_and_store_transcription(
                     content_type,
                     source_identifier,
                     album=album,
+                    access_level=access_level,
                 )
             except Exception as e:
                 error_msg = f"Error processing {'YouTube video' if is_youtube_video else 'file'} {file_name}: {str(e)}"
@@ -520,6 +530,7 @@ def process_file(
     dryrun,
     default_author,
     library_name,
+    site_config,
     is_youtube_video=False,
     youtube_data=None,
     s3_key=None,
@@ -584,6 +595,7 @@ def process_file(
         default_author,
         library_name,
         s3_key,
+        site_config,
     )
 
     if processing_report["errors"] > 0:
@@ -616,6 +628,9 @@ def worker(task_queue, result_queue, args, stop_event):
     client = OpenAI()
     index = load_pinecone()
 
+    # Load site configuration once per worker
+    site_config = load_site_config(args.site)
+
     while not stop_event.is_set():
         try:
             # 1 second timeout prevents workers from hanging indefinitely
@@ -626,7 +641,7 @@ def worker(task_queue, result_queue, args, stop_event):
 
             logger.debug(f"Worker processing item: {item}")
             # Process item and report results back to main thread
-            item_id, report = process_item(item, args, client, index)
+            item_id, report = process_item(item, args, client, index, site_config)
             logger.debug(f"Worker processed item: {item_id}, report: {report}")
             result_queue.put((item_id, report))
         except Empty:
@@ -642,7 +657,7 @@ def worker(task_queue, result_queue, args, stop_event):
                 result_queue.put((None, {"errors": 1, "error_details": [str(e)]}))
 
 
-def process_item(item, args, client, index):
+def process_item(item, args, client, index, site_config):
     """
     Processes a single media item with timing metrics and cleanup.
 
@@ -697,6 +712,7 @@ def process_item(item, args, client, index):
         dryrun=args.dryrun,
         default_author=author,
         library_name=library,
+        site_config=site_config,
         is_youtube_video=is_youtube_video,
         youtube_data=youtube_data,
         s3_key=s3_key,

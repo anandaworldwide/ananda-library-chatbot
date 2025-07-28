@@ -21,6 +21,10 @@
       "whole_library": "All authors"
     },
     "includedLibraries": ["Ananda Library", "Ananda Youtube", "Treasures", "The Bhaktan Files"],
+    "excludedAccessLevels": ["kriyaban"],
+    "accessLevelPathMap": {
+      "kriyaban": ["Kriyaban Only"]
+    },
     "libraryMappings": {
       "Ananda Youtube": {
         "displayName": "Ananda YouTube",
