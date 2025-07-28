@@ -39,6 +39,15 @@ jest.mock("@langchain/core/prompts", () => {
   };
 });
 
+// Mock StringOutputParser
+jest.mock("@langchain/core/output_parsers", () => {
+  return {
+    StringOutputParser: jest.fn().mockImplementation(() => ({
+      invoke: jest.fn().mockResolvedValue("Mocked string output"),
+    })),
+  };
+});
+
 // Mock RunnableSequence and RunnablePassthrough
 jest.mock("@langchain/core/runnables", () => {
   const RunnablePassthroughMock = function () {
@@ -62,12 +71,24 @@ jest.mock("@langchain/core/runnables", () => {
       from: jest.fn().mockImplementation((steps) => ({
         steps,
         invoke: jest.fn().mockImplementation(async (input) => {
-          // For the first chain (standalone question converter)
-          if (input.chat_history !== undefined && steps.length === 3) {
+          // For the standalone question converter chain (3 steps: prompt, model, parser)
+          if (Array.isArray(steps) && steps.length === 3) {
             return "Converted standalone question";
           }
-          // For the second chain (main answer chain)
-          return "Final chain response";
+          // For the main conversational chain (starts with object containing question function)
+          if (Array.isArray(steps) && steps.length > 1 && typeof steps[0] === "object" && steps[0].question) {
+            return {
+              answer: "Mocked AI response",
+              sourceDocuments: [],
+              question: input.question || "Mocked reformulated question",
+            };
+          }
+          // Default fallback
+          return {
+            answer: "Mocked AI response",
+            sourceDocuments: [],
+            question: input.question || "Mocked reformulated question",
+          };
         }),
         pipe: jest.fn().mockReturnThis(),
       })),
@@ -505,6 +526,39 @@ describe("makeChain", () => {
       modelName: "gpt-3.5-turbo",
       streaming: false,
     });
+  });
+
+  test("should include location clarification instructions in CONDENSE_TEMPLATE", async () => {
+    const sendData = jest.fn();
+    const resolveDocs = jest.fn();
+
+    // Call makeChain to trigger template creation
+    await makeChain(
+      mockRetriever,
+      { model: "gpt-4o-mini", temperature: 0.7 },
+      2,
+      undefined,
+      sendData,
+      resolveDocs,
+      undefined, // rephraseModelConfig
+      false, // privateSession
+      [], // geoTools
+      undefined, // request
+      mockSiteConfig // siteConfig
+    );
+
+    // Verify that the CONDENSE_TEMPLATE includes the new location clarification instructions
+    expect(ChatPromptTemplate.fromTemplate).toHaveBeenCalledWith(
+      expect.stringContaining("SPECIAL HANDLING FOR LOCATION CLARIFICATIONS")
+    );
+
+    // Verify it includes specific examples for location clarifications
+    expect(ChatPromptTemplate.fromTemplate).toHaveBeenCalledWith(expect.stringContaining("No, my zip code is 94705"));
+
+    // Verify it includes instructions for combining location info with context
+    expect(ChatPromptTemplate.fromTemplate).toHaveBeenCalledWith(
+      expect.stringContaining("combine the location information with the original question context")
+    );
   });
 
   test("should respect privacy mode and not log questions when privateSession is true", async () => {

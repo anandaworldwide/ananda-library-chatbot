@@ -266,6 +266,14 @@ of the following:
 
 DO NOT attempt to reformulate these into questions. Instead, return EXACTLY what the user said, word for word.
 
+SPECIAL HANDLING FOR LOCATION CLARIFICATIONS: If the follow up input provides location information to clarify or correct a previous location-based query, combine the location information with the original question context. Look for:
+- Zip codes: "94705", "My zip code is 94705", "No, 94705"
+- Addresses: "123 Main St", "I'm at 123 Main Street"
+- City/state corrections: "No, I'm in Berkeley", "Actually, I'm in San Francisco"
+- Location negations followed by clarifications: "No, my location is...", "Actually, I'm in..."
+
+For location clarifications, create a standalone question that incorporates the new location information with the context from the chat history.
+
 Examples of inputs you should return unchanged:
 - "Thanks for the information!"
 - "That's all I needed, thank you."
@@ -277,6 +285,14 @@ Examples of inputs you should return unchanged:
 - "Got it, thanks for explaining."
 - "Okay, thank you!"
 - "I understand now, thanks."
+
+Examples of location clarifications that should be reformulated:
+- Input: "No, my zip code is 94705" (after asking about centers near me)
+  → Output: "Is there an Ananda center near zip code 94705?"
+- Input: "Actually, I'm in Berkeley, California" (after asking about nearby centers)
+  → Output: "Is there an Ananda center near Berkeley, California?"
+- Input: "My address is 123 Main Street, Portland, Oregon" (after asking about local groups)
+  → Output: "Are there Ananda meditation groups near 123 Main Street, Portland, Oregon?"
 
 <chat_history>
   {chat_history}
