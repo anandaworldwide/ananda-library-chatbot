@@ -365,8 +365,7 @@ export const makeChain = async (
   privateSession: boolean = false,
   geoTools: any[] = [],
   request?: NextRequest,
-  siteConfig?: AppSiteConfig | null,
-  originalQuestion?: string // Add this parameter to pass the original question
+  siteConfig?: AppSiteConfig | null
 ) => {
   const { model, temperature, label } = modelConfig;
   let answerModel: BaseLanguageModel; // Renamed for clarity
@@ -392,77 +391,15 @@ export const makeChain = async (
       }
     }
 
-    // Initialize the answer generation model
+    // Initialize the base answer generation model (without tools initially)
     const baseAnswerModel = new ChatOpenAI({
       temperature,
       modelName: model,
       streaming: true,
     });
 
-    // ✅ CONDITIONAL TOOL BINDING: Only bind geo tools if location intent is detected
-    let shouldUseGeoTools = false;
-    let locationIntentLatency = 0;
-
-    if (originalQuestion && siteConfig?.enableGeoAwareness && geoTools.length > 0) {
-      const intentDetectionStart = Date.now();
-      try {
-        shouldUseGeoTools = await hasLocationIntentAsync(originalQuestion);
-        locationIntentLatency = Date.now() - intentDetectionStart;
-
-        if (shouldUseGeoTools) {
-          // 📊 COMPREHENSIVE GEO-AWARENESS LOGGING
-          console.log(`🌍 GEO-AWARENESS METRICS:`, {
-            siteId,
-            query: originalQuestion?.substring(0, 100),
-            locationIntentDetected: shouldUseGeoTools,
-            detectionLatency: `${locationIntentLatency}ms`,
-            toolsAvailable: geoTools.length,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      } catch (error) {
-        locationIntentLatency = Date.now() - intentDetectionStart;
-        console.warn("⚠️ Error in semantic location intent detection:", error);
-        console.warn("Falling back to disabled geo-awareness");
-
-        // 🚨 ERROR LOGGING FOR GEO-AWARENESS
-        console.error(`🌍 GEO-AWARENESS ERROR:`, {
-          siteId,
-          query: originalQuestion?.substring(0, 100),
-          error: error instanceof Error ? error.message : String(error),
-          detectionLatency: `${locationIntentLatency}ms`,
-          timestamp: new Date().toISOString(),
-        });
-
-        shouldUseGeoTools = false;
-      }
-    }
-
-    if (shouldUseGeoTools && geoTools.length > 0 && request) {
-      // Bind tools to the model - LangChain will handle tool execution automatically
-      answerModel = baseAnswerModel.bind({
-        tools: geoTools,
-        tool_choice: "auto", // Let AI decide when to use tools
-      }) as BaseLanguageModel;
-
-      console.log(
-        "✅ Geo-awareness tools conditionally bound to OpenAI model for location query:",
-        originalQuestion?.substring(0, 100)
-      );
-
-      // NEW: Notify frontend immediately that location search is underway
-      if (sendData) {
-        // Send a standalone token so the frontend can display a persistent hint
-        sendData({ token: "Searching locations...\n" });
-      }
-    } else {
-      answerModel = baseAnswerModel as BaseLanguageModel;
-
-      // 📊 NO TOOLS BOUND LOGGING
-      if (originalQuestion && siteConfig?.enableGeoAwareness) {
-        console.log(`🔍 GEO-TOOLS not bound: No location intent detected`);
-      }
-    }
+    // Start with the base model - tools will be bound dynamically after reformulation
+    answerModel = baseAnswerModel as BaseLanguageModel;
 
     // Initialize the rephrasing model (faster, lighter)
     rephraseModel = new ChatOpenAI({
@@ -818,6 +755,88 @@ Error details: ${errorString}`,
   // Store the restated question in a closure to be accessed later
   let capturedRestatedQuestion = "";
 
+  // Helper function to handle geo-tools evaluation and binding
+  const evaluateAndBindGeoTools = async (questionToEvaluate: string, originalQuestion: string) => {
+    if (siteConfig?.enableGeoAwareness && geoTools.length > 0 && request) {
+      const intentDetectionStart = Date.now();
+      let shouldUseGeoTools = false;
+
+      try {
+        // Use the provided question for location intent detection
+        shouldUseGeoTools = await hasLocationIntentAsync(questionToEvaluate);
+        const locationIntentLatency = Date.now() - intentDetectionStart;
+
+        if (shouldUseGeoTools) {
+          // 📊 COMPREHENSIVE GEO-AWARENESS LOGGING
+          const isReformulated = questionToEvaluate !== originalQuestion;
+          console.log(`🌍 GEO-AWARENESS METRICS (${isReformulated ? "POST-REFORMULATION" : "ORIGINAL"}):`, {
+            siteId,
+            originalQuery: originalQuestion?.substring(0, 100),
+            evaluatedQuery: questionToEvaluate?.substring(0, 100),
+            isReformulated,
+            locationIntentDetected: shouldUseGeoTools,
+            detectionLatency: `${locationIntentLatency}ms`,
+            toolsAvailable: geoTools.length,
+            timestamp: new Date().toISOString(),
+          });
+
+          // Dynamically bind tools to the model
+          const baseAnswerModel = new ChatOpenAI({
+            temperature,
+            modelName: model,
+            streaming: true,
+          });
+
+          answerModel = baseAnswerModel.bind({
+            tools: geoTools,
+            tool_choice: "auto", // Let AI decide when to use tools
+          }) as BaseLanguageModel;
+
+          console.log(
+            `✅ Geo-awareness tools dynamically bound for ${isReformulated ? "reformulated" : "original"} question:`,
+            questionToEvaluate?.substring(0, 100)
+          );
+
+          // Notify frontend that location search is underway
+          if (sendData) {
+            sendData({ token: "Searching locations...\n" });
+          }
+        } else {
+          // 📊 NO TOOLS BOUND LOGGING
+          const isReformulated = questionToEvaluate !== originalQuestion;
+          console.log(
+            `🔍 GEO-TOOLS not bound: No location intent detected in ${isReformulated ? "reformulated" : "original"} question`
+          );
+        }
+      } catch (error) {
+        const locationIntentLatency = Date.now() - intentDetectionStart;
+        const isReformulated = questionToEvaluate !== originalQuestion;
+        console.warn(
+          `⚠️ Error in ${isReformulated ? "post-reformulation" : "original"} location intent detection:`,
+          error
+        );
+        console.warn("Falling back to disabled geo-awareness");
+
+        // 🚨 ERROR LOGGING FOR GEO-AWARENESS
+        console.error(`🌍 GEO-AWARENESS ERROR (${isReformulated ? "POST-REFORMULATION" : "ORIGINAL"}):`, {
+          siteId,
+          originalQuery: originalQuestion?.substring(0, 100),
+          evaluatedQuery: questionToEvaluate?.substring(0, 100),
+          isReformulated,
+          error: error instanceof Error ? error.message : String(error),
+          detectionLatency: `${locationIntentLatency}ms`,
+          timestamp: new Date().toISOString(),
+        });
+
+        if (sendData) {
+          sendData({
+            log: `[GEO] Error in location intent detection: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      }
+    }
+  };
+
   // Combine all chains into the final conversational retrieval QA chain
   const conversationalRetrievalQAChain = RunnableSequence.from([
     {
@@ -841,6 +860,9 @@ Error details: ${errorString}`,
         }
 
         if (input.chat_history.length === 0) {
+          // ✅ ORIGINAL QUESTION: Check for location intent
+          await evaluateAndBindGeoTools(input.question, input.question);
+
           capturedRestatedQuestion = input.question; // Store for later
           return input.question;
         }
@@ -852,7 +874,11 @@ Error details: ${errorString}`,
         if (!privateSession) {
           const debugMsg = `🔍 REFORMULATED TO: "${standaloneQuestion}"`;
           console.log(debugMsg);
+          if (sendData) sendData({ log: debugMsg });
         }
+
+        // ✅ REFORMULATED QUESTION: Check for location intent
+        await evaluateAndBindGeoTools(standaloneQuestion, input.question);
 
         capturedRestatedQuestion = standaloneQuestion; // Store for later
         return standaloneQuestion;
@@ -898,8 +924,7 @@ export const makeComparisonChains = async (
         privateSession,
         [], // No geo tools for comparison chains
         undefined, // No request for comparison chains
-        siteConfig,
-        undefined // No original question for comparison chains
+        siteConfig
       ),
       makeChain(
         retriever,
@@ -912,8 +937,7 @@ export const makeComparisonChains = async (
         privateSession,
         [], // No geo tools for comparison chains
         undefined, // No request for comparison chains
-        siteConfig,
-        undefined // No original question for comparison chains
+        siteConfig
       ),
     ]);
 
@@ -992,8 +1016,7 @@ export async function setupAndExecuteLanguageModelChain(
         privateSession,
         geoTools,
         request,
-        siteConfig,
-        sanitizedQuestion // Pass original question for intent detection
+        siteConfig
       );
 
       // Format chat history for the language model
