@@ -29,7 +29,7 @@
       "@/services/*": ["./src/services/*"],
       "@/components/*": ["./src/components/*"]
     },
-    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "typeRoots": ["./node_modules/@types", "../node_modules/@types", "./src/types"],
     "types": ["node"]
   },
   "include": [
@@ -40,11 +40,5 @@
     "src/types/**/*.d.ts",
     "scripts/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "**/*.test.ts",
-    "**/*.test.tsx",
-    "jest.setup.ts",
-    "jest.config.cjs"
-  ]
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx", "jest.setup.ts", "jest.config.cjs"]
 }
