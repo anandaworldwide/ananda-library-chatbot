@@ -3,10 +3,10 @@
     "name": "Luca, The Ananda Devotee Chatbot",
     "shortname": "Luca",
     "tagline": "Explore, Discover, Learn – Uncover the treasures of our path.",
-    "greeting": "Hi GuruBuddy! I'm Luca. How can I help you get closer to God today?",
+    "greeting": "Hi GuruBuddy! I'm Luca. How can I help you today?",
     "welcome_popup_heading": "Welcome, Gurubhai!",
     "other_visitors_reference": "your Gurubhais",
-    "chatPlaceholder": "How can I think of God more?",
+    "chatPlaceholder": "How can I meditate more deeply?",
     "allowedFrontEndDomains": [
       "ask.anandalibrary.org",
       "luca.ananda.org",
@@ -14,8 +14,6 @@
       "localhost:3000",
       "127.0.0.1:3000"
     ],
-    "parent_site_url": "https://www.anandalibrary.org",
-    "parent_site_name": "Ananda Library",
     "help_url": "https://www.anandalibrary.org/content/ai-chatbot-intro/",
     "help_text": "Help",
     "collectionConfig": {
