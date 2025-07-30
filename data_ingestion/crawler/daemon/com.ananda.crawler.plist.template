@@ -48,12 +48,13 @@
     <key>ThrottleInterval</key>
     <integer>60</integer>
     
-    <!-- Standard output and error logging -->
+    <!-- Standard output and error logging (combined) -->
     <key>StandardOutPath</key>
     <string>{{LOG_DIR}}/crawler-{{SITE_ID}}.log</string>
     
+    <!-- Redirect stderr to stdout to combine all logs -->
     <key>StandardErrorPath</key>
-    <string>{{LOG_DIR}}/crawler-{{SITE_ID}}-error.log</string>
+    <string>{{LOG_DIR}}/crawler-{{SITE_ID}}.log</string>
     
     <!-- Process timeout settings -->
     <key>ExitTimeOut</key>

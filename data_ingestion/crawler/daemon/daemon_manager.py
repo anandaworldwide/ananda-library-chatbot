@@ -156,7 +156,7 @@ class DaemonManager:
 
         print("✅ Daemon installed and loaded successfully")
         print(f"   Service name: {self.service_name}")
-        print(f"   Log files: {self.log_dir}/crawler-{self.site_id}*.log")
+        print(f"   Log file: {self.log_dir}/crawler-{self.site_id}.log")
         print(
             "   The crawler will start automatically on login and restart if it crashes."
         )
@@ -233,12 +233,10 @@ class DaemonManager:
                 print("✅ Service loaded")
 
         # Show log file info
-        log_files = list(self.log_dir.glob(f"crawler-{self.site_id}*.log"))
-        if log_files:
-            print("\n📄 Log files:")
-            for log_file in sorted(log_files):
-                size_mb = log_file.stat().st_size / (1024 * 1024)
-                print(f"   {log_file} ({size_mb:.1f} MB)")
+        log_file = self.log_dir / f"crawler-{self.site_id}.log"
+        if log_file.exists():
+            size_mb = log_file.stat().st_size / (1024 * 1024)
+            print(f"\n📄 Log file: {log_file} ({size_mb:.1f} MB)")
 
         return True
 
@@ -285,10 +283,9 @@ class DaemonManager:
     def logs(self, follow: bool = False) -> None:
         """Show daemon logs."""
         log_file = self.log_dir / f"crawler-{self.site_id}.log"
-        error_log_file = self.log_dir / f"crawler-{self.site_id}-error.log"
 
-        if not log_file.exists() and not error_log_file.exists():
-            print(f"❌ No log files found in {self.log_dir}")
+        if not log_file.exists():
+            print(f"❌ No log file found in {self.log_dir}")
             return
 
         if follow:
@@ -297,8 +294,7 @@ class DaemonManager:
 
             # Use tail -f to follow logs
             try:
-                if log_file.exists():
-                    subprocess.run(["tail", "-f", str(log_file)])
+                subprocess.run(["tail", "-f", str(log_file)])
             except KeyboardInterrupt:
                 print("\nStopped following logs")
         else:
@@ -306,13 +302,8 @@ class DaemonManager:
             print(f"Recent logs for '{self.service_name}':")
             print("=" * 60)
 
-            if log_file.exists():
-                print("\n📄 Standard Output:")
-                subprocess.run(["tail", "-50", str(log_file)])
-
-            if error_log_file.exists():
-                print("\n📄 Error Output:")
-                subprocess.run(["tail", "-20", str(error_log_file)])
+            print("\n📄 Combined Log Output:")
+            subprocess.run(["tail", "-50", str(log_file)])
 
 
 def parse_arguments() -> argparse.Namespace:
