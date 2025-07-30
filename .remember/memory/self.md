@@ -326,3 +326,34 @@ if (!isValidAudioType && !isBinaryOctetStream) {
 **Pattern**: For file validation systems, combine file extension validation (primary security) with permissive
 content-type validation that accepts both specific MIME types and generic octet-stream types. This handles legacy
 uploads while maintaining security through extension checks.
+
+### 15. Universal S3 Content-Type Issue Pattern
+
+**Issue**: Legacy file uploads in S3 commonly return `binary/octet-stream` or `application/octet-stream` instead of
+specific MIME types (like `audio/mpeg`, `application/pdf`), causing strict content-type validation to fail for valid
+files.
+
+**Root Cause**: Files uploaded without explicit content-type headers, older uploads, or certain upload methods default
+to generic octet-stream MIME types in S3.
+
+**Universal Fix Pattern**: Accept both specific MIME types AND octet-stream types for all file validation endpoints.
+
+```typescript
+// Universal pattern for any file type validation
+if (headResponse.ContentType) {
+  const isValidSpecificType = headResponse.ContentType.includes("expected-type"); // pdf, mpeg, etc.
+  const isBinaryOctetStream =
+    headResponse.ContentType.includes("binary/octet-stream") ||
+    headResponse.ContentType.includes("application/octet-stream");
+
+  if (!isValidSpecificType && !isBinaryOctetStream) {
+    return res.status(400).json({
+      message: "File is not a [TYPE] document",
+      actualType: headResponse.ContentType,
+    });
+  }
+}
+```
+
+**Applied To**: Fixed audio endpoints (`getAudioSignedUrl`, `getPublicAudioUrl`) and PDF endpoint (`getPdfSignedUrl`)
+with comprehensive test coverage for octet-stream acceptance.

@@ -45,10 +45,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       const headResponse = await s3Client.send(headCommand);
 
-      // Verify content type is PDF
-      if (headResponse.ContentType && !headResponse.ContentType.includes("pdf")) {
-        console.warn(`File content-type validation failed: ${pdfS3Key} has type ${headResponse.ContentType}`);
-        return res.status(400).json({ message: "File is not a PDF document" });
+      // Verify content type is PDF or binary/octet-stream (common for older uploads)
+      if (headResponse.ContentType) {
+        const isValidPdfType = headResponse.ContentType.includes("pdf");
+        const isBinaryOctetStream =
+          headResponse.ContentType.includes("binary/octet-stream") ||
+          headResponse.ContentType.includes("application/octet-stream");
+
+        if (!isValidPdfType && !isBinaryOctetStream) {
+          console.warn(`File content-type validation failed: ${pdfS3Key} has type ${headResponse.ContentType}`);
+          return res.status(400).json({
+            message: "File is not a PDF document",
+            actualType: headResponse.ContentType,
+          });
+        }
       }
     } catch (s3Error: any) {
       // Handle S3 errors (file not found, access denied, etc.)

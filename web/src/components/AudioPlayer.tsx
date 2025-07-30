@@ -141,6 +141,8 @@ export function AudioPlayer({
       const link = document.createElement("a");
       link.href = secureAudioUrl;
       link.download = src || "audio.mp3";
+      link.target = "_blank"; // Open download in new tab
+      link.rel = "noopener noreferrer"; // Security best practice
       link.style.display = "none";
 
       document.body.appendChild(link);
