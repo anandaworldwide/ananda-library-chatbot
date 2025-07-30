@@ -16,10 +16,39 @@ Chatbot application.
 
 ### 1. User Workflows
 
+#### Chat Interaction Flow
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│    User     │    │  Frontend   │    │   Backend   │    │   AI/Data   │
+│             │    │   (Next.js) │    │    APIs     │    │  Services   │
+└──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+       │                  │                  │                  │
+       │ 1. Enter Question│                  │                  │
+       ├─────────────────→│                  │                  │
+       │                  │ 2. JWT + Query   │                  │
+       │                  ├─────────────────→│                  │
+       │                  │                  │ 3. Vector Search │
+       │                  │                  ├─────────────────→│
+       │                  │                  │ 4. Context Chunks│
+       │                  │                  │←─────────────────┤
+       │                  │                  │ 5. LLM Generate  │
+       │                  │                  ├─────────────────→│
+       │                  │ 6. Stream Answer │ 6. Stream Response│
+       │                  │←─────────────────┤←─────────────────┤
+       │ 7. Display Answer│                  │                  │
+       │←─────────────────┤                  │                  │
+       │                  │                  │ 8. Log to DB     │
+       │                  │                  ├─────────────────→│
+       │ 9. Feedback      │                  │                  │
+       ├─────────────────→│ 10. Store Vote   │                  │
+       │                  ├─────────────────→│                  │
+```
+
 #### A. Basic Question & Answer Flow (Unauthenticated/Default)
 
-1. **User Accesses Chatbot:** The user lands on the page hosting the chatbot (either the main Next.js application page or
-   a WordPress page where the plugin is embedded).
+1. **User Accesses Chatbot:** The user lands on the page hosting the chatbot (either the main Next.js application page
+   or a WordPress page where the plugin is embedded).
 2. **View Chat Interface:** The user sees the chat interface, including:
    - A message display area.
    - An input field for questions.
@@ -41,6 +70,32 @@ Chatbot application.
 
 #### B. Authenticated User Flow
 
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│    User     │    │  Frontend   │    │   Backend   │    │  Database   │
+│             │    │   (Next.js) │    │    APIs     │    │ (Firestore) │
+└──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+       │                  │                  │                  │
+       │ 1. Access Site   │                  │                  │
+       ├─────────────────→│                  │                  │
+       │                  │ 2. Check Auth    │                  │
+       │                  ├─────────────────→│                  │
+       │                  │ 3. Redirect Login│                  │
+       │                  │←─────────────────┤                  │
+       │ 4. Enter Creds   │                  │                  │
+       ├─────────────────→│                  │                  │
+       │                  │ 5. Login Request │                  │
+       │                  ├─────────────────→│                  │
+       │                  │                  │ 6. Verify Hash   │
+       │                  │                  ├─────────────────→│
+       │                  │                  │ 7. User Valid    │
+       │                  │                  │←─────────────────┤
+       │                  │ 8. JWT + Cookie  │                  │
+       │                  │←─────────────────┤                  │
+       │ 9. Chat Access   │                  │                  │
+       │←─────────────────┤                  │                  │
+```
+
 If the site is configured to require user login:
 
 1. **User Navigates to Login:** The user accesses a login mechanism (potentially a dedicated page or modal).
@@ -52,19 +107,19 @@ If the site is configured to require user login:
    - The main chat interaction page.
    - The All Answers page (if turned on for the site).
    - Individual answer pages.
-5. **Perform Actions:** The user interacts with the chatbot as in the basic flow, but potentially with elevated privileges
-   or access.
+5. **Perform Actions:** The user interacts with the chatbot as in the basic flow, but potentially with elevated
+   privileges or access.
 6. **Logout:** The user initiates logout, triggering the logout API (`pages/api/logout.ts`).
 
 #### C. WordPress Integration Flow
 
 1. **User Visits WordPress Page:** The user navigates to a WordPress page containing the chatbot embed code provided by
    the plugin (`wordpress/plugins/ananda-ai-chatbot/ai-chatbot.php`).
-2. **Chatbot Widget Loads:** The chatbot JavaScript (`assets/js/chatbot.js`) initializes the chat interface widget on the
-   page. Authentication might be handled via WordPress mechanisms feeding into the chatbot's auth
+2. **Chatbot Widget Loads:** The chatbot JavaScript (`assets/js/chatbot.js`) initializes the chat interface widget on
+   the page. Authentication might be handled via WordPress mechanisms feeding into the chatbot's auth
    (`assets/js/chatbot-auth.js`, `pages/api/web-token.ts`).
-3. **Interact with Widget:** The user interacts with the chatbot within the widget, following the Basic Question & Answer
-   Flow described above. API calls are made from the WordPress frontend to the Next.js backend API.
+3. **Interact with Widget:** The user interacts with the chatbot within the widget, following the Basic Question &
+   Answer Flow described above. API calls are made from the WordPress frontend to the Next.js backend API.
 
 ### 2. Screen Transitions / States
 
@@ -73,8 +128,8 @@ If the site is configured to require user login:
 - **Question Input:** User focuses on the input field.
 - **Loading/Waiting for Answer:** After submitting a question, a loading indicator (e.g.,
   `styles/loading-dots.module.css`) appears while waiting for the backend response.
-- **Answer Display:** The chat area updates with the user's question and the chatbot's streamed response. Source links or
-  related questions might appear alongside the answer.
+- **Answer Display:** The chat area updates with the user's question and the chatbot's streamed response. Source links
+  or related questions might appear alongside the answer.
 - **Feedback State:** Buttons for liking/disliking might change appearance after being clicked.
 - **(Authenticated) Login Screen:** A separate view/modal for entering credentials.
 - **(Authenticated) Logged-in State:** UI might show user status or provide access to logout/admin features.
@@ -97,8 +152,8 @@ If the site is configured to require user login:
   and answer generation.
 - **Vector Database (Pinecone):** Used for retrieving relevant document chunks based on the user's query
   (`config/pinecone.ts`, `utils/server/pinecone-client.ts`). Data is populated into Pinecone through various ingestion
-  processes, including a website crawler (`data_ingestion/crawler/website_crawler.py`), PDF processing,
-  audio/video transcription, and direct SQL database imports.
+  processes, including a website crawler (`data_ingestion/crawler/website_crawler.py`), PDF processing, audio/video
+  transcription, and direct SQL database imports.
 - **Database (Firestore):** Likely used for storing chat logs, user votes, configuration, or other persistent data
   (`services/firebase.ts`, `utils/server/firestoreUtils.ts`).
 - **Authentication System:** Manages user login, logout, and potentially JWT tokens (`pages/api/login.ts`,

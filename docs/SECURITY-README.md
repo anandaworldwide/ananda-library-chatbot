@@ -12,6 +12,75 @@ The system uses JSON Web Tokens (JWT) to secure API communication between:
 1. The web frontend and backend API
 2. The WordPress plugin and backend API
 
+### Security Architecture
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                      │
+│                                                                                │
+│ ┌──────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │   Web Client     │    │ WordPress Plugin│    │     Admin Client            │ │
+│ │                  │    │                 │    │                             │ │
+│ │ • JWT Tokens     │    │ • Site ID Check │    │ • Admin JWT                 │ │
+│ │ • HttpOnly       │    │ • Secure API    │    │ • Elevated Permissions      │ │
+│ │   Cookies        │    │   Client        │    │ • Sudo Mode                 │ │
+│ │ • CSRF Protection│    │ • Token Exchange│    │                             │ │
+│ └──────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                            ┌─────────────────────────┐
+                            │     SECURITY GATEWAY    │
+                            │                         │
+                            │ • JWT Validation        │
+                            │ • Rate Limiting (Redis) │
+                            │ • CORS Policy           │
+                            │ • Request Sanitization  │
+                            │ • IP-based Blocking     │
+                            └─────────────────────────┘
+                                       │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                           AUTHENTICATION LAYER                                │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │  JWT Service    │    │ Password Service│    │     Session Management      │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Token Issue   │    │ • bcrypt Hash   │    │ • Cookie Management         │ │
+│ │ • Token Verify  │    │ • Salt Rounds   │    │ • Session Expiry            │ │
+│ │ • Refresh Logic │    │ • Hash Compare  │    │ • Secure Flags              │ │
+│ │ • Role Claims   │    │ • Complexity    │    │ • SameSite Policy           │ │
+│ │                 │    │   Validation    │    │                             │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                           AUTHORIZATION LAYER                                 │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │ Access Control  │    │  API Protection │    │     Data Protection         │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Role-based    │    │ • Endpoint      │    │ • Access Level Filter       │ │
+│ │   Permissions   │    │   Guards        │    │ • Kriyaban Content          │ │
+│ │ • Admin Roles   │    │ • Method        │    │ • PII Encryption            │ │
+│ │ • User Roles    │    │   Validation    │    │ • Data Anonymization        │ │
+│ │ • Sudo Mode     │    │ • Input         │    │                             │ │
+│ │                 │    │   Sanitization  │    │                             │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                             MONITORING LAYER                                   │
+│                                                                                │
+│ ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────────────┐ │
+│ │ Security Logs   │    │  Threat Detection│    │     Incident Response       │ │
+│ │                 │    │                  │    │                             │ │
+│ │ • Auth Failures │    │ • Rate Limit     │    │ • Alert System              │ │
+│ │ • Access Logs   │    │   Violations     │    │ • Auto-blocking             │ │
+│ │ • Error Tracking│    │ • Suspicious     │    │ • Manual Review             │ │
+│ │ • Audit Trail   │    │   Patterns       │    │ • Recovery Procedures       │ │
+│ └─────────────────┘    └──────────────────┘    └─────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### Key Components
 
 #### Vercel Backend
@@ -68,10 +137,10 @@ These endpoints use the `withJwtOnlyAuth` middleware which:
 
 #### Frontend Implementation
 
-- **Always use JWT tokens**: All API calls from the frontend to backend must include a valid JWT token in
-  the Authorization header
-- **Use helper functions**: Prefer using the helper functions (`fetchWithAuth`, `withAuth`, `queryFetch`)
-  over manually adding tokens
+- **Always use JWT tokens**: All API calls from the frontend to backend must include a valid JWT token in the
+  Authorization header
+- **Use helper functions**: Prefer using the helper functions (`fetchWithAuth`, `withAuth`, `queryFetch`) over manually
+  adding tokens
 - **Avoid duplication**: Don't duplicate token fetching and header construction logic across the codebase
 - **Consistent approach**: Use the provided utilities in `tokenManager.ts` and `reactQueryConfig.ts`
 - **Handle token errors**: Let the helper functions handle token failures and retries
@@ -80,48 +149,48 @@ These endpoints use the `withJwtOnlyAuth` middleware which:
 
 ```typescript
 // Example 1: PREFERRED - Using fetchWithAuth (simplest approach)
-import { fetchWithAuth } from '@/utils/client/tokenManager';
+import { fetchWithAuth } from "@/utils/client/tokenManager";
 
 async function makeApiCall() {
-  const response = await fetchWithAuth('/api/endpoint', {
-    method: 'POST',
+  const response = await fetchWithAuth("/api/endpoint", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify({ data: 'example' }),
+    body: JSON.stringify({ data: "example" }),
   });
 }
 
 // Example 2: Using withAuth helper for custom fetch scenarios
-import { withAuth } from '@/utils/client/tokenManager';
+import { withAuth } from "@/utils/client/tokenManager";
 
 async function makeCustomApiCall() {
   const options = await withAuth({
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
   });
-  const response = await fetch('/api/endpoint', options);
+  const response = await fetch("/api/endpoint", options);
 }
 
 // Example 3: Using queryFetch for React Query
-import { queryFetch } from '@/utils/client/reactQueryConfig';
+import { queryFetch } from "@/utils/client/reactQueryConfig";
 
 async function makeQueryApiCall() {
-  const response = await queryFetch('/api/endpoint', {
-    method: 'POST',
-    body: JSON.stringify({ data: 'example' }),
+  const response = await queryFetch("/api/endpoint", {
+    method: "POST",
+    body: JSON.stringify({ data: "example" }),
   });
 }
 
 // Example 4: NOT RECOMMENDED - Manual token handling
-import { getToken } from '@/utils/client/tokenManager';
+import { getToken } from "@/utils/client/tokenManager";
 
 async function manualTokenHandling() {
   // Avoid this approach - it duplicates logic and is error-prone
   const token = await getToken();
-  const response = await fetch('/api/endpoint', {
+  const response = await fetch("/api/endpoint", {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -156,7 +225,8 @@ For WordPress integration, you have two options in wp-config.php:
    define('CHATBOT_BACKEND_SECURE_TOKEN', 'your-secure-token-value');
    ```
 
-Option 2 is recommended as it automatically derives the WordPress token from the same SECURE_TOKEN used in the Vercel backend.
+Option 2 is recommended as it automatically derives the WordPress token from the same SECURE_TOKEN used in the Vercel
+backend.
 
 #### Site ID Validation
 
@@ -178,8 +248,8 @@ The system includes site ID validation to prevent accidental connections to the 
    - Site mismatch errors include specific information about which site was expected vs. actual
    - The WordPress admin interface shows a user-friendly error with instructions on how to fix it
 
-This feature prevents common development errors when multiple environments exist (staging, production, etc.)
-and helps users quickly identify and fix configuration issues.
+This feature prevents common development errors when multiple environments exist (staging, production, etc.) and helps
+users quickly identify and fix configuration issues.
 
 #### Setup Instructions
 
@@ -235,8 +305,8 @@ For public endpoints that need API security but not user login:
 
 ### JWT Authentication Implementation
 
-This project implements JWT authentication for secure API access. This document outlines the key components
-and patterns used.
+This project implements JWT authentication for secure API access. This document outlines the key components and patterns
+used.
 
 #### Core Components
 
@@ -280,7 +350,7 @@ and patterns used.
 For routes that require both JWT and siteAuth (logged-in users):
 
 ```typescript
-import { withJwtAuth } from '@/utils/server/jwtUtils';
+import { withJwtAuth } from "@/utils/server/jwtUtils";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Your implementation here
@@ -292,7 +362,7 @@ export default withJwtAuth(handler);
 For public routes that require JWT but not siteAuth:
 
 ```typescript
-import { withJwtOnlyAuth } from '@/utils/server/apiMiddleware';
+import { withJwtOnlyAuth } from "@/utils/server/apiMiddleware";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Your implementation here
@@ -305,11 +375,11 @@ export default withJwtOnlyAuth(handler);
 
 ```typescript
 // Example of using hooks in a component
-import { useAnswers, useLike } from '@/hooks';
+import { useAnswers, useLike } from "@/hooks";
 
 function MyComponent() {
   // Fetch data with authentication
-  const { data, isLoading } = useAnswers(1, 'mostRecent');
+  const { data, isLoading } = useAnswers(1, "mostRecent");
 
   // Handle liking
   const likeMutation = useLike();
@@ -332,7 +402,7 @@ function MyComponent() {
 
 ## Cron Job Security
 
-Vercel cron jobs currently cannot easily include JWT tokens in their requests. For endpoints called by
-cron jobs, such as `/api/relatedQuestions` when performing batch updates, we use rate limiting as a
-security measure instead of JWT authentication. This involves a stricter rate limit applied specifically
-to requests potentially originating from the cron job mechanism.
+Vercel cron jobs currently cannot easily include JWT tokens in their requests. For endpoints called by cron jobs, such
+as `/api/relatedQuestions` when performing batch updates, we use rate limiting as a security measure instead of JWT
+authentication. This involves a stricter rate limit applied specifically to requests potentially originating from the
+cron job mechanism.

@@ -2,6 +2,65 @@
 
 Here's a breakdown of the tech stack used in the project:
 
+## Technology Architecture
+
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                              FRONTEND LAYER                                   │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │   Web Client    │    │ WordPress Plugin│    │     Admin Dashboard         │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Next.js 14    │    │ • PHP           │    │ • React Components          │ │
+│ │ • React 18      │    │ • JavaScript    │    │ • TypeScript                │ │
+│ │ • TypeScript    │    │ • WordPress API │    │ • Tailwind CSS              │ │
+│ │ • Tailwind CSS  │    │                 │    │                             │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                            BACKEND SERVICES                                   │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │   API Layer     │    │   AI/ML Stack   │    │    Data Processing          │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Next.js API   │    │ • LangChain     │    │ • Python 3.9+               │ │
+│ │ • Node.js       │    │ • OpenAI GPT    │    │ • spaCy NLP                 │ │
+│ │ • TypeScript    │    │ • Embeddings    │    │ • BeautifulSoup4            │ │
+│ │ • JWT Auth      │    │ • Streaming     │    │ • pdfplumber                │ │
+│ │ • Rate Limiting │    │                 │    │ • Whisper (Audio)           │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                             DATABASE LAYER                                    │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │ Vector Database │    │   NoSQL Store   │    │       Cache Layer           │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Pinecone      │    │ • Firestore     │    │ • Redis                     │ │
+│ │ • Embeddings    │    │ • Real-time     │    │ • Session Store             │ │
+│ │ • Semantic      │    │ • Chat Logs     │    │ • Rate Limiting             │ │
+│ │   Search        │    │ • User Data     │    │ • Caching                   │ │
+│ │ • Multi-tenant  │    │ • Analytics     │    │                             │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                         INFRASTRUCTURE LAYER                                  │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │    Hosting      │    │   Development   │    │       Monitoring            │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Vercel        │    │ • Git/GitHub    │    │ • Error Tracking            │ │
+│ │ • Serverless    │    │ • NPM/Yarn      │    │ • Performance Metrics       │ │
+│ │ • CDN           │    │ • Jest Testing  │    │ • Usage Analytics           │ │
+│ │ • Edge Runtime  │    │ • Pytest        │    │ • Health Checks             │ │
+│ │                 │    │ • CI/CD         │    │                             │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Core Technologies
 
 - **Programming Languages:**

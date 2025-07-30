@@ -8,6 +8,58 @@ facilitate understanding and future development.
 
 ## 1. Architecture Overview
 
+### System Architecture
+
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                                 FRONTEND                                      │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │   Next.js App   │    │ WordPress Plugin│    │     Admin Interface         │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Chat UI       │    │ • Chatbot Widget│    │ • Model Stats               │ │
+│ │ • Authentication│    │ • JWT Auth      │    │ • Downvotes Review          │ │
+│ │ • Answer Pages  │    │ • Site Embed    │    │ • Related Questions Mgmt    │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                          ┌─────────────────────────┐
+                          │      API GATEWAY        │
+                          │                         │
+                          │ • JWT Authentication    │
+                          │ • Rate Limiting (Redis) │
+                          │ • CORS & Security       │
+                          └─────────────────────────┘
+                                       │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              BACKEND SERVICES                                   │
+│                                                                                 │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐   │
+│ │   Chat Engine   │    │  Data Ingestion │    │    Analytics & Logging      │   │
+│ │                 │    │                 │    │                             │   │
+│ │ • LangChain RAG │    │ • PDF Processing│    │ • Chat Logs (Firestore)     │   │
+│ │ • OpenAI LLM    │    │ • Web Crawler   │    │ • User Feedback             │   │
+│ │ • Streaming     │    │ • Audio/Video   │    │ • Usage Analytics           │   │
+│ │ • Geo-Awareness │    │ • Database Sync │    │ • Error Monitoring          │   │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                             DATA LAYER                                         │
+│                                                                                │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐  │
+│ │ Pinecone Vector │    │   Firestore     │    │        Redis Cache          │  │
+│ │   Database      │    │   NoSQL DB      │    │                             │  │
+│ │                 │    │                 │    │ • Rate Limiting             │  │
+│ │ • Embeddings    │    │ • Chat History  │    │ • Session Storage           │  │
+│ │ • Semantic      │    │ • User Data     │    │ • Temporary Data            │  │
+│ │   Search        │    │ • Feedback      │    │                             │  │
+│ │ • Multi-tenant  │    │ • Analytics     │    │                             │  │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Technology Stack
+
 - **Framework:** The backend is built primarily using **Next.js**, leveraging both the `pages/api` directory for
   traditional serverless functions and the `app/api` directory (App Router) for edge-compatible routes.
 - **Language:** **TypeScript** is the primary language for the Next.js backend logic. **Python** is used for data

@@ -6,6 +6,81 @@ The Ananda Library Chatbot uses a sophisticated data ingestion pipeline that pro
 unified vector database for retrieval-augmented generation (RAG). This document provides a high-level overview and
 references to detailed implementation documentation.
 
+### Data Ingestion Pipeline
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                             CONTENT SOURCES                                    │
+│                                                                                │
+│ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
+│ │    PDFs     │  │ Audio/Video │  │ Web Content │  │    Database Text        │ │
+│ │             │  │             │  │             │  │                         │ │
+│ │ • Books     │  │ • Lectures  │  │ • Articles  │  │ • CMS Content           │ │
+│ │ • Articles  │  │ • Talks     │  │ • Blog Posts│  │ • WordPress Posts       │ │
+│ │ • Manuals   │  │ • Meditations│ │ • Resources │  │ • Library Records       │ │
+│ └─────────────┘  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────────┘
+         │                │                │                          │
+         ▼                ▼                ▼                          ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          PROCESSING LAYER                                       │
+│                                                                                 │
+│ ┌─────────────┐  ┌────────-─────┐  ┌─────────────┐  ┌─────────────────────────┐ │
+│ │pdfplumber   │  │ Transcription│  │BeautifulSoup│  │     SQL Queries         │ │
+│ │Text Extract │  │  (Whisper)   │  │HTML Parsing │  │                         │ │
+│ │             │  │              │  │             │  │ • Data Extraction       │ │
+│ │ • Layout    │  │ • Speech-to- │  │ • Content   │  │ • HTML Cleaning         │ │
+│ │   Preserve  │  │   Text       │  │   Extract   │  │ • Metadata Preserve     │ │
+│ │ • Metadata  │  │ • Timestamps │  │ • Link      │  │                         │ │
+│ │   Extract   │  │ • Speakers   │  │   Discovery │  │                         │ │
+│ └─────────────┘  └────────────_─┘  └─────────────┘  └─────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                         TEXT PROCESSING                                       │
+│                                                                               │
+│                    ┌─────────────────────────────┐                            │
+│                    │      spaCy Chunking         │                            │
+│                    │                             │                            │
+│                    │ • Semantic Boundaries       │                            │
+│                    │ • Token-Based Sizing        │                            │
+│                    │ • Smart Overlap (20%)       │                            │
+│                    │ • 250 tokens per chunk      │                            │
+│                    │ • Metadata Preservation     │                            │
+│                    └─────────────────────────────┘                            │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                        VECTOR GENERATION                                      │
+│                                                                               │
+│                    ┌─────────────────────────────┐                            │
+│                    │     OpenAI Embeddings       │                            │
+│                    │                             │                            │
+│                    │ • text-embedding-3-large    │                            │
+│                    │ • 3072-dimensional vectors  │                            │
+│                    │ • Batch Processing          │                            │
+│                    │ • Rate Limiting             │                            │
+│                    └─────────────────────────────┘                            │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                         VECTOR STORAGE                                        │
+│                                                                               │
+│                    ┌─────────────────────────────┐                            │
+│                    │      Pinecone Database      │                            │
+│                    │                             │                            │
+│                    │ • Multi-tenant Namespaces   │                            │
+│                    │ • Semantic Search           │                            │
+│                    │ • Metadata Filtering        │                            │
+│                    │ • Access Level Control      │                            │
+│                    │ • Document Deduplication    │                            │
+│                    └─────────────────────────────┘                            │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Comprehensive Documentation
 
 **For complete details on chunking strategy, implementation, and technical specifications, see:**

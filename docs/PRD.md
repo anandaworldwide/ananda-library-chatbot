@@ -11,6 +11,81 @@ Retrieval-Augmented Generation (RAG) by leveraging Large Language Models (LLMs) 
 audio/video transcripts). The system features configurable personalities/prompts, user feedback mechanisms,
 authentication, and integration options, including a WordPress plugin.
 
+### System Overview
+
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                                USER INTERFACES                                │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │   Web Portal    │    │ WordPress Sites │    │     Admin Console           │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Chat Interface│    │ • Embedded      │    │ • System Management         │ │
+│ │ • Authentication│    │   Chatbot       │    │ • Content Review            │ │
+│ │ • Answer Pages  │    │ • Site          │    │ • Analytics Dashboard       │ │
+│ │ • Feedback      │    │   Integration   │    │ • User Management           │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                              CORE RAG SYSTEM                                  │
+│                                                                               │
+│                    ┌─────────────────────────────┐                            │
+│                    │      Question Processing    │                            │
+│                    │                             │                            │
+│                    │ • Intent Analysis           │                            │
+│                    │ • Context Reformulation     │                            │
+│                    │ • Geo-awareness Detection   │                            │
+│                    │ • Access Level Filtering    │                            │
+│                    └─────────────────────────────┘                            │
+│                                   │                                           │
+│                    ┌─────────────────────────────┐                            │
+│                    │    Vector Retrieval         │                            │
+│                    │                             │                            │
+│                    │ • Semantic Search           │                            │
+│                    │ • Multi-namespace Support   │                            │
+│                    │ • Relevance Scoring         │                            │
+│                    │ • Source Attribution        │                            │
+│                    └─────────────────────────────┘                            │
+│                                   │                                           │
+│                    ┌─────────────────────────────┐                            │
+│                    │    Answer Generation        │                            │
+│                    │                             │                            │
+│                    │ • LLM Processing (OpenAI)   │                            │
+│                    │ • Context Integration       │                            │
+│                    │ • Response Streaming        │                            │
+│                    │ • Related Questions         │                            │
+│                    └─────────────────────────────┘                            │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                            DATA INGESTION PIPELINE                            │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │ Content Sources │    │   Processing    │    │     Vector Storage          │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • PDF Documents │    │ • Text          │    │ • Pinecone Database         │ │
+│ │ • Audio/Video   │    │   Extraction    │    │ • Semantic Embeddings       │ │
+│ │ • Web Content   │    │ • Chunking      │    │ • Metadata Indexing         │ │
+│ │ • Database Text │    │   (spaCy)       │    │ • Multi-tenant Isolation    │ │
+│ │                 │    │ • Embedding     │    │                             │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                           MONITORING & ANALYTICS                              │
+│                                                                               │
+│ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
+│ │   User Activity │    │ System Health   │    │     Quality Assurance       │ │
+│ │                 │    │                 │    │                             │ │
+│ │ • Chat Logs     │    │ • Performance   │    │ • Answer Quality            │ │
+│ │ • Feedback      │    │   Metrics       │    │ • User Satisfaction         │ │
+│ │ • Usage Patterns│    │ • Error         │    │ • Content Relevance         │ │
+│ │ • Demographics  │    │   Tracking      │    │ • System Optimization       │ │
+│ └─────────────────┘    └─────────────────┘    └─────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### 2. Goals
 
 - Provide accurate, context-aware answers to user questions based on the Ananda library's knowledge base.
