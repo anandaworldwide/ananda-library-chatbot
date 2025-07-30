@@ -245,3 +245,84 @@ try {
 
 **Pattern**: Always use static imports for dependencies that are used in error handling or other critical paths. Dynamic
 imports should only be used for code splitting and lazy loading scenarios, not for error handling utilities.
+
+### 12. Jest Mock Setup for AWS SDK
+
+**Problem**: TypeScript linter errors when mocking AWS SDK clients due to strict typing issues.
+
+**Wrong**: Using strict typing that conflicts with Jest mocks.
+
+```typescript
+const mockS3Client = s3Client as jest.Mocked<typeof s3Client>; // Causes 'never' type errors
+```
+
+**Correct**: Use 'any' type for test mocks to avoid strict typing conflicts.
+
+```typescript
+const mockS3Client = s3Client as any; // Allows flexible mocking
+```
+
+**Pattern**: For Jest tests, prefer `as any` typing for external service mocks (S3, APIs) to avoid TypeScript strict
+typing conflicts while maintaining test functionality.
+
+### 13. AWS SDK Command Mocking for Integration Tests
+
+**Problem**: AWS SDK command objects (HeadObjectCommand, GetObjectCommand) need to return proper structure for test
+assertions to work.
+
+**Wrong**: Using basic jest.fn() without implementation for command constructors.
+
+```typescript
+jest.mock("@aws-sdk/client-s3", () => ({
+  HeadObjectCommand: jest.fn(), // Returns undefined, breaks test assertions
+  GetObjectCommand: jest.fn(),
+}));
+```
+
+**Correct**: Mock command constructors to return objects with input property containing parameters.
+
+```typescript
+jest.mock("@aws-sdk/client-s3", () => ({
+  HeadObjectCommand: jest.fn().mockImplementation((params) => ({ input: params })),
+  GetObjectCommand: jest.fn().mockImplementation((params) => ({ input: params })),
+}));
+```
+
+**Pattern**: AWS SDK commands must be mocked to return `{ input: params }` structure so that test assertions can verify
+the correct parameters were passed to S3 operations.
+
+### 14. S3 Content-Type Validation for Legacy Files
+
+**Problem**: S3 files uploaded without proper MIME type headers return `binary/octet-stream` or
+`application/octet-stream` instead of expected content types like `audio/mpeg`, causing content-type validation to fail
+for valid files.
+
+**Root Cause**: Older file uploads or uploads without explicit content-type headers default to generic octet-stream MIME
+types in S3, even for valid audio/video files.
+
+**Wrong**: Strict content-type validation that only accepts specific MIME types.
+
+```typescript
+// Too restrictive - rejects valid files with generic MIME types
+if (!VALID_AUDIO_MIME_TYPES.some((type) => headResponse.ContentType?.includes(type.split("/")[1]))) {
+  return res.status(400).json({ message: "File is not an audio document" });
+}
+```
+
+**Correct**: Accept both specific MIME types AND generic octet-stream types for files with valid extensions.
+
+```typescript
+// More permissive - accepts valid files regardless of MIME type inconsistencies
+const isValidAudioType = VALID_AUDIO_MIME_TYPES.some((type) => headResponse.ContentType?.includes(type.split("/")[1]));
+const isBinaryOctetStream =
+  headResponse.ContentType.includes("binary/octet-stream") ||
+  headResponse.ContentType.includes("application/octet-stream");
+
+if (!isValidAudioType && !isBinaryOctetStream) {
+  return res.status(400).json({ message: "File is not an audio document" });
+}
+```
+
+**Pattern**: For file validation systems, combine file extension validation (primary security) with permissive
+content-type validation that accepts both specific MIME types and generic octet-stream types. This handles legacy
+uploads while maintaining security through extension checks.
