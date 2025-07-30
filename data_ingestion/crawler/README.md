@@ -177,7 +177,7 @@ python daemon/logrotate.py --site ananda-public --max-size 100MB --keep 10
 
 ### Components
 
-```
+```text
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Web Crawler   │    │  Health Server  │    │ Daemon Manager  │
 │                 │    │                 │    │                 │
@@ -293,47 +293,21 @@ This will:
 - Show detailed HTML processing information
 - Display menu expansion attempts
 
-## Troubleshooting
-
-### Common Issues
-
-**Database locked errors**
-
-- Ensure only one crawler instance per site is running
-- Check daemon status: `python daemon/daemon_manager.py --site {site_id} status`
-
-**Memory usage growing**
-
-- Check log rotation: `sudo newsyslog -v`
-- Restart daemon: `python daemon/daemon_manager.py --site {site_id} restart`
-
-**No URLs being processed**
-
-- Check if initial crawl completed: View health endpoint
-- Check CSV mode configuration
-- Verify robots.txt compliance
-
-**High failure rates**
-
-- Check network connectivity
-- Verify site accessibility
-- Review error logs: `python daemon/daemon_manager.py --site {site_id} logs`
-
 ### Performance Tuning
 
-**Crawl Speed**
+#### Crawl Speed
 
 - Adjust `crawl_delay_seconds` in site config
 - Increase browser restart frequency (modify `PAGES_PER_RESTART`)
 - Use `--stop-after` for testing
 
-**Memory Usage**
+#### Memory Usage
 
 - Configure log rotation via newsyslog (see setup_logrotate.sh)
 - Set resource limits in LaunchAgent plist
 - Monitor with health check endpoint
 
-**Storage Optimization**
+#### Storage Optimization
 
 - Regular database cleanup of old failed URLs
 - Compress rotated logs
