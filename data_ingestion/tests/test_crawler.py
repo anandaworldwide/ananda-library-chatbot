@@ -1141,7 +1141,17 @@ class TestCrawlerChunking(unittest.TestCase):
         """Set up test environment."""
         from utils.text_splitter_utils import SpacyTextSplitter
 
+        # Mock environment variable for embedding model
+        self.env_patcher = patch.dict(
+            os.environ, {"OPENAI_INGEST_EMBEDDINGS_MODEL": "text-embedding-3-large"}
+        )
+        self.env_patcher.start()
+
         self.text_splitter = SpacyTextSplitter()
+
+    def tearDown(self):
+        """Clean up test environment."""
+        self.env_patcher.stop()
 
     def test_short_content_chunking(self):
         """Test chunking of short web content."""

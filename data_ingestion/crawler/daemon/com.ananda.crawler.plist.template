@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identifier - must be unique per site -->
+    <key>Label</key>
+    <string>com.ananda.crawler.{{SITE_ID}}</string>
+    
+    <!-- Program to run -->
+    <key>Program</key>
+    <string>{{PYTHON_PATH}}</string>
+    
+    <!-- Arguments to pass to the program -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{PYTHON_PATH}}</string>
+        <string>{{CRAWLER_SCRIPT_PATH}}</string>
+        <string>--site</string>
+        <string>{{SITE_ID}}</string>
+    </array>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>{{PROJECT_ROOT}}</string>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>PYTHONPATH</key>
+        <string>{{PROJECT_ROOT}}</string>
+    </dict>
+    
+    <!-- Auto-start on login -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Keep the service running (restart if it crashes) -->
+    <key>KeepAlive</key>
+    <dict>
+        <!-- Only restart if the process exits with non-zero status -->
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    
+    <!-- Throttle restart attempts -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+    
+    <!-- Standard output and error logging -->
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/crawler-{{SITE_ID}}.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/crawler-{{SITE_ID}}-error.log</string>
+    
+    <!-- Process timeout settings -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+    
+    <!-- Nice level (lower priority) -->
+    <key>Nice</key>
+    <integer>5</integer>
+    
+    <!-- Limit resource usage -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <!-- Limit memory to 1GB -->
+        <key>ResidentSetSize</key>
+        <integer>1073741824</integer>
+        <!-- Limit CPU time to 24 hours per day -->
+        <key>CPU</key>
+        <integer>86400</integer>
+    </dict>
+    
+    <!-- Only run when network is available -->
+    <key>LaunchOnlyOnce</key>
+    <false/>
+    
+    <!-- Process type -->
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist> 
