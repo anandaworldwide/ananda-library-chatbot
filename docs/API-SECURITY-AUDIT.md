@@ -85,18 +85,19 @@ This audit reviewed **23 API endpoints** across Pages Router and App Router impl
 
 #### Data & Analytics
 
-| Endpoint                     | Method | Auth        | Rate Limit | Security Score |
-| ---------------------------- | ------ | ----------- | ---------- | -------------- |
-| `/api/stats`                 | GET    | ❌ (public) | ✅ 20/5min | **B+**         |
-| `/api/model-comparison`      | POST   | ❌ (public) | ✅ 50/5min | **B+**         |
-| `/api/model-comparison-vote` | POST   | ✅ JWT      | ✅ 10/5min | **A**          |
+| Endpoint                     | Method | Auth   | Rate Limit | Security Score |
+| ---------------------------- | ------ | ------ | ---------- | -------------- |
+| `/api/stats`                 | GET    | ✅ JWT | ✅ 20/5min | **A**          |
+| `/api/model-comparison`      | POST   | ✅ JWT | ✅ 50/5min | **A**          |
+| `/api/model-comparison-vote` | POST   | ✅ JWT | ✅ 10/5min | **A**          |
 
 **Security Features:**
 
+- ✅ JWT authentication required
 - ✅ Rate limiting prevents abuse
 - ✅ Input validation
 - ✅ Caching reduces load
-- ⚠️ Public access (by design)
+- ✅ Protected analytics data
 
 #### User Interaction
 
