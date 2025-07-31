@@ -763,6 +763,7 @@ class TestAudioProcessing(unittest.TestCase):
             dryrun=False,
             default_author=self.author,
             library_name=self.library,
+            site_config={"domain": "test.com"},  # Add missing site_config
             is_youtube_video=False,
             youtube_data=None,
         )

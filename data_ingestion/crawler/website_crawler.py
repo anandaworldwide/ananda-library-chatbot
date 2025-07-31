@@ -52,7 +52,6 @@ from readability import Document
 
 # Import shared utility
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.embeddings_utils import OpenAIEmbeddings
 from utils.pinecone_utils import (
     clear_library_vectors,
     create_pinecone_index_if_not_exists,
@@ -61,7 +60,6 @@ from utils.pinecone_utils import (
     get_pinecone_ingest_index_name,
 )
 from utils.progress_utils import is_exiting, setup_signal_handlers
-from utils.text_splitter_utils import SpacyTextSplitter
 
 # Configure logging with timestamps (will be updated in main() if debug mode)
 logging.basicConfig(
@@ -168,20 +166,12 @@ class WebsiteCrawler:
         self.robots_cache_duration_hours = 24
         self._load_robots_txt()
 
-        # Initialize shared text splitter with historical configuration for web content
-        # Historical: 1000 chars (~250 tokens) with 200 chars (~50 tokens, 20% overlap)
-        self.text_splitter = SpacyTextSplitter(
-            chunk_size=250,  # Historical web content chunk size
-            chunk_overlap=50,  # Historical 20% overlap
-        )
+        # Initialize text splitter lazily to avoid loading spaCy models in tests
+        self._text_splitter = None
 
-        # Initialize shared embeddings instance (reused for all pages)
-        model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
-        if not model_name:
-            raise ValueError(
-                "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
-            )
-        self.embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
+        # Initialize embeddings lazily to avoid API calls in tests
+        self._embeddings = None
+        self._embedding_model_name = None
 
         # Set up SQLite database for crawl queue
         db_dir = Path(__file__).parent / "db"
@@ -227,6 +217,34 @@ class WebsiteCrawler:
         # Run initialization logic
         self._run_initialization_logic()
 
+    @property
+    def text_splitter(self):
+        """Lazy initialization of text splitter to avoid loading spaCy models in tests."""
+        if self._text_splitter is None:
+            from utils.text_splitter_utils import SpacyTextSplitter
+
+            # Historical: 1000 chars (~250 tokens) with 200 chars (~50 tokens, 20% overlap)
+            self._text_splitter = SpacyTextSplitter(
+                chunk_size=250,  # Historical web content chunk size
+                chunk_overlap=50,  # Historical 20% overlap
+            )
+        return self._text_splitter
+
+    @property
+    def embeddings(self):
+        """Lazy initialization of embeddings to avoid API calls in tests."""
+        if self._embeddings is None:
+            from langchain_openai import OpenAIEmbeddings
+
+            model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+            if not model_name:
+                raise ValueError(
+                    "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
+                )
+            self._embedding_model_name = model_name
+            self._embeddings = OpenAIEmbeddings(model=model_name, chunk_size=1000)
+        return self._embeddings
+
     def _run_initialization_logic(self):
         """Run the initialization logic to check if start URL should be added."""
         # Check if database is completely empty (no URLs at all)
@@ -256,10 +274,10 @@ class WebsiteCrawler:
 
     def close(self):
         """Close database connection and print chunking metrics"""
-        # Print chunking metrics summary before closing
-        if hasattr(self, "text_splitter") and self.text_splitter:
+        # Print chunking metrics summary before closing (only if splitter was ever initialized)
+        if self._text_splitter is not None:
             logging.info("=== WEBSITE CRAWLER CHUNKING METRICS ===")
-            self.text_splitter.metrics.print_summary()
+            self._text_splitter.metrics.print_summary()
 
         if hasattr(self, "conn") and self.conn:
             self.conn.close()
@@ -1734,19 +1752,12 @@ def sanitize_for_id(text: str) -> str:
     return text
 
 
-def create_chunks_from_page(page_content, text_splitter=None) -> list[str]:
-    """Create text chunks from page content using spaCy with built-in dynamic sizing."""
+def create_chunks_from_page(page_content, text_splitter) -> list[str]:
+    """Create text chunks from page content using the provided text splitter."""
 
     # Combine title and content with a single newline so the title remains in the
     # same paragraph as the opening content, preventing header-only chunks.
     full_text = f"{page_content.title}\n{page_content.content}"
-
-    # Create text splitter using historical parameters for web content
-    if text_splitter is None:
-        text_splitter = SpacyTextSplitter(
-            chunk_size=250,  # Historical web content chunk size
-            chunk_overlap=50,  # Historical 20% overlap
-        )
 
     # Use URL as document ID for metrics tracking
     document_id = page_content.url

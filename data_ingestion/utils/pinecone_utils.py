@@ -134,6 +134,7 @@ def create_pinecone_index_if_not_exists(
     """
     try:
         pinecone.describe_index(index_name)
+        print(f"Index {index_name} already exists")
         return
     except NotFoundException:
         # Index doesn't exist, we need to create it
@@ -210,6 +211,7 @@ async def create_pinecone_index_if_not_exists_async(
     """
     try:
         await asyncio.to_thread(pinecone.describe_index, index_name)
+        print(f"Index {index_name} already exists")
         return
     except NotFoundException:
         # Index doesn't exist, we need to create it

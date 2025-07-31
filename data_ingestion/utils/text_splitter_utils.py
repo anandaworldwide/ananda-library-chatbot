@@ -16,6 +16,9 @@ import tiktoken
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Global cache for spaCy models to avoid reloading in tests
+_SPACY_MODEL_CACHE = {}
+
 
 # Define Document class to avoid circular imports
 class Document:
@@ -268,11 +271,18 @@ class SpacyTextSplitter:
     def _ensure_nlp(self):
         """
         Ensure spaCy model is loaded, downloading if necessary.
+        Uses global cache to avoid reloading models in tests.
 
         Raises:
             RuntimeError: If the model couldn't be loaded or downloaded
         """
         if self.nlp is None:
+            # Check global cache first
+            if self.pipeline in _SPACY_MODEL_CACHE:
+                self.logger.debug(f"Using cached spaCy model {self.pipeline}")
+                self.nlp = _SPACY_MODEL_CACHE[self.pipeline]
+                return
+
             try:
                 self.logger.debug(f"Loading spaCy model {self.pipeline}")
                 self.nlp = spacy.load(self.pipeline)
@@ -285,6 +295,9 @@ class SpacyTextSplitter:
                     f"Set spaCy max_length to {self.nlp.max_length:,} characters"
                 )
 
+                # Cache the loaded model
+                _SPACY_MODEL_CACHE[self.pipeline] = self.nlp
+
             except OSError:
                 try:
                     self.logger.info(f"Downloading spaCy model {self.pipeline}...")
@@ -296,6 +309,9 @@ class SpacyTextSplitter:
                     self.logger.debug(
                         f"Set spaCy max_length to {self.nlp.max_length:,} characters"
                     )
+
+                    # Cache the loaded model
+                    _SPACY_MODEL_CACHE[self.pipeline] = self.nlp
 
                     self.logger.info(
                         f"Successfully downloaded and loaded {self.pipeline}"

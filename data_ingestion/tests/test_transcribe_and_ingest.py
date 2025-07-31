@@ -104,6 +104,7 @@ def test_process_file_private_video():
         False,
         "Test Author",
         "Test Library",
+        site_config={"domain": "test.com"},  # Add missing site_config
         is_youtube_video=True,
         youtube_data=youtube_data,
     )
