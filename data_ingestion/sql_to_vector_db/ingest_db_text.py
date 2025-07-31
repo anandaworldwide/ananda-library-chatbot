@@ -37,12 +37,16 @@ Command Line Arguments:
     --batch-size: Optional. Number of documents to process in parallel for embeddings/upserts (default: 50).
     --max-records: Optional. Maximum number of records to process (useful for testing or incremental processing).
     --dry-run: Optional. Perform all steps except Pinecone index creation, deletion, and upsertion.
+    --no-pinecone: Optional. Skip Pinecone operations but still generate and upload PDFs to S3.
+    --overwrite-pdfs: Optional. Force regeneration and upload of PDFs even if they already exist in S3.
     --no-pdf-uploads: Optional. Disable PDF generation and S3 uploads.
     --debug-pdfs: Optional. Enable debug mode for PDF generation.
 
 Example Usage:
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --keep-data
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --max-records 100 --dry-run
+    python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --no-pinecone
+    python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --no-pinecone --overwrite-pdfs
     python ingest_db_text.py --site ananda --database wp_ananda --library-name "Ananda Library" --no-pdf-uploads
 """
 
@@ -465,6 +469,10 @@ def _process_content_for_pdf(content: str, debug_mode: bool = False) -> str:
     """
     import re
 
+    # STEP 0: Normalize line endings - convert Windows (\r\n) and Mac (\r) to Unix (\n)
+    # This is critical for MySQL content which often uses \r\n line endings
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
+
     # STEP 1: Convert paragraph tags to double newlines using regex
     # This approach is more reliable than BeautifulSoup tree manipulation
     # Replace opening <p> tags with double newline prefix
@@ -614,9 +622,9 @@ def _clean_paragraph_for_pdf(paragraph: str) -> str:
     if not clean:
         return ""
 
-    # IMPORTANT: Replace ALL single newlines with spaces within a paragraph
+    # IMPORTANT: Replace ALL single newlines and carriage returns with spaces within a paragraph
     # This matches WordPress behavior where line breaks within paragraphs are treated as spaces
-    clean = re.sub(r"\n", " ", clean)
+    clean = re.sub(r"[\r\n]", " ", clean)
 
     # Clean up multiple spaces
     clean = re.sub(r" {2,}", " ", clean)
@@ -791,6 +799,7 @@ def generate_and_upload_pdf(
     library_name: str,
     no_pdf_uploads: bool = False,
     debug_pdfs: bool = False,
+    overwrite_pdfs: bool = False,
 ) -> str | None:
     """
     Generate PDF from post content and upload to S3.
@@ -801,6 +810,7 @@ def generate_and_upload_pdf(
         library_name: Library name for S3 path
         no_pdf_uploads: If True, skip PDF generation and upload
         debug_pdfs: If True, save PDFs locally for debugging
+        overwrite_pdfs: If True, force upload even if PDF already exists in S3
 
     Returns:
         str | None: S3 key or local path if successful, None if skipped
@@ -869,7 +879,7 @@ def generate_and_upload_pdf(
 
         try:
             # Upload to S3 with retry logic
-            uploaded = upload_to_s3(temp_file_path, s3_key)
+            uploaded = upload_to_s3(temp_file_path, s3_key, overwrite=overwrite_pdfs)
             if uploaded:
                 logger.info(f"Successfully uploaded PDF to S3: {s3_key}")
             else:
@@ -932,6 +942,16 @@ def parse_arguments():
         "-n",
         action="store_true",
         help="Perform all steps except Pinecone index creation, deletion, and upsertion.",
+    )
+    parser.add_argument(
+        "--no-pinecone",
+        action="store_true",
+        help="Skip Pinecone operations but still generate and upload PDFs to S3.",
+    )
+    parser.add_argument(
+        "--overwrite-pdfs",
+        action="store_true",
+        help="Force regeneration and upload of PDFs even if they already exist in S3.",
     )
     parser.add_argument(
         "--no-pdf-uploads",
@@ -1730,6 +1750,7 @@ def _prepare_vector_data(
     library_name: str,
     no_pdf_uploads: bool = False,
     debug_pdfs: bool = False,
+    overwrite_pdfs: bool = False,
 ) -> list[dict]:
     """Prepares vector data for each chunk including IDs and metadata."""
     prepared_vectors_data = []
@@ -1741,7 +1762,12 @@ def _prepare_vector_data(
     if not no_pdf_uploads:
         try:
             pdf_s3_key = generate_and_upload_pdf(
-                post_data, site, library_name, no_pdf_uploads, debug_pdfs
+                post_data,
+                site,
+                library_name,
+                no_pdf_uploads,
+                debug_pdfs,
+                overwrite_pdfs,
             )
         except Exception as e:
             # Track PDF generation failures but allow processing to continue
@@ -1871,6 +1897,7 @@ def process_and_upsert_batch(
     dry_run: bool = False,
     no_pdf_uploads: bool = False,
     debug_pdfs: bool = False,
+    overwrite_pdfs: bool = False,
 ) -> tuple[bool, list[int]]:
     """Processes a batch of documents: splits, embeds, and upserts to Pinecone, respecting dry_run.
 
@@ -1906,7 +1933,13 @@ def process_and_upsert_batch(
 
             # Prepare vector data for chunks - now catches PDF and other errors
             prepared_vectors_data = _prepare_vector_data(
-                docs, post_data, site, library_name, no_pdf_uploads, debug_pdfs
+                docs,
+                post_data,
+                site,
+                library_name,
+                no_pdf_uploads,
+                debug_pdfs,
+                overwrite_pdfs,
             )
 
             # Generate embeddings for all chunks in this post - let API errors bubble up
@@ -1982,12 +2015,17 @@ def process_and_upsert_batch(
 
 # --- Setup Functions ---
 def setup_connections_and_index(
-    args: argparse.Namespace, dry_run: bool
+    args: argparse.Namespace, dry_run: bool, no_pinecone: bool = False
 ) -> tuple[pymysql.Connection, Pinecone.Index]:
     """Establishes database and Pinecone connections and ensures the index exists."""
     logger.info("Establishing connections...")
     db_config = get_db_config(args)
     db_connection = get_db_connection(db_config)
+
+    if no_pinecone:
+        logger.info("Skipping Pinecone setup due to --no-pinecone flag.")
+        return db_connection, None
+
     pinecone_client = get_pinecone_client()
     index_name = os.getenv("PINECONE_INGEST_INDEX_NAME")
     if not index_name:
@@ -2001,7 +2039,11 @@ def setup_connections_and_index(
 
 
 def handle_checkpoint_or_clear_data(
-    args: argparse.Namespace, pinecone_index, checkpoint_file: str, dry_run: bool
+    args: argparse.Namespace,
+    pinecone_index,
+    checkpoint_file: str,
+    dry_run: bool,
+    no_pinecone: bool = False,
 ) -> set[int]:
     """Loads checkpoint or clears existing library data based on args."""
     processed_doc_ids = set()
@@ -2019,21 +2061,26 @@ def handle_checkpoint_or_clear_data(
                 "No valid checkpoint found. Starting ingestion from the beginning for this library."
             )
     else:
-        logger.info(
-            "Keep data set to False. Attempting to clear existing vectors for this library..."
-        )
-        try:
-            if not clear_library_vectors(
-                pinecone_index, args.library_name, dry_run=dry_run
-            ):
-                logger.error(
-                    "Exiting due to issues or user cancellation during vector deletion (or skipped in dry run)."
-                )
+        if no_pinecone:
+            logger.info(
+                "Keep data set to False, but skipping vector deletion due to --no-pinecone flag."
+            )
+        else:
+            logger.info(
+                "Keep data set to False. Attempting to clear existing vectors for this library..."
+            )
+            try:
+                if not clear_library_vectors(
+                    pinecone_index, args.library_name, dry_run=dry_run
+                ):
+                    logger.error(
+                        "Exiting due to issues or user cancellation during vector deletion (or skipped in dry run)."
+                    )
+                    sys.exit(1)
+            except Exception as e:
+                logger.error(f"Error during vector deletion: {e}")
+                logger.error("Exiting due to vector deletion failure.")
                 sys.exit(1)
-        except Exception as e:
-            logger.error(f"Error during vector deletion: {e}")
-            logger.error("Exiting due to vector deletion failure.")
-            sys.exit(1)
     return processed_doc_ids
 
 
@@ -2056,7 +2103,83 @@ def fetch_all_data(
     return all_rows
 
 
-# --- Processing Loop Function ---
+# --- Processing Loop Functions ---
+def run_pdf_only_loop(
+    all_rows: list[dict],
+    args: argparse.Namespace,
+) -> tuple[int, int, int, int]:
+    """Runs a PDF-only processing loop for --no-pinecone mode."""
+    logger.info(f"Starting PDF-only processing for {len(all_rows)} documents...")
+    processed_count_session = 0
+    error_count_session = 0
+
+    # Create progress configuration
+    progress_config = ProgressConfig(
+        description="Generating PDFs",
+        unit="doc",
+        total=len(all_rows),
+        show_progress=True,
+        enable_eta=True,
+        bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} docs [{elapsed}<{remaining}, {rate_fmt}]",
+    )
+
+    with ProgressTracker(progress_config) as progress:
+        for i, post_data in enumerate(all_rows, 1):
+            if is_exiting():
+                logger.info("Shutdown signal received, stopping PDF generation...")
+                break
+
+            post_id = post_data.get("id", "N/A")
+            post_title = post_data.get("title", "Unknown Title")
+
+            try:
+                # Generate and upload PDF
+                pdf_s3_key = generate_and_upload_pdf(
+                    post_data,
+                    args.site,
+                    args.library_name,
+                    args.no_pdf_uploads,
+                    args.debug_pdfs,
+                    args.overwrite_pdfs,
+                )
+
+                if pdf_s3_key:
+                    logger.info(
+                        f"✓ {i}/{len(all_rows)}: Generated PDF for '{post_title[:50]}...' -> {pdf_s3_key}"
+                    )
+                else:
+                    logger.info(
+                        f"⚠ {i}/{len(all_rows)}: Skipped PDF for '{post_title[:50]}...' (no-pdf-uploads flag)"
+                    )
+
+                processed_count_session += 1
+                progress.update(1)
+                progress.increment_success(1)
+
+            except Exception as e:
+                failure_tracker.add_failure(
+                    document_id=post_id,
+                    title=post_title,
+                    error=e,
+                    stage="pdf_generation",
+                    include_traceback=True,
+                )
+                error_count_session += 1
+                progress.update(1)
+                progress.increment_error(1)
+                logger.error(
+                    f"✗ {i}/{len(all_rows)}: Failed PDF for '{post_title[:50]}...' - {str(e)[:100]}"
+                )
+
+    return (
+        processed_count_session,
+        0,
+        error_count_session,
+        0,
+    )  # skipped=0, last_id=0 for PDF-only mode
+
+
+# --- Main Processing Loop Function ---
 def run_ingestion_loop(
     all_rows: list[dict],
     processed_doc_ids: set[int],
@@ -2176,6 +2299,7 @@ def run_ingestion_loop(
                 dry_run=dry_run,
                 no_pdf_uploads=args.no_pdf_uploads,
                 debug_pdfs=args.debug_pdfs,
+                overwrite_pdfs=args.overwrite_pdfs,
             )
 
             if not batch_had_errors:
@@ -2238,10 +2362,24 @@ def main():
     logger.info(f"Batch Size: {args.batch_size}")
     logger.info(f"Max Records: {args.max_records}")
     dry_run = args.dry_run
+    no_pinecone = args.no_pinecone
+
+    # Validate conflicting flags
+    if dry_run and no_pinecone:
+        logger.error(
+            "Error: Cannot use both --dry-run and --no-pinecone flags together."
+        )
+        sys.exit(1)
+
     if dry_run:
         logger.info("\n*** DRY RUN MODE ENABLED ***")
         logger.info(
             "No data will be sent to Pinecone (index creation, deletion, upserts skipped)."
+        )
+    elif no_pinecone:
+        logger.info("\n*** NO-PINECONE MODE ENABLED ***")
+        logger.info(
+            "Pinecone operations skipped, but PDFs will be generated and uploaded to S3."
         )
 
     # Setup signal handlers using shared utilities
@@ -2257,10 +2395,12 @@ def main():
     last_processed_id_session = 0
 
     try:
-        db_connection, pinecone_index = setup_connections_and_index(args, dry_run)
+        db_connection, pinecone_index = setup_connections_and_index(
+            args, dry_run, no_pinecone
+        )
         checkpoint_file = get_checkpoint_file_path(args.site)
         processed_doc_ids = handle_checkpoint_or_clear_data(
-            args, pinecone_index, checkpoint_file, dry_run
+            args, pinecone_index, checkpoint_file, dry_run, no_pinecone
         )
 
         all_rows = fetch_all_data(
@@ -2268,33 +2408,50 @@ def main():
         )
 
         if all_rows:
-            # Prepare embedding model and text splitter
-            model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
-            if not model_name:
-                raise ValueError(
-                    "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
-                )
-            embeddings_model = OpenAIEmbeddings(model=model_name, chunk_size=500)
-            # Historical SQL/database processing used 1000 chars (~250 tokens) with 200 chars (~50 tokens) overlap (20%)
-            text_splitter = SpacyTextSplitter(
-                chunk_size=250, chunk_overlap=50, log_summary_on_split=False
-            )
+            # Prepare embedding model and text splitter (only needed if not no_pinecone)
+            embeddings_model = None
+            text_splitter = None
 
-            (
-                processed_count_session,
-                skipped_count_session,
-                error_count_session,
-                last_processed_id_session,
-            ) = run_ingestion_loop(
-                all_rows,
-                processed_doc_ids,
-                args,
-                pinecone_index,
-                embeddings_model,
-                text_splitter,
-                checkpoint_file,
-                dry_run,
-            )
+            if not no_pinecone:
+                model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+                if not model_name:
+                    raise ValueError(
+                        "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
+                    )
+                embeddings_model = OpenAIEmbeddings(model=model_name, chunk_size=500)
+                # Historical SQL/database processing used 1000 chars (~250 tokens) with 200 chars (~50 tokens) overlap (20%)
+                text_splitter = SpacyTextSplitter(
+                    chunk_size=250, chunk_overlap=50, log_summary_on_split=False
+                )
+
+            if no_pinecone:
+                # Run PDF-only processing loop
+                (
+                    processed_count_session,
+                    skipped_count_session,
+                    error_count_session,
+                    last_processed_id_session,
+                ) = run_pdf_only_loop(
+                    all_rows,
+                    args,
+                )
+            else:
+                # Run full ingestion loop
+                (
+                    processed_count_session,
+                    skipped_count_session,
+                    error_count_session,
+                    last_processed_id_session,
+                ) = run_ingestion_loop(
+                    all_rows,
+                    processed_doc_ids,
+                    args,
+                    pinecone_index,
+                    embeddings_model,
+                    text_splitter,
+                    checkpoint_file,
+                    dry_run,
+                )
 
             # Final summary
             logger.info("\n--- Ingestion Session Summary ---")
@@ -2316,8 +2473,9 @@ def main():
                 )  # Updated phrasing
 
             # Print chunking statistics
-            logger.info("")
-            text_splitter.metrics.print_summary()
+            if text_splitter is not None:
+                logger.info("")
+                text_splitter.metrics.print_summary()
 
             # Print failure summary from the global failure tracker
             logger.info("")
@@ -2340,7 +2498,7 @@ def main():
                 logger.error(f"Could not save checkpoint on interrupt: {cp_err}")
 
         # Print chunking statistics before exiting
-        if "text_splitter" in locals():
+        if "text_splitter" in locals() and text_splitter is not None:
             logger.info("")
             text_splitter.metrics.print_summary()
 
@@ -2369,7 +2527,7 @@ def main():
                 )
 
         # Print chunking statistics before exiting
-        if "text_splitter" in locals():
+        if "text_splitter" in locals() and text_splitter is not None:
             logger.info("")
             text_splitter.metrics.print_summary()
 

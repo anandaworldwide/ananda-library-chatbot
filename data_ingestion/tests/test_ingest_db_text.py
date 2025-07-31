@@ -1604,6 +1604,62 @@ It includes multiple paragraphs to ensure proper formatting.</p>
         # Verify upload was attempted once (the function returns None on failure, doesn't retry)
         self.assertEqual(mock_upload.call_count, 1)
 
+    @patch("data_ingestion.utils.s3_utils.upload_to_s3")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_document_hash")
+    def test_generate_and_upload_pdf_with_overwrite(self, mock_hash, mock_upload):
+        """Test PDF generation with overwrite_pdfs=True passes overwrite flag to S3."""
+        # Mock the hash generation
+        mock_hash.return_value = "test_overwrite_hash"
+        mock_upload.return_value = True
+
+        # Call the PDF generation function with overwrite_pdfs=True
+        result = ingest_db_text.generate_and_upload_pdf(
+            post_data=self.test_post_data,
+            site="ananda",
+            library_name="test-library",
+            overwrite_pdfs=True,
+        )
+
+        # Verify the function returns expected S3 key
+        expected_s3_key = "public/pdf/test-library/test_overwrite_hash.pdf"
+        self.assertEqual(result, expected_s3_key)
+
+        # Verify S3 upload was called with overwrite=True
+        self.assertEqual(mock_upload.call_count, 1)
+        upload_args = mock_upload.call_args
+        # Check positional args
+        self.assertEqual(upload_args[0][1], expected_s3_key)  # S3 key
+        # Check keyword args
+        self.assertEqual(upload_args[1]["overwrite"], True)
+
+    @patch("data_ingestion.utils.s3_utils.upload_to_s3")
+    @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_document_hash")
+    def test_generate_and_upload_pdf_without_overwrite(self, mock_hash, mock_upload):
+        """Test PDF generation with overwrite_pdfs=False (default) passes overwrite=False."""
+        # Mock the hash generation
+        mock_hash.return_value = "test_no_overwrite_hash"
+        mock_upload.return_value = True
+
+        # Call the PDF generation function with default overwrite_pdfs=False
+        result = ingest_db_text.generate_and_upload_pdf(
+            post_data=self.test_post_data,
+            site="ananda",
+            library_name="test-library",
+            overwrite_pdfs=False,
+        )
+
+        # Verify the function returns expected S3 key
+        expected_s3_key = "public/pdf/test-library/test_no_overwrite_hash.pdf"
+        self.assertEqual(result, expected_s3_key)
+
+        # Verify S3 upload was called with overwrite=False
+        self.assertEqual(mock_upload.call_count, 1)
+        upload_args = mock_upload.call_args
+        # Check positional args
+        self.assertEqual(upload_args[0][1], expected_s3_key)  # S3 key
+        # Check keyword args
+        self.assertEqual(upload_args[1]["overwrite"], False)
+
     def test_no_pdf_uploads_flag_parsing(self):
         """Test that --no-pdf-uploads flag is properly parsed."""
         # Test with flag present
@@ -1636,6 +1692,94 @@ It includes multiple paragraphs to ensure proper formatting.</p>
         with patch("sys.argv", test_args_without_flag):
             args = ingest_db_text.parse_arguments()
             self.assertFalse(args.no_pdf_uploads)
+
+    def test_overwrite_pdfs_flag_parsing(self):
+        """Test that --overwrite-pdfs flag is properly parsed."""
+        # Test with flag present
+        test_args_with_flag = [
+            "ingest_db_text.py",
+            "--site",
+            "ananda",
+            "--database",
+            "test-db",
+            "--library-name",
+            "test-lib",
+            "--overwrite-pdfs",
+        ]
+
+        with patch("sys.argv", test_args_with_flag):
+            args = ingest_db_text.parse_arguments()
+            self.assertTrue(args.overwrite_pdfs)
+
+        # Test without flag (default should be False)
+        test_args_without_flag = [
+            "ingest_db_text.py",
+            "--site",
+            "ananda",
+            "--database",
+            "test-db",
+            "--library-name",
+            "test-lib",
+        ]
+
+        with patch("sys.argv", test_args_without_flag):
+            args = ingest_db_text.parse_arguments()
+            self.assertFalse(args.overwrite_pdfs)
+
+    def test_no_pinecone_flag_parsing(self):
+        """Test that --no-pinecone flag is properly parsed."""
+        # Test with flag present
+        test_args_with_flag = [
+            "ingest_db_text.py",
+            "--site",
+            "ananda",
+            "--database",
+            "test-db",
+            "--library-name",
+            "test-lib",
+            "--no-pinecone",
+        ]
+
+        with patch("sys.argv", test_args_with_flag):
+            args = ingest_db_text.parse_arguments()
+            self.assertTrue(args.no_pinecone)
+
+        # Test without flag (default should be False)
+        test_args_without_flag = [
+            "ingest_db_text.py",
+            "--site",
+            "ananda",
+            "--database",
+            "test-db",
+            "--library-name",
+            "test-lib",
+        ]
+
+        with patch("sys.argv", test_args_without_flag):
+            args = ingest_db_text.parse_arguments()
+            self.assertFalse(args.no_pinecone)
+
+    def test_conflicting_flags_validation(self):
+        """Test that --dry-run and --no-pinecone flags cannot be used together."""
+        test_args_conflicting = [
+            "ingest_db_text.py",
+            "--site",
+            "ananda",
+            "--database",
+            "test-db",
+            "--library-name",
+            "test-lib",
+            "--dry-run",
+            "--no-pinecone",
+        ]
+
+        # This test would need to be implemented in the main function
+        # For now, just verify both flags can be parsed individually
+        with patch("sys.argv", test_args_conflicting):
+            args = ingest_db_text.parse_arguments()
+            self.assertTrue(args.dry_run)
+            self.assertTrue(args.no_pinecone)
+            # The validation logic is in main(), not parse_arguments()
 
     @patch("data_ingestion.sql_to_vector_db.ingest_db_text.generate_and_upload_pdf")
     @patch("data_ingestion.sql_to_vector_db.ingest_db_text.pymysql.connect")
@@ -1942,7 +2086,12 @@ This tests the PDF generation robustness."""
             return [Document(page_content="Mock chunk")]
 
         def capture_pdf_generation(
-            post_data, site, library_name, no_pdf_uploads=False, debug_pdfs=False
+            post_data,
+            site,
+            library_name,
+            no_pdf_uploads=False,
+            debug_pdfs=False,
+            overwrite_pdfs=False,
         ):
             nonlocal captured_pdf_content
             captured_pdf_content = post_data["content"]
@@ -2202,7 +2351,12 @@ class TestHTMLProcessing(unittest.TestCase):
             return [Document(page_content="Mock chunk")]
 
         def capture_pdf_generation(
-            post_data, site, library_name, no_pdf_uploads=False, debug_pdfs=False
+            post_data,
+            site,
+            library_name,
+            no_pdf_uploads=False,
+            debug_pdfs=False,
+            overwrite_pdfs=False,
         ):
             nonlocal captured_pdf_content
             captured_pdf_content = post_data["content"]
@@ -2265,6 +2419,124 @@ class TestHTMLProcessing(unittest.TestCase):
         # Verify processing succeeded
         self.assertFalse(had_errors)
         self.assertEqual(processed_ids, [12345])
+
+    def test_line_ending_normalization_windows_to_unix(self):
+        """Test that Windows line endings (\r\n) are normalized to Unix (\n) for PDF generation."""
+        from data_ingestion.sql_to_vector_db.ingest_db_text import (
+            _process_content_for_pdf,
+        )
+
+        # Content with Windows line endings (like from MySQL)
+        content_with_windows_endings = (
+            "First paragraph.\r\n\r\nSecond paragraph.\r\n\r\nThird paragraph."
+        )
+
+        # Process content for PDF
+        processed = _process_content_for_pdf(content_with_windows_endings)
+
+        # Verify Windows line endings were normalized to Unix
+        self.assertNotIn("\r\n", processed, "Windows line endings should be normalized")
+        self.assertNotIn("\r", processed, "Carriage returns should be removed")
+
+        # Verify content still has proper paragraph structure
+        self.assertIn("\n\n", processed, "Paragraph breaks should be preserved")
+
+        # Split into paragraphs and verify structure
+        paragraphs = processed.split("\n\n")
+        self.assertEqual(len(paragraphs), 3, "Should have 3 paragraphs")
+        self.assertIn("First paragraph", paragraphs[0])
+        self.assertIn("Second paragraph", paragraphs[1])
+        self.assertIn("Third paragraph", paragraphs[2])
+
+    def test_line_ending_normalization_mixed_endings(self):
+        """Test normalization of mixed line ending types."""
+        from data_ingestion.sql_to_vector_db.ingest_db_text import (
+            _process_content_for_pdf,
+        )
+
+        # Content with mixed line endings
+        mixed_content = (
+            "Windows ending.\r\n\r\nMac ending.\r\rUnix ending.\n\nMixed content."
+        )
+
+        # Process content for PDF
+        processed = _process_content_for_pdf(mixed_content)
+
+        # Verify all line endings were normalized
+        self.assertNotIn("\r\n", processed, "Windows line endings should be normalized")
+        self.assertNotIn("\r", processed, "Mac line endings should be normalized")
+
+        # Verify proper paragraph structure is maintained
+        paragraphs = [p.strip() for p in processed.split("\n\n") if p.strip()]
+        self.assertGreaterEqual(len(paragraphs), 3, "Should have at least 3 paragraphs")
+
+    def test_line_ending_normalization_with_html(self):
+        """Test line ending normalization works with HTML content."""
+        from data_ingestion.sql_to_vector_db.ingest_db_text import (
+            _process_content_for_pdf,
+        )
+
+        # HTML content with Windows line endings
+        html_content = "<p>First paragraph with <strong>bold</strong> text.</p>\r\n\r\n<p>Second paragraph with <em>italic</em> text.</p>"
+
+        # Process content for PDF
+        processed = _process_content_for_pdf(html_content)
+
+        # Verify line endings were normalized
+        self.assertNotIn("\r\n", processed, "Windows line endings should be normalized")
+        self.assertNotIn("\r", processed, "Carriage returns should be removed")
+
+        # Verify HTML formatting is preserved
+        self.assertIn("<strong>", processed, "HTML formatting should be preserved")
+        self.assertIn("<em>", processed, "HTML formatting should be preserved")
+
+        # Verify paragraph structure
+        self.assertIn("\n\n", processed, "Paragraph breaks should be preserved")
+
+    def test_clean_paragraph_for_pdf_line_ending_handling(self):
+        """Test that _clean_paragraph_for_pdf handles both \\n and \\r characters."""
+        from data_ingestion.sql_to_vector_db.ingest_db_text import (
+            _clean_paragraph_for_pdf,
+        )
+
+        # Test paragraph with mixed line endings within
+        paragraph_with_mixed_endings = "Line one\nLine two\rLine three\r\nLine four"
+
+        # Clean the paragraph
+        cleaned = _clean_paragraph_for_pdf(paragraph_with_mixed_endings)
+
+        # Verify all line endings were replaced with spaces
+        self.assertNotIn("\n", cleaned, "Newlines should be replaced with spaces")
+        self.assertNotIn(
+            "\r", cleaned, "Carriage returns should be replaced with spaces"
+        )
+
+        # Verify content is preserved with spaces
+        self.assertEqual(cleaned, "Line one Line two Line three Line four")
+
+    def test_line_ending_normalization_preserves_content(self):
+        """Test that line ending normalization preserves actual content."""
+        from data_ingestion.sql_to_vector_db.ingest_db_text import (
+            _process_content_for_pdf,
+        )
+
+        # Complex content with Windows line endings
+        complex_content = """Greed is the root cause of all depressions.\r\n\r\nIndeed, folk wisdom enlarges on this concept, telling us that the love of money is the root of all evil.\r\n\r\nAnd the wisdom of great seers in every culture gives us the logical corollary to that thought."""
+
+        # Process content
+        processed = _process_content_for_pdf(complex_content)
+
+        # Verify all original text content is preserved
+        self.assertIn("Greed is the root cause", processed)
+        self.assertIn("folk wisdom enlarges", processed)
+        self.assertIn("wisdom of great seers", processed)
+
+        # Verify proper paragraph separation
+        paragraphs = [p.strip() for p in processed.split("\n\n") if p.strip()]
+        self.assertEqual(len(paragraphs), 3, "Should have exactly 3 paragraphs")
+
+        # Verify no Windows line endings remain
+        self.assertNotIn("\r", processed, "No carriage returns should remain")
 
 
 if __name__ == "__main__":

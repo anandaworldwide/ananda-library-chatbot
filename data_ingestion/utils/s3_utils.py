@@ -70,14 +70,15 @@ def file_exists_with_same_size(s3_client, bucket_name, s3_key, local_file_path):
         return False
 
 
-def upload_to_s3(file_path, s3_key, max_attempts=5):
+def upload_to_s3(file_path, s3_key, max_attempts=5, overwrite=False):
     """
-    Upload file to S3, skipping if file already exists with same size.
+    Upload file to S3, skipping if file already exists with same size (unless overwrite=True).
 
     Args:
         file_path: Path to local file
         s3_key: S3 object key
         max_attempts: Maximum retry attempts
+        overwrite: If True, upload even if file already exists
 
     Returns:
         bool: True if file was uploaded, False if skipped (already exists with same size)
@@ -92,8 +93,10 @@ def upload_to_s3(file_path, s3_key, max_attempts=5):
     s3_client = get_s3_client()
     bucket_name = get_bucket_name()
 
-    # Check if file already exists with same size
-    if file_exists_with_same_size(s3_client, bucket_name, s3_key, file_path):
+    # Check if file already exists with same size (unless overwrite is True)
+    if not overwrite and file_exists_with_same_size(
+        s3_client, bucket_name, s3_key, file_path
+    ):
         return False
 
     for attempt in range(max_attempts):

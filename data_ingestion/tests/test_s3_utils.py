@@ -177,6 +177,53 @@ class TestS3Utils:
         mock_s3_client.upload_file.assert_not_called()
         mock_file_exists.assert_called_once()
 
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.file_exists_with_same_size")
+    def test_upload_to_s3_overwrite_true(
+        self, mock_file_exists, mock_get_client, mock_get_bucket
+    ):
+        """Test S3 upload with overwrite=True bypasses existence check."""
+        # Setup mocks
+        mock_s3_client = MagicMock()
+        mock_get_client.return_value = mock_s3_client
+        mock_get_bucket.return_value = "test-bucket"
+        mock_file_exists.return_value = True  # File exists but should be overwritten
+
+        # Call function with overwrite=True
+        result = upload_to_s3("/path/to/file.pdf", "pdf/file.pdf", overwrite=True)
+
+        # Verify upload proceeded despite file existing
+        mock_s3_client.upload_file.assert_called_once_with(
+            "/path/to/file.pdf", "test-bucket", "pdf/file.pdf"
+        )
+        # Verify existence check was skipped
+        mock_file_exists.assert_not_called()
+        assert result is True
+
+    @patch("data_ingestion.utils.s3_utils.get_bucket_name")
+    @patch("data_ingestion.utils.s3_utils.get_s3_client")
+    @patch("data_ingestion.utils.s3_utils.file_exists_with_same_size")
+    def test_upload_to_s3_overwrite_false_file_exists(
+        self, mock_file_exists, mock_get_client, mock_get_bucket
+    ):
+        """Test S3 upload with overwrite=False (default) respects existence check."""
+        # Setup mocks
+        mock_s3_client = MagicMock()
+        mock_get_client.return_value = mock_s3_client
+        mock_get_bucket.return_value = "test-bucket"
+        mock_file_exists.return_value = True  # File exists
+
+        # Call function with overwrite=False (default)
+        result = upload_to_s3("/path/to/file.pdf", "pdf/file.pdf", overwrite=False)
+
+        # Verify upload was skipped
+        mock_s3_client.upload_file.assert_not_called()
+        mock_file_exists.assert_called_once_with(
+            mock_s3_client, "test-bucket", "pdf/file.pdf", "/path/to/file.pdf"
+        )
+        assert result is False
+
     def test_upload_to_s3_missing_key(self):
         """Test upload_to_s3 raises ValueError when s3_key is not provided."""
         with pytest.raises(ValueError, match="s3_key must be provided"):
