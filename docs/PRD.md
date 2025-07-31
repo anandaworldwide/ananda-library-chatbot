@@ -13,7 +13,7 @@ authentication, and integration options, including a WordPress plugin.
 
 ### System Overview
 
-```
+```text
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                                USER INTERFACES                                │
 │                                                                               │

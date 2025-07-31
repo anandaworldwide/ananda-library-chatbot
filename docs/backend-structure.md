@@ -10,7 +10,7 @@ facilitate understanding and future development.
 
 ### System Architecture
 
-```
+```text
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                                 FRONTEND                                      │
 │ ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐ │
@@ -476,7 +476,7 @@ embeddings.
 
 **File Structure:**
 
-```
+```text
 web/
 ├── site-config/location-intent/
 │   └── ananda-public-seeds.json          # Human-editable seed phrases

@@ -4,7 +4,7 @@ Here's a breakdown of the tech stack used in the project:
 
 ## Technology Architecture
 
-```
+```text
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                              FRONTEND LAYER                                   │
 │                                                                               │
