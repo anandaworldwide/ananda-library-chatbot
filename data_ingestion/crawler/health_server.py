@@ -2,18 +2,22 @@
 """
 Flask-based health check server for the website crawler.
 
-This server provides a `/health` endpoint that returns crawler status and statistics.
+This server provides a comprehensive dashboard for crawler status and statistics.
 It can be run alongside the main crawler process to provide monitoring capabilities.
 
 Usage:
     python health_server.py --site ananda-public --port 8080
 
-The health endpoint returns JSON with:
-- Crawler status (running/stopped)
-- Queue statistics
-- Last activity timestamp
-- Database file info
-- Configuration summary
+The dashboard provides:
+- Real-time crawler status monitoring
+- Queue statistics with visual progress
+- Process health and resource usage
+- Configuration overview
+- Issues and alerts display
+
+Endpoints:
+- `/dashboard` - Main HTML dashboard with real-time status
+- `/api/health` - JSON health data for dashboard consumption
 """
 
 import argparse
@@ -26,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template_string
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,6 +42,518 @@ app = Flask(__name__)
 SITE_ID = None
 SITE_CONFIG = None
 DB_FILE = None
+
+# HTML Dashboard Template
+DASHBOARD_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crawler Health Dashboard - {{ site_id }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        
+        .status-bar {
+            background: white;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .overall-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .status-healthy { background: #48bb78; }
+        .status-warning { background: #ed8936; }
+        .status-degraded { background: #f56565; }
+        
+        .last-updated {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid #f7fafc;
+        }
+        
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .card-icon {
+            font-size: 1.5rem;
+            opacity: 0.7;
+        }
+        
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+        }
+        
+        .metric {
+            text-align: center;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 0.25rem;
+        }
+        
+        .metric-label {
+            font-size: 0.85rem;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #48bb78, #38a169);
+            transition: width 0.3s ease;
+        }
+        
+        .status-list {
+            list-style: none;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f7fafc;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            font-weight: 500;
+        }
+        
+        .status-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .issues-list {
+            list-style: none;
+        }
+        
+        .issue-item {
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            border-radius: 6px;
+            color: #c53030;
+        }
+        
+        .no-issues {
+            color: #48bb78;
+            font-style: italic;
+            text-align: center;
+            padding: 1rem;
+        }
+        
+        .process-item {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 0.5rem 0;
+        }
+        
+        .process-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .process-pid {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .process-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .refresh-info {
+            text-align: center;
+            color: #718096;
+            font-size: 0.9rem;
+            margin-top: 2rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            .grid { grid-template-columns: 1fr; }
+            .metric-grid { grid-template-columns: repeat(2, 1fr); }
+            .status-bar { flex-direction: column; gap: 1rem; }
+        }
+        
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🕷️ Crawler Health Dashboard</h1>
+        <div class="subtitle">{{ site_id }} • {{ config.domain }}</div>
+    </div>
+    
+    <div class="status-bar">
+        <div class="overall-status">
+            <span class="status-indicator status-{{ status.lower() }}"></span>
+            Overall Status: <span id="status-text">{{ status.title() }}</span>
+        </div>
+        <div class="last-updated">
+            Last Updated: <span id="last-updated">{{ timestamp }}</span>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="grid">
+            <!-- Queue Status Card -->
+            <div class="card fade-in">
+                <div class="card-header">
+                    <div class="card-title">📊 Queue Status</div>
+                    <div class="card-icon">📊</div>
+                </div>
+                <div class="metric-grid">
+                    <div class="metric">
+                        <div class="metric-value" id="total-urls">{{ database.total_urls }}</div>
+                        <div class="metric-label">Total URLs</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="ready-urls">{{ database.ready_for_crawling }}</div>
+                        <div class="metric-label">Ready</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="visited-urls">{{ database.status_breakdown.visited }}</div>
+                        <div class="metric-label">Visited</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="failed-urls">{{ database.status_breakdown.failed }}</div>
+                        <div class="metric-label">Failed</div>
+                    </div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: {{ (database.status_breakdown.visited / database.total_urls * 100) if database.total_urls > 0 else 0 }}%"></div>
+                </div>
+                <div style="text-align: center; font-size: 0.9rem; color: #718096; margin-top: 0.5rem;">
+                    {{ "%.1f"|format(database.status_breakdown.visited / database.total_urls * 100) if database.total_urls > 0 else 0 }}% Complete
+                </div>
+            </div>
+            
+            <!-- System Health Card -->
+            <div class="card fade-in">
+                <div class="card-header">
+                    <div class="card-title">⚡ System Health</div>
+                    <div class="card-icon">⚡</div>
+                </div>
+                <div class="metric-grid">
+                    <div class="metric">
+                        <div class="metric-value" id="db-size">{{ database.database_size_mb }}</div>
+                        <div class="metric-label">DB Size (MB)</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="avg-retries">{{ database.average_retry_count }}</div>
+                        <div class="metric-label">Avg Retries</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="high-priority">{{ database.high_priority_urls }}</div>
+                        <div class="metric-label">High Priority</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="pending-retry">{{ database.pending_retry }}</div>
+                        <div class="metric-label">Pending Retry</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Process Status Card -->
+            <div class="card fade-in">
+                <div class="card-header">
+                    <div class="card-title">🔄 Process Status</div>
+                    <div class="card-icon">🔄</div>
+                </div>
+                <div id="process-content">
+                    {% if processes.crawler_running %}
+                        <div style="color: #48bb78; font-weight: 600; margin-bottom: 1rem;">
+                            ✅ Crawler Running ({{ processes.process_count }} process{{ 'es' if processes.process_count != 1 else '' }})
+                        </div>
+                        {% for process in processes.crawler_processes %}
+                        <div class="process-item">
+                            <div class="process-header">
+                                <span class="process-pid">PID: {{ process.pid }}</span>
+                                <span style="color: #718096; font-size: 0.9rem;">Started: {{ process.started[:19] }}</span>
+                            </div>
+                            <div class="process-stats">
+                                <div>CPU: {{ process.cpu_percent }}%</div>
+                                <div>Memory: {{ process.memory_mb }}MB</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="color: #f56565; font-weight: 600; text-align: center; padding: 2rem;">
+                            ❌ No Crawler Processes Detected
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Configuration Card -->
+            <div class="card fade-in">
+                <div class="card-header">
+                    <div class="card-title">⚙️ Configuration</div>
+                    <div class="card-icon">⚙️</div>
+                </div>
+                <ul class="status-list">
+                    <li class="status-item">
+                        <span class="status-label">Domain</span>
+                        <span class="status-value">{{ config.domain }}</span>
+                    </li>
+                    <li class="status-item">
+                        <span class="status-label">Crawl Frequency</span>
+                        <span class="status-value">{{ config.crawl_frequency_days }} days</span>
+                    </li>
+                    <li class="status-item">
+                        <span class="status-label">CSV Mode</span>
+                        <span class="status-value">{{ "✅ Enabled" if config.csv_mode_enabled else "❌ Disabled" }}</span>
+                    </li>
+                    <li class="status-item">
+                        <span class="status-label">Initial Crawl</span>
+                        <span class="status-value">{{ "✅ Complete" if database.initial_crawl_completed else "⏳ In Progress" }}</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <!-- Issues Card -->
+            <div class="card fade-in">
+                <div class="card-header">
+                    <div class="card-title">🚨 Issues & Alerts</div>
+                    <div class="card-icon">🚨</div>
+                </div>
+                <div id="issues-content">
+                    {% if issues %}
+                        <ul class="issues-list">
+                            {% for issue in issues %}
+                            <li class="issue-item">{{ issue }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="no-issues">✅ No issues detected</div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Database Info Card -->
+            <div class="card fade-in">
+                <div class="card-header">
+                    <div class="card-title">💾 Database Info</div>
+                    <div class="card-icon">💾</div>
+                </div>
+                <ul class="status-list">
+                    <li class="status-item">
+                        <span class="status-label">Database Path</span>
+                        <span class="status-value" style="font-size: 0.8rem; word-break: break-all;">{{ database.database_path }}</span>
+                    </li>
+                    <li class="status-item">
+                        <span class="status-label">Last Activity</span>
+                        <span class="status-value">{{ database.last_activity[:19] if database.last_activity else 'Never' }}</span>
+                    </li>
+                    <li class="status-item">
+                        <span class="status-label">Database Status</span>
+                        <span class="status-value">{{ "✅ Available" if database.database_exists else "❌ Missing" }}</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="refresh-info">
+            <div>🔄 Auto-refreshing every 10 minutes</div>
+            <div style="margin-top: 0.5rem; font-size: 0.8rem;">
+                Next refresh: <span id="next-refresh"></span>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-refresh functionality
+        const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
+        let nextRefreshTime = new Date(Date.now() + REFRESH_INTERVAL);
+        
+        function updateNextRefreshTime() {
+            const now = new Date();
+            const timeLeft = Math.max(0, nextRefreshTime - now);
+            const minutes = Math.floor(timeLeft / 60000);
+            const seconds = Math.floor((timeLeft % 60000) / 1000);
+            document.getElementById('next-refresh').textContent = 
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        function refreshDashboard() {
+            document.body.classList.add('loading');
+            
+            fetch('/api/health')
+                .then(response => response.json())
+                .then(data => {
+                    // Update status indicators
+                    document.getElementById('status-text').textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+                    document.getElementById('last-updated').textContent = new Date(data.timestamp).toLocaleString();
+                    
+                    // Update queue metrics
+                    document.getElementById('total-urls').textContent = data.database.total_urls;
+                    document.getElementById('ready-urls').textContent = data.database.ready_for_crawling;
+                    document.getElementById('visited-urls').textContent = data.database.status_breakdown.visited;
+                    document.getElementById('failed-urls').textContent = data.database.status_breakdown.failed;
+                    
+                    // Update progress bar
+                    const progressPercent = data.database.total_urls > 0 ? 
+                        (data.database.status_breakdown.visited / data.database.total_urls * 100) : 0;
+                    document.getElementById('progress-fill').style.width = progressPercent + '%';
+                    
+                    // Update system health metrics
+                    document.getElementById('db-size').textContent = data.database.database_size_mb;
+                    document.getElementById('avg-retries').textContent = data.database.average_retry_count;
+                    document.getElementById('high-priority').textContent = data.database.high_priority_urls;
+                    document.getElementById('pending-retry').textContent = data.database.pending_retry;
+                    
+                    // Update status indicator color
+                    const statusIndicator = document.querySelector('.status-indicator');
+                    statusIndicator.className = 'status-indicator status-' + data.status.toLowerCase();
+                    
+                    document.body.classList.remove('loading');
+                    nextRefreshTime = new Date(Date.now() + REFRESH_INTERVAL);
+                })
+                .catch(error => {
+                    console.error('Failed to refresh dashboard:', error);
+                    document.body.classList.remove('loading');
+                });
+        }
+        
+        // Update countdown every second
+        setInterval(updateNextRefreshTime, 1000);
+        
+        // Refresh dashboard every 10 minutes
+        setInterval(refreshDashboard, REFRESH_INTERVAL);
+        
+        // Initial countdown update
+        updateNextRefreshTime();
+    </script>
+</body>
+</html>
+"""
 
 
 def get_database_stats() -> dict[str, Any]:
@@ -199,9 +715,8 @@ def get_crawler_process_info() -> dict[str, Any]:
         return {"error": f"Process check error: {str(e)}", "crawler_running": "unknown"}
 
 
-@app.route("/health")
-def health_check():
-    """Main health check endpoint."""
+def get_health_data():
+    """Get health data for both API and dashboard."""
     timestamp = datetime.now().isoformat()
 
     # Get database statistics
@@ -246,14 +761,14 @@ def health_check():
         else {"error": "Configuration not loaded"},
     }
 
-    # Set appropriate HTTP status code
-    status_code = 200
-    if health_status == "degraded":
-        status_code = 503  # Service Unavailable
-    elif health_status == "warning":
-        status_code = 200  # Still OK, just a warning
+    return response, health_status
 
-    return jsonify(response), status_code
+
+@app.route("/api/health")
+def api_health():
+    """API endpoint for dashboard consumption."""
+    response, _ = get_health_data()
+    return jsonify(response)
 
 
 @app.route("/stats")
@@ -276,6 +791,22 @@ def stats_endpoint():
     )
 
 
+@app.route("/dashboard")
+def dashboard_endpoint():
+    """Serve the HTML dashboard."""
+    response, health_status = get_health_data()
+    return render_template_string(
+        DASHBOARD_TEMPLATE,
+        site_id=SITE_ID,
+        timestamp=response["timestamp"],
+        status=health_status,
+        issues=response["issues"],
+        database=response["database"],
+        processes=response["processes"],
+        config=response["configuration"],
+    )
+
+
 @app.route("/")
 def root():
     """Root endpoint with basic info."""
@@ -284,7 +815,8 @@ def root():
             "service": "Website Crawler Health Check",
             "site_id": SITE_ID,
             "endpoints": {
-                "/health": "Full health check with detailed statistics",
+                "/dashboard": "HTML dashboard with real-time status",
+                "/api/health": "JSON health data for dashboard consumption",
                 "/stats": "Quick statistics summary",
                 "/": "This information",
             },
@@ -373,7 +905,8 @@ def main():
 
     logging.info(f"Starting health check server for site '{args.site}'")
     logging.info(f"Server will be available at http://{args.host}:{args.port}")
-    logging.info(f"Health endpoint: http://{args.host}:{args.port}/health")
+    logging.info(f"Dashboard endpoint: http://{args.host}:{args.port}/dashboard")
+    logging.info(f"API endpoint: http://{args.host}:{args.port}/api/health")
 
     try:
         app.run(
