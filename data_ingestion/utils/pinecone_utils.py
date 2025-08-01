@@ -23,7 +23,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from pinecone import Index, NotFoundException, Pinecone, ServerlessSpec
+from pinecone import Index, Pinecone, ServerlessSpec
+from pinecone.exceptions import PineconeException
 
 from .document_hash import generate_document_hash
 
@@ -133,15 +134,19 @@ def create_pinecone_index_if_not_exists(
         SystemExit: On critical errors during index creation
     """
     try:
-        pinecone.describe_index(index_name)
+        index_desc = pinecone.describe_index(index_name)
+    except PineconeException as e:
+        if "404" in str(e) or "not found" in str(e).lower():
+            pass  # Index not found, proceed to create
+        else:
+            print(f"Error checking Pinecone index: {e}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error checking Pinecone index: {e}")
+        sys.exit(1)
+    else:
         print(f"Index {index_name} already exists")
         return
-    except NotFoundException:
-        # Index doesn't exist, we need to create it
-        pass
-    except Exception as e:
-        print(f"Error checking Pinecone index: {e}")
-        sys.exit(1)
 
     # Index doesn't exist, handle creation
     if dry_run:
@@ -210,15 +215,19 @@ async def create_pinecone_index_if_not_exists_async(
         SystemExit: On critical errors during index creation
     """
     try:
-        await asyncio.to_thread(pinecone.describe_index, index_name)
+        index_desc = await asyncio.to_thread(pinecone.describe_index, index_name)
+    except PineconeException as e:
+        if "404" in str(e) or "not found" in str(e).lower():
+            pass  # Index not found, proceed to create
+        else:
+            print(f"Error checking Pinecone index: {e}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error checking Pinecone index: {e}")
+        sys.exit(1)
+    else:
         print(f"Index {index_name} already exists")
         return
-    except NotFoundException:
-        # Index doesn't exist, we need to create it
-        pass
-    except Exception as e:
-        print(f"Error checking Pinecone index: {e}")
-        sys.exit(1)
 
     print(f"Index {index_name} does not exist. Creating...")
 

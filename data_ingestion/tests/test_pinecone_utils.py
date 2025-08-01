@@ -10,7 +10,7 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
-from pinecone import NotFoundException
+from pinecone.exceptions import PineconeException
 
 from data_ingestion.utils.pinecone_utils import (
     batch_upsert_vectors,
@@ -177,7 +177,7 @@ class TestCreatePineconeIndexSync:
         """Test successful index creation."""
         mock_pinecone = Mock()
         mock_pinecone.describe_index.side_effect = [
-            NotFoundException("Not found"),
+            PineconeException("Not found"),
             Mock(status={"ready": True}),
         ]
 
@@ -213,7 +213,7 @@ class TestCreatePineconeIndexSync:
     def test_create_index_dry_run_decline(self):
         """Test dry run mode with user declining creation."""
         mock_pinecone = Mock()
-        mock_pinecone.describe_index.side_effect = NotFoundException("Not found")
+        mock_pinecone.describe_index.side_effect = PineconeException("Not found")
 
         with (
             patch("builtins.input", return_value="n"),
@@ -227,7 +227,7 @@ class TestCreatePineconeIndexSync:
         """Test dry run mode with user accepting creation."""
         mock_pinecone = Mock()
         mock_pinecone.describe_index.side_effect = [
-            NotFoundException("Not found"),
+            PineconeException("Not found"),
             Mock(status={"ready": True}),
         ]
 
@@ -288,7 +288,7 @@ class TestCreatePineconeIndexAsync:
         ):
             # First call raises NotFoundException, second returns ready status
             mock_to_thread.side_effect = [
-                NotFoundException("Not found"),  # describe_index
+                PineconeException("Not found"),  # describe_index
                 None,  # create_index
                 Mock(status={"ready": True}),  # describe_index for wait
             ]

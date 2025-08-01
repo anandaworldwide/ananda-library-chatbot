@@ -1,8 +1,23 @@
-from unittest.mock import patch
+import sys
+from unittest.mock import Mock
 
-import pytest
+mock_spacy = Mock()
+mock_nlp = Mock()
+mock_nlp.max_length = 2_000_000
+# Reset the side_effect for each test run
+mock_spacy.load = Mock(side_effect=[OSError(), mock_nlp])
+mock_spacy.cli = Mock()
+mock_spacy.cli.download = Mock()
+sys.modules["spacy"] = mock_spacy
 
-from data_ingestion.utils.text_splitter_utils import Document, SpacyTextSplitter
+from unittest.mock import patch  # noqa: E402
+
+import pytest  # noqa: E402
+
+from data_ingestion.utils.text_splitter_utils import (  # noqa: E402
+    Document,
+    SpacyTextSplitter,
+)
 
 # Module-level patch to set the environment variable for all tests
 pytestmark = pytest.mark.usefixtures("mock_embedding_model")
@@ -14,6 +29,14 @@ def mock_embedding_model():
     with patch.dict(
         "os.environ", {"OPENAI_INGEST_EMBEDDINGS_MODEL": "text-embedding-ada-002"}
     ):
+        # Clear the spacy model cache between tests to avoid state pollution
+        from data_ingestion.utils.text_splitter_utils import _SPACY_MODEL_CACHE
+
+        _SPACY_MODEL_CACHE.clear()
+        # Reset mock state
+        mock_spacy.load.reset_mock()
+        mock_spacy.load.side_effect = [OSError(), mock_nlp]
+        mock_spacy.cli.download.reset_mock()
         yield
 
 
@@ -204,54 +227,41 @@ def test_split_with_custom_separator(text_splitter: SpacyTextSplitter):
 
 
 def test_ensure_nlp_called(mocker):
-    # Test that _ensure_nlp is called, and spacy.load / spacy.cli.download if model not present
-    splitter = SpacyTextSplitter()
+    # Clear the cache to ensure this test starts fresh
+    from data_ingestion.utils.text_splitter_utils import _SPACY_MODEL_CACHE
 
-    # Create a mock that raises OSError on first call, then returns a mock nlp object on second call
+    _SPACY_MODEL_CACHE.clear()
+
+    # Create a fresh mock nlp object
     mock_nlp = mocker.MagicMock()
-    # Create mock sentences for the nlp object
-    mock_sent1 = mocker.MagicMock()
-    mock_sent1.text = "This is a test text without clear paragraphs"
-    mock_sent2 = mocker.MagicMock()
-    mock_sent2.text = "It should trigger spacy sentence splitting"
-    mock_nlp.return_value.sents = [mock_sent1, mock_sent2]
+    mock_nlp.max_length = 2_000_000
 
-    mock_spacy_load = mocker.patch("spacy.load", side_effect=[OSError(), mock_nlp])
-    mock_spacy_cli_download = mocker.patch("spacy.cli.download")
+    # Patch spacy.load and spacy.cli.download directly for this test
+    # This ensures we're mocking the actual spacy module being used
+    mock_load = mocker.patch("data_ingestion.utils.text_splitter_utils.spacy.load")
+    mock_download = mocker.patch(
+        "data_ingestion.utils.text_splitter_utils.spacy.cli.download"
+    )
 
-    # Mock the tiktoken import inside _tokenize_text to raise ImportError
-    def mock_import(name, *args, **kwargs):
-        if name == "tiktoken":
-            raise ImportError("tiktoken not available")
-        return original_import(name, *args, **kwargs)
+    # Set up the side effect: first call raises OSError, second returns mock_nlp
+    mock_load.side_effect = [OSError(), mock_nlp]
 
-    import builtins
+    splitter = SpacyTextSplitter()
+    splitter._ensure_nlp()
 
-    original_import = builtins.__import__
-    mocker.patch("builtins.__import__", side_effect=mock_import)
+    # Verify the calls
+    assert mock_load.call_count == 2
+    mock_load.assert_any_call(splitter.pipeline)
+    mock_download.assert_called_once_with(splitter.pipeline)
 
-    # Use text without clear paragraph structure to force spaCy sentence splitting fallback
-    test_text = "This is a test text without clear paragraphs. It should trigger spacy sentence splitting."
+    # Reset for the second call test
+    mock_load.reset_mock()
+    mock_download.reset_mock()
 
-    # Run the method that should trigger _ensure_nlp
-    splitter.split_text(test_text)
-
-    # Check that spacy.load was called with the pipeline name
-    mock_spacy_load.assert_any_call(splitter.pipeline)
-
-    # Check that download was called after the first load failed
-    mock_spacy_cli_download.assert_called_once_with(splitter.pipeline)
-
-    # Check that spacy.load was called a second time after download
-    assert mock_spacy_load.call_count == 2
-
-    # Reset mocks for second scenario
-    mock_spacy_load.reset_mock()
-    mock_spacy_cli_download.reset_mock()
-
-    # Test calling split_text again - should not try to load model again
-    splitter.split_text("Another test.")
-    mock_spacy_load.assert_not_called()  # nlp already loaded
+    # Second call should use cached nlp (no calls to load)
+    splitter._ensure_nlp()
+    mock_load.assert_not_called()
+    mock_download.assert_not_called()
 
 
 def test_dynamic_chunk_size_very_short_text():
@@ -503,6 +513,43 @@ def test_overlap_with_different_separators():
                 f"No overlap found between paragraph chunks. "
                 f"Expected ~{expected_overlap_words} words overlap"
             )
+
+
+def mock_nlp_func(text):
+    doc = Mock()
+    sents = []
+    sentences = text.split(".")
+    all_tokens = []
+    for s in sentences:
+        if not s.strip():
+            continue
+        sent = Mock()
+        sent_text = s.strip() + "."
+        sent.text = sent_text
+        # Create mock tokens by splitting on space
+        words = sent_text.split()
+        tokens = []
+        for i, w in enumerate(words):
+            token = Mock()
+            token.text = w
+            token.is_space = False
+            # Add whitespace_ attribute - add space after all tokens except the last
+            token.whitespace_ = " " if i < len(words) - 1 else ""
+            tokens.append(token)
+        all_tokens.extend(tokens)
+        # Make sent iterable over its tokens
+        sent.__iter__ = lambda self, tokens=tokens: iter(tokens)
+        # Add tokens attribute for direct access
+        sent.tokens = tokens
+        sents.append(sent)
+    # Set doc.sents as list of sent mocks
+    doc.sents = sents
+    # Make doc iterable over all tokens
+    doc.__iter__ = lambda self, all_tokens=all_tokens: iter(all_tokens)
+    return doc
+
+
+mock_nlp.side_effect = mock_nlp_func
 
 
 class TestTokenizationBugFixes:
