@@ -332,7 +332,11 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
       embeddings = providedEmbeddings;
     } else {
       // Generate embeddings if not provided
-      const textsToEmbed = validQuestions.map((q) => q.question);
+      const textsToEmbed = validQuestions.map((q) => {
+        // Use restated question if available, otherwise use original question
+        const questionData = q as any;
+        return questionData.restatedQuestion || q.question || "";
+      });
       // Timer for batch embeddings is within getBatchEmbeddings itself
       embeddings = await getBatchEmbeddings(textsToEmbed);
       // Basic validation after internal generation
@@ -377,6 +381,7 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
     const batchSize = 100; // Pinecone recommends batch sizes of 100 or fewer
     for (let i = 0; i < vectors.length; i += batchSize) {
       const batch = vectors.slice(i, i + batchSize);
+
       // Perform the upsert operation for the current batch
       const batchNum = Math.floor(i / batchSize) + 1;
       const totalBatches = Math.ceil(vectors.length / batchSize);
@@ -390,8 +395,8 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
         try {
           await pineconeIndex.namespace("").upsert(batch);
 
-          // Add a small delay here to allow Pinecone a moment to process the upsert
-          const verificationDelayMs = 500; // 500ms delay
+          // Add a delay here to allow Pinecone time to process the upsert (eventual consistency)
+          const verificationDelayMs = process.env.NODE_ENV === "test" ? 100 : 2000; // 2 seconds in production, 100ms in test
           await new Promise((resolve) => setTimeout(resolve, verificationDelayMs));
 
           // Verify the upsert by fetching the first vector
@@ -412,6 +417,7 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
           }
         } catch (upsertError: any) {
           console.error(`Error during upsert attempt ${attempt} for batch ${batchNum}:`, upsertError);
+
           // Check for retryable errors
           const errorMessage = String(upsertError?.message || upsertError);
           const causedBy = upsertError?.cause ? String(upsertError.cause?.message || upsertError.cause) : "";
@@ -432,8 +438,6 @@ export async function upsertEmbeddings(questions: Answer[], providedEmbeddings?:
               `Non-retryable error or max retries reached for batch ${batchNum} upsert (attempt ${attempt}/${maxUpsertRetries}):`,
               upsertError
             );
-            // If verification failed on the last attempt, this is where we'd note it.
-            // However, the error thrown here would be the upsertError, not a verification specific error.
             throw upsertError; // Re-throw to be caught by outer try/catch
           }
         }
@@ -1388,6 +1392,7 @@ export async function updateRelatedQuestions(
       timestamp: { _seconds: now.seconds, _nanoseconds: now.nanoseconds },
       likeCount: 0, // Add default likeCount
     };
+
     // Call upsertEmbeddings with a single-item array.
     // Timer is inside upsertEmbeddings
     await upsertEmbeddings([minimalAnswer]);

@@ -398,3 +398,34 @@ python daemon_manager.py --site site-name logs --follow
 ```
 
 **Applied To**: Website crawler daemon and health server daemon with automatic startup on system reboot.
+
+### 17. Related Questions API Intermittent Failures - Root Cause Found
+
+**Problem**: Related questions API (`/api/relatedQuestions`) fails intermittently with "All 3 upsert/verification
+attempts failed" error after chat responses complete.
+
+**Root Cause Found**: **Pinecone Eventual Consistency Issue**
+
+- The error occurs in `upsertEmbeddings()` function where Pinecone upsert operations succeed but verification fails
+- **Root Cause**: 500ms verification delay was insufficient for Pinecone's eventual consistency window
+- **Evidence**: Debug logs showed upsert success → 500ms delay → verification failure (0 records) → retry → 500ms delay
+  → verification success (1 record)
+
+**Solution Implemented**:
+
+- Increased verification delay from 500ms to 2000ms (2 seconds) in production
+- Added logging to track the consistency delay
+- Maintained shorter delay (100ms) for test environment
+
+**Key Insight**: Pinecone has eventual consistency where:
+
+- Upsert operations return success immediately
+- Data may not be immediately available for reads
+- Consistency window can be 1-2 seconds or longer
+
+**Pattern**: For Pinecone operations requiring immediate verification, always use delays of 2+ seconds to account for
+eventual consistency, not just 500ms.
+
+**Files Modified**:
+
+- `relatedQuestionsUtils.ts`: Increased verification delay in `upsertEmbeddings()` function

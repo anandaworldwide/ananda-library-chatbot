@@ -1,23 +1,20 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import {
-  updateRelatedQuestionsBatch,
-  updateRelatedQuestions,
-} from '@/utils/server/relatedQuestionsUtils';
-import { withApiMiddleware } from '@/utils/server/apiMiddleware';
-import { withJwtAuth } from '@/utils/server/jwtUtils';
-import { RelatedQuestion } from '@/types/RelatedQuestion';
-import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
+import type { NextApiRequest, NextApiResponse } from "next";
+import { updateRelatedQuestionsBatch, updateRelatedQuestions } from "@/utils/server/relatedQuestionsUtils";
+import { withApiMiddleware } from "@/utils/server/apiMiddleware";
+import { withJwtAuth } from "@/utils/server/jwtUtils";
+import { RelatedQuestion } from "@/types/RelatedQuestion";
+import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 
 // Set maximum vercel duration to 300 seconds (5 minutes).
 export const config = { maxDuration: 300 };
 
 // Error types to help categorize and handle errors
 const ERROR_TYPES = {
-  TIMEOUT: 'timeout',
-  FIRESTORE: 'firestore',
-  NOT_FOUND: 'not_found',
-  VALIDATION: 'validation',
-  UNKNOWN: 'unknown',
+  TIMEOUT: "timeout",
+  FIRESTORE: "firestore",
+  NOT_FOUND: "not_found",
+  VALIDATION: "validation",
+  UNKNOWN: "unknown",
 };
 
 /**
@@ -29,10 +26,10 @@ function categorizeError(error: unknown): { type: string; message: string } {
   const errorMessage = error instanceof Error ? error.message : String(error);
 
   if (
-    errorMessage.includes('deadline') ||
-    errorMessage.includes('timed out') ||
-    errorMessage.includes('DEADLINE_EXCEEDED') ||
-    errorMessage.includes('timeout')
+    errorMessage.includes("deadline") ||
+    errorMessage.includes("timed out") ||
+    errorMessage.includes("DEADLINE_EXCEEDED") ||
+    errorMessage.includes("timeout")
   ) {
     return {
       type: ERROR_TYPES.TIMEOUT,
@@ -40,17 +37,14 @@ function categorizeError(error: unknown): { type: string; message: string } {
     };
   }
 
-  if (errorMessage.includes('firestore')) {
+  if (errorMessage.includes("firestore")) {
     return {
       type: ERROR_TYPES.FIRESTORE,
       message: `Firestore error: ${errorMessage}`,
     };
   }
 
-  if (
-    errorMessage.includes('not found') ||
-    errorMessage.includes('does not exist')
-  ) {
+  if (errorMessage.includes("not found") || errorMessage.includes("does not exist")) {
     return {
       type: ERROR_TYPES.NOT_FOUND,
       message: errorMessage,
@@ -68,24 +62,19 @@ function categorizeError(error: unknown): { type: string; message: string } {
  * @param handler The API route handler to wrap
  * @returns A wrapped handler that checks for either valid JWT or Vercel cron
  */
-function withJwtOrCronAuth(
-  handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void,
-) {
+function withJwtOrCronAuth(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return async (req: NextApiRequest, res: NextApiResponse) => {
-    const userAgent = req.headers['user-agent'] || '';
-    const isVercelCron = userAgent.startsWith('vercel-cron/');
-    const authHeader = req.headers.authorization || '';
+    const userAgent = req.headers["user-agent"] || "";
+    const isVercelCron = userAgent.startsWith("vercel-cron/");
+    const authHeader = req.headers.authorization || "";
 
     if (isVercelCron) {
       // Verify that cron requests provide the correct secret
-      if (
-        !process.env.CRON_SECRET ||
-        authHeader !== `Bearer ${process.env.CRON_SECRET}`
-      ) {
+      if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return res.status(401).json({
-          message: 'Unauthorized cron request',
-          error: 'Invalid or missing cron secret',
-          errorType: 'authorization',
+          message: "Unauthorized cron request",
+          error: "Invalid or missing cron secret",
+          errorType: "authorization",
         });
       }
       // Allow authorized Vercel cron requests through
@@ -112,7 +101,7 @@ async function handler(
     error?: string;
     errorType?: string;
     operationId?: string;
-  }>,
+  }>
 ) {
   // Apply rate limiting. This method is called when a new question answer pair is added and it is
   // also called by a periodic cron job because the cron job can't do JWT tokens we keep the rate
@@ -120,21 +109,21 @@ async function handler(
   const isAllowed = await genericRateLimiter(req, res, {
     windowMs: 5 * 60 * 1000, // 5 minutes
     max: 50, // 50 requests per 5 minutes
-    name: 'related-questions-api',
+    name: "related-questions-api",
   });
 
   if (!isAllowed) {
     return; // Response is already sent by the rate limiter
   }
 
-  if (req.method === 'GET') {
+  if (req.method === "GET") {
     // Handle batch update of related questions
     const { updateBatch } = req.query;
 
     // Validate updateBatch parameter
-    if (!updateBatch || typeof updateBatch !== 'string') {
+    if (!updateBatch || typeof updateBatch !== "string") {
       return res.status(400).json({
-        message: 'updateBatch parameter is required and must be a string.',
+        message: "updateBatch parameter is required and must be a string.",
         errorType: ERROR_TYPES.VALIDATION,
       });
     }
@@ -142,7 +131,7 @@ async function handler(
     const batchSize = parseInt(updateBatch);
     if (isNaN(batchSize)) {
       return res.status(400).json({
-        message: 'updateBatch must be a valid number.',
+        message: "updateBatch must be a valid number.",
         errorType: ERROR_TYPES.VALIDATION,
       });
     }
@@ -154,9 +143,7 @@ async function handler(
         // Set timeout to 280 seconds (slightly below the 300 second max)
         const timeoutMs = 280 * 1000;
         setTimeout(() => {
-          reject(
-            new Error(`API timeout safety triggered after ${timeoutMs}ms`),
-          );
+          reject(new Error(`API timeout safety triggered after ${timeoutMs}ms`));
         }, timeoutMs);
       });
 
@@ -165,7 +152,7 @@ async function handler(
       await Promise.race([batchPromise, timeoutPromise]);
 
       return res.status(200).json({
-        message: 'Related questions batch update successful',
+        message: "Related questions batch update successful",
       });
     } catch (error: unknown) {
       // Handle and log errors during batch update
@@ -181,27 +168,22 @@ async function handler(
       });
 
       // Determine appropriate status code
-      const statusCode =
-        type === ERROR_TYPES.TIMEOUT
-          ? 503
-          : type === ERROR_TYPES.NOT_FOUND
-            ? 404
-            : 500;
+      const statusCode = type === ERROR_TYPES.TIMEOUT ? 503 : type === ERROR_TYPES.NOT_FOUND ? 404 : 500;
 
       return res.status(statusCode).json({
-        message: 'Error updating related questions',
+        message: "Error updating related questions",
         error: message,
         errorType: type,
       });
     }
-  } else if (req.method === 'POST') {
+  } else if (req.method === "POST") {
     // Handle update of related questions for a single document
     const { docId } = req.body;
 
     // Validate docId parameter
-    if (!docId || typeof docId !== 'string') {
+    if (!docId || typeof docId !== "string") {
       return res.status(400).json({
-        message: 'docId is required and must be a string.',
+        message: "docId is required and must be a string.",
         errorType: ERROR_TYPES.VALIDATION,
       });
     }
@@ -209,8 +191,9 @@ async function handler(
     try {
       // Update related questions for the specified document
       const result = await updateRelatedQuestions(docId);
+
       return res.status(200).json({
-        message: 'Related questions updated successfully',
+        message: "Related questions updated successfully",
         relatedQuestions: result.current,
       });
     } catch (error: unknown) {
@@ -226,15 +209,10 @@ async function handler(
       });
 
       // Determine appropriate status code
-      const statusCode =
-        type === ERROR_TYPES.TIMEOUT
-          ? 503
-          : type === ERROR_TYPES.NOT_FOUND
-            ? 404
-            : 500;
+      const statusCode = type === ERROR_TYPES.TIMEOUT ? 503 : type === ERROR_TYPES.NOT_FOUND ? 404 : 500;
 
       return res.status(statusCode).json({
-        message: 'Error updating related questions',
+        message: "Error updating related questions",
         error: message,
         errorType: type,
       });
@@ -242,7 +220,7 @@ async function handler(
   } else {
     // Handle unsupported HTTP methods
     res.status(405).json({
-      message: 'Method not allowed',
+      message: "Method not allowed",
     });
   }
 }
