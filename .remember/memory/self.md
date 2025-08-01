@@ -357,3 +357,44 @@ if (headResponse.ContentType) {
 
 **Applied To**: Fixed audio endpoints (`getAudioSignedUrl`, `getPublicAudioUrl`) and PDF endpoint (`getPdfSignedUrl`)
 with comprehensive test coverage for octet-stream acceptance.
+
+### 16. macOS LaunchAgent Daemon Pattern for Background Services
+
+**Pattern**: Use macOS LaunchAgent plist files with proper resource limits and logging for background services.
+
+**Implementation**: Create plist template with placeholders, daemon manager script for installation/management, and
+comprehensive logging setup.
+
+**Key Components**:
+
+1. **Plist Template**: XML configuration with resource limits, logging paths, and auto-restart settings
+2. **Daemon Manager**: Python script for install/uninstall/status/start/stop/restart/logs operations
+3. **Port Management**: Unique port assignment per service to avoid conflicts
+4. **Logging**: Structured logging to `~/Library/Logs/` with rotation support
+
+**Resource Limits**:
+
+```xml
+<key>SoftResourceLimits</key>
+<dict>
+    <key>ResidentSetSize</key>
+    <integer>536870912</integer>  <!-- 512MB memory limit -->
+    <key>CPU</key>
+    <integer>86400</integer>      <!-- 24 hours CPU time -->
+</dict>
+```
+
+**Service Management Pattern**:
+
+```bash
+# Install service
+python daemon_manager.py --site site-name install
+
+# Check status
+python daemon_manager.py --site site-name status
+
+# View logs
+python daemon_manager.py --site site-name logs --follow
+```
+
+**Applied To**: Website crawler daemon and health server daemon with automatic startup on system reboot.
