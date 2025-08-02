@@ -276,7 +276,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Track chatbot popup open event
    */
   function trackPopupOpen() {
-    sendGoogleAnalyticsEvent("chatbot_popup_open", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_popup_open", {
       event_category: "chatbot_interaction",
       method: "bubble_click",
     });
@@ -287,7 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * @param {string} method - How the popup was closed ('close_button', 'click_away', 'escape_key')
    */
   function trackPopupClose(method) {
-    sendGoogleAnalyticsEvent("chatbot_popup_close", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_popup_close", {
       event_category: "chatbot_interaction",
       method: method,
     });
@@ -299,7 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * @param {string} question - The question text (first 100 chars for privacy)
    */
   function trackQuestionSubmit(questionNumber, question) {
-    sendGoogleAnalyticsEvent("chatbot_question_submit", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_question_submit", {
       event_category: "chatbot_engagement",
       question_number: questionNumber,
       question_preview: question.substring(0, 100), // First 100 chars for analysis
@@ -311,7 +311,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Track full page chat link click
    */
   function trackFullPageChatClick() {
-    sendGoogleAnalyticsEvent("chatbot_fullpage_click", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_fullpage_click", {
       event_category: "chatbot_navigation",
       destination: "fullpage_chat",
     });
@@ -321,7 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Track contact human link click
    */
   function trackContactHumanClick() {
-    sendGoogleAnalyticsEvent("chatbot_contact_human", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_contact_human", {
       event_category: "chatbot_support",
       method: "intercom_trigger",
     });
@@ -331,7 +331,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Track language button click
    */
   function trackLanguageButtonClick() {
-    sendGoogleAnalyticsEvent("chatbot_language_click", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_language_click", {
       event_category: "chatbot_utility",
       feature: "language_help",
     });
@@ -343,7 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * @param {string} feedback - Whether feedback was provided
    */
   function trackNPSSurveySubmit(score, feedback) {
-    sendGoogleAnalyticsEvent("chatbot_nps_submit", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_nps_submit", {
       event_category: "chatbot_feedback",
       nps_score: score,
       has_feedback: feedback && feedback.trim().length > 0 ? "yes" : "no",
@@ -356,7 +356,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * @param {string} reason - 'later' or 'no_thanks'
    */
   function trackNPSSurveyDismiss(reason) {
-    sendGoogleAnalyticsEvent("chatbot_nps_dismiss", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_nps_dismiss", {
       event_category: "chatbot_feedback",
       dismiss_reason: reason,
     });
@@ -366,7 +366,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Track clear chat history button click
    */
   function trackClearChatHistory() {
-    sendGoogleAnalyticsEvent("chatbot_clear_history", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_clear_history", {
       event_category: "chatbot_interaction",
       chat_messages_cleared: chatHistory.length,
     });
@@ -376,7 +376,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * Track popup open via keyboard shortcut
    */
   function trackKeyboardShortcutOpen() {
-    sendGoogleAnalyticsEvent("chatbot_popup_open", {
+    sendGoogleAnalyticsEvent("chatbot_vivek_popup_open", {
       event_category: "chatbot_interaction",
       method: "keyboard_shortcut",
       shortcut_key: "slash",
