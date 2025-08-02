@@ -1024,9 +1024,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                   }
 
-                  // Log the raw response before markdown rendering
-                  console.log("Streaming response before markdown:", accumulatedResponse);
-
                   // Render markdown for the accumulated response
                   messageContent.innerHTML = renderMarkdown(accumulatedResponse);
 
