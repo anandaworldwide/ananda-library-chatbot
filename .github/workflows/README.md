@@ -120,3 +120,7 @@ When Dependabot or similar tools create dependency update PRs, these workflows w
 - **Workflow runs:** GitHub Actions tab shows all runs and their status
 - **Notifications:** Failed runs will notify repository maintainers
 - **Trends:** Monitor build times and success rates over time
+
+## Testing
+
+This documentation was updated to test the Python CI workflows in our repository.
