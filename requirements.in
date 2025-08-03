@@ -37,7 +37,7 @@ moviepy==1.0.3
 multidict==6.4.4
 multiprocess==0.70.18
 mutagen==1.47.0
-networkx==3.5
+networkx==3.4.2
 nltk==3.8.1
 numpy<2.0
 onnx==1.18.0
