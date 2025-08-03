@@ -191,9 +191,9 @@ If any checklist item fails:
 | 🐣     | Add job matrix for all supported Python versions (3.10-3.12)                                      |
 | 🐣     | Install Node deps and run `npm run lint && npm run build --prefix web` inside the same workflow   |
 | 🐣     | Cache pip/poetry and npm assets for faster builds                                                 |
-| 🥚     | Configure required status checks so merges are blocked until CI passes                            |
-| 🐣     | Add nightly scheduled workflow to run full test suite + `bin/import_sweep.py` on `main`           |
-| 🥚     | Enable Dependabot or Renovate to re-use this workflow for automatic PRs                           |
+| 🐥     | Configure required status checks so merges are blocked until CI passes                            |
+| 🐥     | Add nightly scheduled workflow to run full test suite + `bin/import_sweep.py` on `main`           |
+| 🐥     | Enable Dependabot or Renovate to re-use this workflow for automatic PRs                           |
 
 **Implementation Notes:**
 
@@ -201,6 +201,8 @@ If any checklist item fails:
 - ✅ **python-nightly.yml**: Full test suite with security audits
 - ✅ **Caching**: Added pip and npm caching to both workflows
 - ✅ **Documentation**: Complete setup guide in `.github/workflows/README.md`
+- ✅ **Dependabot**: Automated weekly dependency updates with workflow integration
+- ✅ **Branch Protection**: Setup guide provided in `.github/BRANCH_PROTECTION_SETUP.md`
 
 ---
 
