@@ -409,6 +409,33 @@ DASHBOARD_TEMPLATE = """
                             ❌ No Crawler Processes Detected
                         </div>
                     {% endif %}
+                    
+                    <!-- Log Activity Section -->
+                    <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 2px solid #f7fafc;">
+                        <div style="font-weight: 600; color: #2d3748; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            📋 Log Activity
+                        </div>
+                        <ul class="status-list">
+                            {% if log_activity.last_activity %}
+                            <li class="status-item">
+                                <span class="status-label">Last Activity</span>
+                                <span class="status-value" id="process-last-activity">{{ log_activity.last_activity[:19] }}</span>
+                            </li>
+                            <li class="status-item">
+                                <span class="status-label">Minutes Since Activity</span>
+                                <span class="status-value" id="process-minutes-since" style="color: {{ '#f56565' if log_activity.is_wedged else '#48bb78' }};">
+                                    {{ log_activity.minutes_since_activity }} min
+                                </span>
+                            </li>
+                            {% endif %}
+                            {% if log_activity.error %}
+                            <li class="status-item">
+                                <span class="status-label">Error</span>
+                                <span class="status-value" id="process-log-error" style="color: #f56565; font-size: 0.8rem;">{{ log_activity.error }}</span>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
                 </div>
             </div>
             
@@ -479,41 +506,7 @@ DASHBOARD_TEMPLATE = """
                 </ul>
             </div>
             
-            <!-- Log Activity Card -->
-            <div class="card fade-in">
-                <div class="card-header">
-                    <div class="card-title">📋 Log Activity</div>
-                    <div class="card-icon">📋</div>
-                </div>
-                <ul class="status-list">
-                    <li class="status-item">
-                        <span class="status-label">Log File Status</span>
-                        <span class="status-value" id="log-file-status">{{ "✅ Available" if log_activity.log_file_exists else "❌ Missing" }}</span>
-                    </li>
-                    {% if log_activity.last_activity %}
-                    <li class="status-item">
-                        <span class="status-label">Last Activity</span>
-                        <span class="status-value" id="log-last-activity">{{ log_activity.last_activity[:19] }}</span>
-                    </li>
-                    <li class="status-item">
-                        <span class="status-label">Minutes Since Activity</span>
-                        <span class="status-value" id="log-minutes-since" style="color: {{ '#f56565' if log_activity.is_wedged else '#48bb78' }};">
-                            {{ log_activity.minutes_since_activity }} min
-                        </span>
-                    </li>
-                    <li class="status-item">
-                        <span class="status-label">Crawler Status</span>
-                        <span class="status-value" id="log-crawler-status">{{ "❌ Wedged" if log_activity.is_wedged else "✅ Active" }}</span>
-                    </li>
-                    {% endif %}
-                    {% if log_activity.error %}
-                    <li class="status-item">
-                        <span class="status-label">Error</span>
-                        <span class="status-value" id="log-error" style="color: #f56565; font-size: 0.8rem;">{{ log_activity.error }}</span>
-                    </li>
-                    {% endif %}
-                </ul>
-            </div>
+
         </div>
         
         <div class="refresh-info">
@@ -565,33 +558,23 @@ DASHBOARD_TEMPLATE = """
                     document.getElementById('high-priority').textContent = data.database.high_priority_urls;
                     document.getElementById('pending-retry').textContent = data.database.pending_retry;
                     
-                    // Update log activity metrics
+                    // Update log activity metrics (now in process status card)
                     if (data.log_activity) {
-                        const logFileStatus = document.getElementById('log-file-status');
-                        if (logFileStatus) {
-                            logFileStatus.textContent = data.log_activity.log_file_exists ? '✅ Available' : '❌ Missing';
+                        const processLastActivity = document.getElementById('process-last-activity');
+                        if (processLastActivity && data.log_activity.last_activity) {
+                            processLastActivity.textContent = data.log_activity.last_activity.substring(0, 19);
                         }
                         
-                        const logLastActivity = document.getElementById('log-last-activity');
-                        if (logLastActivity && data.log_activity.last_activity) {
-                            logLastActivity.textContent = data.log_activity.last_activity.substring(0, 19);
+                        const processMinutesSince = document.getElementById('process-minutes-since');
+                        if (processMinutesSince && data.log_activity.minutes_since_activity !== null) {
+                            processMinutesSince.textContent = data.log_activity.minutes_since_activity + ' min';
+                            processMinutesSince.style.color = data.log_activity.is_wedged ? '#f56565' : '#48bb78';
                         }
                         
-                        const logMinutesSince = document.getElementById('log-minutes-since');
-                        if (logMinutesSince && data.log_activity.minutes_since_activity !== null) {
-                            logMinutesSince.textContent = data.log_activity.minutes_since_activity + ' min';
-                            logMinutesSince.style.color = data.log_activity.is_wedged ? '#f56565' : '#48bb78';
-                        }
-                        
-                        const logCrawlerStatus = document.getElementById('log-crawler-status');
-                        if (logCrawlerStatus) {
-                            logCrawlerStatus.textContent = data.log_activity.is_wedged ? '❌ Wedged' : '✅ Active';
-                        }
-                        
-                        const logError = document.getElementById('log-error');
-                        if (logError) {
-                            logError.textContent = data.log_activity.error || '';
-                            logError.style.display = data.log_activity.error ? 'inline' : 'none';
+                        const processLogError = document.getElementById('process-log-error');
+                        if (processLogError) {
+                            processLogError.textContent = data.log_activity.error || '';
+                            processLogError.style.display = data.log_activity.error ? 'inline' : 'none';
                         }
                     }
                     
