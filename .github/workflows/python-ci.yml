@@ -13,6 +13,8 @@ on:
       - "web/src/**"
       - "web/package*.json"
       - ".github/workflows/python-ci.yml"
+      - ".github/workflows/python-nightly.yml"
+      - ".github/workflows/README.md"
 
   # Manual trigger for testing
   workflow_dispatch:
