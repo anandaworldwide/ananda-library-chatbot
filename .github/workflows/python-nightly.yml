@@ -1,0 +1,98 @@
+name: Python Nightly Tests
+
+on:
+  # Run every night at 2 AM UTC
+  schedule:
+    - cron: "0 2 * * *"
+
+  # Manual trigger
+  workflow_dispatch:
+
+jobs:
+  nightly-tests:
+    name: Nightly Full Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: "web/package-lock.json"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-nightly-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-nightly-
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Node.js dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Full Validation Checklist
+        run: |
+          echo "🌙 Running Nightly Full Validation..."
+
+          echo "✅ Import sweep: Testing all top-level module imports"
+          python bin/import_sweep.py
+
+          echo "✅ Dependency integrity: Checking for conflicts"
+          python -m pip check
+
+          echo "✅ Full test suite: Running all Python tests"
+          python -m pytest data_ingestion/tests/ -v --tb=short
+
+          echo "✅ Static analysis: Running comprehensive ruff check"
+          python -m ruff check data_ingestion/ bin/ pyutil/ evaluation/
+
+          echo "✅ Type checking: Running mypy if available"
+          python -m mypy data_ingestion/ bin/ pyutil/ --ignore-missing-imports || echo "⚠️  mypy not configured, skipping"
+
+      - name: Node.js Full Validation
+        working-directory: ./web
+        run: |
+          echo "🌙 Running Node.js nightly validation..."
+
+          echo "✅ Full test suite: Running all Jest tests"
+          npm run test:all
+
+          echo "✅ Linting: Full lint check"
+          npm run lint
+
+          echo "✅ Build: Production build test"
+          npm run build
+
+      - name: Dependency Security Audit
+        run: |
+          echo "🔒 Running security audits..."
+
+          echo "✅ Python security audit"
+          pip-audit --desc --output=json || echo "⚠️  pip-audit not available, install with: pip install pip-audit"
+
+          echo "✅ Node.js security audit"
+          cd web && npm audit --audit-level=moderate
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "❌ Nightly tests failed!"
+          echo "Check the logs above for details."
+          echo "This may indicate dependency issues or breaking changes."

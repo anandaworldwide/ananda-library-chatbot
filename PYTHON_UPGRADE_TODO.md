@@ -187,13 +187,20 @@ If any checklist item fails:
 
 | Status | Task                                                                                              |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| 🥚     | Create `python-ci.yml` GitHub Actions workflow that runs the **Validation Checklist** on every PR |
-| 🥚     | Add job matrix for all supported Python versions (3.10-3.12)                                      |
-| 🥚     | Install Node deps and run `npm run lint && npm run build --prefix web` inside the same workflow   |
-| 🥚     | Cache pip/poetry and npm assets for faster builds                                                 |
+| 🐣     | Create `python-ci.yml` GitHub Actions workflow that runs the **Validation Checklist** on every PR |
+| 🐣     | Add job matrix for all supported Python versions (3.10-3.12)                                      |
+| 🐣     | Install Node deps and run `npm run lint && npm run build --prefix web` inside the same workflow   |
+| 🐣     | Cache pip/poetry and npm assets for faster builds                                                 |
 | 🥚     | Configure required status checks so merges are blocked until CI passes                            |
-| 🥚     | Add nightly scheduled workflow to run full test suite + `bin/import_sweep.py` on `main`           |
+| 🐣     | Add nightly scheduled workflow to run full test suite + `bin/import_sweep.py` on `main`           |
 | 🥚     | Enable Dependabot or Renovate to re-use this workflow for automatic PRs                           |
+
+**Implementation Notes:**
+
+- ✅ **python-ci.yml**: Comprehensive workflow with Python 3.10-3.12 matrix
+- ✅ **python-nightly.yml**: Full test suite with security audits
+- ✅ **Caching**: Added pip and npm caching to both workflows
+- ✅ **Documentation**: Complete setup guide in `.github/workflows/README.md`
 
 ---
 

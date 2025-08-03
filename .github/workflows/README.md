@@ -1,51 +1,122 @@
 # GitHub Actions Workflows
 
-This directory contains GitHub Actions workflows for automated testing and CI/CD.
+This directory contains automated CI/CD workflows for the Ananda Library Chatbot project.
 
-## Available Workflows
+## Workflows
 
-### 1. Basic Test Suite (`tests.yml`)
+### `python-ci.yml` - Pull Request Validation
 
-This workflow runs all tests in the project when code is pushed to `main` or `develop` branches,
-or when a pull request is created targeting these branches.
+**Triggers:**
 
-- **Trigger**: Push to `main` or `develop`, PR to `main` or `develop`
-- **Actions**:
-  - Runs all tests with `npm test`
-  - Uploads test coverage as an artifact
+- Pull requests to `main` branch
+- Changes to Python dependencies, data ingestion, or web components
+- Manual trigger via GitHub Actions UI
 
-### 2. Comprehensive Test Suite (`comprehensive-tests.yml`)
+**What it does:**
 
-This workflow runs component tests and API tests separately, and then runs all tests together.
+- Runs on Python 3.10, 3.11, and 3.12 in parallel
+- Executes the complete **Validation Checklist** from `PYTHON_UPGRADE_TODO.md`:
+  - Import sweep testing
+  - Dependency integrity checks
+  - Static analysis with Ruff
+  - PDF processing dry-run
+  - Node.js linting and type checking
+- Uses caching for pip and npm dependencies for faster builds
 
-- **Trigger**: Push to `main` or `develop`, PR to `main` or `develop`
-- **Jobs**:
-  - **Component Tests**: Runs only component tests
-  - **API Tests**: Runs only API tests (excluding utility files)
-  - **All Tests**: Runs all tests (depends on the previous two jobs)
+**Status:** This workflow must pass before PRs can be merged.
 
-## Setting Up Required Secrets
+### `python-nightly.yml` - Comprehensive Testing
 
-For these workflows to run correctly, you need to set up the following secrets in your GitHub repository:
+**Triggers:**
 
-1. Go to your repository on GitHub
-2. Click on "Settings" > "Secrets and variables" > "Actions"
-3. Add the following secrets:
-   - `GOOGLE_APPLICATION_CREDENTIALS`: Firebase service account credentials (JSON)
-   - Any other environment variables needed for tests
+- Scheduled daily at 2:00 AM UTC
+- Manual trigger via GitHub Actions UI
 
-## Customizing the Workflows
+**What it does:**
 
-You can customize these workflows by:
+- Runs full test suite on Python 3.11
+- Comprehensive validation including:
+  - All Python tests with pytest
+  - Full Node.js test suite
+  - Security audits for both Python and Node.js dependencies
+  - Complete static analysis and type checking
 
-1. Changing the trigger branches in the `on` section
-2. Adding more environment variables in the `env` section
-3. Adding more jobs or steps as needed
+**Purpose:** Catch issues that might not surface in PR validation, monitor dependency health.
 
-## Viewing Test Results
+## Required Status Checks
 
-After a workflow runs:
+To configure required status checks in GitHub:
 
-1. Go to the "Actions" tab in your GitHub repository
-2. Click on the workflow run
-3. Download the coverage artifacts to view detailed test coverage reports
+1. Go to repository **Settings** → **Branches**
+2. Add/edit branch protection rule for `main`
+3. Enable "Require status checks to pass before merging"
+4. Add required checks:
+   - `Python CI (Python 3.10)`
+   - `Python CI (Python 3.11)`
+   - `Python CI (Python 3.12)`
+
+## Environment Variables
+
+The workflows use minimal environment variables to avoid requiring secrets in CI:
+
+- `SITE=ananda-public` - Default site configuration
+- `SKIP_ENV_VALIDATION=true` - Skip validation requiring API keys
+- `NODE_ENV=test` - Test environment mode
+
+## Caching Strategy
+
+Both workflows implement caching to reduce build times:
+
+- **pip cache:** `~/.cache/pip` keyed by OS, Python version, and `requirements.txt` hash
+- **npm cache:** Built-in npm cache via `actions/setup-node@v4`
+
+## Troubleshooting
+
+### Common Issues
+
+**Import failures in CI:**
+
+- Expected due to missing optional dependencies in CI environment
+- Workflows continue with warnings rather than failing
+
+**Build failures due to missing secrets:**
+
+- Node.js build requires API keys not available in CI
+- Workflows perform type checking instead of full build
+
+**Dependency conflicts:**
+
+- Detected by `pip check` command
+- May indicate need for dependency updates or pinning
+
+### Manual Testing
+
+Test the validation checklist locally:
+
+```bash
+# Python validation
+python bin/import_sweep.py
+python -m pip check
+python -m pytest -q tests/
+python -m ruff check data_ingestion/ bin/ pyutil/ evaluation/
+
+# Node.js validation
+cd web
+npm run lint
+npx tsc --noEmit
+```
+
+## Integration with Dependabot
+
+When Dependabot or similar tools create dependency update PRs, these workflows will automatically:
+
+1. Test the new dependencies across all Python versions
+2. Validate compatibility with the existing codebase
+3. Ensure no breaking changes are introduced
+4. Provide confidence before merging dependency updates
+
+## Monitoring
+
+- **Workflow runs:** GitHub Actions tab shows all runs and their status
+- **Notifications:** Failed runs will notify repository maintainers
+- **Trends:** Monitor build times and success rates over time
