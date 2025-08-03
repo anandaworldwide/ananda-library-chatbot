@@ -478,6 +478,42 @@ DASHBOARD_TEMPLATE = """
                     </li>
                 </ul>
             </div>
+            
+            <!-- Log Activity Card -->
+            <div class="card fade-in">
+                <div class="card-header">
+                    <div class="card-title">📋 Log Activity</div>
+                    <div class="card-icon">📋</div>
+                </div>
+                <ul class="status-list">
+                    <li class="status-item">
+                        <span class="status-label">Log File Status</span>
+                        <span class="status-value" id="log-file-status">{{ "✅ Available" if log_activity.log_file_exists else "❌ Missing" }}</span>
+                    </li>
+                    {% if log_activity.last_activity %}
+                    <li class="status-item">
+                        <span class="status-label">Last Activity</span>
+                        <span class="status-value" id="log-last-activity">{{ log_activity.last_activity[:19] }}</span>
+                    </li>
+                    <li class="status-item">
+                        <span class="status-label">Minutes Since Activity</span>
+                        <span class="status-value" id="log-minutes-since" style="color: {{ '#f56565' if log_activity.is_wedged else '#48bb78' }};">
+                            {{ log_activity.minutes_since_activity }} min
+                        </span>
+                    </li>
+                    <li class="status-item">
+                        <span class="status-label">Crawler Status</span>
+                        <span class="status-value" id="log-crawler-status">{{ "❌ Wedged" if log_activity.is_wedged else "✅ Active" }}</span>
+                    </li>
+                    {% endif %}
+                    {% if log_activity.error %}
+                    <li class="status-item">
+                        <span class="status-label">Error</span>
+                        <span class="status-value" id="log-error" style="color: #f56565; font-size: 0.8rem;">{{ log_activity.error }}</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
         </div>
         
         <div class="refresh-info">
@@ -528,6 +564,36 @@ DASHBOARD_TEMPLATE = """
                     document.getElementById('avg-retries').textContent = data.database.average_retry_count;
                     document.getElementById('high-priority').textContent = data.database.high_priority_urls;
                     document.getElementById('pending-retry').textContent = data.database.pending_retry;
+                    
+                    // Update log activity metrics
+                    if (data.log_activity) {
+                        const logFileStatus = document.getElementById('log-file-status');
+                        if (logFileStatus) {
+                            logFileStatus.textContent = data.log_activity.log_file_exists ? '✅ Available' : '❌ Missing';
+                        }
+                        
+                        const logLastActivity = document.getElementById('log-last-activity');
+                        if (logLastActivity && data.log_activity.last_activity) {
+                            logLastActivity.textContent = data.log_activity.last_activity.substring(0, 19);
+                        }
+                        
+                        const logMinutesSince = document.getElementById('log-minutes-since');
+                        if (logMinutesSince && data.log_activity.minutes_since_activity !== null) {
+                            logMinutesSince.textContent = data.log_activity.minutes_since_activity + ' min';
+                            logMinutesSince.style.color = data.log_activity.is_wedged ? '#f56565' : '#48bb78';
+                        }
+                        
+                        const logCrawlerStatus = document.getElementById('log-crawler-status');
+                        if (logCrawlerStatus) {
+                            logCrawlerStatus.textContent = data.log_activity.is_wedged ? '❌ Wedged' : '✅ Active';
+                        }
+                        
+                        const logError = document.getElementById('log-error');
+                        if (logError) {
+                            logError.textContent = data.log_activity.error || '';
+                            logError.style.display = data.log_activity.error ? 'inline' : 'none';
+                        }
+                    }
                     
                     // Update status indicator color
                     const statusIndicator = document.querySelector('.status-indicator');
@@ -715,6 +781,112 @@ def get_crawler_process_info() -> dict[str, Any]:
         return {"error": f"Process check error: {str(e)}", "crawler_running": "unknown"}
 
 
+def get_log_activity_status() -> dict[str, Any]:
+    """Check the crawler log file for recent activity to detect if crawler is wedged."""
+    log_dir = Path.home() / "Library" / "Logs" / "AnandaCrawler"
+    log_file = log_dir / f"crawler-{SITE_ID}.log"
+
+    try:
+        if not log_file.exists():
+            return {
+                "log_file_exists": False,
+                "error": f"Log file not found: {log_file}",
+                "last_activity": None,
+                "minutes_since_activity": None,
+                "is_wedged": True,
+            }
+
+        # Read the last few lines of the log file to find recent activity
+        # We look for key patterns that indicate the crawler is actively working
+        activity_patterns = [
+            "Sleep completed - continuing loop...",
+            "No URLs ready for processing. Sleeping for one hour...",
+            "Starting crawl of",
+            "Processing URL:",
+            "CSV check completed",
+            "Found URL from CSV",
+        ]
+
+        last_activity_time = None
+        last_activity_line = None
+
+        # Read the last 500 lines to find the most recent activity
+        try:
+            with open(log_file, encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()[-500:]  # Get last 500 lines
+
+                for line in reversed(lines):  # Start from the most recent
+                    line = line.strip()
+
+                    # Look for timestamp at the beginning of the line
+                    # Expected format: "2024-01-15 14:30:25,123 - INFO - message"
+                    if any(pattern in line for pattern in activity_patterns):
+                        # Extract timestamp from the log line
+                        try:
+                            # Parse timestamp from log format: "YYYY-MM-DD HH:MM:SS,mmm"
+                            timestamp_str = line.split(" - ")[
+                                0
+                            ]  # Get the timestamp part
+                            if "," in timestamp_str:
+                                timestamp_str = timestamp_str.split(",")[
+                                    0
+                                ]  # Remove milliseconds
+
+                            last_activity_time = datetime.strptime(
+                                timestamp_str, "%Y-%m-%d %H:%M:%S"
+                            )
+                            last_activity_line = line
+                            break
+                        except (ValueError, IndexError):
+                            # If we can't parse the timestamp, continue looking
+                            continue
+
+        except Exception as e:
+            return {
+                "log_file_exists": True,
+                "error": f"Error reading log file: {str(e)}",
+                "last_activity": None,
+                "minutes_since_activity": None,
+                "is_wedged": True,
+            }
+
+        if last_activity_time is None:
+            return {
+                "log_file_exists": True,
+                "error": "No recent activity patterns found in log",
+                "last_activity": None,
+                "minutes_since_activity": None,
+                "is_wedged": True,
+            }
+
+        # Calculate time since last activity
+        now = datetime.now()
+        time_diff = now - last_activity_time
+        minutes_since_activity = int(time_diff.total_seconds() / 60)
+
+        # Consider crawler wedged if no activity for more than 90 minutes
+        # (Should wake up every 60 minutes, so 90 minutes gives some buffer)
+        is_wedged = minutes_since_activity > 90
+
+        return {
+            "log_file_exists": True,
+            "last_activity": last_activity_time.isoformat(),
+            "last_activity_line": last_activity_line,
+            "minutes_since_activity": minutes_since_activity,
+            "is_wedged": is_wedged,
+            "error": None,
+        }
+
+    except Exception as e:
+        return {
+            "log_file_exists": log_file.exists(),
+            "error": f"Unexpected error checking log activity: {str(e)}",
+            "last_activity": None,
+            "minutes_since_activity": None,
+            "is_wedged": True,
+        }
+
+
 def get_health_data():
     """Get health data for both API and dashboard."""
     timestamp = datetime.now().isoformat()
@@ -724,6 +896,9 @@ def get_health_data():
 
     # Get process information
     process_info = get_crawler_process_info()
+
+    # Get log activity status to detect wedged crawler
+    log_activity = get_log_activity_status()
 
     # Determine overall health status
     health_status = "healthy"
@@ -741,6 +916,21 @@ def get_health_data():
         health_status = "warning"
         issues.append("No crawler processes detected")
 
+    # NEW: Check if crawler is wedged based on log activity
+    if log_activity.get("is_wedged", False):
+        if health_status == "healthy":
+            health_status = "warning"
+
+        if log_activity.get("error"):
+            issues.append(f"Log activity check failed: {log_activity['error']}")
+        elif log_activity.get("minutes_since_activity") is not None:
+            minutes = log_activity["minutes_since_activity"]
+            issues.append(
+                f"Crawler appears wedged - no activity for {minutes} minutes (expected: hourly wake-ups)"
+            )
+        else:
+            issues.append("Crawler appears wedged - no recent activity detected")
+
     response = {
         "timestamp": timestamp,
         "site_id": SITE_ID,
@@ -748,6 +938,7 @@ def get_health_data():
         "issues": issues,
         "database": db_stats,
         "processes": process_info,
+        "log_activity": log_activity,  # NEW: Include log activity data
         "configuration": {
             "domain": SITE_CONFIG.get("domain") if SITE_CONFIG else "Unknown",
             "csv_mode_enabled": bool(SITE_CONFIG.get("csv_export_url"))
@@ -803,6 +994,7 @@ def dashboard_endpoint():
         issues=response["issues"],
         database=response["database"],
         processes=response["processes"],
+        log_activity=response["log_activity"],
         config=response["configuration"],
     )
 
