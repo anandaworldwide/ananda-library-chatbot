@@ -41,8 +41,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-          cache: "npm"
-          cache-dependency-path: "web/package-lock.json"
 
       - name: Cache pip dependencies
         uses: actions/cache@v4
