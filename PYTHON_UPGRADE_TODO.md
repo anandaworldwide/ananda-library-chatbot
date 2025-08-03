@@ -187,7 +187,7 @@ If any checklist item fails:
 
 | Status | Task                                                                                              |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| 🐣     | Create `python-ci.yml` GitHub Actions workflow that runs the **Validation Checklist** on every PR |
+| 🐥     | Create `python-ci.yml` GitHub Actions workflow that runs the **Validation Checklist** on every PR |
 | 🐣     | Add job matrix for all supported Python versions (3.10-3.12)                                      |
 | 🐣     | Install Node deps and run `npm run lint && npm run build --prefix web` inside the same workflow   |
 | 🐣     | Cache pip/poetry and npm assets for faster builds                                                 |
