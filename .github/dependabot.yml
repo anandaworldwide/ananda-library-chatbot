@@ -1,0 +1,79 @@
+# Dependabot configuration for automatic dependency updates
+# This will create PRs that automatically trigger the Python CI workflows
+
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "anandaworldwide/maintainers"
+    assignees:
+      - "anandaworldwide/maintainers"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    # Group minor and patch updates together
+    groups:
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Node.js dependencies (web directory)
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "anandaworldwide/maintainers"
+    assignees:
+      - "anandaworldwide/maintainers"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "javascript"
+    # Group minor and patch updates together
+    groups:
+      node-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "1"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "anandaworldwide/maintainers"
+    assignees:
+      - "anandaworldwide/maintainers"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
