@@ -82,7 +82,8 @@
     "enableModelComparison": true,
     "showSourceCountSelector": true,
     "temperature": 0.4,
-    "modelName": "gpt-4o"
+    "modelName": "gpt-4o",
+    "enableGeoAwareness": true
   },
   "ananda-public": {
     "name": "The Ananda.org Chatbot",

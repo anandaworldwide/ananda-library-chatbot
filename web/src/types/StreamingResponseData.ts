@@ -10,6 +10,7 @@ export interface StreamingResponseData {
   siteId?: string;
   warning?: string;
   toolResponse?: boolean; // Flag to indicate this response came from tool execution
+  isLocationQuery?: boolean; // Flag to indicate this is a location-based query using geo-awareness tools
   timing?: {
     ttfb?: number;
     total?: number;

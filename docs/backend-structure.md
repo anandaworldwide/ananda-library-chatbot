@@ -442,6 +442,8 @@ embeddings.
   - Site-specific seed files containing positive and negative location intent examples
   - `{site}-seeds.json` format with curated multilingual examples
   - Currently implemented for `ananda-public` with 68 positive and 28 negative seeds
+  - **Data Sharing:** The `ananda` site uses the same location intent data as `ananda-public` by copying the embeddings
+    file
   - Human-editable JSON files for easy maintenance and updates
 
 - **Embedding Generation (`web/scripts/generate-location-intent-embeddings.ts`):**
@@ -482,6 +484,7 @@ web/
 │   └── ananda-public-seeds.json          # Human-editable seed phrases
 ├── private/location-intent/
 │   └── ananda-public-embeddings.json     # Generated embeddings (8MB)
+│   └── ananda-embeddings.json            # Shared embeddings (copy of ananda-public)
 ├── scripts/
 │   └── generate-location-intent-embeddings.ts  # Embedding generation script
 └── src/utils/server/
@@ -492,8 +495,10 @@ web/
 
 1. **Seed Updates:** Edit `{site}-seeds.json` files to add/modify examples
 2. **Regeneration:** Run `npm run build:location-intent -- --site {site}` to update embeddings
-3. **Deployment:** Embeddings are committed to version control and deployed with the application
-4. **Monitoring:** Detection accuracy can be monitored through chat logs and user feedback
+3. **Data Sharing:** For sites sharing embeddings (like `ananda` using `ananda-public` data), copy the generated
+   embeddings file manually
+4. **Deployment:** Embeddings are committed to version control and deployed with the application
+5. **Monitoring:** Detection accuracy can be monitored through chat logs and user feedback
 
 ---
 

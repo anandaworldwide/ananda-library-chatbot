@@ -387,6 +387,7 @@ export const makeChain = async (
   const { model, temperature, label } = modelConfig;
   let answerModel: BaseLanguageModel; // Renamed for clarity
   let rephraseModel: BaseLanguageModel; // New model for rephrasing
+  let isLocationQuery = false; // Flag to track if this is a location query
 
   // Get site ID from siteConfig if available
   const siteId = siteConfig?.siteId || process.env.SITE_ID;
@@ -479,6 +480,9 @@ export const makeChain = async (
         console.log(`🔍 GEO-TOOLS not bound: No location intent detected`);
       }
     }
+
+    // Capture shouldUseGeoTools for use in retrieval sequence
+    isLocationQuery = shouldUseGeoTools;
 
     // Initialize the rephrasing model (faster, lighter)
     rephraseModel = new ChatOpenAI({
@@ -606,6 +610,15 @@ Error details: ${errorString}`,
   // Runnable sequence for retrieving documents
   const retrievalSequence = RunnableSequence.from([
     async (input: AnswerChainInput) => {
+      // Early return for location queries - skip Pinecone entirely for performance
+      if (isLocationQuery) {
+        if (sendData) {
+          sendData({ sourceDocs: [], isLocationQuery: true });
+          sendData({ log: "🌍 LOCATION QUERY: Skipped vector search - using geo-tools only for faster response" });
+        }
+        return [];
+      }
+
       const allDocuments: Document[] = [];
       try {
         if (sendData) sendData({ log: `[RAG] Retrieving documents: requested=${sourceCount}` });
