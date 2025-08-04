@@ -218,16 +218,25 @@ class TestHealthServer(unittest.TestCase):
         """Test health endpoint returns healthy status."""
         self._insert_test_data()
 
-        with patch(
-            "crawler.health_server.get_crawler_process_info"
-        ) as mock_process_info:
+        with (
+            patch(
+                "crawler.health_server.get_crawler_process_info"
+            ) as mock_process_info,
+            patch("crawler.health_server.get_log_activity_status") as mock_log_activity,
+        ):
             mock_process_info.return_value = {
                 "crawler_running": True,
                 "process_count": 1,
                 "crawler_processes": [{"pid": 1234}],
             }
+            mock_log_activity.return_value = {
+                "log_file_exists": True,
+                "is_wedged": False,
+                "last_activity": "2024-01-01T12:00:00",
+                "minutes_since_activity": 5,
+            }
 
-            response = self.client.get("/health")
+            response = self.client.get("/api/health")
 
         self.assertEqual(response.status_code, 200)
 
@@ -244,16 +253,25 @@ class TestHealthServer(unittest.TestCase):
         """Test health endpoint returns warning when no processes are running."""
         self._insert_test_data()
 
-        with patch(
-            "crawler.health_server.get_crawler_process_info"
-        ) as mock_process_info:
+        with (
+            patch(
+                "crawler.health_server.get_crawler_process_info"
+            ) as mock_process_info,
+            patch("crawler.health_server.get_log_activity_status") as mock_log_activity,
+        ):
             mock_process_info.return_value = {
                 "crawler_running": False,
                 "process_count": 0,
                 "crawler_processes": [],
             }
+            mock_log_activity.return_value = {
+                "log_file_exists": True,
+                "is_wedged": False,
+                "last_activity": "2024-01-01T12:00:00",
+                "minutes_since_activity": 5,
+            }
 
-            response = self.client.get("/health")
+            response = self.client.get("/api/health")
 
         self.assertEqual(response.status_code, 200)  # Still 200 for warnings
 
@@ -275,7 +293,7 @@ class TestHealthServer(unittest.TestCase):
                 SITE_CONFIG={"domain": "example.com", "crawl_frequency_days": 14},
                 DB_FILE=Path("/nonexistent/path"),
             ):
-                response = self.client.get("/health")
+                response = self.client.get("/api/health")
 
             self.assertEqual(response.status_code, 503)  # Service Unavailable
 
@@ -339,9 +357,81 @@ class TestHealthServer(unittest.TestCase):
 
         # Check that all expected endpoints are documented
         endpoints = data["endpoints"]
-        self.assertIn("/health", endpoints)
+        self.assertIn("/api/health", endpoints)
         self.assertIn("/stats", endpoints)
         self.assertIn("/", endpoints)
+
+    def test_dashboard_endpoint_warning_state(self):
+        """Test dashboard endpoint includes alert banner for warning state."""
+        self._insert_test_data()
+
+        with (
+            patch(
+                "crawler.health_server.get_crawler_process_info"
+            ) as mock_process_info,
+            patch("crawler.health_server.get_log_activity_status") as mock_log_activity,
+        ):
+            mock_process_info.return_value = {
+                "crawler_running": False,
+                "process_count": 0,
+                "crawler_processes": [],
+            }
+            mock_log_activity.return_value = {
+                "log_file_exists": True,
+                "is_wedged": False,
+                "last_activity": "2024-01-01T12:00:00",
+                "minutes_since_activity": 5,
+            }
+
+            response = self.client.get("/dashboard")
+
+        self.assertEqual(response.status_code, 200)
+        html_content = response.data.decode("utf-8")
+
+        # Check that alert banner is present for warning state
+        self.assertIn("alert-banner alert-banner-warning", html_content)
+        self.assertIn("⚠️ System Warning", html_content)
+        self.assertIn("Immediate attention required", html_content)
+        self.assertIn("No crawler processes detected", html_content)
+
+    def test_dashboard_endpoint_healthy_state(self):
+        """Test dashboard endpoint does not include alert banner for healthy state."""
+        self._insert_test_data()
+
+        with (
+            patch(
+                "crawler.health_server.get_crawler_process_info"
+            ) as mock_process_info,
+            patch("crawler.health_server.get_log_activity_status") as mock_log_activity,
+        ):
+            mock_process_info.return_value = {
+                "crawler_running": True,
+                "process_count": 1,
+                "crawler_processes": [
+                    {
+                        "pid": 12345,
+                        "started": "2024-01-01T10:00:00",
+                        "cpu_percent": 2.5,
+                        "memory_mb": 150,
+                    }
+                ],
+            }
+            mock_log_activity.return_value = {
+                "log_file_exists": True,
+                "is_wedged": False,
+                "last_activity": "2024-01-01T12:00:00",
+                "minutes_since_activity": 5,
+            }
+
+            response = self.client.get("/dashboard")
+
+        self.assertEqual(response.status_code, 200)
+        html_content = response.data.decode("utf-8")
+
+        # Check that alert banner is NOT present for healthy state
+        self.assertNotIn('<div class="alert-banner', html_content)
+        # Check that the banner title elements are not present in the HTML body
+        self.assertNotIn('class="alert-banner-title"', html_content)
 
 
 class TestHealthServerIntegration(unittest.TestCase):

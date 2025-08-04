@@ -68,8 +68,14 @@ DASHBOARD_TEMPLATE = """
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 1.5rem 2rem;
+            padding: 1.5rem 0;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
         }
         
         .header h1 {
@@ -85,8 +91,14 @@ DASHBOARD_TEMPLATE = """
         
         .status-bar {
             background: white;
-            padding: 1rem 2rem;
+            padding: 1rem 0;
             border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .status-bar-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -287,7 +299,9 @@ DASHBOARD_TEMPLATE = """
             .container { padding: 1rem; }
             .grid { grid-template-columns: 1fr; }
             .metric-grid { grid-template-columns: repeat(2, 1fr); }
-            .status-bar { flex-direction: column; gap: 1rem; }
+            .header-content { padding: 0 1rem; }
+            .status-bar-content { flex-direction: column; gap: 1rem; padding: 0 1rem; }
+            .alert-banner-content { padding: 0 1rem; }
         }
         
         .loading {
@@ -303,21 +317,115 @@ DASHBOARD_TEMPLATE = """
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
+        /* Prominent Alert Banner Styles */
+        .alert-banner {
+            padding: 1.5rem 0;
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-align: center;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: alertPulse 2s ease-in-out infinite alternate;
+        }
+        
+        .alert-banner-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .alert-banner-warning {
+            background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+            color: #744210;
+            border-bottom: 4px solid #c05621;
+        }
+        
+        .alert-banner-degraded {
+            background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+            color: #742a2a;
+            border-bottom: 4px solid #c53030;
+        }
+        
+        .alert-banner-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .alert-banner-issues {
+            list-style: none;
+            margin: 0.75rem 0 0 0;
+            padding: 0;
+        }
+        
+        .alert-banner-issues li {
+            margin: 0.25rem 0;
+            padding: 0.5rem 1rem;
+            background: rgba(255,255,255,0.2);
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        
+        @keyframes alertPulse {
+            0% { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+            100% { box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+        }
+        
+        @media (max-width: 768px) {
+            .alert-banner {
+                padding: 1rem;
+                font-size: 1rem;
+            }
+            .alert-banner-title {
+                font-size: 1.2rem;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🕷️ Crawler Health Dashboard</h1>
-        <div class="subtitle">{{ site_id }} • {{ config.domain }}</div>
+        <div class="header-content">
+            <h1>🕷️ Crawler Health Dashboard</h1>
+            <div class="subtitle">{{ site_id }} • {{ config.domain }}</div>
+        </div>
     </div>
     
-    <div class="status-bar">
-        <div class="overall-status">
-            <span class="status-indicator status-{{ status.lower() }}"></span>
-            Overall Status: <span id="status-text">{{ status.title() }}</span>
+    <!-- Prominent Alert Banner for Warning/Error States -->
+    {% if status.lower() in ['warning', 'degraded'] %}
+    <div class="alert-banner alert-banner-{{ status.lower() }}">
+        <div class="alert-banner-content">
+            <div class="alert-banner-title">
+                {% if status.lower() == 'warning' %}
+                    ⚠️ System Warning
+                {% elif status.lower() == 'degraded' %}
+                    🚨 System Error
+                {% endif %}
+            </div>
+            <div>Immediate attention required - crawler health issues detected</div>
+            {% if issues %}
+            <ul class="alert-banner-issues">
+                {% for issue in issues %}
+                <li>{{ issue }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
         </div>
-        <div class="last-updated">
-            Last Updated: <span id="last-updated">{{ timestamp }}</span>
+    </div>
+    {% endif %}
+    
+    <div class="status-bar">
+        <div class="status-bar-content">
+            <div class="overall-status">
+                <span class="status-indicator status-{{ status.lower() }}"></span>
+                Overall Status: <span id="status-text">{{ status.title() }}</span>
+            </div>
+            <div class="last-updated">
+                Last Updated: <span id="last-updated">{{ timestamp }}</span>
+            </div>
         </div>
     </div>
     
@@ -522,6 +630,54 @@ DASHBOARD_TEMPLATE = """
         const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
         let nextRefreshTime = new Date(Date.now() + REFRESH_INTERVAL);
         
+        function updateAlertBanner(status, issues) {
+            const existingBanner = document.querySelector('.alert-banner');
+            const statusBar = document.querySelector('.status-bar');
+            
+            // Remove existing banner if present
+            if (existingBanner) {
+                existingBanner.remove();
+            }
+            
+            // Only show banner for warning or degraded states
+            if (status.toLowerCase() === 'warning' || status.toLowerCase() === 'degraded') {
+                const banner = document.createElement('div');
+                banner.className = `alert-banner alert-banner-${status.toLowerCase()}`;
+                
+                const bannerContent = document.createElement('div');
+                bannerContent.className = 'alert-banner-content';
+                
+                const title = document.createElement('div');
+                title.className = 'alert-banner-title';
+                title.innerHTML = status.toLowerCase() === 'warning' ? 
+                    '⚠️ System Warning' : '🚨 System Error';
+                
+                const message = document.createElement('div');
+                message.textContent = 'Immediate attention required - crawler health issues detected';
+                
+                bannerContent.appendChild(title);
+                bannerContent.appendChild(message);
+                
+                if (issues && issues.length > 0) {
+                    const issuesList = document.createElement('ul');
+                    issuesList.className = 'alert-banner-issues';
+                    
+                    issues.forEach(issue => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = issue;
+                        issuesList.appendChild(listItem);
+                    });
+                    
+                    bannerContent.appendChild(issuesList);
+                }
+                
+                banner.appendChild(bannerContent);
+                
+                // Insert banner before status bar
+                statusBar.parentNode.insertBefore(banner, statusBar);
+            }
+        }
+        
         function updateNextRefreshTime() {
             const now = new Date();
             const timeLeft = Math.max(0, nextRefreshTime - now);
@@ -581,6 +737,9 @@ DASHBOARD_TEMPLATE = """
                     // Update status indicator color
                     const statusIndicator = document.querySelector('.status-indicator');
                     statusIndicator.className = 'status-indicator status-' + data.status.toLowerCase();
+                    
+                    // Update or show/hide alert banner
+                    updateAlertBanner(data.status, data.issues);
                     
                     document.body.classList.remove('loading');
                     nextRefreshTime = new Date(Date.now() + REFRESH_INTERVAL);
