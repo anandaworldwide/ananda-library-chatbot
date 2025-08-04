@@ -19,36 +19,31 @@
  * allowing for easy customization of features and behavior.
  */
 
-import React, { useState, useEffect } from 'react';
-import DOMPurify from 'dompurify';
-import validator from 'validator';
-import styles from '@/styles/Home.module.css';
-import RandomQueries from '@/components/RandomQueries';
-import CollectionSelector from '@/components/CollectionSelector';
-import { SiteConfig } from '@/types/siteConfig';
+import React, { useState, useEffect } from "react";
+import DOMPurify from "dompurify";
+import validator from "validator";
+import styles from "@/styles/Home.module.css";
+import RandomQueries from "@/components/RandomQueries";
+import CollectionSelector from "@/components/CollectionSelector";
+import { SiteConfig } from "@/types/siteConfig";
 import {
   getEnableSuggestedQueries,
   getEnableMediaTypeSelection,
   getEnableAuthorSelection,
   getChatPlaceholder,
   getEnabledMediaTypes,
-} from '@/utils/client/siteConfig';
-import { logEvent } from '@/utils/client/analytics';
+} from "@/utils/client/siteConfig";
+import { logEvent } from "@/utils/client/analytics";
 
 // Define the props interface for the ChatInput component
 interface ChatInputProps {
   loading: boolean;
   handleSubmit: (e: React.FormEvent, query: string) => void;
   handleStop: () => void;
-  handleEnter: (
-    e: React.KeyboardEvent<HTMLTextAreaElement>,
-    query: string,
-  ) => void;
+  handleEnter: (e: React.KeyboardEvent<HTMLTextAreaElement>, query: string) => void;
   handleClick: (query: string) => void;
   handleCollectionChange: (newCollection: string) => void;
-  handlePrivateSessionChange: (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => void;
+  handlePrivateSessionChange: (event: React.MouseEvent<HTMLButtonElement>) => void;
   collection: string;
   privateSession: boolean;
   error: string | null;
@@ -57,7 +52,7 @@ interface ChatInputProps {
   shuffleQueries: () => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   mediaTypes: { text: boolean; audio: boolean; youtube: boolean };
-  handleMediaTypeChange: (type: 'text' | 'audio' | 'youtube') => void;
+  handleMediaTypeChange: (type: "text" | "audio" | "youtube") => void;
   siteConfig: SiteConfig | null;
   input: string;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -99,7 +94,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   setSourceCount,
 }) => {
   // State variables for managing component behavior
-  const [, setLocalQuery] = useState<string>('');
+  const [, setLocalQuery] = useState<string>("");
   const [hasInteracted, setHasInteracted] = useState<boolean>(false);
   const [isFirstQuery, setIsFirstQuery] = useState<boolean>(true);
   const [isMobile, setIsMobile] = useState<boolean>(false);
@@ -110,19 +105,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   // Effect to set initial suggestions expanded state based on saved preference
   useEffect(() => {
-    const savedPreference = localStorage.getItem('suggestionsExpanded');
-    setSuggestionsExpanded(
-      savedPreference === null ? true : savedPreference === 'true',
-    );
+    const savedPreference = localStorage.getItem("suggestionsExpanded");
+    setSuggestionsExpanded(savedPreference === null ? true : savedPreference === "true");
   }, [setSuggestionsExpanded]);
 
   // Effect to reset input after submission
   useEffect(() => {
     if (!loading && hasInteracted) {
-      setLocalQuery('');
+      setLocalQuery("");
       if (textAreaRef.current) {
         // 1. Reset to auto - now textarea temporarily collapses to fit content
-        textAreaRef.current.style.height = 'auto';
+        textAreaRef.current.style.height = "auto";
         // 2. Now we can get the true height needed
         textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
       }
@@ -140,19 +133,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     };
 
     handleResize(); // Set initial value
-    window.addEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener("resize", handleResize);
     };
   }, []);
 
   // Effect to reset input and update first query state
   useEffect(() => {
     if (!loading) {
-      setLocalQuery('');
+      setLocalQuery("");
       if (textAreaRef.current) {
-        textAreaRef.current.style.height = 'auto';
+        textAreaRef.current.style.height = "auto";
       }
       if (isFirstQuery) {
         setIsFirstQuery(false);
@@ -177,10 +170,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   // Function to validate user input
   const validateInput = (input: string) => {
     if (validator.isEmpty(input)) {
-      return 'Input cannot be empty';
+      return "Input cannot be empty";
     }
     if (!validator.isLength(input, { min: 1, max: 4000 })) {
-      return 'Input must be between 1 and 4000 characters';
+      return "Input must be between 1 and 4000 characters";
     }
     return null;
   };
@@ -190,9 +183,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     e.preventDefault();
     if (loading) {
       handleStop();
-      logEvent('stop_query', 'Engagement', '');
+      logEvent("stop_query", "Engagement", "");
     } else {
       const sanitizedInput = sanitizeInput(input);
+
+      // Skip validation for empty inputs - let parent handle gracefully
+      if (sanitizedInput.trim() === "") {
+        handleSubmit(e, sanitizedInput);
+        return;
+      }
+
       const validationError = validateInput(sanitizedInput);
       if (validationError) {
         setError(validationError);
@@ -200,28 +200,35 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       }
       setIsNearBottom(true);
       handleSubmit(e, sanitizedInput);
-      setQuery('');
+      setQuery("");
       focusInput();
-      logEvent('submit_query', 'Engagement', sanitizedInput);
+      logEvent("submit_query", "Engagement", sanitizedInput);
     }
   };
 
   // Function to handle Enter key press
   const onEnter = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       if (!loading) {
         e.preventDefault();
         const sanitizedInput = sanitizeInput(input);
+
+        // Skip validation for empty inputs - let parent handle gracefully
+        if (sanitizedInput.trim() === "") {
+          handleEnter(e, sanitizedInput);
+          return;
+        }
+
         const validationError = validateInput(sanitizedInput);
         if (validationError) {
           setError(validationError);
           return;
         }
-        logEvent('submit_query_enter', 'Engagement', sanitizedInput);
+        logEvent("submit_query_enter", "Engagement", sanitizedInput);
         setHasInteracted(true);
         setIsNearBottom(true);
         handleEnter(e, sanitizedInput);
-        setQuery('');
+        setQuery("");
         focusInput();
       }
     }
@@ -238,7 +245,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     e.preventDefault();
     const newState = !suggestionsExpanded;
     setSuggestionsExpanded(newState);
-    localStorage.setItem('suggestionsExpanded', newState.toString());
+    localStorage.setItem("suggestionsExpanded", newState.toString());
   };
 
   // Function to handle clicking on a suggested query
@@ -248,13 +255,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     handleClick(q);
   };
 
-  const placeholderText = getChatPlaceholder(siteConfig) || 'Ask a question...';
+  const placeholderText = getChatPlaceholder(siteConfig) || "Ask a question...";
 
   // Function to adjust textarea height
   const adjustTextAreaHeight = () => {
     if (textAreaRef.current) {
       // 1. Reset to auto - now textarea temporarily collapses to fit content
-      textAreaRef.current.style.height = 'auto';
+      textAreaRef.current.style.height = "auto";
       // 2. Now we can get the true height needed
       textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
     }
@@ -280,22 +287,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               maxLength={4000}
               id="userInput"
               name="userInput"
-              placeholder={hasInteracted ? '' : placeholderText}
+              placeholder={hasInteracted ? "" : placeholderText}
               className="flex-grow p-2 border border-gray-300 rounded-md resize-none focus:outline-none min-h-[40px] overflow-hidden"
-              style={{ height: 'auto' }}
+              style={{ height: "auto" }}
             />
             <button
               type="submit"
               className="bg-blue-500 text-white p-2 rounded-full flex-shrink-0 w-10 h-10 flex items-center justify-center"
             >
               {loading ? (
-                <span className="material-icons text-2xl leading-none">
-                  stop
-                </span>
+                <span className="material-icons text-2xl leading-none">stop</span>
               ) : (
-                <span className="material-icons text-xl leading-none">
-                  send
-                </span>
+                <span className="material-icons text-xl leading-none">send</span>
               )}
             </button>
           </div>
@@ -305,16 +308,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             (showMediaTypeSelection ||
               showAuthorSelection ||
               siteConfig?.showSourceCountSelector ||
-              (showPrivateSessionOptions &&
-                !privateSession &&
-                siteConfig?.allowPrivateSessions)) && (
+              (showPrivateSessionOptions && !privateSession && siteConfig?.allowPrivateSessions)) && (
               <div className="mb-4">
                 <button
                   type="button"
                   onClick={() => setShowOptions(!showOptions)}
                   className="text-blue-500 hover:underline mb-2"
                 >
-                  {showOptions ? 'Hide options' : 'Show options'}
+                  {showOptions ? "Hide options" : "Show options"}
                 </button>
               </div>
             )}
@@ -324,40 +325,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <div className="flex flex-wrap gap-2 mb-2">
               {showMediaTypeSelection && (
                 <>
-                  {enabledMediaTypes.includes('text') && (
+                  {enabledMediaTypes.includes("text") && (
                     <button
                       type="button"
-                      onClick={() => handleMediaTypeChange('text')}
+                      onClick={() => handleMediaTypeChange("text")}
                       className={`px-2 py-1 text-xs sm:text-sm rounded ${
-                        mediaTypes.text
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-200 text-gray-700'
+                        mediaTypes.text ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-700"
                       }`}
                     >
                       Writings
                     </button>
                   )}
-                  {enabledMediaTypes.includes('audio') && (
+                  {enabledMediaTypes.includes("audio") && (
                     <button
                       type="button"
-                      onClick={() => handleMediaTypeChange('audio')}
+                      onClick={() => handleMediaTypeChange("audio")}
                       className={`px-2 py-1 text-xs sm:text-sm rounded ${
-                        mediaTypes.audio
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-200 text-gray-700'
+                        mediaTypes.audio ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-700"
                       }`}
                     >
                       Audio
                     </button>
                   )}
-                  {enabledMediaTypes.includes('youtube') && (
+                  {enabledMediaTypes.includes("youtube") && (
                     <button
                       type="button"
-                      onClick={() => handleMediaTypeChange('youtube')}
+                      onClick={() => handleMediaTypeChange("youtube")}
                       className={`px-2 py-1 text-xs sm:text-sm rounded ${
-                        mediaTypes.youtube
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-200 text-gray-700'
+                        mediaTypes.youtube ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-700"
                       }`}
                     >
                       Video
@@ -367,10 +362,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               )}
               {showAuthorSelection && (
                 <div className="flex-grow sm:flex-grow-0 sm:min-w-[160px]">
-                  <CollectionSelector
-                    onCollectionChange={handleCollectionChange}
-                    currentCollection={collection}
-                  />
+                  <CollectionSelector onCollectionChange={handleCollectionChange} currentCollection={collection} />
                 </div>
               )}
               {siteConfig?.showSourceCountSelector && (
@@ -381,36 +373,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     checked={sourceCount === 10}
                     onChange={(e) => {
                       setSourceCount(e.target.checked ? 10 : 4);
-                      logEvent(
-                        'toggle_extra_sources',
-                        'Settings',
-                        e.target.checked ? 'enabled' : 'disabled',
-                      );
+                      logEvent("toggle_extra_sources", "Settings", e.target.checked ? "enabled" : "disabled");
                     }}
                     className="mr-1"
                   />
-                  <label
-                    htmlFor="extraSources"
-                    className="text-sm text-gray-700 cursor-pointer"
-                  >
+                  <label htmlFor="extraSources" className="text-sm text-gray-700 cursor-pointer">
                     Use extra sources
                   </label>
                 </div>
               )}
-              {showPrivateSessionOptions &&
-                !privateSession &&
-                siteConfig?.allowPrivateSessions && (
-                  <button
-                    type="button"
-                    onClick={handlePrivateSessionChange}
-                    className="px-2 py-1 text-xs sm:text-sm rounded bg-purple-100 text-purple-800 whitespace-nowrap"
-                  >
-                    <span className="material-icons text-sm mr-1 align-middle">
-                      lock
-                    </span>
-                    <span className="align-middle">Start Private Session</span>
-                  </button>
-                )}
+              {showPrivateSessionOptions && !privateSession && siteConfig?.allowPrivateSessions && (
+                <button
+                  type="button"
+                  onClick={handlePrivateSessionChange}
+                  className="px-2 py-1 text-xs sm:text-sm rounded bg-purple-100 text-purple-800 whitespace-nowrap"
+                >
+                  <span className="material-icons text-sm mr-1 align-middle">lock</span>
+                  <span className="align-middle">Start Private Session</span>
+                </button>
+              )}
               {(showMediaTypeSelection ||
                 showAuthorSelection ||
                 siteConfig?.showSourceCountSelector ||
@@ -435,9 +416,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   />
                   <div className="fixed z-[101] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
                     <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-lg font-semibold">
-                        Available Controls
-                      </h3>
+                      <h3 className="text-lg font-semibold">Available Controls</h3>
                       <button
                         onClick={() => setShowControlsInfo(false)}
                         className="text-gray-500 hover:text-gray-700"
@@ -450,44 +429,31 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     <div className="space-y-4">
                       {showMediaTypeSelection && (
                         <div>
-                          <h4 className="font-medium mb-1">
-                            Media Type Selection
-                          </h4>
+                          <h4 className="font-medium mb-1">Media Type Selection</h4>
                           <p className="text-sm text-gray-600">
                             Choose which media types (
-                            {enabledMediaTypes
-                              .map((type) =>
-                                type === 'youtube' ? 'video' : type,
-                              )
-                              .join(', ')}
-                            ) to include for your query.
+                            {enabledMediaTypes.map((type) => (type === "youtube" ? "video" : type)).join(", ")}) to
+                            include for your query.
                           </p>
                         </div>
                       )}
 
                       {showAuthorSelection && (
                         <div>
-                          <h4 className="font-medium mb-1">
-                            Collection Selection
-                          </h4>
+                          <h4 className="font-medium mb-1">Collection Selection</h4>
                           <p className="text-sm text-gray-600">
-                            Select specific collections or authors to focus your
-                            search.
+                            Select specific collections or authors to focus your search.
                           </p>
                         </div>
                       )}
 
                       {siteConfig?.showSourceCountSelector && (
                         <div>
-                          <h4 className="font-medium mb-1">
-                            Use Extra Sources
-                          </h4>
+                          <h4 className="font-medium mb-1">Use Extra Sources</h4>
                           <p className="text-sm text-gray-600">
-                            Enable to use more sources (10 instead of 4) for
-                            potentially more comprehensive responses. Relevant
-                            text passages are retrieved based on similarity to
-                            your query and used as context for generating
-                            answers.
+                            Enable to use more sources (10 instead of 4) for potentially more comprehensive responses.
+                            Relevant text passages are retrieved based on similarity to your query and used as context
+                            for generating answers.
                           </p>
                         </div>
                       )}
@@ -496,8 +462,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         <div>
                           <h4 className="font-medium mb-1">Private Session</h4>
                           <p className="text-sm text-gray-600">
-                            Enable private mode to keep your queries
-                            confidential and unlisted.
+                            Enable private mode to keep your queries confidential and unlisted.
                           </p>
                         </div>
                       )}
@@ -518,30 +483,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </form>
 
         {/* Suggested queries section */}
-        {!isLoadingQueries &&
-          showSuggestedQueries &&
-          randomQueries.length > 0 && (
-            <div className="w-full mb-4">
-              {suggestionsExpanded && (
-                <>
-                  <RandomQueries
-                    queries={randomQueries}
-                    onQueryClick={onQueryClick}
-                    isLoading={loading}
-                    shuffleQueries={shuffleQueries}
-                    isMobile={isMobile}
-                  />
-                </>
-              )}
-              <button
-                type="button"
-                onClick={toggleSuggestions}
-                className="text-blue-500 hover:underline mb-2"
-              >
-                {suggestionsExpanded ? 'Hide suggestions' : 'Show suggestions'}
-              </button>
-            </div>
-          )}
+        {!isLoadingQueries && showSuggestedQueries && randomQueries.length > 0 && (
+          <div className="w-full mb-4">
+            {suggestionsExpanded && (
+              <>
+                <RandomQueries
+                  queries={randomQueries}
+                  onQueryClick={onQueryClick}
+                  isLoading={loading}
+                  shuffleQueries={shuffleQueries}
+                  isMobile={isMobile}
+                />
+              </>
+            )}
+            <button type="button" onClick={toggleSuggestions} className="text-blue-500 hover:underline mb-2">
+              {suggestionsExpanded ? "Hide suggestions" : "Show suggestions"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

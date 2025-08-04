@@ -1,22 +1,18 @@
 // Mock dependencies
-jest.mock('@/utils/client/analytics', () => ({
+jest.mock("@/utils/client/analytics", () => ({
   logEvent: jest.fn(),
 }));
 
-jest.mock('@/components/CollectionSelector', () =>
+jest.mock("@/components/CollectionSelector", () =>
   jest.fn().mockImplementation(({ onChange, value }) => (
-    <select
-      data-testid="collection-selector"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
+    <select data-testid="collection-selector" value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="all">All</option>
       <option value="test">Test</option>
     </select>
-  )),
+  ))
 );
 
-jest.mock('@/components/RandomQueries', () =>
+jest.mock("@/components/RandomQueries", () =>
   jest.fn().mockImplementation(({ queries, onQueryClick, onShuffleClick }) => (
     <div data-testid="random-queries">
       {queries.map((query: string, index: number) => (
@@ -28,36 +24,36 @@ jest.mock('@/components/RandomQueries', () =>
         Shuffle
       </button>
     </div>
-  )),
+  ))
 );
 
 // React imports after mocks
-import React from 'react';
-import { render, fireEvent, screen } from '@testing-library/react';
-import { ChatInput } from '@/components/ChatInput';
-import { SiteConfig } from '@/types/siteConfig';
+import React from "react";
+import { render, fireEvent, screen } from "@testing-library/react";
+import { ChatInput } from "@/components/ChatInput";
+import { SiteConfig } from "@/types/siteConfig";
 
-describe('ChatInput', () => {
+describe("ChatInput", () => {
   // Common mock props
   const mockSiteConfig: SiteConfig = {
-    siteId: 'test',
-    name: 'Test Site',
-    shortname: 'Test',
-    tagline: 'Test Tagline',
-    greeting: 'Test Greeting',
-    parent_site_url: '',
-    parent_site_name: '',
-    help_url: '',
-    help_text: '',
+    siteId: "test",
+    name: "Test Site",
+    shortname: "Test",
+    tagline: "Test Tagline",
+    greeting: "Test Greeting",
+    parent_site_url: "",
+    parent_site_name: "",
+    help_url: "",
+    help_text: "",
     collectionConfig: {},
     libraryMappings: {},
     enableSuggestedQueries: true,
     enableMediaTypeSelection: true,
     enableAuthorSelection: true,
-    welcome_popup_heading: '',
-    other_visitors_reference: '',
+    welcome_popup_heading: "",
+    other_visitors_reference: "",
     loginImage: null,
-    header: { logo: '', navItems: [] },
+    header: { logo: "", navItems: [] },
     footer: { links: [] },
     requireLogin: true,
     allowPrivateSessions: true,
@@ -75,17 +71,17 @@ describe('ChatInput', () => {
     handleClick: jest.fn(),
     handleCollectionChange: jest.fn(),
     handlePrivateSessionChange: jest.fn(),
-    collection: 'all',
+    collection: "all",
     privateSession: false,
     error: null,
     setError: jest.fn(),
-    randomQueries: ['How can I meditate?', 'What is yoga?'],
+    randomQueries: ["How can I meditate?", "What is yoga?"],
     shuffleQueries: jest.fn(),
     textAreaRef: { current: null } as React.RefObject<HTMLTextAreaElement>,
     mediaTypes: { text: true, audio: false, youtube: false },
     handleMediaTypeChange: jest.fn(),
     siteConfig: mockSiteConfig,
-    input: '',
+    input: "",
     handleInputChange: jest.fn(),
     setShouldAutoScroll: jest.fn(),
     setQuery: jest.fn(),
@@ -100,27 +96,27 @@ describe('ChatInput', () => {
     jest.clearAllMocks();
   });
 
-  it('renders correctly', () => {
+  it("renders correctly", () => {
     const { container } = render(<ChatInput {...defaultProps} />);
     expect(container).toBeInTheDocument();
   });
 
-  it('submits input on form submission', () => {
+  it("submits input on form submission", () => {
     const props = {
       ...defaultProps,
-      input: 'Test question',
+      input: "Test question",
     };
 
     const { container } = render(<ChatInput {...props} />);
 
     // Find the form element directly
-    const form = container.querySelector('form');
+    const form = container.querySelector("form");
     fireEvent.submit(form!);
 
     expect(defaultProps.handleSubmit).toHaveBeenCalled();
   });
 
-  it('calls handleStop when stop button is clicked during loading', () => {
+  it("calls handleStop when stop button is clicked during loading", () => {
     const props = {
       ...defaultProps,
       loading: true,
@@ -129,105 +125,107 @@ describe('ChatInput', () => {
     render(<ChatInput {...props} />);
 
     // Find stop button by its text content
-    const stopButton = screen.getByText('stop');
+    const stopButton = screen.getByText("stop");
     fireEvent.click(stopButton);
 
     expect(defaultProps.handleStop).toHaveBeenCalled();
   });
 
-  it('handles Enter key press correctly', () => {
+  it("handles Enter key press correctly", () => {
     const props = {
       ...defaultProps,
-      input: 'Test question',
+      input: "Test question",
     };
 
     render(<ChatInput {...props} />);
 
     // Get textarea by its role and id
-    const textarea = screen.getByRole('textbox', { name: '' });
-    fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' });
+    const textarea = screen.getByRole("textbox", { name: "" });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
     expect(defaultProps.handleEnter).toHaveBeenCalled();
   });
 
-  it('does not submit on Shift+Enter', () => {
+  it("does not submit on Shift+Enter", () => {
     const props = {
       ...defaultProps,
-      input: 'Test question',
+      input: "Test question",
     };
 
     render(<ChatInput {...props} />);
 
     // Get textarea by its role and id
-    const textarea = screen.getByRole('textbox', { name: '' });
+    const textarea = screen.getByRole("textbox", { name: "" });
     fireEvent.keyDown(textarea, {
-      key: 'Enter',
-      code: 'Enter',
+      key: "Enter",
+      code: "Enter",
       shiftKey: true,
     });
 
     expect(defaultProps.handleEnter).not.toHaveBeenCalled();
   });
 
-  it('toggles collection correctly', () => {
+  it("toggles collection correctly", () => {
     render(<ChatInput {...defaultProps} />);
 
     // Check if the collection selector renders with the correct data-testid
-    const selector = screen.getByTestId('collection-selector');
+    const selector = screen.getByTestId("collection-selector");
     expect(selector).toBeInTheDocument();
   });
 
-  it('handles query shuffling', () => {
+  it("handles query shuffling", () => {
     render(<ChatInput {...defaultProps} />);
 
     // Find and click the shuffle button directly
-    const shuffleButton = screen.getByTestId('shuffle-button');
+    const shuffleButton = screen.getByTestId("shuffle-button");
     fireEvent.click(shuffleButton);
 
     // Instead of checking the internals of the mock, use a simpler assertion
-    expect(screen.getByTestId('shuffle-button')).toBeInTheDocument();
+    expect(screen.getByTestId("shuffle-button")).toBeInTheDocument();
   });
 
-  it('toggles private session correctly', () => {
+  it("toggles private session correctly", () => {
     render(<ChatInput {...defaultProps} />);
 
     // Find and click the private session button by its text content
-    const privateSessionToggle = screen.getByText('Start Private Session');
+    const privateSessionToggle = screen.getByText("Start Private Session");
     fireEvent.click(privateSessionToggle);
 
     expect(defaultProps.handlePrivateSessionChange).toHaveBeenCalled();
   });
 
-  it('toggles media types correctly', () => {
+  it("toggles media types correctly", () => {
     render(<ChatInput {...defaultProps} />);
 
     // Find the Audio button by its text content
-    const audioButton = screen.getByText('Audio');
+    const audioButton = screen.getByText("Audio");
     fireEvent.click(audioButton);
 
-    expect(defaultProps.handleMediaTypeChange).toHaveBeenCalledWith('audio');
+    expect(defaultProps.handleMediaTypeChange).toHaveBeenCalledWith("audio");
   });
 
-  it('validates empty input', () => {
+  it("handles empty input gracefully by passing to parent", () => {
     const props = {
       ...defaultProps,
-      input: '',
+      input: "",
     };
 
     render(<ChatInput {...props} />);
 
     // Find send button by its icon text
-    const sendButton = screen.getByText('send');
+    const sendButton = screen.getByText("send");
     fireEvent.click(sendButton);
 
-    expect(defaultProps.setError).toHaveBeenCalledWith('Input cannot be empty');
-    expect(defaultProps.handleSubmit).not.toHaveBeenCalled();
+    // Empty input should not trigger error, but should call handleSubmit
+    // to let parent handle it gracefully (parent has early return for empty strings)
+    expect(defaultProps.setError).not.toHaveBeenCalled();
+    expect(defaultProps.handleSubmit).toHaveBeenCalledWith(expect.any(Object), "");
   });
 
-  it('toggles suggestions visibility', () => {
-    Object.defineProperty(window, 'localStorage', {
+  it("toggles suggestions visibility", () => {
+    Object.defineProperty(window, "localStorage", {
       value: {
-        getItem: jest.fn().mockReturnValue('true'),
+        getItem: jest.fn().mockReturnValue("true"),
         setItem: jest.fn(),
       },
       writable: true,
@@ -236,19 +234,16 @@ describe('ChatInput', () => {
     render(<ChatInput {...defaultProps} />);
 
     // Use the actual text from the component
-    const toggleButton = screen.getByText('Hide suggestions');
+    const toggleButton = screen.getByText("Hide suggestions");
     fireEvent.click(toggleButton);
 
-    expect(window.localStorage.setItem).toHaveBeenCalledWith(
-      'suggestionsExpanded',
-      'false',
-    );
+    expect(window.localStorage.setItem).toHaveBeenCalledWith("suggestionsExpanded", "false");
   });
 
-  it('displays random queries', () => {
+  it("displays random queries", () => {
     render(<ChatInput {...defaultProps} />);
 
-    expect(screen.getByText('How can I meditate?')).toBeInTheDocument();
-    expect(screen.getByText('What is yoga?')).toBeInTheDocument();
+    expect(screen.getByText("How can I meditate?")).toBeInTheDocument();
+    expect(screen.getByText("What is yoga?")).toBeInTheDocument();
   });
 });
