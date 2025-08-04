@@ -228,7 +228,9 @@ CREATE TABLE crawl_queue (
 -- CSV tracking
 CREATE TABLE csv_tracking (
     id INTEGER PRIMARY KEY,
-    initial_crawl_completed BOOLEAN DEFAULT 0
+    initial_crawl_completed BOOLEAN DEFAULT 0,
+    last_check_time TEXT,
+    last_error TEXT
 );
 ```
 

@@ -198,11 +198,13 @@ class WebsiteCrawler:
             modified_date TIMESTAMP
         )""")
 
-        # Create CSV tracking table if it doesn't exist (simplified - only tracks initial crawl completion)
+        # Create CSV tracking table if it doesn't exist
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS csv_tracking (
             id INTEGER PRIMARY KEY,
-            initial_crawl_completed BOOLEAN DEFAULT 0
+            initial_crawl_completed BOOLEAN DEFAULT 0,
+            last_check_time TEXT,
+            last_error TEXT
         )""")
 
         self.conn.commit()
@@ -1642,19 +1644,81 @@ class WebsiteCrawler:
         return total_processed
 
     def update_csv_tracking(self, csv_error: str | None = None, success: bool = False):
-        """Update CSV tracking table with latest status (simplified - no timestamp tracking)"""
-        # This method now only logs the results, no database updates needed
-        if csv_error:
-            logging.error(f"CSV processing failed: {csv_error}")
-        # No database updates needed - we just check CSV once per hour when system wakes up
+        """Update CSV tracking table with latest status and timestamp"""
+        try:
+            current_time = datetime.now().isoformat()
+
+            # Get or create tracking record
+            self.cursor.execute("SELECT id FROM csv_tracking LIMIT 1")
+            tracking_record = self.cursor.fetchone()
+
+            if tracking_record:
+                self.cursor.execute(
+                    """
+                    UPDATE csv_tracking 
+                    SET last_check_time = ?, last_error = ?
+                    WHERE id = ?
+                    """,
+                    (current_time, csv_error, tracking_record[0]),
+                )
+            else:
+                self.cursor.execute(
+                    """
+                    INSERT INTO csv_tracking 
+                    (last_check_time, last_error, initial_crawl_completed)
+                    VALUES (?, ?, 1)
+                    """,
+                    (current_time, csv_error),
+                )
+
+            self.conn.commit()
+
+            if csv_error:
+                logging.error(f"CSV processing failed: {csv_error}")
+            elif success:
+                logging.debug(f"CSV tracking updated: last check at {current_time}")
+
+        except Exception as e:
+            logging.error(f"Error updating CSV tracking: {e}")
 
     def should_check_csv(self) -> bool:
-        """Check if CSV should be processed (simplified - always check if initial crawl is complete)"""
+        """Check if CSV should be processed with cooldown period to prevent frequent downloads"""
         if not self.csv_mode_enabled:
             return False
 
         # Only check CSV if initial crawl is completed
-        return self.is_initial_crawl_completed()
+        if not self.is_initial_crawl_completed():
+            return False
+
+        # Check if enough time has passed since last CSV check (minimum 30 minutes)
+        try:
+            self.cursor.execute("""
+                SELECT last_check_time 
+                FROM csv_tracking 
+                LIMIT 1
+            """)
+            result = self.cursor.fetchone()
+
+            if result and result[0]:
+                last_check = datetime.fromisoformat(result[0])
+                time_since_last_check = datetime.now() - last_check
+
+                # Minimum 30 minutes between CSV checks
+                if time_since_last_check.total_seconds() < 30 * 60:
+                    logging.debug(
+                        f"CSV check skipped - only {time_since_last_check.total_seconds():.0f} seconds since last check (minimum 1800 seconds)"
+                    )
+                    return False
+
+                logging.debug(
+                    f"CSV check allowed - {time_since_last_check.total_seconds():.0f} seconds since last check"
+                )
+
+        except Exception as e:
+            logging.error(f"Error checking CSV timing: {e}")
+            # If we can't check timing, allow the check to proceed
+
+        return True
 
     def mark_initial_crawl_completed(self):
         """Mark that the initial full crawl has been completed"""
@@ -1708,6 +1772,8 @@ class WebsiteCrawler:
 
         csv_data = self.download_csv_data(browser)
         if csv_data is None:
+            # Still update tracking even if download failed
+            self.update_csv_tracking(csv_error="Failed to download CSV data")
             return 0
 
         added_count = self.process_csv_data(csv_data)
