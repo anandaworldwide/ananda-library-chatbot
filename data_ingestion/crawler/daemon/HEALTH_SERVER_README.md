@@ -125,7 +125,7 @@ Once installed, the health server provides:
 
 ### Dashboard (HTML)
 
-```
+```http
 http://127.0.0.1:8081/dashboard  # for ananda-public (currently the only active site)
 ```
 
@@ -201,7 +201,7 @@ If you get permission errors:
 
 Health server logs are stored in:
 
-```
+```text
 ~/Library/Logs/AnandaCrawler/health-server-{site}.log
 ```
 

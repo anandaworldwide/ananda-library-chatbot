@@ -28,7 +28,7 @@ Enable these options:
 
 In the "Status checks found in the last week for this repository" section, search for and add:
 
-```
+```text
 Python CI (Python 3.10)
 Python CI (Python 3.11)
 Python CI (Python 3.12)
