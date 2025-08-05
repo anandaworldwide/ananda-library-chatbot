@@ -3,12 +3,15 @@
 import { sendOpsAlert } from "../../../src/utils/server/emailOps";
 
 // Mock AWS SES
-jest.mock("@aws-sdk/client-ses", () => ({
-  SESClient: jest.fn().mockImplementation(() => ({
+jest.mock("@aws-sdk/client-ses", () => {
+  const mockSESClient = {
     send: jest.fn(),
-  })),
-  SendEmailCommand: jest.fn().mockImplementation((params) => ({ input: params })),
-}));
+  };
+  return {
+    SESClient: jest.fn().mockImplementation(() => mockSESClient),
+    SendEmailCommand: jest.fn().mockImplementation((params) => ({ input: params })),
+  };
+});
 
 describe("emailOps", () => {
   beforeEach(() => {
@@ -151,6 +154,70 @@ describe("emailOps", () => {
 
       // Verify
       expect(result2).toBe(true);
+    });
+
+    it("should suppress alerts in test environment (NODE_ENV=test)", async () => {
+      // Setup
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalJestWorkerId = process.env.JEST_WORKER_ID;
+
+      // Clear JEST_WORKER_ID to ensure we're only testing NODE_ENV
+      delete process.env.JEST_WORKER_ID;
+      (process.env as any).NODE_ENV = "test";
+      process.env.OPS_ALERT_EMAIL = "ops@example.com";
+
+      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
+
+      // Execute
+      const result = await sendOpsAlert("Test Alert", "Test message");
+
+      // Verify
+      expect(result).toBe(true); // Should return true for test compatibility
+      expect(consoleSpy).toHaveBeenCalledWith("[TEST MODE] Suppressing ops alert: Test Alert");
+      // SES client is mocked and should not send actual emails in test mode
+
+      // Cleanup
+      if (originalNodeEnv !== undefined) {
+        (process.env as any).NODE_ENV = originalNodeEnv;
+      } else {
+        delete (process.env as any).NODE_ENV;
+      }
+      if (originalJestWorkerId !== undefined) {
+        process.env.JEST_WORKER_ID = originalJestWorkerId;
+      }
+      consoleSpy.mockRestore();
+    });
+
+    it("should suppress alerts when JEST_WORKER_ID is set", async () => {
+      // Setup
+      const originalJestWorkerId = process.env.JEST_WORKER_ID;
+      const originalNodeEnv = process.env.NODE_ENV;
+
+      // Clear NODE_ENV to ensure we're only testing JEST_WORKER_ID
+      delete (process.env as any).NODE_ENV;
+      process.env.JEST_WORKER_ID = "1";
+      process.env.OPS_ALERT_EMAIL = "ops@example.com";
+
+      const consoleSpy = jest.spyOn(console, "log").mockImplementation();
+
+      // Execute
+      const result = await sendOpsAlert("Jest Alert", "Jest test message");
+
+      // Verify
+      expect(result).toBe(true); // Should return true for test compatibility
+      expect(consoleSpy).toHaveBeenCalledWith("[TEST MODE] Suppressing ops alert: Jest Alert");
+      // SES client is mocked and should not send actual emails in test mode
+
+      // Cleanup
+      if (originalJestWorkerId !== undefined) {
+        process.env.JEST_WORKER_ID = originalJestWorkerId;
+      } else {
+        delete process.env.JEST_WORKER_ID;
+      }
+      if (originalNodeEnv !== undefined) {
+        (process.env as any).NODE_ENV = originalNodeEnv;
+      }
+      consoleSpy.mockRestore();
     });
   });
 });

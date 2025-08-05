@@ -399,7 +399,32 @@ python daemon_manager.py --site site-name logs --follow
 
 **Applied To**: Website crawler daemon and health server daemon with automatic startup on system reboot.
 
-### 17. Related Questions API Intermittent Failures - Root Cause Found
+### 17. Test Environment Alert Suppression
+
+**Problem**: Automated tests (including Vercel tests) were triggering real operational alert emails when tests
+intentionally failed operations, causing email spam.
+
+**Root Cause**: The `sendOpsAlert` function was sending emails whenever `OPS_ALERT_EMAIL` environment variable was set,
+regardless of test environment.
+
+**Solution**: Added test environment detection to suppress alerts during testing:
+
+```typescript
+// In emailOps.ts
+// Suppress alerts during testing to prevent spam when tests intentionally fail
+if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID !== undefined) {
+  console.log(`[TEST MODE] Suppressing ops alert: ${subject}`);
+  return true; // Return true to indicate successful "sending" for test compatibility
+}
+```
+
+**Key Insight**: Test environment detection must come after basic validation (checking `OPS_ALERT_EMAIL` exists and
+contains valid emails) so that tests expecting validation failures still work correctly.
+
+**Pattern**: For operational alerts, always check for test environment using both `NODE_ENV === "test"` and
+`JEST_WORKER_ID !== undefined` to cover all Jest execution scenarios.
+
+### 18. Related Questions API Intermittent Failures - Root Cause Found
 
 **Problem**: Related questions API (`/api/relatedQuestions`) fails intermittently with "All 3 upsert/verification
 attempts failed" error after chat responses complete.

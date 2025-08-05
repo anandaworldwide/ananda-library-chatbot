@@ -46,6 +46,12 @@ export async function sendOpsAlert(
       return false;
     }
 
+    // Suppress alerts during testing to prevent spam when tests intentionally fail
+    if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID !== undefined) {
+      console.log(`[TEST MODE] Suppressing ops alert: ${subject}`);
+      return true; // Return true to indicate successful "sending" for test compatibility
+    }
+
     // Build email body with error details if provided
     let emailBody = message;
 
