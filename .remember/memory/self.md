@@ -454,3 +454,20 @@ eventual consistency, not just 500ms.
 **Files Modified**:
 
 - `relatedQuestionsUtils.ts`: Increased verification delay in `upsertEmbeddings()` function
+
+### 19. Markdownlint Error Patterns
+
+**Common Issues**: MD013 (line length), MD022 (blanks around headings), MD032 (blanks around lists), MD024 (duplicate
+headings), MD031 (blanks around fences), MD040 (fenced code language), MD050 (strong style).
+
+**Systematic Fix Approach**:
+
+1. **Line length (MD013)**: Break long lines at logical points (134+ chars)
+2. **Blanks around headings (MD022)**: Add blank line before and after all headings
+3. **Blanks around lists (MD032)**: Add blank line before and after all lists
+4. **Duplicate headings (MD024)**: Make headings unique by adding context (e.g., "Test Directory Structure" → "Python
+   Test Directory Structure")
+5. **Fenced code blocks (MD031/MD040)**: Add blank lines around and specify language (`text,`typescript, ```python)
+6. **Strong style (MD050)**: Use `**text**` instead of `__text__` for bold formatting
+
+**Pattern**: Fix markdownlint errors systematically by category rather than line-by-line for efficiency.

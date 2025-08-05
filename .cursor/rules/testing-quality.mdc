@@ -3,13 +3,16 @@ description:
 globs: *test*
 alwaysApply: false
 ---
+
 # Testing & Quality Assurance Rules
 
 ## Testing Philosophy
 
-The project uses a **comprehensive testing strategy** with multiple layers to ensure reliability and quality across the entire system.
+The project uses a **comprehensive testing strategy** with multiple layers to ensure
+reliability and quality across the entire system.
 
 ### Testing Levels
+
 1. **Unit Tests**: Individual functions and components
 2. **Integration Tests**: Component and API interactions
 3. **End-to-End Tests**: Complete user workflows
@@ -18,7 +21,8 @@ The project uses a **comprehensive testing strategy** with multiple layers to en
 ## Frontend Testing (Jest + React Testing Library)
 
 ### Test Directory Structure
-```
+
+```text
 web/__tests__/
 ├── components/          # React component tests
 ├── hooks/              # Custom hook tests
@@ -32,37 +36,40 @@ web/__tests__/
 ```
 
 ### Testing Standards
-- **Location**: [web/__tests__/](mdc:web/__tests__)
+
+- **Location**: [web/**tests**/](mdc:web/__tests__)
 - **Framework**: Jest + React Testing Library
 - **Configuration**: [web/jest.config.js](mdc:web/jest.config.js)
 - **Setup**: [web/jest.setup.ts](mdc:web/jest.setup.ts)
 - **Command**: `npm run test:all` from [web/](mdc:web) directory
 
 ### Component Testing Examples
+
 ```typescript
 // Component test structure
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { ChatInterface } from './ChatInterface'
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { ChatInterface } from "./ChatInterface";
 
-describe('ChatInterface', () => {
-  it('sends message when form is submitted', async () => {
-    const mockSendMessage = jest.fn()
-    render(<ChatInterface onSendMessage={mockSendMessage} />)
-    
-    const input = screen.getByLabelText(/ask a question/i)
-    const submitButton = screen.getByRole('button', { name: /send/i })
-    
-    fireEvent.change(input, { target: { value: 'Test question' } })
-    fireEvent.click(submitButton)
-    
+describe("ChatInterface", () => {
+  it("sends message when form is submitted", async () => {
+    const mockSendMessage = jest.fn();
+    render(<ChatInterface onSendMessage={mockSendMessage} />);
+
+    const input = screen.getByLabelText(/ask a question/i);
+    const submitButton = screen.getByRole("button", { name: /send/i });
+
+    fireEvent.change(input, { target: { value: "Test question" } });
+    fireEvent.click(submitButton);
+
     await waitFor(() => {
-      expect(mockSendMessage).toHaveBeenCalledWith('Test question')
-    })
-  })
-})
+      expect(mockSendMessage).toHaveBeenCalledWith("Test question");
+    });
+  });
+});
 ```
 
 ### API Testing
+
 - **Mock implementations** for external services
 - **Authentication testing** with valid/invalid tokens
 - **Error scenario handling**
@@ -70,8 +77,9 @@ describe('ChatInterface', () => {
 
 ## Backend Python Testing (pytest)
 
-### Test Directory Structure
-```
+### Python Test Directory Structure
+
+```text
 data_ingestion/tests/
 ├── test_spacy_text_splitter.py     # Core chunking logic
 ├── test_pinecone_utils.py          # Vector database operations
@@ -82,7 +90,8 @@ data_ingestion/tests/
 └── conftest.py                     # Shared test configuration
 ```
 
-### Testing Standards
+### Python Testing Standards
+
 - **Location**: [data_ingestion/tests/](mdc:data_ingestion/tests)
 - **Framework**: pytest with pytest-asyncio
 - **Configuration**: [pyproject.toml](mdc:pyproject.toml)
@@ -90,6 +99,7 @@ data_ingestion/tests/
 - **Site-specific testing**: `--site` argument for environment configs
 
 ### Python Testing Examples
+
 ```python
 # pytest test structure
 import pytest
@@ -99,22 +109,22 @@ class TestSpacyTextSplitter:
     def test_dynamic_chunk_sizing(self):
         """Test that chunk size adjusts based on document length."""
         splitter = SpacyTextSplitter()
-        
+
         # Short document should use smaller chunks
         short_text = "Short document. " * 50  # ~100 words
         chunks = splitter.split_text(short_text)
-        
+
         assert len(chunks) > 0
         assert all(len(chunk.split()) >= 50 for chunk in chunks)
-    
+
     @pytest.mark.asyncio
     async def test_error_handling(self):
         """Test fallback behavior when spaCy processing fails."""
         splitter = SpacyTextSplitter(pipeline="invalid_model")
-        
+
         text = "This should trigger fallback processing."
         chunks = splitter.split_text(text)
-        
+
         # Should still produce chunks via fallback
         assert len(chunks) > 0
 ```
@@ -122,27 +132,30 @@ class TestSpacyTextSplitter:
 ## Integration Testing
 
 ### Data Ingestion Quality Tests
+
 - **File**: [data_ingestion/tests/test_integration_chunk_quality.py](mdc:data_ingestion/tests/test_integration_chunk_quality.py)
 - **Purpose**: Validate end-to-end chunk quality across all ingestion methods
 - **Coverage**: PDF, SQL, crawler, audio/video processing
 - **Metrics**: Target word range compliance (225-450 words)
 
 ### Quality Validation Standards
+
 ```python
 def test_chunk_word_count_distribution():
     """Verify 70% of chunks meet target word range."""
     results = analyze_chunk_quality()
-    
+
     target_range_count = sum(
-        1 for chunk in results 
+        1 for chunk in results
         if 225 <= chunk.word_count <= 450
     )
     compliance_rate = target_range_count / len(results)
-    
+
     assert compliance_rate >= 0.70, f"Only {compliance_rate:.1%} meet target range"
 ```
 
 ### Cross-Method Consistency
+
 - **Metadata preservation** during chunking
 - **Vector ID format** validation (7-part standardized format)
 - **Source attribution** accuracy
@@ -151,12 +164,14 @@ def test_chunk_word_count_distribution():
 ## Test Configuration
 
 ### Environment Setup
+
 - **Test databases**: Separate Pinecone namespaces for testing
 - **Mock services**: AssemblyAI, OpenAI API mocking
 - **Test data**: [data_ingestion/tests/test_data/](mdc:data_ingestion/tests/test_data)
 - **Fixtures**: Shared test data and configuration
 
 ### CI/CD Integration
+
 - **Pre-commit hooks**: Run tests before commits
 - **GitHub Actions**: Automated test runs on pull requests
 - **Coverage reporting**: Track test coverage metrics
@@ -165,18 +180,21 @@ def test_chunk_word_count_distribution():
 ## Quality Assurance Standards
 
 ### Code Quality Metrics
+
 - **TypeScript**: Strict mode with no `any` types
 - **Python**: Ruff linting with PEP 8 compliance
 - **Test coverage**: Minimum 80% coverage for critical paths
 - **Documentation**: JSDoc for complex functions
 
 ### Performance Testing
+
 - **Response time validation**: API endpoints under 2s
 - **Memory usage monitoring**: Large document processing
 - **Concurrent request handling**: Rate limiting effectiveness
 - **Database query optimization**: Pinecone search performance
 
 ### Security Testing
+
 - **Authentication bypass attempts**: JWT validation
 - **Input sanitization**: SQL injection prevention
 - **Rate limiting effectiveness**: DDoS protection
@@ -185,6 +203,7 @@ def test_chunk_word_count_distribution():
 ## Continuous Integration
 
 ### Automated Testing Pipeline
+
 1. **Linting**: ESLint, Prettier, Ruff
 2. **Type checking**: TypeScript compilation
 3. **Unit tests**: Component and function testing
@@ -193,6 +212,7 @@ def test_chunk_word_count_distribution():
 6. **Security scanning**: Dependency vulnerability checks
 
 ### Test Data Management
+
 - **Synthetic test data**: Generated for consistent testing
 - **Data anonymization**: Remove sensitive information
 - **Test isolation**: Each test uses clean state
@@ -201,12 +221,14 @@ def test_chunk_word_count_distribution():
 ## Error Tracking and Monitoring
 
 ### Error Logging
+
 - **Structured logging**: Consistent error format
 - **Error context**: User session and request details
 - **Performance metrics**: Response times and resource usage
 - **Alert thresholds**: Automated notifications for critical errors
 
 ### Quality Monitoring
+
 - **Chunk quality dashboards**: Real-time metrics
 - **User feedback tracking**: Vote and like patterns
 - **System health monitoring**: Database and service availability
@@ -215,12 +237,14 @@ def test_chunk_word_count_distribution():
 ## Manual Testing Procedures
 
 ### User Acceptance Testing
+
 - **Chat functionality**: End-to-end conversation flows
 - **Authentication**: Login/logout and permission handling
 - **Multi-site support**: Site-specific configuration validation
 - **WordPress integration**: Plugin functionality testing
 
 ### Accessibility Testing
+
 - **Screen reader compatibility**: NVDA/JAWS testing
 - **Keyboard navigation**: Tab order and focus management
 - **Color contrast**: WCAG AA compliance
@@ -229,12 +253,14 @@ def test_chunk_word_count_distribution():
 ## Test Maintenance
 
 ### Test Data Updates
+
 - **Content refresh**: Regular updates to test documents
 - **Schema evolution**: Update tests for metadata changes
 - **Performance baselines**: Adjust thresholds based on improvements
 - **Dependency updates**: Test compatibility with new versions
 
 ### Documentation
+
 - **Test documentation**: [docs/TESTS-README.md](mdc:docs/TESTS-README.md)
 - **Coverage reports**: Regular generation and review
 - **Testing guidelines**: Best practices and standards
@@ -243,6 +269,7 @@ def test_chunk_word_count_distribution():
 ## Quality Gates
 
 ### Pre-Deployment Checklist
+
 - [ ] All tests passing (frontend and backend)
 - [ ] Code coverage above minimum thresholds
 - [ ] Security scans clean
@@ -251,6 +278,7 @@ def test_chunk_word_count_distribution():
 - [ ] Documentation updated
 
 ### Production Monitoring
+
 - **Error rate monitoring**: Alert on increased error rates
 - **Performance degradation**: Response time alerts
 - **User experience metrics**: Conversion and engagement tracking
