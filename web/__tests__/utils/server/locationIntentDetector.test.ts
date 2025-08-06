@@ -144,4 +144,105 @@ describe("Location Intent Detector", () => {
     // Should complete within 1 second (allowing for OpenAI API call)
     expect(endTime - startTime).toBeLessThan(1000);
   });
+
+  describe("API key validation", () => {
+    beforeEach(() => {
+      delete process.env.OPENAI_API_KEY;
+    });
+
+    it("should throw an error when OPENAI_API_KEY is missing during initialization", async () => {
+      await expect(initializeLocationIntentDetector("ananda-public")).rejects.toThrow(
+        "OPENAI_API_KEY environment variable is required"
+      );
+    });
+  });
+
+  describe("re-initialization handling", () => {
+    beforeEach(() => {
+      process.env.OPENAI_API_KEY = "test-key";
+      mockFs.existsSync.mockReturnValue(false);
+    });
+
+    it("should handle re-initialization with the same site gracefully", async () => {
+      // Initialize once
+      await initializeLocationIntentDetector("does-not-exist");
+
+      // Initialize again with same site - should not throw
+      await expect(initializeLocationIntentDetector("does-not-exist")).resolves.not.toThrow();
+
+      // Should still return false for location intent
+      const result = await hasLocationIntentAsync("Where is the nearest center?");
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("embedding model validation", () => {
+    beforeEach(() => {
+      process.env.OPENAI_API_KEY = "test-key";
+      mockFs.existsSync.mockReturnValue(false);
+    });
+
+    it("should use default embedding model when OPENAI_EMBEDDINGS_MODEL is not set", async () => {
+      delete process.env.OPENAI_EMBEDDINGS_MODEL;
+
+      await initializeLocationIntentDetector("test-site");
+
+      // Should initialize without throwing
+      expect(getCachedSiteId()).toBe("test-site");
+    });
+  });
+
+  describe("error handling in detection", () => {
+    beforeEach(() => {
+      process.env.OPENAI_API_KEY = "test-key";
+      process.env.OPENAI_EMBEDDINGS_MODEL = "text-embedding-3-large";
+    });
+
+    it("should handle invalid embedding data gracefully", async () => {
+      const invalidEmbeddingData = {
+        model: "text-embedding-3-large",
+        timestamp: "2024-01-01T00:00:00.000Z",
+        positiveCount: 1,
+        negativeCount: 1,
+        embeddingDimensions: 3072,
+        positiveEmbeddings: ["invalid"], // Invalid embedding format
+        negativeEmbeddings: [new Array(3072).fill(0.2)],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(invalidEmbeddingData));
+
+      await initializeLocationIntentDetector("test-site");
+
+      // Should handle invalid data and return false
+      const result = await hasLocationIntentAsync("Where is the nearest center?");
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("cache behavior", () => {
+    beforeEach(() => {
+      process.env.OPENAI_API_KEY = "test-key";
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(
+        JSON.stringify({
+          model: "text-embedding-3-large",
+          timestamp: "2024-01-01T00:00:00.000Z",
+          positiveCount: 1,
+          negativeCount: 1,
+          embeddingDimensions: 3072,
+          positiveEmbeddings: [[0.1, 0.2, 0.3]],
+          negativeEmbeddings: [[0.4, 0.5, 0.6]],
+          contrastiveThreshold: 0.0,
+        })
+      );
+    });
+
+    it("should cache the site ID after successful initialization", async () => {
+      await initializeLocationIntentDetector("test-site");
+
+      // getCachedSiteId should return the cached site ID
+      expect(getCachedSiteId()).toBe("test-site");
+    });
+  });
 });
