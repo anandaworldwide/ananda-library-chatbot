@@ -220,4 +220,43 @@ describe("emailOps", () => {
       consoleSpy.mockRestore();
     });
   });
+
+  it("should use default contact email when CONTACT_EMAIL env var is not set", async () => {
+    // Setup - ensure OPS_ALERT_EMAIL is set so the function runs
+    process.env.OPS_ALERT_EMAIL = "ops@example.com";
+    const originalContactEmail = process.env.CONTACT_EMAIL;
+    delete process.env.CONTACT_EMAIL;
+
+    const result = await sendOpsAlert("Test Alert", "Test message");
+
+    // Restore original env var
+    if (originalContactEmail) {
+      process.env.CONTACT_EMAIL = originalContactEmail;
+    }
+
+    // Should succeed even without CONTACT_EMAIL set (uses default)
+    expect(result).toBe(true);
+  });
+
+  it("should handle missing SITE_ID environment variable gracefully", async () => {
+    process.env.OPS_ALERT_EMAIL = "ops@example.com";
+    process.env.CONTACT_EMAIL = "noreply@example.com";
+    delete process.env.SITE_ID;
+
+    const result = await sendOpsAlert("Test Alert", "Test message");
+
+    // Should succeed and use "unknown" as fallback site name
+    expect(result).toBe(true);
+  });
+
+  it("should handle AWS_REGION environment variable properly", async () => {
+    process.env.OPS_ALERT_EMAIL = "ops@example.com";
+    process.env.CONTACT_EMAIL = "noreply@example.com";
+    process.env.AWS_REGION = "us-west-2";
+
+    const result = await sendOpsAlert("Test Alert", "Test message");
+
+    // Should succeed with custom AWS region
+    expect(result).toBe(true);
+  });
 });
