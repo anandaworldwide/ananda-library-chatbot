@@ -32,14 +32,18 @@ The system will:
 
 - [ ] Update Firestore user schema: Ensure `users` collection includes fields like `email` (unique), `uuid` (persistent
       ID), `entitlements` (array/object from Salesforce), `lastSync` (timestamp for cron).
+
 - [ ] Create magic link generation endpoint (e.g., /api/requestMagicLink.ts):
+
   - Accept email via POST.
   - Validate email format.
   - Query Salesforce for authorization and entitlements.
   - If valid, generate a one-time token (e.g., signed JWT with 15-min expiration).
   - Send email with link (e.g., <https://yourdomain.com/verify?token=xxx>) using emailOps.ts.
   - Handle errors (e.g., invalid email, Salesforce failure) with user-friendly messages.
+
 - [ ] Create verification endpoint (e.g., /api/verifyMagicLink.ts):
+
   - GET/POST with token.
   - Validate token (not expired, unused).
   - Fetch/check for existing UUID from cookie/local storage (if present).
@@ -47,17 +51,24 @@ The system will:
   - If no UUID or mismatch, generate new UUID and store in Firestore with email/entitlements.
   - Set long-lived JWT cookie (maxAge: 6 months, HttpOnly, secure) via jwtUtils.ts.
   - Redirect to dashboard or home.
+
 - [ ] Implement UUID association logic:
+
   - In verification: Check request cookies/local storage for existing UUID.
   - Query Firestore: If UUID exists but linked to different email, handle conflict (e.g., generate new or prompt user).
   - Update user doc to link email and entitlements.
+
 - [ ] Add session persistence:
+
   - Use JWT with refresh token mechanism for safe long sessions.
   - On each request, validate JWT and check entitlements via middleware (extend authMiddleware.ts).
+
 - [ ] Daily cron job for entitlement sync (e.g., extend pruneRateLimits.ts):
+
   - Query active users (e.g., last login > 30 days).
   - Re-fetch entitlements from Salesforce.
   - Update Firestore; if revoked, flag for session invalidation (e.g., add `revoked: true` checked in middleware).
+
 - [ ] Security enhancements:
   - Rate limit magic link requests (using genericRateLimiter.ts, e.g., 5 per IP/hour).
   - Add device/IP checks on verification to flag suspicious logins.
@@ -70,9 +81,11 @@ The system will:
   - Handle submission: POST to /api/requestMagicLink.
   - Display messages (e.g., "Check your email!").
 - [ ] Verification page (e.g., /verify):
+
   - Handle token from URL, POST to /api/verifyMagicLink.
   - Show loading/success/error states.
   - Redirect based on entitlements (e.g., to restricted content).
+
 - [ ] User data features (favorites, chat history):
   - In relevant components (e.g., ChatInterface.tsx), key data to user's UUID (fetched from JWT/cookie).
   - Use Firestore queries filtered by UUID.
