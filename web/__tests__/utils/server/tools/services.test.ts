@@ -6,9 +6,14 @@ import {
   HaversineDistanceCalculator,
   ConsoleLogger,
   LocationService,
+  GoogleGeocodingService,
+  S3CenterDataService,
+  VercelIPGeolocationService,
+  CenterSearchService,
 } from "../../../../src/utils/server/tools/services";
 import { IGeocodingService, IIPGeolocationService, ILogger } from "../../../../src/utils/server/tools/interfaces";
 import { LocationResult } from "../../../../src/utils/server/tools";
+import { Readable } from "stream";
 
 // Mock the external dependencies
 jest.mock("../../../../src/utils/server/awsConfig", () => ({
@@ -312,6 +317,430 @@ describe("Services - Dependency Injection Architecture", () => {
       expect(distance1).toBe(distance2);
       expect(typeof distance1).toBe("number");
       expect(distance1).toBeGreaterThan(0);
+    });
+  });
+
+  describe("GoogleGeocodingService", () => {
+    let service: GoogleGeocodingService;
+
+    beforeEach(() => {
+      service = new GoogleGeocodingService();
+      // Mock the API key
+      process.env.GOOGLE_MAPS_API_KEY = "test-api-key";
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it("should handle successful geocoding response", async () => {
+      // Mock successful API response
+      const mockResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          status: "OK",
+          results: [
+            {
+              geometry: {
+                location: { lat: 37.7749, lng: -122.4194 },
+              },
+              address_components: [
+                { types: ["locality"], long_name: "San Francisco" },
+                { types: ["country"], long_name: "United States" },
+              ],
+            },
+          ],
+        }),
+      };
+
+      global.fetch = jest.fn().mockResolvedValue(mockResponse);
+
+      const result = await service.geocode("San Francisco, CA");
+
+      expect(result).toEqual({
+        city: "San Francisco",
+        country: "United States",
+        latitude: 37.7749,
+        longitude: -122.4194,
+        confidence: "high",
+        source: "google-geolocation",
+      });
+
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining("https://maps.googleapis.com/maps/api/geocode/json"));
+    });
+
+    it("should handle ZERO_RESULTS status", async () => {
+      const mockResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          status: "ZERO_RESULTS",
+          results: [],
+        }),
+      };
+
+      global.fetch = jest.fn().mockResolvedValue(mockResponse);
+
+      const result = await service.geocode("Nonexistent Location");
+
+      expect(result).toBeNull();
+      expect(fetch).toHaveBeenCalled();
+    });
+
+    it("should handle OVER_QUERY_LIMIT status", async () => {
+      const mockResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          status: "OVER_QUERY_LIMIT",
+          results: [],
+        }),
+      };
+
+      global.fetch = jest.fn().mockResolvedValue(mockResponse);
+
+      const result = await service.geocode("Any Location");
+
+      expect(result).toBeNull();
+      expect(fetch).toHaveBeenCalled();
+    });
+
+    it("should handle REQUEST_DENIED status", async () => {
+      const mockResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          status: "REQUEST_DENIED",
+          results: [],
+        }),
+      };
+
+      global.fetch = jest.fn().mockResolvedValue(mockResponse);
+
+      const result = await service.geocode("Any Location");
+
+      expect(result).toBeNull();
+      expect(fetch).toHaveBeenCalled();
+    });
+
+    it("should handle missing geometry in response", async () => {
+      const mockResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          status: "OK",
+          results: [
+            {
+              // Missing geometry property
+              address_components: [],
+            },
+          ],
+        }),
+      };
+
+      global.fetch = jest.fn().mockResolvedValue(mockResponse);
+
+      const result = await service.geocode("Location Without Geometry");
+
+      expect(result).toBeNull();
+      expect(fetch).toHaveBeenCalled();
+    });
+
+    it("should handle network errors", async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error("Network error"));
+
+      const result = await service.geocode("Any Location");
+
+      expect(result).toBeNull();
+      expect(fetch).toHaveBeenCalled();
+    });
+  });
+
+  describe("S3CenterDataService", () => {
+    let service: S3CenterDataService;
+
+    beforeEach(() => {
+      service = new S3CenterDataService();
+      process.env.S3_BUCKET_NAME = "test-bucket";
+      process.env.SITE_ID = "test-site";
+      jest.clearAllMocks();
+    });
+
+    it("should handle missing S3_BUCKET_NAME environment variable with fallback", async () => {
+      delete process.env.S3_BUCKET_NAME;
+
+      // Should not throw but return empty array when fallback also fails
+      const result = await service.loadCenters();
+
+      expect(result).toEqual([]);
+      // Should have attempted the fallback mechanism
+      expect(result).toBeInstanceOf(Array);
+    });
+
+    it("should handle missing SITE_ID environment variable", async () => {
+      delete process.env.SITE_ID;
+
+      const result = await service.loadCenters();
+
+      expect(result).toEqual([]);
+      expect(result).toBeInstanceOf(Array);
+    });
+
+    it("should handle S3 errors gracefully", async () => {
+      process.env.S3_BUCKET_NAME = "test-bucket";
+      process.env.SITE_ID = "test-site";
+
+      // Mock S3 client to throw an error
+      const mockS3Client = jest.requireMock("../../../../src/utils/server/awsConfig").s3Client;
+      mockS3Client.send.mockRejectedValue(new Error("S3 connection failed"));
+
+      const result = await service.loadCenters();
+
+      expect(result).toEqual([]);
+      expect(service.getLastError()).toEqual({
+        type: "error",
+        message:
+          "Sorry, I encountered a temporary issue while searching for nearby Ananda centers. Please try again in a few minutes or visit ananda.org to find center information.",
+      });
+    });
+
+    it("should handle invalid CSV format gracefully", async () => {
+      process.env.S3_BUCKET_NAME = "test-bucket";
+      process.env.SITE_ID = "test-site";
+
+      // Mock S3 client to return invalid CSV
+      const mockS3Client = jest.requireMock("../../../../src/utils/server/awsConfig").s3Client;
+
+      // Create a proper stream with Buffer data
+      const mockStream = new Readable({
+        read() {
+          this.push(Buffer.from("invalid,csv,format\n"));
+          this.push(null); // End the stream
+        },
+      });
+
+      mockS3Client.send.mockResolvedValue({
+        Body: mockStream,
+      });
+
+      const result = await service.loadCenters();
+
+      expect(result).toEqual([]);
+      // The service should handle invalid CSV gracefully and return empty array
+      expect(Array.isArray(result)).toBe(true);
+    });
+  });
+
+  describe("VercelIPGeolocationService", () => {
+    let service: VercelIPGeolocationService;
+
+    beforeEach(() => {
+      service = new VercelIPGeolocationService();
+      process.env.GOOGLE_MAPS_API_KEY = "test-api-key";
+      jest.clearAllMocks();
+    });
+
+    it("should handle successful Vercel header geolocation", async () => {
+      const mockHeaders = {
+        get: jest.fn((name: string) => {
+          switch (name) {
+            case "x-vercel-ip-city":
+              return "Mountain%20View";
+            case "x-vercel-ip-country":
+              return "US";
+            case "x-vercel-ip-latitude":
+              return "37.4419";
+            case "x-vercel-ip-longitude":
+              return "-122.1430";
+            default:
+              return null;
+          }
+        }),
+      } as any;
+
+      const result = await service.getLocationFromIP(mockHeaders);
+
+      expect(result).toEqual({
+        city: "Mountain View",
+        country: "US",
+        latitude: 37.4419,
+        longitude: -122.143,
+        confidence: "medium",
+        source: "vercel-header",
+      });
+    });
+
+    it("should return null when Google Maps API key is missing", async () => {
+      delete process.env.GOOGLE_MAPS_API_KEY;
+
+      const mockHeaders = {
+        get: jest.fn().mockReturnValue(null),
+      } as any;
+
+      const result = await service.getLocationFromIP(mockHeaders);
+
+      expect(result).toBeNull();
+    });
+
+    it("should handle localhost IP in development mode", async () => {
+      const originalEnv = process.env.NODE_ENV;
+      Object.defineProperty(process.env, "NODE_ENV", {
+        value: "development",
+        writable: true,
+      });
+
+      try {
+        const mockHeaders = {
+          get: jest.fn((name: string) => {
+            switch (name) {
+              case "x-forwarded-for":
+                return "127.0.0.1";
+              default:
+                return null;
+            }
+          }),
+        } as any;
+
+        // Mock Google Geolocation API response (fails to return location)
+        const mockResponse = {
+          ok: true,
+          json: jest.fn().mockResolvedValue({
+            // No location property - simulates API failure
+            accuracy: 1000,
+          }),
+        };
+
+        // Mock the geocoding fallback response
+        const mockGeocodingResponse = {
+          ok: true,
+          json: jest.fn().mockResolvedValue({
+            status: "OK",
+            results: [
+              {
+                geometry: { location: { lat: 37.4419, lng: -122.143 } },
+                address_components: [
+                  { types: ["locality"], long_name: "Mountain View" },
+                  { types: ["country"], long_name: "United States", short_name: "US" },
+                ],
+              },
+            ],
+          }),
+        };
+
+        global.fetch = jest
+          .fn()
+          .mockResolvedValueOnce(mockResponse) // First call to Google Geolocation API
+          .mockResolvedValueOnce(mockGeocodingResponse); // Second call to geocoding fallback
+
+        const result = await service.getLocationFromIP(mockHeaders);
+
+        expect(result).toEqual({
+          city: "Mountain View",
+          country: "United States",
+          latitude: 37.4419,
+          longitude: -122.143,
+          confidence: "high",
+          source: "google-geolocation",
+        });
+
+        expect(fetch).toHaveBeenCalledTimes(2);
+      } finally {
+        Object.defineProperty(process.env, "NODE_ENV", {
+          value: originalEnv,
+          writable: true,
+        });
+      }
+    });
+  });
+
+  describe("CenterSearchService", () => {
+    let service: CenterSearchService;
+    let mockCenterDataService: any;
+    let mockDistanceCalculator: any;
+
+    beforeEach(() => {
+      mockCenterDataService = {
+        loadCenters: jest.fn(),
+        getLastError: jest.fn().mockReturnValue({ type: null, message: null }),
+      };
+
+      mockDistanceCalculator = {
+        calculateDistance: jest.fn(),
+      };
+
+      service = new CenterSearchService(mockCenterDataService, mockDistanceCalculator);
+      jest.clearAllMocks();
+    });
+
+    it("should find nearby centers within 150 miles", async () => {
+      const mockCenters = [
+        { name: "Ananda Palo Alto", latitude: 37.4419, longitude: -122.143, city: "Palo Alto" },
+        { name: "Ananda San Francisco", latitude: 37.7749, longitude: -122.4194, city: "San Francisco" },
+      ];
+
+      mockCenterDataService.loadCenters.mockResolvedValue(mockCenters);
+      mockDistanceCalculator.calculateDistance
+        .mockReturnValueOnce(25) // 25 miles to Palo Alto
+        .mockReturnValueOnce(45); // 45 miles to San Francisco
+
+      const result = await service.findNearestCenters(37.5, -122.2);
+
+      expect(result).toEqual({
+        found: true,
+        centers: [
+          { ...mockCenters[0], distance: 25 },
+          { ...mockCenters[1], distance: 45 },
+        ],
+      });
+
+      expect(mockDistanceCalculator.calculateDistance).toHaveBeenCalledTimes(2);
+    });
+
+    it("should filter out centers beyond 150 miles", async () => {
+      const mockCenters = [
+        { name: "Ananda Palo Alto", latitude: 37.4419, longitude: -122.143, city: "Palo Alto" },
+        { name: "Ananda New York", latitude: 40.7128, longitude: -74.006, city: "New York" },
+      ];
+
+      mockCenterDataService.loadCenters.mockResolvedValue(mockCenters);
+      mockDistanceCalculator.calculateDistance
+        .mockReturnValueOnce(25) // 25 miles - within range
+        .mockReturnValueOnce(2800); // 2800 miles - too far
+
+      const result = await service.findNearestCenters(37.5, -122.2);
+
+      expect(result).toEqual({
+        found: true,
+        centers: [{ ...mockCenters[0], distance: 25 }],
+      });
+    });
+
+    it("should handle no centers within range", async () => {
+      const mockCenters = [{ name: "Ananda Far Away", latitude: 0, longitude: 0, city: "Far Away" }];
+
+      mockCenterDataService.loadCenters.mockResolvedValue(mockCenters);
+      mockDistanceCalculator.calculateDistance.mockReturnValue(500); // 500 miles - too far
+
+      const result = await service.findNearestCenters(37.5, -122.2);
+
+      expect(result).toEqual({
+        found: false,
+        centers: [],
+        fallbackMessage:
+          "No Ananda centers found within 150 miles of your location. You might want to check out Ananda's virtual events and online community!",
+      });
+    });
+
+    it("should handle S3 error from center data service", async () => {
+      mockCenterDataService.loadCenters.mockResolvedValue([]);
+      mockCenterDataService.getLastError.mockReturnValue({
+        type: "S3_ERROR",
+        message: "Failed to load center data from S3",
+      });
+
+      const result = await service.findNearestCenters(37.5, -122.2);
+
+      expect(result).toEqual({
+        found: false,
+        centers: [],
+        fallbackMessage: "Failed to load center data from S3",
+      });
     });
   });
 });

@@ -557,4 +557,61 @@ describe("tools.executeTool", () => {
     expect(toolNames).toContain("get_user_location");
     expect(toolNames).toContain("confirm_user_location");
   });
+
+  it("should test confirm_user_location tool execution", async () => {
+    // Test the confirm_user_location tool path that doesn't require request parameter
+    const result = await executeTool(
+      "confirm_user_location",
+      {
+        location: { city: "San Francisco", country: "US", latitude: 37.7749, longitude: -122.4194 },
+        confirmed: true,
+      },
+      {} as NextRequest
+    );
+
+    expect(result).toBeDefined();
+    // The actual result depends on the implementation, but it should not throw an error
+  });
+
+  it("should enhance request with mock Vercel headers in development", async () => {
+    // Mock NODE_ENV as development
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", {
+      value: "development",
+      configurable: true,
+    });
+
+    try {
+      // Create a mock request with no Vercel headers
+      const mockRequest = {
+        headers: {
+          get: (name: string) => {
+            if (name === "user-agent") return "test-agent";
+            return null; // No Vercel headers
+          },
+        },
+      } as NextRequest;
+
+      // This should trigger the localhost development enhancement path
+      const result = await executeTool("get_user_location", {}, mockRequest);
+
+      expect(result).toBeDefined();
+
+      // In development, the system should provide mock location data
+      // The location might be null if external services fail, but the system should handle it gracefully
+      if (result.location) {
+        expect(result.location.city).toBe("Mountain View");
+      } else {
+        // Should still provide a fallback response structure
+        expect(result.centers).toBeDefined();
+        expect(result.centers.found).toBe(false);
+      }
+    } finally {
+      // Restore original NODE_ENV
+      Object.defineProperty(process.env, "NODE_ENV", {
+        value: originalEnv,
+        configurable: true,
+      });
+    }
+  });
 });
