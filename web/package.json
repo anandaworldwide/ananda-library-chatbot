@@ -24,6 +24,7 @@
     "test:all": "npm test && echo '✅ Client tests passed! Running server tests...' || (echo '❌ Client tests failed!' && exit 1) && npm run test:server",
     "test:server:coverage": "jest --selectProjects=server --coverage",
     "test:queries:ananda-public": "RUN_SEMANTIC_TESTS=true dotenv -e ../.env.ananda-public -- jest -c jest.config.cjs __tests__/site_specific/ananda-public/*.test.ts",
+    "test:location:ananda-public": "RUN_LOCATION_TESTS=true dotenv -e ../.env.ananda-public -- jest -c jest.config.cjs __tests__/site_specific/ananda-public/locationSemantic.test.ts",
     "find-untested": "node ../scripts/find-untested-files.js",
     "build:location-intent": "tsx scripts/generate-location-intent-embeddings.ts",
     "emulator": "firebase emulators:start --import ../emulator-data --export-on-exit ../emulator-data --inspect-functions",
