@@ -614,4 +614,210 @@ describe("tools.executeTool", () => {
       });
     }
   });
+
+  it("confirm_user_location defaults confirmed=false and ignores request", async () => {
+    jest.resetModules();
+    const confirmSpy = jest.fn().mockResolvedValue({ location: "San Mateo", confirmed: false });
+
+    jest.doMock("../../../src/utils/server/tools/locationToolService", () => ({
+      createLocationToolService: jest.fn().mockResolvedValue({
+        confirmUserLocation: confirmSpy,
+      }),
+    }));
+
+    // Import after mocking so the mock is applied
+    const { executeTool: executeWithMock } = await import("../../../src/utils/server/tools");
+
+    const result = await executeWithMock("confirm_user_location", { location: "San Mateo" } as any, {} as NextRequest);
+
+    expect(confirmSpy).toHaveBeenCalledWith("San Mateo", false);
+    expect(result).toEqual({ location: "San Mateo", confirmed: false });
+  });
+
+  it("initializes location tool service only once", async () => {
+    jest.resetModules();
+    const createSpy = jest.fn().mockResolvedValue({
+      getUserLocation: jest.fn().mockResolvedValue({ location: null, centers: { found: false, centers: [] } }),
+      confirmUserLocation: jest.fn(),
+    });
+
+    jest.doMock("../../../src/utils/server/tools/locationToolService", () => ({
+      createLocationToolService: createSpy,
+    }));
+
+    const { executeTool: exec } = await import("../../../src/utils/server/tools");
+
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", { value: "development", configurable: true });
+    try {
+      const req = { headers: { get: () => null } } as any;
+      await exec("get_user_location", {}, req);
+      await exec("get_user_location", {}, req);
+      expect(createSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(process.env, "NODE_ENV", { value: originalEnv, configurable: true });
+    }
+  });
+
+  it("development enhancement preserves original headers and injects missing Vercel headers", async () => {
+    jest.resetModules();
+    let capturedHeaders: Headers | { get: (k: string) => string | null };
+    const getUserLocation = jest.fn().mockImplementation(async (_args, headers) => {
+      capturedHeaders = headers;
+      return { location: null, centers: { found: false, centers: [] } };
+    });
+
+    jest.doMock("../../../src/utils/server/tools/locationToolService", () => ({
+      createLocationToolService: jest.fn().mockResolvedValue({
+        getUserLocation,
+        confirmUserLocation: jest.fn(),
+      }),
+    }));
+
+    const { executeTool: exec } = await import("../../../src/utils/server/tools");
+
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", { value: "development", configurable: true });
+    try {
+      const req = {
+        headers: {
+          get: (name: string) => {
+            if (name === "user-agent") return "UA-Test";
+            if (name === "x-vercel-ip-city") return "San%20Mateo";
+            // country is intentionally missing to trigger injection
+            return null;
+          },
+        },
+      } as any;
+
+      await exec("get_user_location", {}, req);
+
+      expect(getUserLocation).toHaveBeenCalled();
+      // @ts-expect-error capturedHeaders is assigned in mock implementation
+      expect(capturedHeaders.get("user-agent")).toBe("UA-Test");
+      // existing city should be preserved
+      // @ts-expect-error capturedHeaders is assigned in mock implementation
+      expect(capturedHeaders.get("x-vercel-ip-city")).toBe("San%20Mateo");
+      // missing country should be injected by enhancement
+      // @ts-expect-error capturedHeaders is assigned in mock implementation
+      expect(capturedHeaders.get("x-vercel-ip-country")).toBe("US");
+    } finally {
+      Object.defineProperty(process.env, "NODE_ENV", { value: originalEnv, configurable: true });
+    }
+  });
+
+  it("production invalid request throws expected error", async () => {
+    jest.resetModules();
+    const { executeTool: exec } = await import("../../../src/utils/server/tools");
+
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", { value: "production", configurable: true });
+    try {
+      await expect(exec("get_user_location", {}, {} as any)).rejects.toThrow(
+        "Invalid request object - cannot determine location"
+      );
+    } finally {
+      Object.defineProperty(process.env, "NODE_ENV", { value: originalEnv, configurable: true });
+    }
+  });
+
+  it("development invalid request injects full mock headers and forwards to service", async () => {
+    jest.resetModules();
+    let capturedHeaders: Headers | { get: (k: string) => string | null };
+    const getUserLocation = jest.fn().mockImplementation(async (_args, headers) => {
+      capturedHeaders = headers;
+      return { location: null, centers: { found: false, centers: [] } };
+    });
+
+    jest.doMock("../../../src/utils/server/tools/locationToolService", () => ({
+      createLocationToolService: jest.fn().mockResolvedValue({
+        getUserLocation,
+        confirmUserLocation: jest.fn(),
+      }),
+    }));
+
+    const { executeTool: exec } = await import("../../../src/utils/server/tools");
+
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", { value: "development", configurable: true });
+    try {
+      // Pass completely invalid request (no headers) to trigger mock request creation
+      await exec("get_user_location", {}, {} as any);
+
+      expect(getUserLocation).toHaveBeenCalled();
+      // @ts-expect-error capturedHeaders is assigned in mock implementation
+      expect(capturedHeaders.get("x-vercel-ip-city")).toBe("Mountain%20View");
+      // @ts-expect-error capturedHeaders is assigned in mock implementation
+      expect(capturedHeaders.get("x-vercel-ip-country")).toBe("US");
+      // @ts-expect-error capturedHeaders is assigned in mock implementation
+      expect(capturedHeaders.get("x-vercel-ip-latitude")).toBe("37.4419");
+      // @ts-expect-error capturedHeaders is assigned in mock implementation
+      expect(capturedHeaders.get("x-vercel-ip-longitude")).toBe("-122.1430");
+      // @ts-expect-error capturedHeaders is assigned in mock implementation
+      expect(capturedHeaders.get("x-forwarded-for")).toBe("98.41.154.118");
+    } finally {
+      Object.defineProperty(process.env, "NODE_ENV", { value: originalEnv, configurable: true });
+    }
+  });
+
+  it("skips enhancement when Vercel headers present and preserves original headers object", async () => {
+    jest.resetModules();
+    let capturedHeaders: { get: (k: string) => string | null } | Headers;
+    const getUserLocation = jest.fn().mockImplementation(async (_args, headers) => {
+      capturedHeaders = headers;
+      return { location: null, centers: { found: false, centers: [] } };
+    });
+
+    jest.doMock("../../../src/utils/server/tools/locationToolService", () => ({
+      createLocationToolService: jest.fn().mockResolvedValue({
+        getUserLocation,
+        confirmUserLocation: jest.fn(),
+      }),
+    }));
+
+    const { executeTool: exec } = await import("../../../src/utils/server/tools");
+
+    const originalEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", { value: "development", configurable: true });
+    try {
+      const origHeaders = {
+        get: (name: string) => {
+          if (name === "x-vercel-ip-city") return "Mountain%20View";
+          if (name === "x-vercel-ip-country") return "US";
+          return null;
+        },
+      };
+      const req = { headers: origHeaders } as any;
+
+      await exec("get_user_location", {}, req);
+
+      expect(getUserLocation).toHaveBeenCalled();
+      // should be the exact same headers object (no enhancement)
+      // @ts-expect-error capturedHeaders assigned in mock
+      expect(capturedHeaders).toBe(origHeaders);
+      // values should remain as originally provided
+      // @ts-expect-error capturedHeaders assigned in mock
+      expect(capturedHeaders.get("x-vercel-ip-city")).toBe("Mountain%20View");
+      // @ts-expect-error capturedHeaders assigned in mock
+      expect(capturedHeaders.get("x-vercel-ip-country")).toBe("US");
+    } finally {
+      Object.defineProperty(process.env, "NODE_ENV", { value: originalEnv, configurable: true });
+    }
+  });
+
+  it("confirm_user_location propagates service errors", async () => {
+    jest.resetModules();
+    const svcError = new Error("confirm failed");
+    jest.doMock("../../../src/utils/server/tools/locationToolService", () => ({
+      createLocationToolService: jest.fn().mockResolvedValue({
+        confirmUserLocation: jest.fn().mockRejectedValue(svcError),
+      }),
+    }));
+
+    const { executeTool: exec } = await import("../../../src/utils/server/tools");
+
+    await expect(exec("confirm_user_location", { location: "San Mateo" } as any, {} as any)).rejects.toThrow(
+      "confirm failed"
+    );
+  });
 });
