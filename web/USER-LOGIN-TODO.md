@@ -2,116 +2,162 @@
 
 ## Overview
 
-This TODO outlines the implementation of a passwordless magic link authentication system, integrated with Salesforce for
-email validation and entitlements. It builds on the existing UUID system in Firestore, ensuring continuity for user data
-(e.g., favorites, chat history). Key goals: Maximize ease of use, minimize support tickets, support long sessions (up to
-6 months), and handle three access levels. We'll use AWS SES for email delivery, with optional SendGrid integration for
-low-volume use.
+Implement passwordless authentication using magic links, built on the existing Firestore UUID system for continuity of
+user data (favorites, chat history). We will ship in two phases:
 
-The system will:
+- Phase I (no Salesforce): Admin-only onboarding via “Add User”. No public signup. Users receive an activation magic
+  link (single-use, expires in 14 days). On activation, they get a long-lived JWT session and basic site-scoped
+  entitlements. Audit all admin actions.
+- Phase II (Salesforce enrichment): On activation, attempt immediate Salesforce entitlement enrichment; also run a daily
+  midnight PT sync. Salesforce is the source of truth. Users are notified on upgrades/downgrades. Ops alerted on sync
+  failures. No local entitlement overrides.
 
-- Use magic links as the primary login flow.
-- On first magic link click: Validate email via Salesforce, check for existing UUID/cookie/local storage, associate or
-  generate a new UUID, fetch entitlements, and set a long-lived JWT session.
-- Tie all user data to the UUID/email for persistence.
-- Include a daily cron for entitlement syncing.
-- Consider a hybrid option (optional password creation) for future flexibility.
+Key goals: maximize ease of use, minimize support tickets, support long sessions (up to 6 months), and maintain clear
+role governance and auditing. Use AWS SES for email (start with simple SES templates; evaluate SendGrid later for
+templates/analytics). Use shadcn/ui for admin UI components.
+
+Scope: Applies to the Ananda and Jairam sites only. Other sites do not use login.
+
+Roles and governance:
+
+- Roles: `user`, `admin`, `superuser`.
+- Only `superuser` can assign or remove `admin` permissions.
+- Bootstrap: first superusers/admins created via environment-gated bootstrap.
+- Audit: record all admin actions (add user, resend activation, role changes) with who/when/context.
+
+Entitlements:
+
+- Basic entitlements: access to completely unrestricted content in the Pinecone database (site-scoped).
+- No entitlement overrides; Salesforce wins on conflicts in Phase II.
+- Extended entitlements: initial set = `kriyaban`, `minister`; final list TBD. Mapping to Salesforce fields defined in
+  Phase II.
 
 ## Prerequisites
 
-- [ ] Review existing auth code: passwordUtils.ts, jwtUtils.ts, appRouterJwtUtils.ts, authMiddleware.ts, login.ts,
-      logout.ts.
-- [ ] Confirm Salesforce API integration: Define endpoint for email validation and entitlement fetching (e.g., access
-      levels: public, kriyaban, premium).
-- [ ] Set up email service: Configure AWS SES for magic link sending; evaluate SendGrid free tier for
-      templates/analytics if needed.
+- [ ] Review existing auth code: `passwordUtils.ts`, `jwtUtils.ts`, `appRouterJwtUtils.ts`, `authMiddleware.ts`,
+      `login.ts`, `logout.ts`.
+- [ ] Email service: Configure AWS SES for magic/activation emails; evaluate SendGrid for templates/analytics if needed.
+- [ ] Phase II only: Define Salesforce API/webhook for entitlement fetching; confirm field mapping and auth.
 
 ## Implementation Steps
 
-### 1. Backend Setup
+### Phase I — Backend (no Salesforce gating)
 
-- [ ] Update Firestore user schema: Ensure `users` collection includes fields like `email` (unique), `uuid` (persistent
-      ID), `entitlements` (array/object from Salesforce), `lastSync` (timestamp for cron).
+- [ ] Update Firestore user schema (site-scoped):
 
-- [ ] Create magic link generation endpoint (e.g., /api/requestMagicLink.ts):
+  - `email` (unique per site), `uuid` (persistent ID), `siteId`, `roles` (default `user`), `entitlements` (basic only),
+    `invitedBy`, `inviteStatus` (`pending` | `accepted` | `expired`), `inviteTokenHash`, `inviteExpiresAt`,
+    `verifiedAt`, `lastLoginAt`, `audit` entries (append-only).
 
-  - Accept email via POST.
-  - Validate email format.
-  - Query Salesforce for authorization and entitlements.
-  - If valid, generate a one-time token (e.g., signed JWT with 15-min expiration).
-  - Send email with link (e.g., <https://yourdomain.com/verify?token=xxx>) using emailOps.ts.
-  - Handle errors (e.g., invalid email, Salesforce failure) with user-friendly messages.
+- [ ] Admin add user endpoint: `POST /api/admin/addUser`
 
-- [ ] Create verification endpoint (e.g., /api/verifyMagicLink.ts):
+  - Auth: `admin` or `superuser` (site-scoped).
+  - Input: `{ email, siteId }`.
+  - Behavior: Idempotent per (email, siteId). If no user, create with basic entitlements and `pending` status; generate
+    activation token (single-use) valid for 14 days; send activation email. If user exists and is `pending`, resend and
+    extend expiry. If user is already `accepted`, return 200 with no-op message.
+  - Audit: Record actor, target email, result (created|resent|no-op).
 
-  - GET/POST with token.
-  - Validate token (not expired, unused).
-  - Fetch/check for existing UUID from cookie/local storage (if present).
-  - If existing UUID found and matches email, associate and refresh entitlements from Salesforce.
-  - If no UUID or mismatch, generate new UUID and store in Firestore with email/entitlements.
-  - Set long-lived JWT cookie (maxAge: 6 months, HttpOnly, secure) via jwtUtils.ts.
-  - Redirect to dashboard or home.
+- [ ] Resend activation endpoint: `POST /api/admin/resendActivation`
 
-- [ ] Implement UUID association logic:
+  - Auth: `admin` or `superuser`. Idempotent. Only allowed for `pending` users. Generates a new token with a fresh
+    14-day window, sends email, records audit.
 
-  - In verification: Check request cookies/local storage for existing UUID.
-  - Query Firestore: If UUID exists but linked to different email, handle conflict (e.g., generate new or prompt user).
-  - Update user doc to link email and entitlements.
+- [ ] Activation verification endpoint: `POST /api/verifyMagicLink`
 
-- [ ] Add session persistence:
+  - Input: `{ token }` (from emailed link).
+  - Validate token (unexpired, unused, matches site and email), mark `accepted`, set `verifiedAt`, associate existing
+    UUID from cookies/local storage when present, else generate a new UUID and store.
+  - Set long-lived JWT cookie (HttpOnly, secure, sameSite strict, maxAge 6 months).
+  - Redirect to the appropriate page.
 
-  - Use JWT with refresh token mechanism for safe long sessions.
-  - On each request, validate JWT and check entitlements via middleware (extend authMiddleware.ts).
+- [ ] UUID association logic
 
-- [ ] Daily cron job for entitlement sync (e.g., extend pruneRateLimits.ts):
+  - During activation, if an existing UUID is present and linked to the same email/site, keep it; otherwise, store a new
+    UUID. Handle edge conflicts by preferring the email/site-linked UUID and auditing the change.
 
-  - Query active users (e.g., last login > 30 days).
-  - Re-fetch entitlements from Salesforce.
-  - Update Firestore; if revoked, flag for session invalidation (e.g., add `revoked: true` checked in middleware).
+- [ ] Session persistence
 
-- [ ] Security enhancements:
-  - Rate limit magic link requests (using genericRateLimiter.ts, e.g., 5 per IP/hour).
-  - Add device/IP checks on verification to flag suspicious logins.
-  - Implement "log out from all devices" endpoint.
+  - Use JWT for long sessions. Keep JWT claims minimal (userId/uuid, roles, site). Resolve entitlements server-side per
+    request to avoid stale claims.
+
+- [ ] Security enhancements
+
+  - No per-admin daily limit for add/resend per requirement, but keep generic API abuse protection (reasonable IP-based
+    limits) using `genericRateLimiter.ts`. Add device/IP checks on verification to flag suspicious logins. Add "log out
+    from all devices" endpoint.
+
+- [ ] Audit log
+
+  - Append-only audit entries: action, actor, target, siteId, timestamp, context (requestId, IP), outcome.
+
+### Phase I — Frontend
+
+- [ ] Admin UI: Simple “Add User” form (email only) built with shadcn/ui components. Site scoping is automatic (each
+      site has its own Firestore DB); admins/superusers can only add users within their current site. List pending users
+      with “Resend activation”.
+- [ ] Activation page: Handles token POST to `/api/verifyMagicLink`, shows success/error, redirects.
+- [ ] User data features: Continue keying to user UUID; fetch from JWT/cookies.
+
+### Phase I — Testing
+
+- [ ] Unit tests: token generation/validation, idempotent add/resend, JWT creation, UUID association.
+- [ ] Integration tests: add → email send (mock) → activation → session persistence; pending → resend; accepted → no-op.
+- [ ] Edge cases: expired tokens (14 days), cross-site attempts, duplicate emails per site, cookie UUID mismatch.
+
+### Phase II — Salesforce Entitlement Enrichment
+
+- [ ] Immediate check on activation
+
+  - After successful activation, call Salesforce webhook/API to enrich entitlements. On failure/timeouts, proceed
+    silently and try during the nightly sync.
+
+- [ ] Daily sync (Vercel Cron)
+
+  - Schedule: 00:00 America/Los_Angeles. Backoff/retry on failures; alert Ops on repeated failures (use existing
+    ops-email utility). Sync rules: Salesforce is the source of truth. Apply upgrades/downgrades. Notify users via email
+    when entitlements change.
+
+- [ ] Data model additions
+
+  - `entitlementsSource` (`local` | `salesforce`), `lastSalesforceSync`, `salesforceContactId?` (if available), and
+    minimal additional fields needed for mapping. No site-specific mappings; mappings are global.
+
+### Duplicate Handling (definition and defaults)
+
+- Duplicate means an admin attempts to add the same email for the same `siteId` more than once.
+- Behavior:
+
+  - If no user exists: create `pending` user, send activation (14-day).
+  - If user exists and is `pending`: resend activation and extend expiry (idempotent resend).
+  - If user exists and is `accepted`: no-op (return 200 with “already active”); do not send a new activation.
+  - Uniqueness is enforced per site. The same email may exist on another site with an independent account.
 
 ### 2. Frontend Integration
 
-- [ ] Update login page/component:
-  - Simple form: Email input + "Send Magic Link" button.
-  - Handle submission: POST to /api/requestMagicLink.
-  - Display messages (e.g., "Check your email!").
-- [ ] Verification page (e.g., /verify):
-
-  - Handle token from URL, POST to /api/verifyMagicLink.
-  - Show loading/success/error states.
-  - Redirect based on entitlements (e.g., to restricted content).
-
-- [ ] User data features (favorites, chat history):
-  - In relevant components (e.g., ChatInterface.tsx), key data to user's UUID (fetched from JWT/cookie).
-  - Use Firestore queries filtered by UUID.
+- [ ] Admin pages only (no public signup): Add User and Pending list with Resend.
+- [ ] Activation page (`/verify`): token handling, states, redirect logic.
+- [ ] Continue keying favorites/chat history to UUID from JWT/cookies.
 
 ### 3. Hybrid Option (Optional Password Flow)
 
-- [ ] Add during first verification: Prompt "Want faster logins? Set a password now."
-- [ ] If chosen: Collect password, hash with bcrypt (passwordUtils.ts), store in user doc.
-- [ ] Update login page: Offer "Login with Password" alongside magic link.
-- [ ] In /api/login.ts: Validate password against hash, set JWT if match.
+- [ ] Optional and deferred. Not required for Phase I/II. If implemented later, add only after magic-link flow is
+      stable.
 
 ### 4. Testing
 
-- [ ] Unit tests: Cover UUID generation/association, token validation, entitlement fetching (in
-      **tests**/utils/server/).
-- [ ] Integration tests: End-to-end flows (request link → verify → session persistence) in **tests**/api/.
-- [ ] Edge cases: Existing UUID mismatch, expired links, Salesforce failures, multi-device sync.
+- [ ] Unit tests: token, UUID association, admin endpoints, audit logging, JWT/session, SF sync utilities (Phase II).
+- [ ] Integration tests: add → activation → session; pending → resend; accepted → no-op; Phase II nightly sync with
+      upgrade/downgrade.
 - [ ] Run full suite: `npm run test:all`.
 
 ### 5. Deployment and Monitoring
 
-- [ ] Update docs/user-auth-TODO.md with this implementation.
-- [ ] Monitor: Track login success rates, email delivery failures, support tickets pre/post-launch.
-- [ ] Rollout: Start with beta users to test varied tech levels.
+- [ ] Document Phase I and II in `docs/user-auth-TODO.md` and `docs/backend-structure.md`.
+- [ ] Vercel Cron at midnight PT for Phase II sync; add dashboards for success/failure counts.
+- [ ] Monitor: login success, email delivery failures, sync outcomes, downgrade events; support ticket deltas.
 
 ## Risks and Mitigations
 
-- Risk: High email volume → Mitigation: Confirm low volume; use SendGrid if needed.
-- Risk: Entitlement sync misses → Mitigation: Add alerts if cron fails.
+- Risk: Email deliverability/latency → Mitigation: Warm-up SES domain, consider SendGrid templates.
+- Risk: Sync misses/downgrades surprise users → Mitigation: Clear user notifications; Ops alerts on repeated failures.

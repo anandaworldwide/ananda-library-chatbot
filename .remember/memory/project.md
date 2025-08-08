@@ -100,6 +100,27 @@
 - **Pinecone namespaces**: One per site
 - **Config location**: `site-config/config.json`
 
+## Authentication and Onboarding (Decisions)
+
+- Admin-only onboarding via Add User; no public signup for Ananda and Jairam sites
+- Roles: `user`, `admin`, `superuser` (only superuser can grant/revoke admin)
+- Bootstrap first admins via environment-gated route/script
+- Activation links: magic link, single-use, 14-day expiry; resend allowed; no per-admin daily cap
+- Basic entitlements: access to completely unrestricted Pinecone content; site-scoped entitlements and logins
+- Phase I: Implement auth, add/resend, activation, audit logging; no Salesforce dependency
+- Phase II: Salesforce enrichment on activation + nightly (midnight PT) cron; Salesforce is source of truth;
+  auto-up/downgrade; user notified on changes; Ops alerted on repeated sync failures; no local entitlement overrides
+- Duplicate handling: per (email, site) — create if none; resend if pending; no-op if already active
+
+## UI and Templates
+
+- Use shadcn/ui for admin UI (forms, lists, buttons)
+- Start with SES email templates; consider SendGrid later for richer templates/analytics
+
+## Entitlements (Interim)
+
+- Extended entitlements initial set: `kriyaban`, `minister` (final list TBD by user)
+
 ## Never Do Again
 
 1. Cross-evaluate between different embedding model generations
