@@ -36,7 +36,7 @@ Require authentication to get signed URLs, preventing anonymous access.
 - Add tests: Extend api tests in web/**tests**/api/ with auth scenarios
 - Dependencies: appRouterJwtUtils.ts, existing S3 signed URL logic
 
-## 🥚 3. Disable Text Copying in PDFs (Data Ingestion - Medium Effort)
+## 🐣 3. Disable Text Copying in PDFs (Data Ingestion - Medium Effort)
 
 Set PDF security flags during generation to prevent text selection/copying.
 
@@ -50,6 +50,8 @@ Set PDF security flags during generation to prevent text selection/copying.
 - Test: Generate sample PDF, verify in Adobe Reader that text can't be selected/copied
 - Handle in --overwrite-pdfs mode; update any related tests
 - Dependencies: ReportLab output as bytes, reportlab.lib.pdfencrypt.StandardEncryption
+
+Note: Encryption integrated in create_pdf_from_content with StandardEncryption (canCopy=0).
 
 ## Prioritization & Timeline
 

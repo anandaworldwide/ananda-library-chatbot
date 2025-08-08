@@ -57,6 +57,7 @@ import logging
 import math
 import os
 import re
+import secrets
 import sys
 import time
 import traceback
@@ -70,6 +71,7 @@ from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from pinecone import NotFoundException, Pinecone, ServerlessSpec
 from reportlab.lib.pagesizes import letter
+from reportlab.lib.pdfencrypt import StandardEncryption
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
@@ -662,6 +664,19 @@ def create_pdf_from_content(
     buffer = BytesIO()
 
     try:
+        # Configure PDF encryption to disable text copying while allowing viewing
+        # Use an empty user password for seamless opening, with a strong owner password
+
+        owner_password = os.getenv("PDF_OWNER_PASSWORD") or secrets.token_urlsafe(24)
+        encryption = StandardEncryption(
+            userPassword="",
+            ownerPassword=owner_password,
+            canPrint=1,
+            canModify=0,
+            canCopy=0,  # Disable text copying
+            canAnnotate=1,
+            strength=128,
+        )
         # Create PDF document
         doc = SimpleDocTemplate(
             buffer,
@@ -670,6 +685,7 @@ def create_pdf_from_content(
             leftMargin=72,
             topMargin=72,
             bottomMargin=18,
+            encrypt=encryption,
         )
 
         # Get styles
