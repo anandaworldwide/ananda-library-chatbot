@@ -22,6 +22,14 @@ import { s3Client } from "@/utils/server/awsConfig";
 // Mock dependencies
 jest.mock("@/utils/server/genericRateLimiter");
 jest.mock("@/utils/server/getS3PdfSignedUrl");
+jest.mock("@/utils/server/apiMiddleware", () => ({
+  withJwtOnlyAuth: (handler: any) => {
+    return async (req: NextApiRequest, res: NextApiResponse) => {
+      // Bypass JWT for this suite; JWT behavior covered elsewhere
+      return handler(req, res);
+    };
+  },
+}));
 jest.mock("@/utils/server/awsConfig", () => ({
   s3Client: {
     send: jest.fn(),
@@ -71,7 +79,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should accept POST requests", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "test.pdf" },
+        body: { pdfS3Key: "test.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -84,15 +92,20 @@ describe("/api/getPdfSignedUrl", () => {
     it("should apply rate limiting with correct parameters", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "test.pdf" },
+        body: { pdfS3Key: "test.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
 
       expect(mockGenericRateLimiter).toHaveBeenCalledWith(req, res, {
         windowMs: 60 * 1000, // 1 minute
-        max: 10, // 10 requests per minute
+        max: 5, // 5 requests per minute
         name: "pdf_download",
+      });
+      expect(mockGenericRateLimiter).toHaveBeenCalledWith(req, res, {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 20, // 20 requests per hour
+        name: "pdf_download_hourly",
       });
     });
 
@@ -160,7 +173,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should accept .pdf files", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "document.pdf" },
+        body: { pdfS3Key: "document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -171,7 +184,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should accept .PDF files (case insensitive)", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "document.PDF" },
+        body: { pdfS3Key: "document.PDF", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -182,7 +195,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should reject non-PDF file extensions", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "document.txt" },
+        body: { pdfS3Key: "document.txt", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -196,7 +209,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should reject files without extensions", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "document" },
+        body: { pdfS3Key: "document", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -212,7 +225,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should verify file exists in S3", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "test-document.pdf" },
+        body: { pdfS3Key: "test-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -234,7 +247,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "nonexistent.pdf" },
+        body: { pdfS3Key: "nonexistent.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -252,7 +265,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "restricted.pdf" },
+        body: { pdfS3Key: "restricted.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -270,7 +283,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "test.pdf" },
+        body: { pdfS3Key: "test.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -290,7 +303,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "valid-document.pdf" },
+        body: { pdfS3Key: "valid-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -305,7 +318,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "legacy-document.pdf" },
+        body: { pdfS3Key: "legacy-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -323,7 +336,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "old-document.pdf" },
+        body: { pdfS3Key: "old-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -341,7 +354,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "fake-document.pdf" },
+        body: { pdfS3Key: "fake-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -360,7 +373,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "no-content-type.pdf" },
+        body: { pdfS3Key: "no-content-type.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -374,7 +387,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should generate signed URL for valid PDF", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "valid-document.pdf" },
+        body: { pdfS3Key: "valid-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -391,7 +404,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "test-document.pdf" },
+        body: { pdfS3Key: "test-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -407,7 +420,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should validate file extension before S3 verification", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "malicious.exe" },
+        body: { pdfS3Key: "malicious.exe", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -423,7 +436,7 @@ describe("/api/getPdfSignedUrl", () => {
     it("should perform S3 verification before generating signed URL", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "secure-document.pdf" },
+        body: { pdfS3Key: "secure-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);
@@ -443,7 +456,7 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
-        body: { pdfS3Key: "test.pdf" },
+        body: { pdfS3Key: "test.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
       await handler(req, res);

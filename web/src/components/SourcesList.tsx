@@ -29,6 +29,8 @@ import { AudioPlayer } from "./AudioPlayer";
 import { getMappedLibraryName, getLibraryUrl } from "@/utils/client/libraryMappings";
 import { DocMetadata } from "@/types/DocMetadata";
 import { SiteConfig } from "@/types/siteConfig";
+import { getOrCreateUUID } from "@/utils/client/uuid";
+import { getToken } from "@/utils/client/tokenManager";
 
 // Helper function to extract the title from document metadata.
 const extractTitle = (metadata: DocMetadata): string => {
@@ -255,12 +257,18 @@ const SourcesList: React.FC<SourcesListProps> = ({
         logEvent("download_pdf", "UI", doc.metadata.pdf_s3_key || "unknown");
 
         // Call API to get signed URL
+        const uuid = getOrCreateUUID();
+        const token = await getToken();
+        if (!token) {
+          throw new Error("Authentication required");
+        }
         const response = await fetch("/api/getPdfSignedUrl", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ pdfS3Key: doc.metadata.pdf_s3_key }),
+          body: JSON.stringify({ pdfS3Key: doc.metadata.pdf_s3_key, uuid }),
         });
 
         if (!response.ok) {
@@ -561,12 +569,19 @@ const SourcesList: React.FC<SourcesListProps> = ({
                         try {
                           logEvent("download_pdf", "UI", currentSourceDoc.metadata.pdf_s3_key || "unknown");
 
+                          const uuid = getOrCreateUUID();
+                          const token = await getToken();
+                          if (!token) {
+                            throw new Error("Authentication required");
+                          }
+
                           const response = await fetch("/api/getPdfSignedUrl", {
                             method: "POST",
                             headers: {
                               "Content-Type": "application/json",
+                              Authorization: `Bearer ${token}`,
                             },
-                            body: JSON.stringify({ pdfS3Key: currentSourceDoc.metadata.pdf_s3_key }),
+                            body: JSON.stringify({ pdfS3Key: currentSourceDoc.metadata.pdf_s3_key, uuid }),
                           });
 
                           if (!response.ok) {
