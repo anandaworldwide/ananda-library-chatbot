@@ -2367,9 +2367,20 @@ def run_ingestion_loop(
 
 
 # --- Main Execution ---
-def main():
-    """Main function to orchestrate the data ingestion process."""
-    args = parse_arguments()
+def _validate_flag_combinations(dry_run: bool, no_pinecone: bool) -> None:
+    """Validate mutually exclusive CLI flags.
+
+    Exits the process if an invalid combination is detected.
+    """
+    if dry_run and no_pinecone:
+        logger.error(
+            "Error: Cannot use both --dry-run and --no-pinecone flags together."
+        )
+        sys.exit(1)
+
+
+def _log_startup_info(args: argparse.Namespace) -> None:
+    """Log initial startup information and mode flags."""
     logger.info("--- Starting DB Text Ingestion ---")
     logger.info(f"Site: {args.site}")
     logger.info(f"Database: {args.database}")
@@ -2377,46 +2388,166 @@ def main():
     logger.info(f"Keep Existing Data: {args.keep_data}")
     logger.info(f"Batch Size: {args.batch_size}")
     logger.info(f"Max Records: {args.max_records}")
-    dry_run = args.dry_run
-    no_pinecone = args.no_pinecone
 
-    # Validate conflicting flags
-    if dry_run and no_pinecone:
-        logger.error(
-            "Error: Cannot use both --dry-run and --no-pinecone flags together."
-        )
-        sys.exit(1)
-
-    if dry_run:
+    if args.dry_run:
         logger.info("\n*** DRY RUN MODE ENABLED ***")
         logger.info(
             "No data will be sent to Pinecone (index creation, deletion, upserts skipped)."
         )
-    elif no_pinecone:
+    elif args.no_pinecone:
         logger.info("\n*** NO-PINECONE MODE ENABLED ***")
         logger.info(
             "Pinecone operations skipped, but PDFs will be generated and uploaded to S3."
         )
 
-    # Setup signal handlers using shared utilities
-    setup_signal_handlers()
 
+def _prepare_models_and_splitter(no_pinecone: bool):
+    """Prepare embedding model and text splitter unless Pinecone is disabled.
+
+    Returns a tuple of (embeddings_model, text_splitter).
+    """
+    embeddings_model = None
+    text_splitter = None
+    if not no_pinecone:
+        model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
+        if not model_name:
+            raise ValueError(
+                "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
+            )
+        embeddings_model = OpenAIEmbeddings(model=model_name, chunk_size=500)
+        # Historical SQL/database processing used 1000 chars (~250 tokens) with 200 chars (~50 tokens) overlap (20%)
+        text_splitter = SpacyTextSplitter(
+            chunk_size=250, chunk_overlap=50, log_summary_on_split=False
+        )
+
+    return embeddings_model, text_splitter
+
+
+def _print_session_summary(
+    processed_count_session: int,
+    skipped_count_session: int,
+    error_count_session: int,
+    processed_doc_ids: set[int],
+    last_processed_id_session: int,
+    text_splitter,
+) -> None:
+    """Print a consolidated session summary, including splitter metrics and failures."""
+    logger.info("\n--- Ingestion Session Summary ---")
+    logger.info(
+        f"Total documents processed successfully in this session: {processed_count_session}"
+    )
+    logger.info(
+        f"Total documents skipped (already processed in previous runs): {skipped_count_session}"
+    )
+    logger.info(
+        f"Total documents skipped or failed due to errors in this session: {error_count_session}"
+    )
+    logger.info(
+        f"Total unique documents processed overall (including previous runs): {len(processed_doc_ids)}"
+    )
+    if last_processed_id_session > 0:
+        logger.info(
+            f"Highest document ID processed overall: {last_processed_id_session}"
+        )
+
+    if text_splitter is not None:
+        logger.info("")
+        text_splitter.metrics.print_summary()
+
+    logger.info("")
+    failure_tracker.print_summary()
+
+
+def _attempt_save_checkpoint(
+    checkpoint_file: str,
+    processed_doc_ids: set[int],
+    last_processed_id_session: int,
+) -> None:
+    """Attempt to save a checkpoint; log but ignore any errors."""
+    try:
+        save_checkpoint(
+            checkpoint_file, list(processed_doc_ids), last_processed_id_session
+        )
+    except Exception as cp_err:  # noqa: BLE001 — log and continue on best-effort checkpoint
+        logger.error(f"Could not save checkpoint: {cp_err}")
+
+
+def _handle_rows(
+    all_rows: list[dict],
+    args: argparse.Namespace,
+    processed_doc_ids: set[int],
+    pinecone_index,
+    dry_run: bool,
+    no_pinecone: bool,
+    checkpoint_file: str,
+) -> tuple[int, int, int, int, object | None]:
+    """Process fetched rows using either PDF-only or full ingestion loop.
+
+    Returns (processed_count_session, skipped_count_session, error_count_session, last_processed_id_session, text_splitter)
+    """
+    embeddings_model, text_splitter = _prepare_models_and_splitter(no_pinecone)
+
+    if no_pinecone:
+        (
+            processed_count_session,
+            skipped_count_session,
+            error_count_session,
+            last_processed_id_session,
+        ) = run_pdf_only_loop(
+            all_rows,
+            args,
+        )
+        return (
+            processed_count_session,
+            skipped_count_session,
+            error_count_session,
+            last_processed_id_session,
+            text_splitter,
+        )
+
+    (
+        processed_count_session,
+        skipped_count_session,
+        error_count_session,
+        last_processed_id_session,
+    ) = run_ingestion_loop(
+        all_rows,
+        processed_doc_ids,
+        args,
+        pinecone_index,
+        embeddings_model,
+        text_splitter,
+        checkpoint_file,
+        dry_run,
+    )
+
+    return (
+        processed_count_session,
+        skipped_count_session,
+        error_count_session,
+        last_processed_id_session,
+        text_splitter,
+    )
+
+
+def _run_ingestion(args: argparse.Namespace) -> None:
+    """Execute the ingestion flow with setup, processing, and teardown."""
     load_environment(args.site)
     site_config = get_config(args.site)
 
     db_connection = None
     pinecone_index = None
-    processed_doc_ids = set()
+    processed_doc_ids: set[int] = set()
     processed_count_session = 0
     last_processed_id_session = 0
 
     try:
         db_connection, pinecone_index = setup_connections_and_index(
-            args, dry_run, no_pinecone
+            args, args.dry_run, args.no_pinecone
         )
         checkpoint_file = get_checkpoint_file_path(args.site)
         processed_doc_ids = handle_checkpoint_or_clear_data(
-            args, pinecone_index, checkpoint_file, dry_run, no_pinecone
+            args, pinecone_index, checkpoint_file, args.dry_run, args.no_pinecone
         )
 
         all_rows = fetch_all_data(
@@ -2424,78 +2555,30 @@ def main():
         )
 
         if all_rows:
-            # Prepare embedding model and text splitter (only needed if not no_pinecone)
-            embeddings_model = None
-            text_splitter = None
-
-            if not no_pinecone:
-                model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
-                if not model_name:
-                    raise ValueError(
-                        "OPENAI_INGEST_EMBEDDINGS_MODEL environment variable not set"
-                    )
-                embeddings_model = OpenAIEmbeddings(model=model_name, chunk_size=500)
-                # Historical SQL/database processing used 1000 chars (~250 tokens) with 200 chars (~50 tokens) overlap (20%)
-                text_splitter = SpacyTextSplitter(
-                    chunk_size=250, chunk_overlap=50, log_summary_on_split=False
-                )
-
-            if no_pinecone:
-                # Run PDF-only processing loop
-                (
-                    processed_count_session,
-                    skipped_count_session,
-                    error_count_session,
-                    last_processed_id_session,
-                ) = run_pdf_only_loop(
-                    all_rows,
-                    args,
-                )
-            else:
-                # Run full ingestion loop
-                (
-                    processed_count_session,
-                    skipped_count_session,
-                    error_count_session,
-                    last_processed_id_session,
-                ) = run_ingestion_loop(
-                    all_rows,
-                    processed_doc_ids,
-                    args,
-                    pinecone_index,
-                    embeddings_model,
-                    text_splitter,
-                    checkpoint_file,
-                    dry_run,
-                )
-
-            # Final summary
-            logger.info("\n--- Ingestion Session Summary ---")
-            logger.info(
-                f"Total documents processed successfully in this session: {processed_count_session}"
+            (
+                processed_count_session,
+                skipped_count_session,
+                error_count_session,
+                last_processed_id_session,
+                text_splitter,
+            ) = _handle_rows(
+                all_rows,
+                args,
+                processed_doc_ids,
+                pinecone_index,
+                args.dry_run,
+                args.no_pinecone,
+                checkpoint_file,
             )
-            logger.info(
-                f"Total documents skipped (already processed in previous runs): {skipped_count_session}"
-            )
-            logger.info(
-                f"Total documents skipped or failed due to errors in this session: {error_count_session}"
-            )
-            logger.info(
-                f"Total unique documents processed overall (including previous runs): {len(processed_doc_ids)}"
-            )
-            if last_processed_id_session > 0:
-                logger.info(
-                    f"Highest document ID processed overall: {last_processed_id_session}"
-                )  # Updated phrasing
 
-            # Print chunking statistics
-            if text_splitter is not None:
-                logger.info("")
-                text_splitter.metrics.print_summary()
-
-            # Print failure summary from the global failure tracker
-            logger.info("")
-            failure_tracker.print_summary()
+            _print_session_summary(
+                processed_count_session,
+                skipped_count_session,
+                error_count_session,
+                processed_doc_ids,
+                last_processed_id_session,
+                text_splitter,
+            )
         else:
             logger.info("Exiting as no data was fetched.")
 
@@ -2506,12 +2589,9 @@ def main():
             and processed_doc_ids
             and processed_count_session > 0
         ):
-            try:
-                save_checkpoint(
-                    checkpoint_file, list(processed_doc_ids), last_processed_id_session
-                )
-            except Exception as cp_err:
-                logger.error(f"Could not save checkpoint on interrupt: {cp_err}")
+            _attempt_save_checkpoint(
+                checkpoint_file, processed_doc_ids, last_processed_id_session
+            )
 
         # Print chunking statistics before exiting
         if "text_splitter" in locals() and text_splitter is not None:
@@ -2520,7 +2600,7 @@ def main():
 
         logger.info("Exiting due to KeyboardInterrupt.")
         sys.exit(1)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — top-level handler logs and exits
         logger.error("\n--- An unexpected error occurred during the main process ---")
         logger.error(f"Error: {e}")
         import traceback
@@ -2532,15 +2612,10 @@ def main():
             and "last_processed_id_session" in locals()
             and processed_count_session > 0
         ):
-            try:
-                logger.info("Attempting to save checkpoint on error...")
-                save_checkpoint(
-                    checkpoint_file, list(processed_doc_ids), last_processed_id_session
-                )
-            except Exception as cp_err:
-                logger.error(
-                    f"Could not save checkpoint during error handling: {cp_err}"
-                )
+            logger.info("Attempting to save checkpoint on error...")
+            _attempt_save_checkpoint(
+                checkpoint_file, processed_doc_ids, last_processed_id_session
+            )
 
         # Print chunking statistics before exiting
         if "text_splitter" in locals() and text_splitter is not None:
@@ -2552,6 +2627,17 @@ def main():
         logger.info("Closing database connection...")
         close_db_connection(db_connection)
         logger.info("Ingestion process finished.")
+
+
+def main():
+    """Main function to orchestrate the data ingestion process."""
+    args = parse_arguments()
+    _validate_flag_combinations(args.dry_run, args.no_pinecone)
+    _log_startup_info(args)
+
+    # Setup signal handlers using shared utilities
+    setup_signal_handlers()
+    _run_ingestion(args)
 
 
 if __name__ == "__main__":
