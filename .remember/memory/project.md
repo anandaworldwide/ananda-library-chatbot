@@ -111,6 +111,7 @@
 - Phase II: Salesforce enrichment on activation + nightly (midnight PT) cron; Salesforce is source of truth;
   auto-up/downgrade; user notified on changes; Ops alerted on repeated sync failures; no local entitlement overrides
 - Duplicate handling: per (email, site) — create if none; resend if pending; no-op if already active
+- Bootstrap vetted list: env var `ADMIN_BOOTSTRAP_SUPERUSERS` with comma-separated emails (typically 1–2 superusers)
 
 ## UI and Templates
 

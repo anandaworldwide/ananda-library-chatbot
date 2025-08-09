@@ -32,6 +32,27 @@ Entitlements:
 - Extended entitlements: initial set = `kriyaban`, `minister`; final list TBD. Mapping to Salesforce fields defined in
   Phase II.
 
+## Open Issues
+
+1. Transition grace period using current shared password for self-provisioning
+
+- Goal: For one month, allow users who know the existing shared password to sign in and self-provision an account with
+  basic entitlements, to avoid a sudden support burden.
+- To decide:
+  - Exact UX flow (page/route to enter shared password + email, then send activation magic link)
+  - Rate limiting and abuse prevention (IP limits, optional CAPTCHA)
+  - Eligibility restrictions: open to any email
+  - Sunset mechanics (automatic disable after one month, feature flag, and audit logging)
+
+1. Administrator bootstrap (“knighting” initial admins)
+
+- Goal: Establish the first set of `superuser`/`admin` accounts before rollout.
+- To decide:
+  - Mechanism: environment-gated bootstrap (decided)
+  - Safety controls: single-use/limited-use, detailed audit logging, automatic disable after success
+  - Scope: site-scoped creation only (per-site Firestore)
+  - Logistics: process for selecting administrators (criteria, approvers, timeline)
+
 ## Prerequisites
 
 - [ ] Review existing auth code: `passwordUtils.ts`, `jwtUtils.ts`, `appRouterJwtUtils.ts`, `authMiddleware.ts`,
@@ -66,15 +87,20 @@ Entitlements:
 - [ ] Activation verification endpoint: `POST /api/verifyMagicLink`
 
   - Input: `{ token }` (from emailed link).
-  - Validate token (unexpired, unused, matches site and email), mark `accepted`, set `verifiedAt`, associate existing
-    UUID from cookies/local storage when present, else generate a new UUID and store.
+  - Validate token (unexpired, unused, matches site and email), mark `accepted`, set `verifiedAt`.
+  - One-time UUID inheritance: if a legacy UUID is present (cookie or local storage) and not bound to a different
+    account for this site, set the account's `uuid` to that value; otherwise generate a new UUID and store it.
+  - After association, delete/expire any legacy UUID cookie and instruct the client to remove any legacy localStorage
+    key so future requests use only the account UUID carried in the server-issued JWT.
+  - Ignore any subsequent legacy UUID values on future requests (authoritative source is the account record/JWT).
   - Set long-lived JWT cookie (HttpOnly, secure, sameSite strict, maxAge 6 months).
   - Redirect to the appropriate page.
 
 - [ ] UUID association logic
 
-  - During activation, if an existing UUID is present and linked to the same email/site, keep it; otherwise, store a new
-    UUID. Handle edge conflicts by preferring the email/site-linked UUID and auditing the change.
+  - During activation, perform one-time inheritance as above. From then on, the authoritative UUID is the account's
+    stored value resolved from a validated JWT; never overwrite `uuid` from any legacy cookie/localStorage after
+    activation. Handle edge conflicts by preferring the existing account UUID and auditing the decision.
 
 - [ ] Session persistence
 
@@ -86,10 +112,20 @@ Entitlements:
   - No per-admin daily limit for add/resend per requirement, but keep generic API abuse protection (reasonable IP-based
     limits) using `genericRateLimiter.ts`. Add device/IP checks on verification to flag suspicious logins. Add "log out
     from all devices" endpoint.
+  - Server must ignore any client-supplied legacy UUID after activation; only accept UUID from a validated JWT.
+    Proactively delete/expire legacy UUID cookies and instruct clients to clear localStorage to prevent re-binding
+    attempts.
 
 - [ ] Audit log
 
   - Append-only audit entries: action, actor, target, siteId, timestamp, context (requestId, IP), outcome.
+
+- [ ] Environment-gated admin bootstrap (initial superusers/admins)
+
+  - Implement env-gated route `POST /api/admin/bootstrap` (enabled only when `ENABLE_ADMIN_BOOTSTRAP=true`)
+  - Create site-scoped `superuser` (and optional `admin`) accounts from a vetted list (env or secure config)
+  - Vetted list source: read comma-separated emails from env var `ADMIN_BOOTSTRAP_SUPERUSERS` (typically 1–2 superusers)
+  - Single-use/limited-use; automatically disables itself after success; comprehensive audit logging
 
 ### Phase I — Frontend
 
@@ -97,13 +133,15 @@ Entitlements:
       site has its own Firestore DB); admins/superusers can only add users within their current site. List pending users
       with “Resend activation”.
 - [ ] Activation page: Handles token POST to `/api/verifyMagicLink`, shows success/error, redirects.
-- [ ] User data features: Continue keying to user UUID; fetch from JWT/cookies.
+- [ ] User data features: Continue keying to account `uuid`; read it from server responses/JWT (not from legacy client
+      storage). On activation and first authenticated load, clear any legacy UUID in cookie/localStorage.
 
 ### Phase I — Testing
 
 - [ ] Unit tests: token generation/validation, idempotent add/resend, JWT creation, UUID association.
 - [ ] Integration tests: add → email send (mock) → activation → session persistence; pending → resend; accepted → no-op.
-- [ ] Edge cases: expired tokens (14 days), cross-site attempts, duplicate emails per site, cookie UUID mismatch.
+- [ ] Edge cases: expired tokens (14 days), cross-site attempts, duplicate emails per site, legacy UUID present on
+      activation (one-time inheritance), stale legacy UUID after activation (ignored/cleared), cookie UUID mismatch.
 
 ### Phase II — Salesforce Entitlement Enrichment
 
@@ -137,7 +175,7 @@ Entitlements:
 
 - [ ] Admin pages only (no public signup): Add User and Pending list with Resend.
 - [ ] Activation page (`/verify`): token handling, states, redirect logic.
-- [ ] Continue keying favorites/chat history to UUID from JWT/cookies.
+- [ ] Continue keying favorites/chat history to UUID from a validated JWT; do not read UUID from legacy client storage.
 
 ### 3. Hybrid Option (Optional Password Flow)
 
