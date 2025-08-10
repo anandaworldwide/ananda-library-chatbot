@@ -40,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           createdAt: now,
           updatedAt: now,
         },
-        "set",
+        undefined,
         "bootstrap create"
       );
       results[email] = "created";
@@ -51,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await firestoreSet(
         ref,
         { roles, inviteStatus: "accepted", verifiedAt: now, updatedAt: now },
-        "merge",
+        { merge: true },
         "bootstrap update"
       );
       results[email] = "updated";

@@ -28,6 +28,8 @@ interface TokenData {
 
 // We keep the token in memory to avoid exposing it in localStorage
 let tokenData: TokenData | null = null;
+// Dedupe concurrent token fetches across the app
+let inflightFetchPromise: Promise<string> | null = null;
 
 // Time buffer before expiration to refresh token (30 seconds)
 const EXPIRATION_BUFFER = 30 * 1000;
@@ -45,13 +47,13 @@ let initializationPromise: Promise<string> | null = null;
 function parseJwtExpiration(token: string): number {
   try {
     // Extract payload from JWT (second part between dots)
-    const payload = token.split('.')[1];
+    const payload = token.split(".")[1];
     // Decode base64
     const decoded = JSON.parse(atob(payload));
     // Get expiration timestamp in milliseconds
     return decoded.exp * 1000;
   } catch (error) {
-    console.error('Error parsing JWT token:', error);
+    console.error("Error parsing JWT token:", error);
     // Default to 15 minutes from now if parsing fails
     return Date.now() + 15 * 60 * 1000;
   }
@@ -74,7 +76,7 @@ async function fetchNewToken(): Promise<string> {
   try {
     // Include the full URL as Referer so web-token endpoint can identify special cases
     // like audio files and contact form that need JWT but not siteAuth
-    const response = await fetch('/api/web-token', {
+    const response = await fetch("/api/web-token", {
       headers: {
         // Use the current URL as the referer - this tells the server which page is requesting the token
         Referer: window.location.href,
@@ -83,10 +85,10 @@ async function fetchNewToken(): Promise<string> {
 
     if (!response.ok) {
       // On login page, a 401 is expected - don't treat it as an error
-      if (response.status === 401 && window.location.pathname === '/login') {
-        console.log('No authentication on login page - this is expected');
+      if (response.status === 401 && window.location.pathname === "/login") {
+        console.log("No authentication on login page - this is expected");
         // Return an empty placeholder token for the login page
-        const placeholderToken = 'login-page-placeholder';
+        const placeholderToken = "login-page-placeholder";
         tokenData = {
           token: placeholderToken,
           expiresAt: Date.now() + 15 * 60 * 1000, // 15 minutes
@@ -94,10 +96,10 @@ async function fetchNewToken(): Promise<string> {
         return placeholderToken;
       }
 
-      if (response.status === 401 && window.location.pathname !== '/login') {
+      if (response.status === 401 && window.location.pathname !== "/login") {
         // Save current location for redirect after login
         window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-        return ''; // Return empty token or placeholder
+        return ""; // Return empty token or placeholder
       }
 
       throw new Error(`Failed to fetch token: ${response.status}`);
@@ -107,7 +109,7 @@ async function fetchNewToken(): Promise<string> {
     const token = data.token;
 
     if (!token) {
-      throw new Error('No token received from server');
+      throw new Error("No token received from server");
     }
 
     // Store token with expiration time
@@ -119,9 +121,9 @@ async function fetchNewToken(): Promise<string> {
     return token;
   } catch (error) {
     // Special handling for the login page - don't throw errors
-    if (window.location.pathname === '/login') {
-      console.log('Token fetch failed on login page, using placeholder token');
-      const placeholderToken = 'login-page-placeholder';
+    if (window.location.pathname === "/login") {
+      console.log("Token fetch failed on login page, using placeholder token");
+      const placeholderToken = "login-page-placeholder";
       tokenData = {
         token: placeholderToken,
         expiresAt: Date.now() + 15 * 60 * 1000, // 15 minutes
@@ -129,7 +131,7 @@ async function fetchNewToken(): Promise<string> {
       return placeholderToken;
     }
 
-    console.error('Error fetching token:', error);
+    console.error("Error fetching token:", error);
     throw error;
   }
 }
@@ -161,7 +163,7 @@ export async function initializeTokenManager(): Promise<string> {
     .catch((error) => {
       isInitializing = false;
       initializationPromise = null;
-      console.error('Failed to initialize token manager:', error);
+      console.error("Failed to initialize token manager:", error);
       throw error;
     });
 
@@ -177,11 +179,7 @@ export async function initializeTokenManager(): Promise<string> {
  */
 export function isAuthenticated(): boolean {
   // First check if we have a token and it's valid
-  if (
-    isTokenValid() &&
-    tokenData &&
-    tokenData.token !== 'login-page-placeholder'
-  ) {
+  if (isTokenValid() && tokenData && tokenData.token !== "login-page-placeholder") {
     return true;
   }
 
@@ -204,8 +202,14 @@ export async function getToken(): Promise<string> {
     return tokenData!.token;
   }
 
-  // Otherwise fetch a new token
-  return fetchNewToken();
+  // Otherwise fetch a new token, but dedupe concurrent requests
+  if (inflightFetchPromise) return inflightFetchPromise;
+  inflightFetchPromise = fetchNewToken()
+    .then((token) => token)
+    .finally(() => {
+      inflightFetchPromise = null;
+    });
+  return inflightFetchPromise;
 }
 
 /**
@@ -234,10 +238,7 @@ export async function withAuth(options?: RequestInit): Promise<RequestInit> {
  * @param options Fetch options
  * @returns Fetch response
  */
-export async function fetchWithAuth(
-  url: string,
-  options?: RequestInit,
-): Promise<Response> {
+export async function fetchWithAuth(url: string, options?: RequestInit): Promise<Response> {
   // Standard authenticated request with retry logic
   return fetchWithRetry(url, options);
 }
@@ -246,20 +247,14 @@ export async function fetchWithAuth(
  * Helper function to implement retry logic for fetch requests
  * that might fail due to authentication issues
  */
-async function fetchWithRetry(
-  url: string,
-  options?: RequestInit,
-  retryCount = 0,
-): Promise<Response> {
+async function fetchWithRetry(url: string, options?: RequestInit, retryCount = 0): Promise<Response> {
   try {
     const authOptions = await withAuth(options);
     const response = await fetch(url, authOptions);
 
     // If we get a 401 Unauthorized, try to refresh the token and retry
     if (response.status === 401 && retryCount < MAX_RETRY_ATTEMPTS) {
-      console.log(
-        `Auth failed on attempt ${retryCount + 1}, refreshing token...`,
-      );
+      console.log(`Auth failed on attempt ${retryCount + 1}, refreshing token...`);
 
       // Force token refresh by invalidating the current one
       tokenData = null;
@@ -268,10 +263,10 @@ async function fetchWithRetry(
       return fetchWithRetry(url, options, retryCount + 1);
     }
 
-    if (response.status === 401 && window.location.pathname !== '/login') {
+    if (response.status === 401 && window.location.pathname !== "/login") {
       // Save current location for redirect after login
       window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-      return new Response('', { status: 401 });
+      return new Response("", { status: 401 });
     }
 
     return response;
@@ -282,7 +277,7 @@ async function fetchWithRetry(
 
       // Calculate exponential backoff delay with a maximum
       const delay =
-        process.env.NODE_ENV === 'test'
+        process.env.NODE_ENV === "test"
           ? Math.min(10 * Math.pow(2, retryCount), 50) // Much shorter in test: max 50ms
           : Math.min(500 * Math.pow(2, retryCount), 5000); // Normal: max 5000ms
       await new Promise((resolve) => setTimeout(resolve, delay));

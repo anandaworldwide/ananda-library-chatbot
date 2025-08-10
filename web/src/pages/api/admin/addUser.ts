@@ -56,7 +56,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             inviteExpiresAt,
             updatedAt: now,
           },
-          "merge",
+          { merge: true },
           "update pending user"
         );
         await sendActivationEmail(email, token);
@@ -83,7 +83,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         createdAt: now,
         updatedAt: now,
       },
-      "set",
+      undefined,
       "create user"
     );
 

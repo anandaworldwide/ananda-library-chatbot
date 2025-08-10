@@ -70,7 +70,7 @@ Entitlements:
     `invitedBy`, `inviteStatus` (`pending` | `accepted` | `expired`), `inviteTokenHash`, `inviteExpiresAt`,
     `verifiedAt`, `lastLoginAt`, `audit` entries (append-only).
 
-- [ ] Admin add user endpoint: `POST /api/admin/addUser`
+- [x] Admin add user endpoint: `POST /api/admin/addUser`
 
   - Auth: `admin` or `superuser` (site-scoped).
   - Input: `{ email, siteId }`.
@@ -79,12 +79,12 @@ Entitlements:
     extend expiry. If user is already `accepted`, return 200 with no-op message.
   - Audit: Record actor, target email, result (created|resent|no-op).
 
-- [ ] Resend activation endpoint: `POST /api/admin/resendActivation`
+- [x] Resend activation endpoint: `POST /api/admin/resendActivation`
 
   - Auth: `admin` or `superuser`. Idempotent. Only allowed for `pending` users. Generates a new token with a fresh
     14-day window, sends email, records audit.
 
-- [ ] Activation verification endpoint: `POST /api/verifyMagicLink`
+- [x] Activation verification endpoint: `POST /api/verifyMagicLink`
 
   - Input: `{ token }` (from emailed link).
   - Validate token (unexpired, unused, matches site and email), mark `accepted`, set `verifiedAt`.
@@ -120,7 +120,7 @@ Entitlements:
 
   - Append-only audit entries: action, actor, target, siteId, timestamp, context (requestId, IP), outcome.
 
-- [ ] Environment-gated admin bootstrap (initial superusers/admins)
+- [x] Environment-gated admin bootstrap (initial superusers/admins)
 
   - Implement env-gated route `POST /api/admin/bootstrap` (enabled only when `ENABLE_ADMIN_BOOTSTRAP=true`)
   - Create site-scoped `superuser` (and optional `admin`) accounts from a vetted list (env or secure config)

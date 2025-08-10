@@ -8,6 +8,7 @@ import Cookies from "cookies";
 import bcrypt from "bcryptjs";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import jwt from "jsonwebtoken";
+import { v4 as uuidv4 } from "uuid";
 
 async function compareToken(token: string, hash: string): Promise<boolean> {
   try {
@@ -44,15 +45,24 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ error: "Invalid token" });
     }
 
-    // Mark accepted and set verifiedAt
+    // Determine UUID association (one-time). Prefer existing account uuid; otherwise adopt legacy cookie or generate new
+    const cookies = new Cookies(req, res);
+    const legacyUuid = cookies.get("uuid");
+    const isValidLegacyUuid = typeof legacyUuid === "string" && legacyUuid.length === 36;
+    const accountUuid =
+      typeof (data as any)?.uuid === "string" && (data as any).uuid.length === 36 ? (data as any).uuid : undefined;
+    const finalUuid = accountUuid || (isValidLegacyUuid ? legacyUuid! : uuidv4());
+
+    // Mark accepted, set verifiedAt, updatedAt, and persist uuid if missing
     await firestoreSet(
       userDocRef,
       {
         inviteStatus: "accepted",
         verifiedAt: firebase.firestore.Timestamp.now(),
         updatedAt: firebase.firestore.Timestamp.now(),
+        ...(accountUuid ? {} : { uuid: finalUuid }),
       },
-      "merge",
+      { merge: true },
       "verify user"
     );
 
@@ -71,20 +81,23 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       { expiresIn: "180d" }
     );
 
-    const cookies = new Cookies(req, res);
     cookies.set("auth", authToken, {
       httpOnly: true,
       sameSite: "strict",
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       maxAge: 180 * 24 * 60 * 60 * 1000,
       path: "/",
     });
 
-    return res.status(200).json({ message: "ok" });
+    // Clear legacy uuid cookie after successful association
+    cookies.set("uuid", "", { path: "/", maxAge: 0 });
+
+    return res.status(200).json({ message: "ok", uuid: accountUuid || finalUuid });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ error: message });
   }
 }
 
-export default withApiMiddleware(handler);
+// Activation must work for anonymous users; bypass siteAuth requirement
+export default withApiMiddleware(handler, { skipAuth: true });

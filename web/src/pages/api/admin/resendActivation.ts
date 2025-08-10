@@ -48,7 +48,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     await firestoreSet(
       userDocRef,
       { inviteTokenHash: tokenHash, inviteExpiresAt, updatedAt: firebase.firestore.Timestamp.now() },
-      "merge",
+      { merge: true },
       "resend activation"
     );
     await sendActivationEmail(email, token);
