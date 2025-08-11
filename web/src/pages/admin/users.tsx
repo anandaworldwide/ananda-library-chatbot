@@ -10,6 +10,7 @@ interface PendingUser {
 
 interface ActiveUser {
   email: string;
+  uuid?: string | null;
   roles: string[];
   verifiedAt: string | null;
   lastLoginAt: string | null;
@@ -20,6 +21,7 @@ export default function AdminUsersPage() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<"info" | "error">("info");
   const [pending, setPending] = useState<PendingUser[]>([]);
   const [active, setActive] = useState<ActiveUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,7 +29,6 @@ export default function AdminUsersPage() {
 
   async function fetchPending() {
     setLoading(true);
-    setMessage(null);
     try {
       const res = await fetch("/api/admin/listPendingUsers", {
         headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
@@ -42,6 +43,7 @@ export default function AdminUsersPage() {
       setPending(items);
     } catch (e: any) {
       setMessage(e?.message || "Failed to load pending users");
+      setMessageType("error");
     } finally {
       setLoading(false);
     }
@@ -56,6 +58,7 @@ export default function AdminUsersPage() {
       if (!res.ok) throw new Error(data?.error || "Failed to load active users");
       const items: ActiveUser[] = (data.items || []).map((it: any) => ({
         email: it.email,
+        uuid: it.uuid ?? null,
         roles: it.roles || [],
         verifiedAt: it.verifiedAt ? new Date(it.verifiedAt).toLocaleString() : null,
         lastLoginAt: it.lastLoginAt ? new Date(it.lastLoginAt).toLocaleString() : null,
@@ -64,6 +67,7 @@ export default function AdminUsersPage() {
       setActive(items);
     } catch (e: any) {
       setMessage(e?.message || "Failed to load active users");
+      setMessageType("error");
     }
   }
 
@@ -97,10 +101,12 @@ export default function AdminUsersPage() {
     e.preventDefault();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       setMessage("Enter a valid email");
+      setMessageType("error");
       return;
     }
     setSubmitting(true);
     setMessage(null);
+    setMessageType("info");
     try {
       const res = await fetch("/api/admin/addUser", {
         method: "POST",
@@ -113,12 +119,26 @@ export default function AdminUsersPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to add user");
-      setMessage(data?.message || "User processed");
+      // Interpret backend messages for UI clarity
+      if (data?.message === "already active") {
+        setMessage("Not added: user already exists and is active");
+        setMessageType("error");
+      } else if (data?.message === "resent") {
+        setMessage(`Activation email resent to ${email.toLowerCase()}`);
+        setMessageType("info");
+      } else if (data?.message === "created") {
+        setMessage("User created and activation email sent");
+        setMessageType("info");
+      } else {
+        setMessage(data?.message || "User processed");
+        setMessageType("info");
+      }
       setEmail("");
       await fetchPending();
       await fetchActive();
     } catch (e: any) {
       setMessage(e?.message || "Failed to add user");
+      setMessageType("error");
     } finally {
       setSubmitting(false);
     }
@@ -126,6 +146,7 @@ export default function AdminUsersPage() {
 
   async function onResend(targetEmail: string) {
     setMessage(null);
+    setMessageType("info");
     try {
       const res = await fetch("/api/admin/resendActivation", {
         method: "POST",
@@ -138,10 +159,12 @@ export default function AdminUsersPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to resend");
       setMessage(`Resent to ${targetEmail}`);
+      setMessageType("info");
       await fetchPending();
       await fetchActive();
     } catch (e: any) {
       setMessage(e?.message || "Failed to resend");
+      setMessageType("error");
     }
   }
 
@@ -176,7 +199,15 @@ export default function AdminUsersPage() {
           </button>
         </form>
 
-        {message && <div className="mb-4 rounded border border-yellow-300 bg-yellow-50 p-3 text-sm">{message}</div>}
+        {message && (
+          <div
+            className={`mb-4 rounded border p-3 text-sm ${
+              messageType === "error" ? "border-red-300 bg-red-50 text-red-800" : "border-yellow-300 bg-yellow-50"
+            }`}
+          >
+            {message}
+          </div>
+        )}
 
         <div>
           <h2 className="text-xl font-semibold mb-2">Pending Users</h2>
@@ -223,6 +254,7 @@ export default function AdminUsersPage() {
               <thead>
                 <tr className="border-b">
                   <th className="py-2">Email</th>
+                  <th className="py-2">UUID</th>
                   <th className="py-2">Roles</th>
                   <th className="py-2">Verified</th>
                   <th className="py-2">Last Login</th>
@@ -233,6 +265,7 @@ export default function AdminUsersPage() {
                 {active.map((u) => (
                   <tr key={u.email} className="border-b">
                     <td className="py-2">{u.email}</td>
+                    <td className="py-2 font-mono text-xs text-gray-700">{u.uuid || "–"}</td>
                     <td className="py-2">{u.roles.join(", ") || "–"}</td>
                     <td className="py-2">{u.verifiedAt || "–"}</td>
                     <td className="py-2">{u.lastLoginAt || "–"}</td>

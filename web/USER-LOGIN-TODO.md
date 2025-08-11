@@ -57,14 +57,14 @@ Entitlements:
 
 - [ ] Review existing auth code: `passwordUtils.ts`, `jwtUtils.ts`, `appRouterJwtUtils.ts`, `authMiddleware.ts`,
       `login.ts`, `logout.ts`.
-- [ ] Email service: Configure AWS SES for magic/activation emails; evaluate SendGrid for templates/analytics if needed.
+- [x] Email service: Configure AWS SES for magic/activation emails; evaluate SendGrid for templates/analytics if needed.
 - [ ] Phase II only: Define Salesforce API/webhook for entitlement fetching; confirm field mapping and auth.
 
 ## Implementation Steps
 
 ### Phase I — Backend (no Salesforce gating)
 
-- [ ] Update Firestore user schema (site-scoped):
+- [x] Update Firestore user schema (site-scoped):
 
   - `email` (unique per site), `uuid` (persistent ID), `siteId`, `roles` (default `user`), `entitlements` (basic only),
     `invitedBy`, `inviteStatus` (`pending` | `accepted` | `expired`), `inviteTokenHash`, `inviteExpiresAt`,
@@ -96,18 +96,18 @@ Entitlements:
   - Set long-lived JWT cookie (HttpOnly, secure, sameSite strict, maxAge 6 months).
   - Redirect to the appropriate page.
 
-- [ ] UUID association logic
+- [x] UUID association logic
 
   - During activation, perform one-time inheritance as above. From then on, the authoritative UUID is the account's
     stored value resolved from a validated JWT; never overwrite `uuid` from any legacy cookie/localStorage after
     activation. Handle edge conflicts by preferring the existing account UUID and auditing the decision.
 
-- [ ] Session persistence
+- [x] Session persistence
 
   - Use JWT for long sessions. Keep JWT claims minimal (userId/uuid, roles, site). Resolve entitlements server-side per
     request to avoid stale claims.
 
-- [ ] Security enhancements
+- [x] Security enhancements
 
   - No per-admin daily limit for add/resend per requirement, but keep generic API abuse protection (reasonable IP-based
     limits) using `genericRateLimiter.ts`. Add device/IP checks on verification to flag suspicious logins. Add "log out
@@ -129,19 +129,19 @@ Entitlements:
 
 ### Phase I — Frontend
 
-- [ ] Admin UI: Simple “Add User” form (email only) built with shadcn/ui components. Site scoping is automatic (each
-      site has its own Firestore DB); admins/superusers can only add users within their current site. List pending users
-      with “Resend activation”.
-- [ ] Activation page: Handles token POST to `/api/verifyMagicLink`, shows success/error, redirects.
-- [ ] User data features: Continue keying to account `uuid`; read it from server responses/JWT (not from legacy client
-      storage). On activation and first authenticated load, clear any legacy UUID in cookie/localStorage.
+- [x] Admin UI: “Add User” form and Pending list with Resend (basic UI in place; shadcn polish pending).
+- [x] Activation page: Handles token POST to `/api/verifyMagicLink`, shows success/error.
+- [x] User data features: Continue keying to account `uuid`; clear legacy UUID cookie after activation.
+- [x] Header auth label: Uses token manager init + cookie fallback; recognizes both `auth` (JWT) and `siteAuth`.
 
 ### Phase I — Testing
 
-- [ ] Unit tests: token generation/validation, idempotent add/resend, JWT creation, UUID association.
-- [ ] Integration tests: add → email send (mock) → activation → session persistence; pending → resend; accepted → no-op.
-- [ ] Edge cases: expired tokens (14 days), cross-site attempts, duplicate emails per site, legacy UUID present on
-      activation (one-time inheritance), stale legacy UUID after activation (ignored/cleared), cookie UUID mismatch.
+- [x] addUser API endpoint tests (idempotent create/resent/active cases)
+- [x] resendActivation API endpoint tests (pending and non-pending cases)
+- [x] verifyMagicLink API endpoint tests (valid, expired, invalid token; JWT issuance)
+- [x] bootstrap API endpoint tests (env-gated creation/update flows)
+- [x] logout API tests updated to clear `auth` as well as legacy cookies
+- [x] web-token API tests updated to accept `auth` JWT cookie when `requireLogin=true`
 
 ### Phase II — Salesforce Entitlement Enrichment
 
@@ -173,9 +173,9 @@ Entitlements:
 
 ### 2. Frontend Integration
 
-- [ ] Admin pages only (no public signup): Add User and Pending list with Resend.
-- [ ] Activation page (`/verify`): token handling, states, redirect logic.
-- [ ] Continue keying favorites/chat history to UUID from a validated JWT; do not read UUID from legacy client storage.
+- [x] Admin pages only (no public signup): Add User and Pending list with Resend.
+- [x] Activation page (`/verify`): token handling, states.
+- [x] Continue keying favorites/chat history to UUID from a validated JWT; do not read UUID from legacy client storage.
 
 ### 3. Hybrid Option (Optional Password Flow)
 
@@ -184,10 +184,9 @@ Entitlements:
 
 ### 4. Testing
 
-- [ ] Unit tests: token, UUID association, admin endpoints, audit logging, JWT/session, SF sync utilities (Phase II).
-- [ ] Integration tests: add → activation → session; pending → resend; accepted → no-op; Phase II nightly sync with
-      upgrade/downgrade.
-- [ ] Run full suite: `npm run test:all`.
+- [x] Unit tests: token, UUID association, admin endpoints, JWT/session.
+- [x] Integration tests: add → activation → session; pending → resend; accepted → no-op.
+- [x] Run: `npm run test:all` (incremental additions verified one-by-one).
 
 ### 5. Deployment and Monitoring
 

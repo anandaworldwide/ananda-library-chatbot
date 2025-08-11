@@ -89,8 +89,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       path: "/",
     });
 
-    // Clear legacy uuid cookie after successful association
-    cookies.set("uuid", "", { path: "/", maxAge: 0 });
+    // Set client-readable uuid cookie to match the authoritative account UUID
+    cookies.set("uuid", finalUuid, {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 180 * 24 * 60 * 60 * 1000,
+      path: "/",
+    });
 
     return res.status(200).json({ message: "ok", uuid: accountUuid || finalUuid });
   } catch (err) {

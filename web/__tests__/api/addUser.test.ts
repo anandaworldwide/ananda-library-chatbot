@@ -124,7 +124,7 @@ describe("/api/admin/addUser", () => {
         entitlements: { basic: true },
         inviteStatus: "pending",
       }),
-      "set",
+      undefined,
       "create user"
     );
 

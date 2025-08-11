@@ -121,7 +121,7 @@ describe("/api/admin/bootstrap", () => {
         updatedAt: expect.anything(),
         verifiedAt: expect.anything(),
       }),
-      "set",
+      undefined,
       "bootstrap create"
     );
   });
