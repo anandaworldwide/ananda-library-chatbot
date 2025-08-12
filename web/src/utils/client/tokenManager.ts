@@ -84,8 +84,11 @@ async function fetchNewToken(): Promise<string> {
     });
 
     if (!response.ok) {
-      // On login page, a 401 is expected - don't treat it as an error
-      if (response.status === 401 && window.location.pathname === "/login") {
+      // On login or magic-login pages, a 401 is expected - don't treat it as an error
+      if (
+        response.status === 401 &&
+        (window.location.pathname === "/login" || window.location.pathname === "/magic-login")
+      ) {
         console.log("No authentication on login page - this is expected");
         // Return an empty placeholder token for the login page
         const placeholderToken = "login-page-placeholder";
@@ -97,8 +100,9 @@ async function fetchNewToken(): Promise<string> {
       }
 
       if (response.status === 401 && window.location.pathname !== "/login") {
-        // Save current location for redirect after login
-        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+        // Save current full path (path + search) for redirect after login
+        const fullPath = window.location.pathname + window.location.search;
+        window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
         return ""; // Return empty token or placeholder
       }
 
@@ -120,8 +124,8 @@ async function fetchNewToken(): Promise<string> {
 
     return token;
   } catch (error) {
-    // Special handling for the login page - don't throw errors
-    if (window.location.pathname === "/login") {
+    // Special handling for the login or magic-login pages - don't throw errors
+    if (window.location.pathname === "/login" || window.location.pathname === "/magic-login") {
       console.log("Token fetch failed on login page, using placeholder token");
       const placeholderToken = "login-page-placeholder";
       tokenData = {
@@ -264,8 +268,9 @@ async function fetchWithRetry(url: string, options?: RequestInit, retryCount = 0
     }
 
     if (response.status === 401 && window.location.pathname !== "/login") {
-      // Save current location for redirect after login
-      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      // Save current full path (path + search) for redirect after login
+      const fullPath = window.location.pathname + window.location.search;
+      window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
       return new Response("", { status: 401 });
     }
 

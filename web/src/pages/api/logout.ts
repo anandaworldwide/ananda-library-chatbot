@@ -29,6 +29,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       expires: new Date(0),
       path: "/",
     });
+    // Also clear client-readable UUID to avoid cross-user adoption on shared devices
+    cookies.set("uuid", "", {
+      expires: new Date(0),
+      path: "/",
+    });
     res.status(200).json({ message: "Logged out" });
   } else {
     res.status(405).json({ message: "Method not allowed" });

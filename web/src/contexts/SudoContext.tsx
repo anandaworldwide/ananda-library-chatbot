@@ -1,5 +1,5 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
-import { fetchWithAuth } from '@/utils/client/tokenManager';
+import React, { createContext, useState, useEffect, useContext } from "react";
+import { fetchWithAuth } from "@/utils/client/tokenManager";
 
 interface SudoContextType {
   isSudoUser: boolean;
@@ -9,18 +9,25 @@ interface SudoContextType {
 
 const SudoContext = createContext<SudoContextType | undefined>(undefined);
 
-export const SudoProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const SudoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isSudoUser, setIsSudoUser] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const checkSudoStatus = async () => {
     try {
+      // Skip sudo checks on public auth pages to avoid noisy 401s
+      if (
+        typeof window !== "undefined" &&
+        (window.location.pathname === "/login" || window.location.pathname === "/magic-login")
+      ) {
+        setIsSudoUser(false);
+        setErrorMessage(null);
+        return;
+      }
       // In public/anonymous mode, this will fail with 401 and that's expected
-      const response = await fetchWithAuth('/api/sudoCookie', {
-        method: 'GET',
-        credentials: 'include',
+      const response = await fetchWithAuth("/api/sudoCookie", {
+        method: "GET",
+        credentials: "include",
       });
 
       // Only process the response if it's successful
@@ -28,7 +35,7 @@ export const SudoProvider: React.FC<{ children: React.ReactNode }> = ({
         const data = await response.json();
         setIsSudoUser(data.sudoCookieValue);
         if (data.ipMismatch) {
-          setErrorMessage('Your IP has changed. Please re-authenticate.');
+          setErrorMessage("Your IP has changed. Please re-authenticate.");
         } else {
           setErrorMessage(null);
         }
@@ -44,18 +51,18 @@ export const SudoProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     } catch (error) {
       // Only log actual errors (not 401 auth failures)
-      if (!(error instanceof Error && error.message.includes('401'))) {
-        console.error('Error checking sudo status:', error);
+      if (!(error instanceof Error && error.message.includes("401"))) {
+        console.error("Error checking sudo status:", error);
       }
 
       // Always reset sudo status on any error
       setIsSudoUser(false);
 
       // Don't show error message for auth failures in the UI
-      if (error instanceof Error && error.message.includes('401')) {
+      if (error instanceof Error && error.message.includes("401")) {
         setErrorMessage(null);
       } else {
-        setErrorMessage('Error checking admin privileges');
+        setErrorMessage("Error checking admin privileges");
       }
     }
   };
@@ -64,17 +71,13 @@ export const SudoProvider: React.FC<{ children: React.ReactNode }> = ({
     checkSudoStatus();
   }, []);
 
-  return (
-    <SudoContext.Provider value={{ isSudoUser, errorMessage, checkSudoStatus }}>
-      {children}
-    </SudoContext.Provider>
-  );
+  return <SudoContext.Provider value={{ isSudoUser, errorMessage, checkSudoStatus }}>{children}</SudoContext.Provider>;
 };
 
 export const useSudo = () => {
   const context = useContext(SudoContext);
   if (context === undefined) {
-    throw new Error('useSudo must be used within a SudoProvider');
+    throw new Error("useSudo must be used within a SudoProvider");
   }
   return context;
 };

@@ -3,13 +3,18 @@ import React, { useState } from "react";
 import Head from "next/head";
 import type { GetServerSideProps, NextApiRequest, NextApiResponse } from "next";
 import { getSudoCookie } from "@/utils/server/sudoCookieUtils";
+import Layout from "@/components/layout";
+import { SiteConfig } from "@/types/siteConfig";
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
+import Link from "next/link";
 
 interface AdminDashboardProps {
   isSudoAdmin: boolean;
   bootstrapEnabled: boolean;
+  siteConfig: SiteConfig | null;
 }
 
-export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled }: AdminDashboardProps) {
+export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled, siteConfig }: AdminDashboardProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -30,15 +35,17 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled }: Ad
 
   if (!isSudoAdmin) {
     return (
-      <div className="mx-auto max-w-3xl p-6">
-        <h1 className="text-2xl font-semibold mb-4">Admin Dashboard</h1>
-        <div className="rounded border bg-yellow-50 p-3 text-sm">Access denied. Set sudo cookie to proceed.</div>
-      </div>
+      <Layout siteConfig={siteConfig}>
+        <div className="mx-auto max-w-3xl p-6">
+          <h1 className="text-2xl font-semibold mb-4">Admin Dashboard</h1>
+          <div className="rounded border bg-yellow-50 p-3 text-sm">Access denied. Set sudo cookie to proceed.</div>
+        </div>
+      </Layout>
     );
   }
 
   return (
-    <>
+    <Layout siteConfig={siteConfig}>
       <Head>
         <title>Admin · Dashboard</title>
       </Head>
@@ -70,6 +77,20 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled }: Ad
         </section>
 
         <section className="rounded border p-4">
+          <h2 className="text-lg font-semibold mb-2">Admin Tools</h2>
+          <div className="flex flex-col space-y-2">
+            <Link href="/admin/downvotes" className="text-blue-600 underline inline-flex items-center">
+              Review Downvotes
+              <span className="material-icons text-sm ml-1">thumb_down</span>
+            </Link>
+            <Link href="/admin/relatedQuestionsUpdater" className="text-blue-600 underline inline-flex items-center">
+              Related Qs Updater
+              <span className="material-icons text-sm ml-1">update</span>
+            </Link>
+          </div>
+        </section>
+
+        <section className="rounded border p-4">
           <h2 className="text-lg font-semibold mb-2">Bind UUID to Account</h2>
           <p className="text-sm text-gray-600 mb-2">
             Binds this browser's uuid cookie to the specified user email. Sudo only.
@@ -77,7 +98,7 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled }: Ad
           <BindUuidForm onResult={(t) => setMessage(t)} />
         </section>
       </div>
-    </>
+    </Layout>
   );
 }
 
@@ -131,5 +152,6 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardProps> = async
   const isSudoAdmin = !!sudo.sudoCookieValue;
   const bootstrapEnabled =
     process.env.ENABLE_ADMIN_BOOTSTRAP === "true" || process.env.NEXT_PUBLIC_ENABLE_ADMIN_BOOTSTRAP === "true";
-  return { props: { isSudoAdmin, bootstrapEnabled } };
+  const siteConfig = await loadSiteConfig();
+  return { props: { isSudoAdmin, bootstrapEnabled, siteConfig } };
 };

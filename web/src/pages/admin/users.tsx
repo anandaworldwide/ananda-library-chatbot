@@ -1,6 +1,11 @@
 // Admin Users page: Add User form and Pending Users list with Resend
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
+import Layout from "@/components/layout";
+import { SiteConfig } from "@/types/siteConfig";
+import type { GetServerSideProps, NextApiRequest } from "next";
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
+import { getSudoCookie } from "@/utils/server/sudoCookieUtils";
 
 interface PendingUser {
   email: string;
@@ -17,7 +22,12 @@ interface ActiveUser {
   entitlements: Record<string, any>;
 }
 
-export default function AdminUsersPage() {
+interface AdminUsersPageProps {
+  siteConfig: SiteConfig | null;
+  isSudoAdmin: boolean;
+}
+
+export default function AdminUsersPage({ siteConfig, isSudoAdmin }: AdminUsersPageProps) {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -169,7 +179,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <>
+    <Layout siteConfig={siteConfig}>
       <Head>
         <title>Admin · Users</title>
       </Head>
@@ -283,6 +293,15 @@ export default function AdminUsersPage() {
           )}
         </div>
       </div>
-    </>
+    </Layout>
   );
 }
+
+export const getServerSideProps: GetServerSideProps<AdminUsersPageProps> = async ({ req }) => {
+  const siteConfig = await loadSiteConfig();
+  const sudoStatus = getSudoCookie(req as NextApiRequest);
+  if (!sudoStatus.sudoCookieValue) {
+    return { notFound: true };
+  }
+  return { props: { siteConfig, isSudoAdmin: true } };
+};

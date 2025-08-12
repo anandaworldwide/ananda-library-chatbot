@@ -53,6 +53,15 @@ Entitlements:
   - Scope: site-scoped creation only (per-site Firestore)
   - Logistics: process for selecting administrators (criteria, approvers, timeline)
 
+1. Missing UUID on answers/question-answer pairs from database
+
+- Goal: Ensure every answer and question-answer record has an associated `uuid` for proper attribution and session
+  binding.
+- To do:
+  - Add validation on read/write paths to require `uuid`.
+  - Create a backfill/migration script to populate missing `uuid` values (deterministic mapping when possible).
+  - Add monitoring to detect and alert on any future inserts without `uuid`.
+
 ## Prerequisites
 
 - [ ] Review existing auth code: `passwordUtils.ts`, `jwtUtils.ts`, `appRouterJwtUtils.ts`, `authMiddleware.ts`,
@@ -134,6 +143,70 @@ Entitlements:
 - [x] User data features: Continue keying to account `uuid`; clear legacy UUID cookie after activation.
 - [x] Header auth label: Uses token manager init + cookie fallback; recognizes both `auth` (JWT) and `siteAuth`.
 
+## Login Transition UX (Grace Period)
+
+Purpose: Smooth transition to magic-link auth without spiking support. During the transition, existing users can
+identify via email. If the email is unknown, they can self-provision using the existing shared password to receive an
+activation email with basic entitlements.
+
+Important constraints:
+
+- Do NOT implement any time-based cutoff logic now. The "one-month grace" is a plan only. There should be no code that
+  auto-disables anything by date. Future cutoff will be implemented via a separate change.
+- Continue using the existing shared password for self-provision during this transition.
+- Magic-link validity remains 14 days.
+
+### UX Flow
+
+- Default screen (Email-first):
+
+  - User enters email.
+  - If email exists and is active: send magic link → show confirmation message.
+  - If email exists and is pending: resend activation link (refresh 14-day window) → show confirmation message.
+  - If email is unknown: transition to "Verify access" screen.
+
+- Verify access screen (Shared password):
+  - Prompt for the shared password and email (email prefilled from prior step).
+  - Include hint link: "Those with access to the Ananda library can get the password here." (same content/link as now).
+  - If password is correct: create user with basic entitlements for the site, set status `pending`, generate 14-day
+    activation token, send activation email, and show confirmation.
+  - If password is incorrect: show error and apply rate limiting (see Security & Abuse).
+
+### Security & Abuse
+
+- Rate limiting for shared-password attempts: 5 attempts per hour per IP.
+- Soft lock definition: when an IP exceeds the allowed attempts in the time window, further attempts are temporarily
+  blocked until the window resets (no permanent ban). Audit the lock event.
+- Continue existing rate limits on other auth endpoints.
+- Audit logging: Record self-provision attempts and outcomes with IP, user agent, and siteId.
+
+### Entitlements
+
+- Self-provision assigns only basic entitlements. No domain restrictions at this stage. Extended roles (e.g.,
+  `kriyaban`, `minister`) are not granted by self-provision.
+
+### Admin Notifications
+
+- Send a daily digest summarizing self-provision events (success/failure counts by site) to the operational email
+  configured in `OPS_ALERT_EMAIL`. No per-event email to avoid noise.
+
+### Tasks
+
+- [ ] Frontend: Implement email-first screen with unknown-email branch to shared-password screen (progressive flow).
+- [ ] Frontend: Implement shared-password verification screen with hint link and success/error states.
+- [ ] Backend: Add endpoint for self-provision via shared password that creates `pending` user with basic entitlements
+      and sends activation (14-day), idempotent on concurrent submits.
+- [ ] Backend: Add rate limiting for the shared-password endpoint at 5 attempts/hour/IP.
+- [ ] Backend: Add audit entries for self-provision attempts (success/failure) with context.
+- [ ] Backend: Implement daily digest job that aggregates self-provision events and emails `OPS_ALERT_EMAIL`.
+- [ ] Monitoring: Add metrics for known-email matches, unknown-email branches, shared-password success/failure, and
+      digest sends.
+- [ ] Documentation: Update user-facing copy for both screens and admin docs.
+
+### Deferred (not in this change)
+
+- [ ] Cutoff mechanism for ending grace period (date-based or flag). Not implemented now by design; will be added later.
+
 ### Phase I — Testing
 
 - [x] addUser API endpoint tests (idempotent create/resent/active cases)
@@ -142,6 +215,12 @@ Entitlements:
 - [x] bootstrap API endpoint tests (env-gated creation/update flows)
 - [x] logout API tests updated to clear `auth` as well as legacy cookies
 - [x] web-token API tests updated to accept `auth` JWT cookie when `requireLogin=true`
+
+#### New tests added (this branch)
+
+- 🐣 SudoContext tests
+  - Skips sudo checks on `/login` and does not call network
+  - Sets `isSudoUser` from successful response and shows IP mismatch message
 
 ### Phase II — Salesforce Entitlement Enrichment
 
