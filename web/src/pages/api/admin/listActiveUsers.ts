@@ -21,7 +21,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return {
         email: data.email,
         uuid: data.uuid || null,
-        roles: data.roles || [],
+        role: data.role || undefined,
         verifiedAt: data.verifiedAt?.toDate?.() ?? null,
         lastLoginAt: data.lastLoginAt?.toDate?.() ?? null,
         entitlements: data.entitlements || {},

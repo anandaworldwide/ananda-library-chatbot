@@ -76,8 +76,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             if (!indexSnap.exists) {
               tx.set(indexRef, { email: emailLower, siteId: process.env.SITE_ID || "default", createdAt: nowTs });
             }
-            // Mark accepted
-            tx.set(userDocRef, { inviteStatus: "accepted", verifiedAt: nowTs, updatedAt: nowTs }, { merge: true });
+            // Mark accepted and record initial login timestamp
+            tx.set(
+              userDocRef,
+              { inviteStatus: "accepted", verifiedAt: nowTs, lastLoginAt: nowTs, updatedAt: nowTs },
+              { merge: true }
+            );
             finalUuid = existingAccountUuid;
           } else {
             // Reserve candidate or fail if taken by different user
@@ -89,7 +93,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             tx.set(indexRef, { email: emailLower, siteId: process.env.SITE_ID || "default", createdAt: nowTs });
             tx.set(
               userDocRef,
-              { uuid: candidate, inviteStatus: "accepted", verifiedAt: nowTs, updatedAt: nowTs },
+              { uuid: candidate, inviteStatus: "accepted", verifiedAt: nowTs, lastLoginAt: nowTs, updatedAt: nowTs },
               { merge: true }
             );
             finalUuid = candidate;
@@ -110,11 +114,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const jwtSecret = process.env.SECURE_TOKEN;
     if (!jwtSecret) return res.status(500).json({ error: "JWT secret missing" });
 
+    // Determine effective role for JWT (see magicLogin.ts for precedence rules)
+    const effectiveRole = typeof (data as any)?.role === "string" ? (data as any).role : "user";
+
     const authToken = jwt.sign(
       {
         client: "web",
         email: email.toLowerCase(),
-        roles: Array.isArray(data?.roles) ? data.roles : ["user"],
+        role: effectiveRole,
         site: process.env.SITE_ID || "default",
       },
       jwtSecret,

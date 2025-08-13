@@ -16,7 +16,7 @@ import {
 import {
   generateLoginToken,
   hashLoginToken,
-  getLoginExpiryDate,
+  getLoginExpiryDateHours,
   sendLoginEmail,
 } from "@/utils/server/userLoginMagicUtils";
 
@@ -43,7 +43,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         // Send login magic link
         const token = generateLoginToken();
         const tokenHash = await hashLoginToken(token);
-        const expiresAt = firebase.firestore.Timestamp.fromDate(getLoginExpiryDate(14));
+        const expiresAt = firebase.firestore.Timestamp.fromDate(getLoginExpiryDateHours(1));
         await firestoreSet(
           userDocRef,
           { loginTokenHash: tokenHash, loginTokenExpiresAt: expiresAt, updatedAt: now },

@@ -119,7 +119,7 @@ describe("/api/admin/resendActivation", () => {
       data: () => ({
         email: "accepted@example.com",
         inviteStatus: "accepted",
-        roles: ["user"],
+        role: "user",
       }),
     });
 
@@ -148,7 +148,7 @@ describe("/api/admin/resendActivation", () => {
       data: () => ({
         email: "pending@example.com",
         inviteStatus: "pending",
-        roles: ["user"],
+        role: "user",
       }),
     });
 

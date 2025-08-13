@@ -61,6 +61,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           const clearFields = {
             loginTokenHash: firebase.firestore.FieldValue.delete(),
             loginTokenExpiresAt: firebase.firestore.FieldValue.delete(),
+            lastLoginAt: nowTs,
             updatedAt: nowTs,
           } as any;
 
@@ -98,11 +99,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const jwtSecret = process.env.SECURE_TOKEN;
     if (!jwtSecret) return res.status(500).json({ error: "JWT secret missing" });
+    // Determine effective role for JWT: use explicit role field; default to "user"
+    const effectiveRole = typeof (data as any)?.role === "string" ? (data as any).role : "user";
+
     const authToken = jwt.sign(
       {
         client: "web",
         email: email.toLowerCase(),
-        roles: Array.isArray(data?.roles) ? data.roles : ["user"],
+        role: effectiveRole,
         site: process.env.SITE_ID || "default",
       },
       jwtSecret,

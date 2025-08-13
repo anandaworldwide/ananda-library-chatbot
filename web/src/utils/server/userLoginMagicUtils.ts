@@ -21,8 +21,8 @@ export async function hashLoginToken(token: string): Promise<string> {
   return bcrypt.hash(token, saltRounds);
 }
 
-export function getLoginExpiryDate(days: number = 14): Date {
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+export function getLoginExpiryDateHours(hours: number = 1): Date {
+  return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
 export async function sendLoginEmail(email: string, token: string, redirect?: string) {
@@ -30,14 +30,14 @@ export async function sendLoginEmail(email: string, token: string, redirect?: st
   const redirectPart = redirect ? `&redirect=${encodeURIComponent(redirect)}` : "";
   const url = `${baseUrl}/magic-login?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}${redirectPart}`;
   const siteConfig = loadSiteConfigSync();
-  const brand = siteConfig?.shortname || siteConfig?.name || process.env.SITE_ID || "your";
+  const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
   const params = {
     Source: process.env.CONTACT_EMAIL || "noreply@ananda.org",
     Destination: { ToAddresses: [email] },
     Message: {
       Subject: { Data: `Sign in to ${brand}` },
-      Body: { Text: { Data: `Click to sign in: ${url}\nThis link expires in 14 days.` } },
+      Body: { Text: { Data: `Click to sign in: ${url}\nThis link expires in one hour.` } },
     },
   };
   await ses.send(new SendEmailCommand(params));

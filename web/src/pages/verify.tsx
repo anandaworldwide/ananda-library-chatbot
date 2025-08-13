@@ -31,6 +31,15 @@ export default function VerifyPage() {
     })();
   }, [token, email, status]);
 
+  // After successful activation, inform user and redirect to home after 3 seconds
+  useEffect(() => {
+    if (status !== "success") return;
+    const t = setTimeout(() => {
+      router.replace("/");
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [status, router]);
+
   return (
     <>
       <Head>
@@ -42,7 +51,10 @@ export default function VerifyPage() {
           <div className="text-sm text-gray-700">Verifying your link…</div>
         ) : null}
         {status === "success" ? (
-          <div className="rounded border border-green-300 bg-green-50 p-3 text-sm mb-3">{message}</div>
+          <div className="rounded border border-green-300 bg-green-50 p-3 text-sm mb-3">
+            {message}
+            <div className="mt-1">Redirecting to home in three seconds.</div>
+          </div>
         ) : null}
         {status === "error" ? (
           <div className="rounded border border-red-300 bg-red-50 p-3 text-sm mb-3">{message}</div>

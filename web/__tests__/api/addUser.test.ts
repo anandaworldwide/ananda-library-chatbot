@@ -120,7 +120,7 @@ describe("/api/admin/addUser", () => {
       expect.anything(),
       expect.objectContaining({
         email: "test@example.com",
-        roles: ["user"],
+        role: "user",
         entitlements: { basic: true },
         inviteStatus: "pending",
       }),
@@ -141,7 +141,7 @@ describe("/api/admin/addUser", () => {
       data: () => ({
         email: "test@example.com",
         inviteStatus: "pending",
-        roles: ["user"],
+        role: "user",
       }),
     });
 

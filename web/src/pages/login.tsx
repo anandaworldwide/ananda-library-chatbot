@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SiteConfig } from "@/types/siteConfig";
 import { getSiteName, getTagline } from "@/utils/client/siteConfig";
 import Image from "next/image";
@@ -18,6 +18,8 @@ export default function Login({ siteConfig }: LoginProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(0);
+  const [lastSendType, setLastSendType] = useState<"login" | "activation" | null>(null);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
 
   // Tick countdown while active; when it reaches 0, re-enable button
   useEffect(() => {
@@ -29,6 +31,16 @@ export default function Login({ siteConfig }: LoginProps) {
     const t = setTimeout(() => setResendSeconds((s) => (s > 0 ? s - 1 : 0)), 1000);
     return () => clearTimeout(t);
   }, [emailSent, resendSeconds]);
+
+  // Desktop-only autofocus for the email field on initial email step
+  useEffect(() => {
+    if (step !== "email") return;
+    if (typeof window === "undefined" || !("matchMedia" in window)) return;
+    const isDesktop = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (isDesktop && emailInputRef.current) {
+      emailInputRef.current.focus();
+    }
+  }, [step]);
 
   const submitEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +75,7 @@ export default function Login({ siteConfig }: LoginProps) {
           setInfo("We sent you a sign-in link. Please check your email.");
           setEmailSent(true);
           setResendSeconds(60);
+          setLastSendType("login");
           setIsSubmitting(false);
           return;
         }
@@ -70,6 +83,7 @@ export default function Login({ siteConfig }: LoginProps) {
           setInfo("We re-sent your activation link. Please check your email.");
           setEmailSent(true);
           setResendSeconds(60);
+          setLastSendType("activation");
           setIsSubmitting(false);
           return;
         }
@@ -81,6 +95,7 @@ export default function Login({ siteConfig }: LoginProps) {
         setInfo("Check your email for further instructions.");
         setEmailSent(true);
         setResendSeconds(60);
+        setLastSendType("login");
         setIsSubmitting(false);
       } else if (res.status === 429) {
         setError("Too many attempts. Please try again later.");
@@ -128,6 +143,7 @@ export default function Login({ siteConfig }: LoginProps) {
           setInfo("Your account is already active. Check your email for a sign-in link.");
         setEmailSent(true);
         setResendSeconds(60);
+        setLastSendType(data.message === "already active" ? "login" : "activation");
         setIsSubmitting(false);
         return;
       }
@@ -173,6 +189,7 @@ export default function Login({ siteConfig }: LoginProps) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              ref={emailInputRef}
               className="p-2 border border-gray-300 rounded w-full"
               placeholder="Enter your email"
             />
@@ -209,7 +226,12 @@ export default function Login({ siteConfig }: LoginProps) {
             {siteConfig?.siteId === "ananda" && (
               <p className="mt-1 text-sm">
                 Those with Ananda Library access can get the password from&nbsp;
-                <a href="https://www.anandalibrary.org/content/ai-chatbot-intro/" className="text-blue-500 underline">
+                <a
+                  href="https://www.anandalibrary.org/content/ai-chatbot-intro/"
+                  className="text-blue-500 underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   this page in the Ananda Library
                 </a>
               </p>
@@ -239,7 +261,7 @@ export default function Login({ siteConfig }: LoginProps) {
           </button>
           {emailSent && resendSeconds > 0 && (
             <span className="ml-3 text-sm text-gray-600" aria-live="polite">
-              You can resend the login link in {resendSeconds}s
+              You can resend the {lastSendType === "activation" ? "activation email" : "login link"} in {resendSeconds}s
             </span>
           )}
         </div>

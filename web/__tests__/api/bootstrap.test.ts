@@ -62,7 +62,7 @@ describe("/api/admin/bootstrap", () => {
     });
   });
 
-  it("should return 404 when bootstrap is disabled", async () => {
+  it("should return 403 when bootstrap is disabled", async () => {
     // Environment variable is already undefined from beforeEach
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
@@ -114,7 +114,7 @@ describe("/api/admin/bootstrap", () => {
       expect.anything(),
       expect.objectContaining({
         email: "admin1@example.com",
-        roles: ["superuser"],
+        role: "superuser",
         entitlements: { basic: true },
         inviteStatus: "accepted",
         createdAt: expect.anything(),

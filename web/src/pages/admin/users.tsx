@@ -16,7 +16,7 @@ interface PendingUser {
 interface ActiveUser {
   email: string;
   uuid?: string | null;
-  roles: string[];
+  role?: string;
   verifiedAt: string | null;
   lastLoginAt: string | null;
   entitlements: Record<string, any>;
@@ -27,7 +27,7 @@ interface AdminUsersPageProps {
   isSudoAdmin: boolean;
 }
 
-export default function AdminUsersPage({ siteConfig, isSudoAdmin }: AdminUsersPageProps) {
+export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export default function AdminUsersPage({ siteConfig, isSudoAdmin }: AdminUsersPa
       const items: ActiveUser[] = (data.items || []).map((it: any) => ({
         email: it.email,
         uuid: it.uuid ?? null,
-        roles: it.roles || [],
+        role: it.role || undefined,
         verifiedAt: it.verifiedAt ? new Date(it.verifiedAt).toLocaleString() : null,
         lastLoginAt: it.lastLoginAt ? new Date(it.lastLoginAt).toLocaleString() : null,
         entitlements: it.entitlements || {},
@@ -265,10 +265,11 @@ export default function AdminUsersPage({ siteConfig, isSudoAdmin }: AdminUsersPa
                 <tr className="border-b">
                   <th className="py-2">Email</th>
                   <th className="py-2">UUID</th>
-                  <th className="py-2">Roles</th>
+                  <th className="py-2">Role</th>
                   <th className="py-2">Verified</th>
                   <th className="py-2">Last Login</th>
                   <th className="py-2">Entitlements</th>
+                  <th className="py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -276,7 +277,7 @@ export default function AdminUsersPage({ siteConfig, isSudoAdmin }: AdminUsersPa
                   <tr key={u.email} className="border-b">
                     <td className="py-2">{u.email}</td>
                     <td className="py-2 font-mono text-xs text-gray-700">{u.uuid || "–"}</td>
-                    <td className="py-2">{u.roles.join(", ") || "–"}</td>
+                    <td className="py-2">{u.role || "–"}</td>
                     <td className="py-2">{u.verifiedAt || "–"}</td>
                     <td className="py-2">{u.lastLoginAt || "–"}</td>
                     <td className="py-2">
@@ -285,6 +286,11 @@ export default function AdminUsersPage({ siteConfig, isSudoAdmin }: AdminUsersPa
                             .filter((key) => u.entitlements[key])
                             .join(", ")
                         : "–"}
+                    </td>
+                    <td className="py-2">
+                      <a className="text-blue-600 underline" href={`/admin/users/${encodeURIComponent(u.email)}`}>
+                        Edit
+                      </a>
                     </td>
                   </tr>
                 ))}

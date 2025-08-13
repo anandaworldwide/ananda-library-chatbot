@@ -44,7 +44,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (!doc.exists) return res.status(404).json({ error: "User not found" });
 
     const data = doc.data() as any;
-    return res.status(200).json({ email, uuid: data?.uuid || null, roles: data?.roles || [] });
+    const role = typeof data?.role === "string" ? data.role : "user";
+    return res.status(200).json({ email, uuid: data?.uuid || null, role });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Failed to load profile" });
   }

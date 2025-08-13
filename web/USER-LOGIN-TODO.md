@@ -64,7 +64,7 @@ Entitlements:
 
 ## Prerequisites
 
-- [ ] Review existing auth code: `passwordUtils.ts`, `jwtUtils.ts`, `appRouterJwtUtils.ts`, `authMiddleware.ts`,
+- [x] Review existing auth code: `passwordUtils.ts`, `jwtUtils.ts`, `appRouterJwtUtils.ts`, `authMiddleware.ts`,
       `login.ts`, `logout.ts`.
 - [x] Email service: Configure AWS SES for magic/activation emails; evaluate SendGrid for templates/analytics if needed.
 - [ ] Phase II only: Define Salesforce API/webhook for entitlement fetching; confirm field mapping and auth.
@@ -75,9 +75,9 @@ Entitlements:
 
 - [x] Update Firestore user schema (site-scoped):
 
-  - `email` (unique per site), `uuid` (persistent ID), `siteId`, `roles` (default `user`), `entitlements` (basic only),
-    `invitedBy`, `inviteStatus` (`pending` | `accepted` | `expired`), `inviteTokenHash`, `inviteExpiresAt`,
-    `verifiedAt`, `lastLoginAt`, `audit` entries (append-only).
+  - `email` (unique per site), `uuid` (persistent ID), `siteId`, `role` (single string: `user` | `admin` | `superuser`),
+    `entitlements` (basic only), `invitedBy`, `inviteStatus` (`pending` | `accepted` | `expired`), `inviteTokenHash`,
+    `inviteExpiresAt`, `verifiedAt`, `lastLoginAt`, `audit` entries (append-only).
 
 - [x] Admin add user endpoint: `POST /api/admin/addUser`
 
@@ -113,7 +113,7 @@ Entitlements:
 
 - [x] Session persistence
 
-  - Use JWT for long sessions. Keep JWT claims minimal (userId/uuid, roles, site). Resolve entitlements server-side per
+  - Use JWT for long sessions. Keep JWT claims minimal (userId/uuid, role, site). Resolve entitlements server-side per
     request to avoid stale claims.
 
 - [x] Security enhancements
@@ -136,12 +136,30 @@ Entitlements:
   - Vetted list source: read comma-separated emails from env var `ADMIN_BOOTSTRAP_SUPERUSERS` (typically 1–2 superusers)
   - Single-use/limited-use; automatically disables itself after success; comprehensive audit logging
 
+- [ ] Admin edit user endpoints
+
+  - Auth: `superuser` can modify role and email; `admin` can modify email only
+  - Endpoints: `GET /api/admin/users/[userId]` (fetch), `PATCH /api/admin/users/[userId]` (update)
+  - Validation: email format, per-site uniqueness, immutable `uuid`; single `role` field (`user` | `admin` |
+    `superuser`) with only `superuser` allowed to change it; comprehensive audit entries for every change
+
+- [ ] Email change behavior
+
+  - Normalize email to lowercase; on change, transactional doc move + notification email to old and new addresses; keep
+    `uuid` stable and sessions valid; log audit entry
+
 ### Phase I — Frontend
 
 - [x] Admin UI: “Add User” form and Pending list with Resend (basic UI in place; shadcn polish pending).
 - [x] Activation page: Handles token POST to `/api/verifyMagicLink`, shows success/error.
 - [x] User data features: Continue keying to account `uuid`; clear legacy UUID cookie after activation.
 - [x] Header auth label: Uses token manager init + cookie fallback; recognizes both `auth` (JWT) and `siteAuth`.
+
+- [ ] Admin UI: Users list supports click-through to user detail at `/admin/users/[userId]`
+- [ ] Admin UI: Edit User page (email, single-select role)
+  - Only superusers may change role; client enforces single-select
+  - Client-side validation and clear error states; optimistic update with rollback on failure
+  - Add Admin footer bar driven by JWT `role` (admin/superuser), replacing legacy sudo-only visibility
 
 ## Login Transition UX (Grace Period)
 
@@ -154,7 +172,7 @@ Important constraints:
 - Do NOT implement any time-based cutoff logic now. The "one-month grace" is a plan only. There should be no code that
   auto-disables anything by date. Future cutoff will be implemented via a separate change.
 - Continue using the existing shared password for self-provision during this transition.
-- Magic-link validity remains 14 days.
+- Activation magic links remain valid for 14 days. Login magic links expire after 1 hour.
 
 ### UX Flow
 
@@ -182,7 +200,7 @@ Important constraints:
 
 ### Entitlements
 
-- Self-provision assigns only basic entitlements. No domain restrictions at this stage. Extended roles (e.g.,
+- Self-provision assigns only basic entitlements. No domain restrictions at this stage. Extended entitlements (e.g.,
   `kriyaban`, `minister`) are not granted by self-provision.
 
 ### Admin Notifications
@@ -216,11 +234,38 @@ Important constraints:
 - [x] logout API tests updated to clear `auth` as well as legacy cookies
 - [x] web-token API tests updated to accept `auth` JWT cookie when `requireLogin=true`
 
+- [ ] updateUser API tests
+  - Role permissions (admin vs superuser), email validation, per-site uniqueness, restricted role transitions, audit log
+    creation
+- [ ] Admin UI edit user tests
+  - Visibility of role selector by role, form submission success/failure paths, error rendering, navigation from users
+    list
+
 #### New tests added (this branch)
 
 - 🐣 SudoContext tests
   - Skips sudo checks on `/login` and does not call network
   - Sets `isSudoUser` from successful response and shows IP mismatch message
+- 🐣 TokenManager tests
+  - Placeholder token behavior on `/login` when fetch returns 401 or network error
+  - Redirect logic on protected pages when 401 occurs (includes path + search)
+
+#### Security: Admin/Superuser authorization tests to add
+
+- 🥚 Admin-only API endpoints reject non-admins/non-superusers with 403 (and 401 when unauthenticated)
+  - Endpoints: `/api/admin/addUser`, `/api/admin/resendActivation`, `/api/admin/listPendingUsers`,
+    `/api/admin/listActiveUsers`
+- 🥚 Superuser-only actions are restricted to superusers (admins and users receive 403)
+  - Example actions: role changes, future grant/revoke admin endpoint (stub tests now, enforce when implemented)
+- 🥚 Sudo-gating for admin pages: 401/redirect when `sudoCookie` missing or invalid; success when present and valid
+- 🥚 Role claim enforcement: attempts to set `role` or `entitlements` via request body are validated and audited
+- 🥚 Site scope isolation: admin on `siteA` cannot act as admin on `siteB` (validate `siteId` scoping on all admin APIs)
+- 🥚 Admin bootstrap security: disabled unless `ENABLE_ADMIN_BOOTSTRAP=true`; auto-disables after success; rejects
+  repeats
+- 🥚 Rate limiting present on admin endpoints (validate 429 after threshold using `genericRateLimiter` mocks)
+- 🥚 Profile endpoint exposes correct role and denies access without valid JWT
+- 🥚 Audit logging stub: verify audit write calls occur for admin actions (shape only; content verified later)
+- 🥚 Header/cookie security: admin APIs require JWT `auth` cookie; no reliance on client-readable values
 
 ### Phase II — Salesforce Entitlement Enrichment
 

@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ref,
         {
           email,
-          roles: ["superuser"],
+          role: "superuser",
           entitlements: { basic: true },
           inviteStatus: "accepted",
           verifiedAt: now,
@@ -45,12 +45,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
       results[email] = "created";
     } else {
-      const data = existing.data() as any;
-      const roles: string[] = Array.isArray(data?.roles) ? data.roles : [];
-      if (!roles.includes("superuser")) roles.push("superuser");
       await firestoreSet(
         ref,
-        { roles, inviteStatus: "accepted", verifiedAt: now, updatedAt: now },
+        { role: "superuser", inviteStatus: "accepted", verifiedAt: now, updatedAt: now },
         { merge: true },
         "bootstrap update"
       );

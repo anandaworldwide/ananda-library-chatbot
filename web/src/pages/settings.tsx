@@ -18,6 +18,7 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
   const [likedAnswers, setLikedAnswers] = useState<LikedAnswer[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [role, setRole] = useState<string>("user");
 
   useEffect(() => {
     (async () => {
@@ -40,11 +41,14 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
           const profile = await profileRes.json().catch(() => ({}));
           if (profileRes.ok && profile?.email) {
             setEmail(profile.email);
+            setRole(typeof profile?.role === "string" ? profile.role : "user");
           } else {
             setEmail(null);
+            setRole("user");
           }
         } catch {
           setEmail(null);
+          setRole("user");
         }
 
         // Fetch liked answers via existing APIs
@@ -111,6 +115,20 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
               <section className="mb-6">
                 <h2 className="text-lg font-semibold mb-1">Account</h2>
                 <div className="text-sm text-gray-700">{email ? `Email: ${email}` : "Signed in"}</div>
+                {(role === "admin" || role === "superuser") && (
+                  <div className="mt-2 flex items-center gap-2">
+                    {role === "admin" && (
+                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                        Admin
+                      </span>
+                    )}
+                    {role === "superuser" && (
+                      <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
+                        Superuser
+                      </span>
+                    )}
+                  </div>
+                )}
               </section>
 
               <section className="mb-6">

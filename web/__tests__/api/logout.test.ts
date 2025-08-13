@@ -70,8 +70,8 @@ describe("Logout API", () => {
 
     await handler(req, res);
 
-    // Verify cookies are cleared (siteAuth, auth, isLoggedIn)
-    expect(setCookieMock).toHaveBeenCalledTimes(3);
+    // Verify cookies are cleared (siteAuth, auth, isLoggedIn, uuid)
+    expect(setCookieMock).toHaveBeenCalledTimes(4);
 
     // First call should clear siteAuth cookie
     expect(setCookieMock.mock.calls[0][0]).toBe("siteAuth");
@@ -100,6 +100,15 @@ describe("Logout API", () => {
       })
     );
 
+    // Fourth call should clear uuid cookie
+    expect(setCookieMock.mock.calls[3][0]).toBe("uuid");
+    expect(setCookieMock.mock.calls[3][1]).toBe("");
+    expect(setCookieMock.mock.calls[3][2]).toEqual(
+      expect.objectContaining({
+        expires: expect.any(Date),
+      })
+    );
+
     // Verify response
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
@@ -119,9 +128,10 @@ describe("Logout API", () => {
 
     // For the default implementation, secure is not explicitly set
     // so we just verify the cookies were set
-    expect(setCookieMock).toHaveBeenCalledTimes(3);
+    expect(setCookieMock).toHaveBeenCalledTimes(4);
     expect(setCookieMock.mock.calls[0][0]).toBe("siteAuth");
     expect(setCookieMock.mock.calls[1][0]).toBe("auth");
     expect(setCookieMock.mock.calls[2][0]).toBe("isLoggedIn");
+    expect(setCookieMock.mock.calls[3][0]).toBe("uuid");
   });
 });

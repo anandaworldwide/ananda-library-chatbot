@@ -119,7 +119,7 @@ describe("/api/verifyMagicLink", () => {
         inviteStatus: "pending",
         inviteTokenHash: "hashed-token",
         inviteExpiresAt: { toMillis: () => Date.now() + 86400000 }, // 24 hours from now
-        roles: ["user"],
+        role: "user",
         entitlements: { basic: true },
       }),
     });

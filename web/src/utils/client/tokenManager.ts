@@ -101,7 +101,7 @@ async function fetchNewToken(): Promise<string> {
 
       if (response.status === 401 && window.location.pathname !== "/login") {
         // Save current full path (path + search) for redirect after login
-        const fullPath = window.location.pathname + window.location.search;
+        const fullPath = window.location.pathname + (window.location.search || "");
         window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
         return ""; // Return empty token or placeholder
       }
@@ -269,7 +269,7 @@ async function fetchWithRetry(url: string, options?: RequestInit, retryCount = 0
 
     if (response.status === 401 && window.location.pathname !== "/login") {
       // Save current full path (path + search) for redirect after login
-      const fullPath = window.location.pathname + window.location.search;
+      const fullPath = window.location.pathname + (window.location.search || "");
       window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
       return new Response("", { status: 401 });
     }

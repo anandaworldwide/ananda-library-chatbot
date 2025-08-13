@@ -29,13 +29,13 @@ export async function sendActivationEmail(email: string, token: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://ananda.ai";
   const url = `${baseUrl}/verify?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
   const siteConfig = loadSiteConfigSync();
-  const brand = siteConfig?.shortname || siteConfig?.name || process.env.SITE_ID || "your";
+  const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
   const params = {
     Source: process.env.CONTACT_EMAIL || "noreply@ananda.org",
     Destination: { ToAddresses: [email] },
     Message: {
-      Subject: { Data: `Activate your ${brand} account` },
+      Subject: { Data: `Activate your account with ${brand}` },
       Body: { Text: { Data: `Click to activate: ${url}\nThis link expires in 14 days.` } },
     },
   };

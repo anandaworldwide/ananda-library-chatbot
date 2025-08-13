@@ -3,20 +3,44 @@ import React from "react";
 import Link from "next/link";
 import { SiteConfig } from "@/types/siteConfig";
 import { getFooterConfig } from "@/utils/client/siteConfig";
-import { useSudo } from "@/contexts/SudoContext";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 
 interface FooterProps {
   siteConfig: SiteConfig | null;
 }
 
 const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
-  const { isSudoUser } = useSudo();
+  const [isAdminRole, setIsAdminRole] = useState(false);
+  const router = useRouter();
+  useEffect(() => {
+    let mounted = true;
+    async function checkRole() {
+      try {
+        const res = await fetch("/api/profile", { credentials: "include" });
+        if (!res.ok) {
+          if (mounted) setIsAdminRole(false);
+          return;
+        }
+        const data = await res.json();
+        const role = (data?.role as string) || "user";
+        const isAdmin = role === "admin" || role === "superuser";
+        if (mounted) setIsAdminRole(isAdmin);
+      } catch {
+        if (mounted) setIsAdminRole(false);
+      }
+    }
+    checkRole();
+    return () => {
+      mounted = false;
+    };
+  }, [router.asPath]);
   const footerConfig = getFooterConfig(siteConfig);
 
   return (
     <>
-      {/* Admin section for sudo users */}
-      {isSudoUser && (
+      {/* Admin section for admins/superusers via JWT role */}
+      {isAdminRole && (
         <div className="bg-gray-100 text-gray-700 py-2 border-t border-t-slate-200 mt-4">
           <div className="mx-auto max-w-[800px] px-4">
             <div className="flex flex-col items-center w-full">

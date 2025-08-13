@@ -66,7 +66,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       userDocRef,
       {
         email: email.toLowerCase(),
-        roles: ["user"],
+        role: "user",
         entitlements: { basic: true },
         inviteStatus: "pending",
         inviteTokenHash: tokenHash,
