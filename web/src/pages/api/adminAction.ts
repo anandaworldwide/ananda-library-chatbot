@@ -9,6 +9,8 @@ import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { withJwtAuth } from "@/utils/server/jwtUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
+import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
+import { requireSuperuserRole } from "@/utils/server/authz";
 import { firestoreUpdate } from "@/utils/server/firestoreRetryUtils";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -27,9 +29,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const sudo = getSudoCookie(req, res);
-  if (!sudo.sudoCookieValue) {
-    return res.status(403).json({ message: `Forbidden: ${sudo.message}` });
+  const siteConfig = loadSiteConfigSync();
+  const loginRequired = !!siteConfig?.requireLogin;
+  if (loginRequired) {
+    if (!requireSuperuserRole(req)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+  } else {
+    const sudo = getSudoCookie(req, res);
+    if (!sudo.sudoCookieValue) {
+      return res.status(403).json({ message: `Forbidden: ${sudo.message}` });
+    }
   }
 
   const { docId, action } = req.body;

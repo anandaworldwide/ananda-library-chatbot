@@ -1,12 +1,11 @@
-// API: Returns current user's profile info (email, uuid) based on auth JWT cookie
+// API: Returns current user's profile info (email, uuid, role) based on auth JWT cookie
 import type { NextApiRequest, NextApiResponse } from "next";
-import Cookies from "cookies";
-import jwt from "jsonwebtoken";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { db } from "@/services/firebase";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreGet } from "@/utils/server/firestoreRetryUtils";
+import { verifyToken } from "@/utils/server/jwtUtils";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Rate limit
@@ -21,16 +20,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!db) return res.status(503).json({ error: "Database not available" });
 
   try {
-    const cookies = new Cookies(req, res);
-    const authCookie = cookies.get("auth");
+    const authCookie = req.cookies?.["auth"];
     if (!authCookie) return res.status(401).json({ error: "Not authenticated" });
-
-    const jwtSecret = process.env.SECURE_TOKEN;
-    if (!jwtSecret) return res.status(500).json({ error: "Server configuration error" });
 
     let payload: any;
     try {
-      payload = jwt.verify(authCookie, jwtSecret);
+      payload = verifyToken(authCookie);
     } catch {
       return res.status(401).json({ error: "Invalid session" });
     }
@@ -44,7 +39,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (!doc.exists) return res.status(404).json({ error: "User not found" });
 
     const data = doc.data() as any;
-    const role = typeof data?.role === "string" ? data.role : "user";
+    const roleFromDb = typeof data?.role === "string" ? data.role : undefined;
+    const roleFromToken = typeof payload?.role === "string" ? payload.role : undefined;
+    const role = roleFromDb || roleFromToken || "user";
     return res.status(200).json({ email, uuid: data?.uuid || null, role });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Failed to load profile" });

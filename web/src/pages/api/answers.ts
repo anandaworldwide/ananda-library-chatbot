@@ -13,6 +13,8 @@ import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { withJwtAuth } from "@/utils/server/jwtUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { firestoreQueryGet, firestoreDelete } from "@/utils/server/firestoreRetryUtils";
+import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
+import { requireAdminRole } from "@/utils/server/authz";
 
 // 6/23/24: likedOnly filtering not being used in UI but leaving here for potential future use
 
@@ -233,11 +235,18 @@ async function handleDeleteRequest(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ message: "answerId parameter is required." });
     }
 
-    // Check for sudo permissions before allowing deletion
-    // This is sufficient for deleting answers; siteAuth cookie is not required
-    const sudo = getSudoCookie(req, res);
-    if (!sudo.sudoCookieValue) {
-      return res.status(403).json({ message: `Forbidden: ${sudo.message}` });
+    // Authorization by site type
+    const siteConfig = loadSiteConfigSync();
+    const loginRequired = !!siteConfig?.requireLogin;
+    if (loginRequired) {
+      if (!requireAdminRole(req)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    } else {
+      const sudo = getSudoCookie(req, res);
+      if (!sudo.sudoCookieValue) {
+        return res.status(403).json({ message: `Forbidden: ${sudo.message}` });
+      }
     }
 
     await deleteAnswerById(answerId);

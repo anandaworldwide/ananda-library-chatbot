@@ -263,7 +263,6 @@ Important constraints:
   - No-login sites: require `sudoCookie` (401/redirect when missing/invalid; success when present)
   - Login sites: require JWT role `admin` or `superuser`; do not require `sudoCookie`
 - 🥚 Role claim enforcement: attempts to set `role` or `entitlements` via request body are validated and audited
-- 🥚 Site scope isolation: admin on `siteA` cannot act as admin on `siteB` (validate `siteId` scoping on all admin APIs)
 - 🥚 Admin bootstrap security: disabled unless `ENABLE_ADMIN_BOOTSTRAP=true`; auto-disables after success; rejects
   repeats
 - 🥚 Rate limiting present on admin endpoints (validate 429 after threshold using `genericRateLimiter` mocks)
@@ -338,13 +337,8 @@ Action mapping (final):
 
 Follow-ups:
 
-- [ ] Introduce `getProfile` (or reuse existing) App Router endpoint
-
-  that returns `{ role, siteId }` for client role checks
-
-- [ ] Migrate any remaining UI conditionals that look at `isSudoAdmin`
-
-  to a role-aware prop (or derive internally)
+- [x] Profile endpoint uses shared JWT helpers and returns role (with token fallback)
+- [ ] Migrate any remaining UI conditionals that look at `isSudoAdmin` to role-aware props
 
 ### Phase II — Salesforce Entitlement Enrichment
 
