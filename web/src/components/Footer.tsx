@@ -5,6 +5,7 @@ import { SiteConfig } from "@/types/siteConfig";
 import { getFooterConfig } from "@/utils/client/siteConfig";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import { useSudo } from "@/contexts/SudoContext";
 
 interface FooterProps {
   siteConfig: SiteConfig | null;
@@ -12,6 +13,7 @@ interface FooterProps {
 
 const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
   const [isAdminRole, setIsAdminRole] = useState(false);
+  const { isSudoUser } = useSudo();
   const router = useRouter();
   useEffect(() => {
     let mounted = true;
@@ -37,10 +39,12 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
   }, [router.asPath]);
   const footerConfig = getFooterConfig(siteConfig);
 
+  const showAdminSection = siteConfig?.requireLogin ? isAdminRole : isSudoUser;
+
   return (
     <>
       {/* Admin section for admins/superusers via JWT role */}
-      {isAdminRole && (
+      {showAdminSection && (
         <div className="bg-gray-100 text-gray-700 py-2 border-t border-t-slate-200 mt-4">
           <div className="mx-auto max-w-[800px] px-4">
             <div className="flex flex-col items-center w-full">
@@ -59,13 +63,15 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
                   Admin Dashboard
                   <span className="material-icons text-sm ml-1">dashboard</span>
                 </Link>
-                <Link
-                  href="/admin/users"
-                  className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
-                >
-                  Add User
-                  <span className="material-icons text-sm ml-1">person_add</span>
-                </Link>
+                {siteConfig?.requireLogin && (
+                  <Link
+                    href="/admin/users"
+                    className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
+                  >
+                    Add User
+                    <span className="material-icons text-sm ml-1">person_add</span>
+                  </Link>
+                )}
                 <Link href="/bless" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">
                   Manage Blessing
                   <span className="material-icons text-sm ml-1">auto_fix_high</span>

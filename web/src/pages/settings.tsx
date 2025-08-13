@@ -2,10 +2,10 @@
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import Layout from "@/components/layout";
-import { getCommonSiteConfigProps } from "@/utils/server/getCommonSiteConfigProps";
 import type { GetServerSideProps } from "next";
 import type { SiteConfig } from "@/types/siteConfig";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 
 interface LikedAnswer {
   id: string;
@@ -161,6 +161,9 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
 }
 
 export const getServerSideProps: GetServerSideProps = async () => {
-  const props = await getCommonSiteConfigProps();
-  return props as any;
+  const siteConfig = await loadSiteConfig();
+  if (!siteConfig?.requireLogin) {
+    return { notFound: true };
+  }
+  return { props: { siteConfig } } as any;
 };

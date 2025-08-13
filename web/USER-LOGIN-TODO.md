@@ -271,6 +271,81 @@ Important constraints:
 - 🥚 Audit logging stub: verify audit write calls occur for admin actions (shape only; content verified later)
 - 🥚 Header/cookie security: admin APIs require JWT `auth` cookie; no reliance on client-readable values
 
+#### Deprecate sudoCookie checks on login-required sites (comprehensive)
+
+Goal: When `siteConfig.requireLogin === true`, never gate with `sudoCookie` or `SudoContext`. Always gate by JWT `role`
+(`admin` or `superuser`). Keep `sudoCookie` only for no-login sites.
+
+- [ ] Central rules doc block (this file + `docs/backend-structure.md`): state "no sudo on login sites; roles only"
+- [ ] SSR page gating: ensure role-based gating when `requireLogin=true`
+  - Files to verify/update to use `isAdminPageAllowed()` and ignore `sudoCookie` when login is required:
+    - `src/pages/admin/index.tsx` (done)
+    - `src/pages/admin/users.tsx` (done)
+    - `src/pages/admin/users/[userId].tsx` (done)
+    - `src/pages/admin/model-stats.tsx`
+    - `src/pages/admin/relatedQuestionsUpdater.tsx` (done)
+- [ ] API endpoints: replace sudo checks with role checks when `requireLogin=true`
+  - `src/pages/api/admin/bindUuid.ts`
+  - `src/pages/api/adminAction.ts`
+  - `src/pages/api/answers.ts` (admin-only paths)
+  - [x] `src/pages/api/downvotedAnswers.ts`
+  - `src/pages/api/model-comparison-data.ts`
+  - `src/pages/api/model-comparison-export.ts`
+  - Keep `src/pages/api/sudoCookie.ts` (used by no-login sites only)
+- [ ] Client components: avoid `SudoContext` for admin UI on login sites
+  - `src/components/Footer.tsx` (done: role for login sites; sudo only for no-login)
+  - `src/components/ModelComparisonChat.tsx` (derive admin capability from role; do not call `/api/sudoCookie` on login
+    sites)
+  - `src/components/SourcesList.tsx`, `src/components/AnswerItem.tsx`, `src/components/DownvotedAnswerReview.tsx`
+    (ensure `isSudoAdmin` is driven by role when login required)
+  - `src/pages/_app.tsx`: keep `SudoProvider` mounted, but ensure it short-circuits/no-ops on login-required sites
+- [ ] Compare Models pages: role gate when login-required
+  - `src/pages/compare-models.tsx` (currently uses sudo OR feature flag) → use role for login sites
+- [ ] Tests (login sites): assert sudoCookie has no effect; role is authoritative
+  - Add tests per endpoint/page above that:
+    - (a) admin role → allowed
+    - (b) user role → 403/notFound
+    - (c) sudoCookie present but no JWT → 401/denied
+- [ ] Telemetry: add log when a sudo-gated path is hit on a login site (to catch stragglers during rollout)
+
+Role-specific gating details (login-required sites):
+
+- [x] Add `requireSuperuser` support to `isAdminPageAllowed` (or companion helper) and wire it for superuser-only pages
+- [x] Pages (superuser-only):
+  - `src/pages/admin/downvotes.tsx`
+  - `src/pages/admin/relatedQuestionsUpdater.tsx`
+- [ ] APIs (superuser-only on login sites):
+  - [x] `src/pages/api/downvotedAnswers.ts`
+  - Any related-questions admin mutation endpoint (when present)
+- [ ] Pages (admin permitted):
+  - `src/pages/compare-models.tsx`
+  - `src/pages/admin/model-stats.tsx`
+- [ ] APIs (admin permitted):
+  - `src/pages/api/model-comparison-data.ts`
+  - `src/pages/api/model-comparison-export.ts`
+
+Settings page behavior:
+
+- [x] `src/pages/settings.tsx`: return 404 (`notFound: true`) when `requireLogin=false` (no user settings on no-login
+      sites)
+- [ ] Add tests for settings SSR gating for both site types
+
+Action mapping (final):
+
+- Admin: add user, resend activation, list users (active/pending), export/report operations, model stats, model
+  comparison tools (pages + exports)
+- Superuser: change roles, bootstrap, grant/revoke admin, downvoted answers review tools, related questions updater
+
+Follow-ups:
+
+- [ ] Introduce `getProfile` (or reuse existing) App Router endpoint
+
+  that returns `{ role, siteId }` for client role checks
+
+- [ ] Migrate any remaining UI conditionals that look at `isSudoAdmin`
+
+  to a role-aware prop (or derive internally)
+
 ### Phase II — Salesforce Entitlement Enrichment
 
 - [ ] Immediate check on activation

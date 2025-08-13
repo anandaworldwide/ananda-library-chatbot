@@ -41,3 +41,25 @@ export function isAdminPageAllowed(
   const sudo = getSudoCookie(req, res);
   return !!sudo.sudoCookieValue;
 }
+
+export function isSuperuserPageAllowed(
+  req: NextApiRequest,
+  res: NextApiResponse | undefined,
+  siteConfig: SiteConfig | null
+): boolean {
+  const requireLogin = !!siteConfig?.requireLogin;
+  if (requireLogin) {
+    try {
+      const cookieJwt = req.cookies?.["auth"];
+      if (!cookieJwt) return false;
+      const payload: any = verifyToken(cookieJwt);
+      const role = typeof payload?.role === "string" ? (payload.role as string).toLowerCase() : "user";
+      return role === "superuser";
+    } catch {
+      return false;
+    }
+  }
+
+  const sudo = getSudoCookie(req, res);
+  return !!sudo.sudoCookieValue;
+}

@@ -180,7 +180,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     totalTokens?: number;
   } | null>(null);
 
-  // Check if user is sudo
+  // Check if user is sudo (only relevant on no-login sites)
   const { isSudoUser } = useSudo();
 
   const updateMessageState = useCallback(
@@ -276,7 +276,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
       if (data.log) {
         // eslint-disable-next-line no-console
-        console.log('[BACKEND]', data.log)
+        console.log("[BACKEND]", data.log);
       }
 
       // Capture timing information
@@ -285,7 +285,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       }
 
       if (data.token) {
-        
         accumulatedResponseRef.current += data.token;
         updateMessageState(accumulatedResponseRef.current, null);
 
@@ -301,7 +300,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       }
 
       if (data.sourceDocs) {
-
         try {
           // DEBUG: Add extensive logging for sources debugging
           const receiveTimestamp = Date.now();
@@ -994,7 +992,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
   // Main component render
   return (
-    <SudoProvider>
+    <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
       <Layout siteConfig={siteConfig}>
         {showPopup && popupMessage && <Popup message={popupMessage} onClose={closePopup} siteConfig={siteConfig} />}
         <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />

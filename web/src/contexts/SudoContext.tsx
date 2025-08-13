@@ -9,12 +9,20 @@ interface SudoContextType {
 
 const SudoContext = createContext<SudoContextType | undefined>(undefined);
 
-export const SudoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const SudoProvider: React.FC<{ children: React.ReactNode; disableChecks?: boolean }> = ({
+  children,
+  disableChecks = false,
+}) => {
   const [isSudoUser, setIsSudoUser] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const checkSudoStatus = async () => {
     try {
+      if (disableChecks) {
+        setIsSudoUser(false);
+        setErrorMessage(null);
+        return;
+      }
       // Skip sudo checks on public auth pages to avoid noisy 401s
       if (
         typeof window !== "undefined" &&

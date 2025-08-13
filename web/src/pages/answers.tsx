@@ -348,15 +348,17 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
 
   // Check sudo status on component mount
   useEffect(() => {
-    checkSudoStatus();
-  }, [checkSudoStatus]);
+    if (!(siteConfig && siteConfig.requireLogin)) {
+      checkSudoStatus();
+    }
+  }, [checkSudoStatus, siteConfig]);
 
   // Get whether related questions should be shown (defaults to true)
   // const showRelatedQuestions = true;
   const showRelatedQuestions = siteConfig?.showRelatedQuestions ?? true;
 
   return (
-    <SudoProvider>
+    <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
       <Layout siteConfig={siteConfig}>
         {/* Sort controls */}
         <div className="bg-white shadow">

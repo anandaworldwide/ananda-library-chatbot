@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { fetchWithAuth } from '@/utils/client/tokenManager';
-import Layout from '@/components/layout';
-import { SiteConfig } from '@/types/siteConfig';
-import { GetServerSideProps, NextApiRequest } from 'next';
-import { loadSiteConfig } from '@/utils/server/loadSiteConfig';
-import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
-import { db } from '@/services/firebase'; // Import Firestore db instance
-import { getAnswersCollectionName } from '@/utils/server/firestoreUtils'; // Import the utility function
+import React, { useState } from "react";
+import { fetchWithAuth } from "@/utils/client/tokenManager";
+import Layout from "@/components/layout";
+import { SiteConfig } from "@/types/siteConfig";
+import { GetServerSideProps, NextApiRequest, NextApiResponse } from "next";
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
+import { isSuperuserPageAllowed } from "@/utils/server/adminPageGate";
+import { db } from "@/services/firebase"; // Import Firestore db instance
+import { getAnswersCollectionName } from "@/utils/server/firestoreUtils"; // Import the utility function
 
 // Define props type including siteConfig and totalQuestions
 interface RelatedQuestionsUpdaterProps {
@@ -26,7 +26,7 @@ const RelatedQuestionsUpdater = ({
 
   const handleUpdateClick = async () => {
     if (batchSize <= 0) {
-      setApiError('Batch size must be a positive number.');
+      setApiError("Batch size must be a positive number.");
       return;
     }
 
@@ -37,12 +37,9 @@ const RelatedQuestionsUpdater = ({
     const startTime = performance.now(); // Start timer
 
     try {
-      const response = await fetchWithAuth(
-        `/api/relatedQuestions?updateBatch=${batchSize}`,
-        {
-          method: 'GET',
-        },
-      );
+      const response = await fetchWithAuth(`/api/relatedQuestions?updateBatch=${batchSize}`, {
+        method: "GET",
+      });
 
       // Check if the response is not OK (includes 4xx, 5xx errors)
       if (!response.ok) {
@@ -50,7 +47,7 @@ const RelatedQuestionsUpdater = ({
         // Specifically handle gateway timeouts (504)
         if (response.status === 504) {
           errorMessage =
-            'The update process timed out (504 Gateway Timeout). This might happen with large batch sizes or during high server load.';
+            "The update process timed out (504 Gateway Timeout). This might happen with large batch sizes or during high server load.";
         } else {
           // Try to parse JSON for other errors, but anticipate failure
           try {
@@ -58,7 +55,7 @@ const RelatedQuestionsUpdater = ({
             errorMessage = errorData.message || errorMessage; // Use message from response if available
           } catch (parseError) {
             // If JSON parsing fails, stick with the HTTP status message
-            console.error('Failed to parse error response JSON:', parseError);
+            console.error("Failed to parse error response JSON:", parseError);
           }
         }
         throw new Error(errorMessage); // Throw an error with the determined message
@@ -66,12 +63,10 @@ const RelatedQuestionsUpdater = ({
 
       // If response IS ok, parse the JSON
       const data = await response.json();
-      setApiMessage(data.message || 'Update initiated successfully.');
+      setApiMessage(data.message || "Update initiated successfully.");
     } catch (error: any) {
-      console.error('Error triggering related questions update:', error);
-      setApiError(
-        `Failed to trigger update: ${error.message || 'Unknown error'}`,
-      );
+      console.error("Error triggering related questions update:", error);
+      setApiError(`Failed to trigger update: ${error.message || "Unknown error"}`);
     } finally {
       setIsLoading(false);
       const endTime = performance.now(); // End timer
@@ -84,28 +79,21 @@ const RelatedQuestionsUpdater = ({
   return (
     <Layout siteConfig={siteConfig}>
       <div className="p-4 max-w-md mx-auto">
-        <h1 className="text-xl font-semibold mb-4">
-          Manual Related Questions Updater
-        </h1>
+        <h1 className="text-xl font-semibold mb-4">Manual Related Questions Updater</h1>
         {/* Display total questions */}
         {totalQuestions !== null ? (
           <p className="mb-4 text-sm text-gray-700">
             Total questions in database: <strong>{totalQuestions}</strong>
           </p>
         ) : (
-          <p className="mb-4 text-sm text-yellow-700">
-            Could not load total question count.
-          </p>
+          <p className="mb-4 text-sm text-yellow-700">Could not load total question count.</p>
         )}
         <p className="mb-4 text-sm text-gray-600">
-          Trigger a batch update of related questions. This process involves
-          embedding generation and vector search, which can take time.
+          Trigger a batch update of related questions. This process involves embedding generation and vector search,
+          which can take time.
         </p>
         <div className="mb-4">
-          <label
-            htmlFor="batchSize"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
+          <label htmlFor="batchSize" className="block text-sm font-medium text-gray-700 mb-1">
             Batch Size:
           </label>
           <input
@@ -117,7 +105,7 @@ const RelatedQuestionsUpdater = ({
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             disabled={isLoading}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isLoading && batchSize > 0) {
+              if (e.key === "Enter" && !isLoading && batchSize > 0) {
                 e.preventDefault(); // Prevent default form submission if any
                 handleUpdateClick();
               }
@@ -129,27 +117,19 @@ const RelatedQuestionsUpdater = ({
           onClick={handleUpdateClick}
           disabled={isLoading || batchSize <= 0}
           className={`w-full px-4 py-2 bg-indigo-600 text-white rounded-md shadow-sm ${
-            isLoading || batchSize <= 0
-              ? 'opacity-50 cursor-not-allowed'
-              : 'hover:bg-indigo-700'
+            isLoading || batchSize <= 0 ? "opacity-50 cursor-not-allowed" : "hover:bg-indigo-700"
           } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
         >
-          {isLoading ? 'Updating...' : 'Start Update Batch'}
+          {isLoading ? "Updating..." : "Start Update Batch"}
         </button>
 
         {/* Display results and execution time */}
         {(apiMessage || apiError || executionTime !== null) && (
           <div className="mt-4 space-y-3">
             {apiMessage && (
-              <div className="p-3 bg-green-100 text-green-800 border border-green-300 rounded-md">
-                {apiMessage}
-              </div>
+              <div className="p-3 bg-green-100 text-green-800 border border-green-300 rounded-md">{apiMessage}</div>
             )}
-            {apiError && (
-              <div className="p-3 bg-red-100 text-red-800 border border-red-300 rounded-md">
-                {apiError}
-              </div>
-            )}
+            {apiError && <div className="p-3 bg-red-100 text-red-800 border border-red-300 rounded-md">{apiError}</div>}
             {executionTime !== null && (
               <div className="p-3 bg-blue-100 text-blue-800 border border-blue-300 rounded-md text-sm">
                 Request took: {executionTime} seconds.
@@ -165,21 +145,15 @@ const RelatedQuestionsUpdater = ({
 export default RelatedQuestionsUpdater;
 
 // getServerSideProps to load site config, check admin status, and get question count
-export const getServerSideProps: GetServerSideProps = async ({ req }) => {
+export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   let totalQuestions: number | null = null;
   const siteConfig = await loadSiteConfig();
-  const sudoStatus = getSudoCookie(req as NextApiRequest);
-
-  // If not a sudo user, block access to this admin page
-  if (!sudoStatus.sudoCookieValue) {
-    return {
-      notFound: true, // Return 404 page
-    };
-  }
+  const allowed = isSuperuserPageAllowed(req as NextApiRequest, res as unknown as NextApiResponse, siteConfig);
+  if (!allowed) return { notFound: true };
 
   // If siteConfig couldn't be loaded (should ideally not happen, but handle defensively)
   if (!siteConfig) {
-    console.error('Admin page failed to load site config');
+    console.error("Admin page failed to load site config");
     return {
       notFound: true,
     };
@@ -194,11 +168,11 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
       const snapshot = await questionsCol.count().get();
       totalQuestions = snapshot.data().count; // Access count from data object
     } catch (error) {
-      console.error('Error getting total question count:', error);
+      console.error("Error getting total question count:", error);
       // Keep totalQuestions as null if count fails
     }
   } else {
-    console.warn('Firestore DB instance not available in getServerSideProps');
+    console.warn("Firestore DB instance not available in getServerSideProps");
   }
 
   return {

@@ -1,11 +1,14 @@
-import Layout from '@/components/layout';
-import DownvotedAnswerReview from '@/components/DownvotedAnswerReview';
-import { SiteConfig } from '@/types/siteConfig';
-import { SudoProvider } from '@/contexts/SudoContext';
-import { useDownvotedAnswers } from '@/hooks/useAnswers';
-import { Answer } from '@/types/answer';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
+import Layout from "@/components/layout";
+import DownvotedAnswerReview from "@/components/DownvotedAnswerReview";
+import { SiteConfig } from "@/types/siteConfig";
+import { SudoProvider } from "@/contexts/SudoContext";
+import type { GetServerSideProps, NextApiRequest, NextApiResponse } from "next";
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
+import { isSuperuserPageAllowed } from "@/utils/server/adminPageGate";
+import { useDownvotedAnswers } from "@/hooks/useAnswers";
+import { Answer } from "@/types/answer";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 
 interface DownvotesReviewProps {
   siteConfig: SiteConfig | null;
@@ -55,9 +58,7 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
   if (!siteConfig) {
     return (
       <SudoProvider>
-        <Layout siteConfig={null}>
-          Error: Site configuration not available
-        </Layout>
+        <Layout siteConfig={null}>Error: Site configuration not available</Layout>
       </SudoProvider>
     );
   }
@@ -67,10 +68,7 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
       <SudoProvider>
         <Layout siteConfig={siteConfig}>
           <div className="text-red-600">
-            Error:{' '}
-            {error instanceof Error
-              ? error.message
-              : 'Failed to fetch downvoted answers'}
+            Error: {error instanceof Error ? error.message : "Failed to fetch downvoted answers"}
           </div>
         </Layout>
       </SudoProvider>
@@ -87,11 +85,7 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
           <>
             <div className="space-y-6">
               {data.answers.map((answer: Answer) => (
-                <DownvotedAnswerReview
-                  key={answer.id}
-                  answer={answer}
-                  siteConfig={siteConfig}
-                />
+                <DownvotedAnswerReview key={answer.id} answer={answer} siteConfig={siteConfig} />
               ))}
             </div>
 
@@ -123,3 +117,14 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
 };
 
 export default DownvotesReview;
+
+export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
+  const siteConfig = await loadSiteConfig();
+  const allowed = isSuperuserPageAllowed(
+    req as unknown as NextApiRequest,
+    res as unknown as NextApiResponse,
+    siteConfig
+  );
+  if (!allowed) return { notFound: true };
+  return { props: { siteConfig } };
+};
