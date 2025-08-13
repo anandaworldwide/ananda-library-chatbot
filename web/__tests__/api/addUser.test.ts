@@ -63,6 +63,7 @@ describe("/api/admin/addUser", () => {
   it("should return 405 for non-POST requests", async () => {
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "GET",
+      headers: { "x-test-role": "admin" },
     });
 
     await handler(req, res);
@@ -76,6 +77,7 @@ describe("/api/admin/addUser", () => {
   it("should return 400 for missing email", async () => {
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
+      headers: { "x-test-role": "admin" },
       body: {},
     });
 
@@ -104,6 +106,7 @@ describe("/api/admin/addUser", () => {
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
+      headers: { "x-test-role": "admin" },
       body: {
         email: "test@example.com",
       },
@@ -153,6 +156,7 @@ describe("/api/admin/addUser", () => {
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
+      headers: { "x-test-role": "admin" },
       body: {
         email: "test@example.com",
       },

@@ -252,12 +252,16 @@ Important constraints:
 
 #### Security: Admin/Superuser authorization tests to add
 
-- 🥚 Admin-only API endpoints reject non-admins/non-superusers with 403 (and 401 when unauthenticated)
+- 🐣 Admin-only API endpoints reject non-admins/non-superusers with 403 (and 401 unauth) — tests added for addUser,
+  resendActivation, listPendingUsers; listActiveUsers: 401 OK, 403 pending
   - Endpoints: `/api/admin/addUser`, `/api/admin/resendActivation`, `/api/admin/listPendingUsers`,
     `/api/admin/listActiveUsers`
-- 🥚 Superuser-only actions are restricted to superusers (admins and users receive 403)
-  - Example actions: role changes, future grant/revoke admin endpoint (stub tests now, enforce when implemented)
-- 🥚 Sudo-gating for admin pages: 401/redirect when `sudoCookie` missing or invalid; success when present and valid
+- 🐥 Superuser-only actions are restricted to superusers (admins/users receive 403)
+  - Role changes enforced in `/api/admin/users/[userId]` with tests; grant/revoke admin will be enforced when endpoint
+    exists
+- 🥚 Admin page gating rules by site type:
+  - No-login sites: require `sudoCookie` (401/redirect when missing/invalid; success when present)
+  - Login sites: require JWT role `admin` or `superuser`; do not require `sudoCookie`
 - 🥚 Role claim enforcement: attempts to set `role` or `entitlements` via request body are validated and audited
 - 🥚 Site scope isolation: admin on `siteA` cannot act as admin on `siteB` (validate `siteId` scoping on all admin APIs)
 - 🥚 Admin bootstrap security: disabled unless `ENABLE_ADMIN_BOOTSTRAP=true`; auto-disables after success; rejects

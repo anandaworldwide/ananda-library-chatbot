@@ -63,6 +63,7 @@ describe("/api/admin/resendActivation", () => {
   it("should return 405 for non-POST requests", async () => {
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "GET",
+      headers: { "x-test-role": "admin" },
     });
 
     await handler(req, res);
@@ -76,6 +77,7 @@ describe("/api/admin/resendActivation", () => {
   it("should return 400 for missing email", async () => {
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
+      headers: { "x-test-role": "admin" },
       body: {},
     });
 
@@ -97,6 +99,7 @@ describe("/api/admin/resendActivation", () => {
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
+      headers: { "x-test-role": "admin" },
       body: {
         email: "nonexistent@example.com",
       },
@@ -125,6 +128,7 @@ describe("/api/admin/resendActivation", () => {
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
+      headers: { "x-test-role": "admin" },
       body: {
         email: "accepted@example.com",
       },
@@ -160,6 +164,7 @@ describe("/api/admin/resendActivation", () => {
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
+      headers: { "x-test-role": "admin" },
       body: {
         email: "pending@example.com",
       },

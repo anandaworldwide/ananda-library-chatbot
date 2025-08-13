@@ -5,7 +5,7 @@ import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import type { GetServerSideProps, NextApiRequest } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
-import { getSudoCookie } from "@/utils/server/sudoCookieUtils";
+import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 
 interface UserDetail {
   id: string;
@@ -154,7 +154,7 @@ export default function EditUserPage({ siteConfig }: PageProps) {
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async ({ req }) => {
   const siteConfig = await loadSiteConfig();
-  const sudoStatus = getSudoCookie(req as NextApiRequest);
-  if (!sudoStatus.sudoCookieValue) return { notFound: true };
+  const allowed = isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
+  if (!allowed) return { notFound: true };
   return { props: { siteConfig } };
 };

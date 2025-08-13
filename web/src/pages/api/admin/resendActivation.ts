@@ -7,6 +7,7 @@ import { withJwtAuth } from "@/utils/server/jwtUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreGet, firestoreSet } from "@/utils/server/firestoreRetryUtils";
+import { requireAdminRole } from "@/utils/server/authz";
 import {
   generateInviteToken,
   hashInviteToken,
@@ -27,6 +28,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   if (!db) return res.status(503).json({ error: "Database not available" });
+
+  // Authorization: admin or superuser only
+  if (!requireAdminRole(req)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
 
   const { email } = req.body as { email?: string };
   if (!email || typeof email !== "string") {

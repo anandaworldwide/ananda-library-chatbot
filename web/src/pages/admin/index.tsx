@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import Head from "next/head";
 import type { GetServerSideProps, NextApiRequest, NextApiResponse } from "next";
-import { getSudoCookie } from "@/utils/server/sudoCookieUtils";
+import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
@@ -44,6 +44,8 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled, site
     );
   }
 
+  const loginRequired = !!siteConfig?.requireLogin;
+
   return (
     <Layout siteConfig={siteConfig}>
       <Head>
@@ -54,9 +56,9 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled, site
 
         {message && <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm">{message}</div>}
 
-        <section className="rounded border p-4">
-          <h2 className="text-lg font-semibold mb-2">Bootstrap</h2>
-          {bootstrapEnabled ? (
+        {loginRequired && bootstrapEnabled ? (
+          <section className="rounded border p-4">
+            <h2 className="text-lg font-semibold mb-2">Bootstrap</h2>
             <button
               className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
               onClick={handleBootstrap}
@@ -64,17 +66,17 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled, site
             >
               {busy ? "Bootstrapping…" : "Bootstrap"}
             </button>
-          ) : (
-            <div className="text-sm text-gray-600">Bootstrap is disabled for this environment.</div>
-          )}
-        </section>
+          </section>
+        ) : null}
 
-        <section className="rounded border p-4">
-          <h2 className="text-lg font-semibold mb-2">User Management</h2>
-          <a href="/admin/users" className="text-blue-600 underline">
-            Go to Users
-          </a>
-        </section>
+        {loginRequired ? (
+          <section className="rounded border p-4">
+            <h2 className="text-lg font-semibold mb-2">User Management</h2>
+            <a href="/admin/users" className="text-blue-600 underline">
+              Go to Users
+            </a>
+          </section>
+        ) : null}
 
         <section className="rounded border p-4">
           <h2 className="text-lg font-semibold mb-2">Admin Tools</h2>
@@ -90,13 +92,15 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled, site
           </div>
         </section>
 
-        <section className="rounded border p-4">
-          <h2 className="text-lg font-semibold mb-2">Bind UUID to Account</h2>
-          <p className="text-sm text-gray-600 mb-2">
-            Binds this browser's uuid cookie to the specified user email. Sudo only.
-          </p>
-          <BindUuidForm onResult={(t) => setMessage(t)} />
-        </section>
+        {loginRequired ? (
+          <section className="rounded border p-4">
+            <h2 className="text-lg font-semibold mb-2">Bind UUID to Account</h2>
+            <p className="text-sm text-gray-600 mb-2">
+              Binds this browser's uuid cookie to the specified user email. Sudo only.
+            </p>
+            <BindUuidForm onResult={(t) => setMessage(t)} />
+          </section>
+        ) : null}
       </div>
     </Layout>
   );
@@ -148,10 +152,11 @@ function BindUuidForm({ onResult }: { onResult: (msg: string) => void }) {
 export const getServerSideProps: GetServerSideProps<AdminDashboardProps> = async (ctx) => {
   const req = ctx.req as unknown as NextApiRequest;
   const res = ctx.res as unknown as NextApiResponse;
-  const sudo = getSudoCookie(req, res);
-  const isSudoAdmin = !!sudo.sudoCookieValue;
+  const siteConfig = await loadSiteConfig();
+  const allowed = isAdminPageAllowed(req, res, siteConfig);
+  if (!allowed) return { notFound: true };
   const bootstrapEnabled =
     process.env.ENABLE_ADMIN_BOOTSTRAP === "true" || process.env.NEXT_PUBLIC_ENABLE_ADMIN_BOOTSTRAP === "true";
-  const siteConfig = await loadSiteConfig();
-  return { props: { isSudoAdmin, bootstrapEnabled, siteConfig } };
+  // For render, treat allowed as sudo/admin presence
+  return { props: { isSudoAdmin: true, bootstrapEnabled, siteConfig } };
 };
