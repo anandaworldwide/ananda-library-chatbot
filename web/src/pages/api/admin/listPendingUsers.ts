@@ -2,9 +2,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { db } from "@/services/firebase";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
-import { withJwtAuth } from "@/utils/server/jwtUtils";
+import { withJwtAuth, verifyToken } from "@/utils/server/jwtUtils";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { requireAdminRole } from "@/utils/server/authz";
+import { firestoreGet } from "@/utils/server/firestoreRetryUtils";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
@@ -13,10 +14,25 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (!db) return res.status(503).json({ error: "Database not available" });
 
-  // Authorization: admin or superuser only
-  if (!requireAdminRole(req)) {
-    return res.status(403).json({ error: "Forbidden" });
+  // Authorization: admin or superuser only (fallback to live Firestore role if JWT role missing)
+  let isAllowed = requireAdminRole(req);
+  if (!isAllowed) {
+    try {
+      const cookieJwt = req.cookies?.["auth"];
+      if (cookieJwt && db) {
+        const payload: any = verifyToken(cookieJwt);
+        const email = typeof payload?.email === "string" ? payload.email.toLowerCase() : undefined;
+        if (email) {
+          const snap = await firestoreGet(db.collection(getUsersCollectionName()).doc(email), "authz: get user", email);
+          const liveRole = snap.exists ? ((snap.data() as any)?.role as string | undefined) : undefined;
+          isAllowed = liveRole === "admin" || liveRole === "superuser";
+        }
+      }
+    } catch {
+      // fall through
+    }
   }
+  if (!isAllowed) return res.status(403).json({ error: "Forbidden" });
 
   const usersCol = getUsersCollectionName();
 

@@ -154,7 +154,7 @@ export default function EditUserPage({ siteConfig }: PageProps) {
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async ({ req }) => {
   const siteConfig = await loadSiteConfig();
-  const allowed = isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
+  const allowed = await isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
   if (!allowed) return { notFound: true };
   return { props: { siteConfig } };
 };

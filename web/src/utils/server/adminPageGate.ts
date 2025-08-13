@@ -19,12 +19,15 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { verifyToken } from "./jwtUtils";
 import { getSudoCookie } from "./sudoCookieUtils";
 import type { SiteConfig } from "@/types/siteConfig";
+import { db } from "@/services/firebase";
+import { getUsersCollectionName } from "./firestoreUtils";
+import { firestoreGet } from "./firestoreRetryUtils";
 
-export function isAdminPageAllowed(
+export async function isAdminPageAllowed(
   req: NextApiRequest,
   res: NextApiResponse | undefined,
   siteConfig: SiteConfig | null
-): boolean {
+): Promise<boolean> {
   const requireLogin = !!siteConfig?.requireLogin;
   if (requireLogin) {
     try {
@@ -32,7 +35,20 @@ export function isAdminPageAllowed(
       if (!cookieJwt) return false;
       const payload: any = verifyToken(cookieJwt);
       const role = typeof payload?.role === "string" ? (payload.role as string).toLowerCase() : "user";
-      return role === "admin" || role === "superuser";
+      if (role === "admin" || role === "superuser") return true;
+      // Fallback to live Firestore role by email if present
+      const email = typeof payload?.email === "string" ? payload.email.toLowerCase() : undefined;
+      if (email && db) {
+        try {
+          const usersCol = getUsersCollectionName();
+          const snap = await firestoreGet(db.collection(usersCol).doc(email), "gating: get user role", email);
+          const liveRole = snap.exists ? ((snap.data() as any)?.role as string | undefined) : undefined;
+          return liveRole === "admin" || liveRole === "superuser";
+        } catch {
+          return false;
+        }
+      }
+      return false;
     } catch {
       return false;
     }
@@ -42,11 +58,11 @@ export function isAdminPageAllowed(
   return !!sudo.sudoCookieValue;
 }
 
-export function isSuperuserPageAllowed(
+export async function isSuperuserPageAllowed(
   req: NextApiRequest,
   res: NextApiResponse | undefined,
   siteConfig: SiteConfig | null
-): boolean {
+): Promise<boolean> {
   const requireLogin = !!siteConfig?.requireLogin;
   if (requireLogin) {
     try {
@@ -54,7 +70,20 @@ export function isSuperuserPageAllowed(
       if (!cookieJwt) return false;
       const payload: any = verifyToken(cookieJwt);
       const role = typeof payload?.role === "string" ? (payload.role as string).toLowerCase() : "user";
-      return role === "superuser";
+      if (role === "superuser") return true;
+      // Fallback to live Firestore role by email if present
+      const email = typeof payload?.email === "string" ? payload.email.toLowerCase() : undefined;
+      if (email && db) {
+        try {
+          const usersCol = getUsersCollectionName();
+          const snap = await firestoreGet(db.collection(usersCol).doc(email), "gating: get user role", email);
+          const liveRole = snap.exists ? ((snap.data() as any)?.role as string | undefined) : undefined;
+          return liveRole === "superuser";
+        } catch {
+          return false;
+        }
+      }
+      return false;
     } catch {
       return false;
     }

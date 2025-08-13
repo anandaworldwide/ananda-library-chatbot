@@ -210,10 +210,6 @@ Important constraints:
 
 ### Tasks
 
-- [ ] Frontend: Implement email-first screen with unknown-email branch to shared-password screen (progressive flow).
-- [ ] Frontend: Implement shared-password verification screen with hint link and success/error states.
-- [ ] Backend: Add endpoint for self-provision via shared password that creates `pending` user with basic entitlements
-      and sends activation (14-day), idempotent on concurrent submits.
 - [ ] Backend: Add rate limiting for the shared-password endpoint at 5 attempts/hour/IP.
 - [ ] Backend: Add audit entries for self-provision attempts (success/failure) with context.
 - [ ] Backend: Implement daily digest job that aggregates self-provision events and emails `OPS_ALERT_EMAIL`.
@@ -259,16 +255,16 @@ Important constraints:
 - 🐥 Superuser-only actions are restricted to superusers (admins/users receive 403)
   - Role changes enforced in `/api/admin/users/[userId]` with tests; grant/revoke admin will be enforced when endpoint
     exists
-- 🥚 Admin page gating rules by site type:
+- 🐣 Admin page gating rules by site type:
   - No-login sites: require `sudoCookie` (401/redirect when missing/invalid; success when present)
   - Login sites: require JWT role `admin` or `superuser`; do not require `sudoCookie`
-- 🥚 Role claim enforcement: attempts to set `role` or `entitlements` via request body are validated and audited
-- 🥚 Admin bootstrap security: disabled unless `ENABLE_ADMIN_BOOTSTRAP=true`; auto-disables after success; rejects
+- 🐥 Role claim enforcement: attempts to set `role` or `entitlements` via request body are validated and audited
+- 🐥 Admin bootstrap security: disabled unless `ENABLE_ADMIN_BOOTSTRAP=true`; auto-disables after success; rejects
   repeats
-- 🥚 Rate limiting present on admin endpoints (validate 429 after threshold using `genericRateLimiter` mocks)
-- 🥚 Profile endpoint exposes correct role and denies access without valid JWT
-- 🥚 Audit logging stub: verify audit write calls occur for admin actions (shape only; content verified later)
-- 🥚 Header/cookie security: admin APIs require JWT `auth` cookie; no reliance on client-readable values
+- 🐣 Rate limiting present on admin endpoints (validate 429 after threshold using `genericRateLimiter` mocks)
+- 🐣 Profile endpoint exposes correct role and denies access without valid JWT
+- 🐣 Audit logging stub: verify audit write calls occur for admin actions (shape only; content verified later)
+- 🐥 Header/cookie security: admin APIs require JWT `auth` cookie; no reliance on client-readable values
 
 #### Deprecate sudoCookie checks on login-required sites (comprehensive)
 

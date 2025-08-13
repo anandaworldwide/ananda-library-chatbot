@@ -6,6 +6,7 @@ import { withJwtAuth, getTokenFromRequest, verifyToken } from "@/utils/server/jw
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
+import { writeAuditLog } from "@/utils/server/auditLog";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!db) return res.status(503).json({ error: "Database not available" });
@@ -101,6 +102,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         }
         updates.updatedAt = now;
         await db.collection(usersCol).doc(currentId).set(updates, { merge: true });
+        if (updates.role) {
+          await writeAuditLog(req, "admin_change_role", currentId, { role: updates.role });
+        }
         const updated = await db.collection(usersCol).doc(currentId).get();
         const data = updated.data() || {};
         return res.status(200).json({
@@ -143,6 +147,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         tx.set(newRef, newData, { merge: true });
         tx.delete(currentRef);
       });
+
+      await writeAuditLog(req, "admin_change_email", currentId, { newEmail });
 
       const finalDoc = await (db as NonNullable<typeof db>).collection(usersCol).doc(newEmail).get();
       const out = finalDoc.data() || {};

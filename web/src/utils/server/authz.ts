@@ -19,7 +19,7 @@ export function getRequesterRole(req: NextApiRequest): Role {
       const payload: any = verifyToken(cookieJwt);
       const role = typeof payload?.role === "string" ? (payload.role as string).toLowerCase() : "user";
       if (role === "admin" || role === "superuser") return role;
-      return "user";
+      // Fall through to header-based check when cookie role isn't elevated
     }
   } catch {
     // fall through to header-based check

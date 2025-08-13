@@ -153,7 +153,7 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardProps> = async
   const req = ctx.req as unknown as NextApiRequest;
   const res = ctx.res as unknown as NextApiResponse;
   const siteConfig = await loadSiteConfig();
-  const allowed = isAdminPageAllowed(req, res, siteConfig);
+  const allowed = await isAdminPageAllowed(req, res, siteConfig);
   if (!allowed) return { notFound: true };
   const bootstrapEnabled =
     process.env.ENABLE_ADMIN_BOOTSTRAP === "true" || process.env.NEXT_PUBLIC_ENABLE_ADMIN_BOOTSTRAP === "true";

@@ -14,6 +14,7 @@ import {
   getInviteExpiryDate,
   sendActivationEmail,
 } from "@/utils/server/userInviteUtils";
+import { writeAuditLog } from "@/utils/server/auditLog";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   const allowed = await genericRateLimiter(req, res, {
@@ -58,6 +59,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       "resend activation"
     );
     await sendActivationEmail(email, token);
+    await writeAuditLog(req, "admin_resend_activation", email.toLowerCase());
     return res.status(200).json({ message: "resent" });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

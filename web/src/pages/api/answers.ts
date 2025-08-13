@@ -15,6 +15,7 @@ import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { firestoreQueryGet, firestoreDelete } from "@/utils/server/firestoreRetryUtils";
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
 import { requireAdminRole } from "@/utils/server/authz";
+import { writeAuditLog } from "@/utils/server/auditLog";
 
 // 6/23/24: likedOnly filtering not being used in UI but leaving here for potential future use
 
@@ -250,6 +251,7 @@ async function handleDeleteRequest(req: NextApiRequest, res: NextApiResponse) {
     }
 
     await deleteAnswerById(answerId);
+    await writeAuditLog(req, "admin_delete_answer", answerId);
     res.status(200).json({ message: "Answer deleted successfully." });
   } catch (error: unknown) {
     // Error handling for DELETE requests

@@ -305,7 +305,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
 
 export const getServerSideProps: GetServerSideProps<AdminUsersPageProps> = async ({ req }) => {
   const siteConfig = await loadSiteConfig();
-  const allowed = isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
+  const allowed = await isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
   if (!allowed) return { notFound: true };
   return { props: { siteConfig, isSudoAdmin: true } };
 };
