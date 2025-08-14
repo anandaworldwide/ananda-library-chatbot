@@ -28,7 +28,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   for (const email of emails) {
     const ref = db.collection(usersCol).doc(email);
     const existing = await firestoreGet(ref, "get bootstrap user", email);
-    if (!existing.exists) {
+    // Normalize existence check: mocks in build/test may not be full Firestore snapshots
+    const alreadyExists = !!(existing && typeof (existing as any).exists === "boolean"
+      ? (existing as any).exists
+      : false);
+    if (!alreadyExists) {
       await firestoreSet(
         ref,
         {
