@@ -47,6 +47,7 @@ describe("/api/admin/bootstrap", () => {
     jest.clearAllMocks();
     // Clear environment variables
     process.env.ADMIN_BOOTSTRAP_SUPERUSERS = undefined;
+    process.env.ENABLE_ADMIN_BOOTSTRAP = "false";
   });
 
   it("should return 405 for non-POST requests", async () => {
@@ -63,7 +64,8 @@ describe("/api/admin/bootstrap", () => {
   });
 
   it("should return 403 when bootstrap is disabled", async () => {
-    // Environment variable is already undefined from beforeEach
+    // Ensure bootstrap remains disabled regardless of CI env
+    process.env.ENABLE_ADMIN_BOOTSTRAP = "false";
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
     });
