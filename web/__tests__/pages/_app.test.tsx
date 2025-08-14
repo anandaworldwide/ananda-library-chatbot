@@ -4,30 +4,30 @@
  * Tests for the _app.tsx component which serves as the main wrapper for all pages
  */
 
-import { render, act } from '@testing-library/react';
-import MyApp, { reportWebVitals } from '@/pages/_app';
-import { initializeTokenManager } from '@/utils/client/tokenManager';
-import { toast } from 'react-toastify';
-import { NextWebVitalsMetric } from 'next/app';
+import { render, act } from "@testing-library/react";
+import MyApp, { reportWebVitals } from "@/pages/_app";
+import { initializeTokenManager } from "@/utils/client/tokenManager";
+import { toast } from "react-toastify";
+import { NextWebVitalsMetric } from "next/app";
 
 // Mock dependencies
-jest.mock('next/font/google', () => ({
+jest.mock("next/font/google", () => ({
   Inter: jest.fn(() => ({
-    className: 'mocked-font',
+    className: "mocked-font",
   })),
 }));
 
-jest.mock('@/utils/client/tokenManager', () => ({
-  initializeTokenManager: jest.fn(() => Promise.resolve('token')),
+jest.mock("@/utils/client/tokenManager", () => ({
+  initializeTokenManager: jest.fn(() => Promise.resolve("token")),
   fetchWithAuth: jest.fn().mockImplementation(() =>
     Promise.resolve({
       ok: true,
       json: () => Promise.resolve({ sudoCookieValue: false }),
-    }),
+    })
   ),
 }));
 
-jest.mock('react-toastify', () => ({
+jest.mock("react-toastify", () => ({
   toast: {
     error: jest.fn(),
     warning: jest.fn(),
@@ -35,44 +35,47 @@ jest.mock('react-toastify', () => ({
   ToastContainer: jest.fn(() => null),
 }));
 
-jest.mock('@/components/SessionExpiredModal', () => ({
+jest.mock("@/components/SessionExpiredModal", () => ({
   __esModule: true,
-  default: jest.fn(({ isOpen }) =>
-    isOpen ? <div>Session Expired Modal</div> : null,
-  ),
+  default: jest.fn(({ isOpen }) => (isOpen ? <div>Session Expired Modal</div> : null)),
 }));
 
-jest.mock('nextjs-google-analytics', () => ({
+jest.mock("@/components/AuthGuard", () => ({
+  __esModule: true,
+  default: jest.fn(({ children }) => children),
+}));
+
+jest.mock("nextjs-google-analytics", () => ({
   GoogleAnalytics: jest.fn(() => null),
   event: jest.fn(),
 }));
 
-jest.mock('@tanstack/react-query', () => ({
+jest.mock("@tanstack/react-query", () => ({
   QueryClientProvider: jest.fn(({ children }) => children),
 }));
 
-jest.mock('@/utils/client/reactQueryConfig', () => ({
+jest.mock("@/utils/client/reactQueryConfig", () => ({
   queryClient: {},
 }));
 
-describe('MyApp component', () => {
+describe("MyApp component", () => {
   const mockComponent = jest.fn(() => <div>Test</div>);
-  const pageProps = { siteConfig: null };
+  const pageProps = { siteConfig: { requireLogin: true, siteId: "test" } };
 
   // Store original window.location
   let originalLocation: Location;
 
   beforeAll(() => {
     originalLocation = window.location;
-    Object.defineProperty(window, 'location', {
+    Object.defineProperty(window, "location", {
       configurable: true,
       enumerable: true,
-      value: { pathname: '/' },
+      value: { pathname: "/" },
     });
   });
 
   afterAll(() => {
-    Object.defineProperty(window, 'location', {
+    Object.defineProperty(window, "location", {
       configurable: true,
       enumerable: true,
       value: originalLocation,
@@ -82,109 +85,78 @@ describe('MyApp component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset the mock implementation before each test
-    (initializeTokenManager as jest.Mock).mockImplementation(() =>
-      Promise.resolve('token'),
-    );
+    (initializeTokenManager as jest.Mock).mockImplementation(() => Promise.resolve("token"));
   });
 
-  it('renders without crashing', () => {
+  it("renders without crashing", () => {
     const { container } = render(
-      <MyApp
-        Component={mockComponent}
-        pageProps={pageProps}
-        router={{ pathname: '/' } as any}
-      />,
+      <MyApp Component={mockComponent} pageProps={pageProps} router={{ pathname: "/" } as any} />
     );
     expect(container).toBeTruthy();
   });
 
-  it('initializes token manager on mount', () => {
-    render(
-      <MyApp
-        Component={mockComponent}
-        pageProps={pageProps}
-        router={{ pathname: '/' } as any}
-      />,
-    );
+  it("initializes token manager for background features on mount", () => {
+    render(<MyApp Component={mockComponent} pageProps={pageProps} router={{ pathname: "/" } as any} />);
 
     expect(initializeTokenManager).toHaveBeenCalled();
   });
 
-  it('shows error toast when token initialization fails on non-login page', async () => {
+  it("suppresses error toast when token initialization fails for background features", async () => {
     // Set location to home page
-    Object.defineProperty(window, 'location', {
+    Object.defineProperty(window, "location", {
       configurable: true,
       enumerable: true,
-      value: { pathname: '/' },
+      value: { pathname: "/" },
     });
 
     // Mock token manager to fail
-    (initializeTokenManager as jest.Mock).mockImplementation(() =>
-      Promise.reject(new Error('Failed to initialize')),
-    );
+    (initializeTokenManager as jest.Mock).mockImplementation(() => Promise.reject(new Error("Failed to initialize")));
 
     // Render component and wait for effects to run
     await act(async () => {
-      render(
-        <MyApp
-          Component={mockComponent}
-          pageProps={pageProps}
-          router={{ pathname: '/' } as any}
-        />,
-      );
+      render(<MyApp Component={mockComponent} pageProps={pageProps} router={{ pathname: "/" } as any} />);
     });
 
-    // Error toast should be called with error message
-    expect(toast.error).toHaveBeenCalledWith(
-      'Failed to initialize authentication. Some features may not work correctly.',
-      expect.any(Object),
-    );
+    // Error toast should NOT be called since we now suppress errors for background features
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it('suppresses error toast when token initialization fails on login page', async () => {
+  it("suppresses error toast when token initialization fails on login page", async () => {
     // Set location to login page
-    Object.defineProperty(window, 'location', {
+    Object.defineProperty(window, "location", {
       configurable: true,
       enumerable: true,
-      value: { pathname: '/login' },
+      value: { pathname: "/login" },
     });
 
     // Mock token manager to fail
-    (initializeTokenManager as jest.Mock).mockImplementation(() =>
-      Promise.reject(new Error('Failed to initialize')),
-    );
+    (initializeTokenManager as jest.Mock).mockImplementation(() => Promise.reject(new Error("Failed to initialize")));
 
     // Render component and wait for effects to run
     await act(async () => {
-      render(
-        <MyApp
-          Component={mockComponent}
-          pageProps={pageProps}
-          router={{ pathname: '/login' } as any}
-        />,
-      );
+      render(<MyApp Component={mockComponent} pageProps={pageProps} router={{ pathname: "/login" } as any} />);
     });
 
     // Error toast should NOT be called
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it('handles web vitals reporting', () => {
+  it("handles web vitals reporting", () => {
     const mockEvent = jest.fn();
     (window as any).gtag = mockEvent;
 
     // Create a fake environment variable for testing
     const origNodeEnv = process.env.NODE_ENV;
     // @ts-expect-error - Modifying read-only property for testing purposes
-    process.env.NODE_ENV = 'development';
+    process.env.NODE_ENV = "development";
 
     // Create a NextWebVitalsMetric compatible object
     const metric: NextWebVitalsMetric = {
-      id: 'test-id',
-      name: 'FCP',
+      id: "test-id",
+      name: "FCP",
       startTime: 100,
       value: 100,
-      label: 'web-vital',
+      label: "web-vital",
     };
 
     reportWebVitals(metric);

@@ -16,6 +16,7 @@ import { initializeTokenManager } from "@/utils/client/tokenManager";
 import { useEffect, useState } from "react";
 import AuthErrorBoundary from "@/components/AuthErrorBoundary";
 import SessionExpiredModal from "@/components/SessionExpiredModal";
+import AuthGuard from "@/components/AuthGuard";
 import { isPublicEndpoint, isPublicPage } from "@/utils/client/authConfig";
 
 // Configure Inter font
@@ -38,43 +39,27 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const { siteConfig } = pageProps;
 
-  // Initialize token manager when the app loads
+  // Initialize token manager for background features (like error handling)
+  // The main authentication check is now handled by AuthGuard
   useEffect(() => {
-    // Initialize the token manager immediately, but suppress console noise on login page
-    initializeTokenManager()
-      .then(() => {
-        setAuthInitialized(true);
-      })
-      .catch((error) => {
-        if (
-          typeof window !== "undefined" &&
-          (window.location.pathname === "/login" || window.location.pathname === "/magic-login")
-        ) {
-          // On login page, auth init failures are expected; avoid console noise
+    // Only initialize token manager for background features, not for page access control
+    if (typeof window !== "undefined" && siteConfig !== null) {
+      initializeTokenManager()
+        .then(() => {
+          setAuthInitialized(true);
+        })
+        .catch((error) => {
+          // Suppress errors on login/magic-login pages and public pages
+          const currentPath = window.location.pathname;
+          if (currentPath === "/login" || currentPath === "/magic-login" || isPublicPage(currentPath, siteConfig)) {
+            setAuthInitialized(false);
+            return;
+          }
+
+          console.error("Failed to initialize token manager for background features:", error);
           setAuthInitialized(false);
-          return;
-        }
-        console.error("Failed to initialize token manager:", error);
-        setAuthInitialized(false);
-
-        // Don't show error toast on public pages
-        if (typeof window !== "undefined" && isPublicPage(window.location.pathname, siteConfig)) {
-          console.log("Suppressing auth error toast on public page:", window.location.pathname);
-          return;
-        }
-
-        // Show error toast on initialization failure only for protected pages
-        toast.error("Failed to initialize authentication. Some features may not work correctly.", {
-          position: "top-center",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
         });
-        // We don't want to block rendering if this fails,
-        // the token manager will retry when needed
-      });
+    }
   }, [siteConfig]);
 
   // Listen for 401 errors globally
@@ -149,7 +134,9 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
             <main className={inter.className}>
               {/* Only include Google Analytics in production */}
               {!isDevelopment && <GoogleAnalytics trackPageViews />}
-              <Component {...pageProps} />
+              <AuthGuard siteConfig={siteConfig}>
+                <Component {...pageProps} />
+              </AuthGuard>
             </main>
             <ToastContainer />
           </AudioProvider>
