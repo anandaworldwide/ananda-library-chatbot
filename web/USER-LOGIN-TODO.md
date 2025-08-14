@@ -222,10 +222,10 @@ Important constraints:
 - [x] logout API tests updated to clear `auth` as well as legacy cookies
 - [x] web-token API tests updated to accept `auth` JWT cookie when `requireLogin=true`
 
-- [ ] updateUser API tests
+- [x] updateUser API tests
   - Role permissions (admin vs superuser), email validation, per-site uniqueness, restricted role transitions, audit log
     creation
-- [ ] Admin UI edit user tests
+- [x] Admin UI edit user tests
   - Visibility of role selector by role, form submission success/failure paths, error rendering, navigation from users
     list
 
@@ -301,13 +301,13 @@ Role-specific gating details (login-required sites):
 - [x] Pages (superuser-only):
   - `src/pages/admin/downvotes.tsx`
   - `src/pages/admin/relatedQuestionsUpdater.tsx`
-- [ ] APIs (superuser-only on login sites):
+- [x] APIs (superuser-only on login sites):
   - [x] `src/pages/api/downvotedAnswers.ts`
   - Any related-questions admin mutation endpoint (when present)
-- [ ] Pages (admin permitted):
+- [x] Pages (admin permitted):
   - `src/pages/compare-models.tsx`
   - `src/pages/admin/model-stats.tsx`
-- [ ] APIs (admin permitted):
+- [x] APIs (admin permitted):
   - `src/pages/api/model-comparison-data.ts`
   - `src/pages/api/model-comparison-export.ts`
 
