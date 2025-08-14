@@ -8,6 +8,7 @@ import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreGet, firestoreSet } from "@/utils/server/firestoreRetryUtils";
+import { writeAuditLog } from "@/utils/server/auditLog";
 import {
   generateInviteToken,
   hashInviteToken,
@@ -32,7 +33,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!sharedHash) return res.status(500).json({ error: "Server misconfiguration" });
 
   const ok = await bcrypt.compare(sharedPassword, sharedHash);
-  if (!ok) return res.status(403).json({ error: "Incorrect password" });
+  if (!ok) {
+    await writeAuditLog(req, "self_provision_attempt", email?.toLowerCase?.(), {
+      outcome: "invalid_password",
+    });
+    return res.status(403).json({ error: "Incorrect password" });
+  }
 
   const usersCol = getUsersCollectionName();
   const userDocRef = db.collection(usersCol).doc(email.toLowerCase());
@@ -55,6 +61,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         "resend activation on verify access"
       );
       await sendActivationEmail(email, token);
+      await writeAuditLog(req, "self_provision_attempt", email.toLowerCase(), {
+        outcome: "resent_pending_activation",
+      });
       return res.status(200).json({ message: "activation-resent" });
     }
 
@@ -78,9 +87,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       "create user via verify access"
     );
     await sendActivationEmail(email, token);
+    await writeAuditLog(req, "self_provision_attempt", email.toLowerCase(), {
+      outcome: "created_pending_user",
+    });
     return res.status(200).json({ message: "created" });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    try {
+      await writeAuditLog(req, "self_provision_attempt", email?.toLowerCase?.(), {
+        outcome: "server_error",
+        error: message,
+      });
+    } catch {}
     return res.status(500).json({ error: message });
   }
 }

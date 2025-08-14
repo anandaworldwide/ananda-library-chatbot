@@ -14,7 +14,7 @@ The system uses JSON Web Tokens (JWT) to secure API communication between:
 
 ### Security Architecture
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────────────────────┐
 │                              CLIENT LAYER                                      │
 │                                                                                │
@@ -402,7 +402,37 @@ function MyComponent() {
 
 ## Cron Job Security
 
-Vercel cron jobs currently cannot easily include JWT tokens in their requests. For endpoints called by cron jobs, such
-as `/api/relatedQuestions` when performing batch updates, we use rate limiting as a security measure instead of JWT
-authentication. This involves a stricter rate limit applied specifically to requests potentially originating from the
-cron job mechanism.
+Cron-invoked endpoints are secured with a dedicated shared secret instead of JWTs. The secret is provided via the
+`Authorization` header and validated by the endpoint.
+
+### Authentication Pattern
+
+```typescript
+// Require Cron secret in Authorization header
+const authHeader = req.headers.authorization;
+if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
+```
+
+### Endpoints using CRON_SECRET
+
+- `/api/admin/digestSelfProvision` (daily digest of self-provision attempts)
+- `/api/relatedQuestions` (batch updates)
+
+### Additional Safeguards
+
+- Apply `genericRateLimiter` with conservative limits for cron endpoints (defense in depth)
+- Log failures for visibility (401s, rate-limit triggers, unexpected errors)
+
+### Vercel Configuration
+
+- Set `CRON_SECRET` in the project environment variables
+- In Vercel Cron configuration, add header:
+
+```http
+Authorization: Bearer ${CRON_SECRET}
+```
+
+This approach avoids embedding JWT logic into Vercel Cron while still ensuring only authorized jobs call these
+endpoints.

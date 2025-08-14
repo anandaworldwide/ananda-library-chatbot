@@ -155,12 +155,6 @@ Entitlements:
 - [x] User data features: Continue keying to account `uuid`; clear legacy UUID cookie after activation.
 - [x] Header auth label: Uses token manager init + cookie fallback; recognizes both `auth` (JWT) and `siteAuth`.
 
-- [ ] Admin UI: Users list supports click-through to user detail at `/admin/users/[userId]`
-- [ ] Admin UI: Edit User page (email, single-select role)
-  - Only superusers may change role; client enforces single-select
-  - Client-side validation and clear error states; optimistic update with rollback on failure
-  - Add Admin footer bar driven by JWT `role` (admin/superuser), replacing legacy sudo-only visibility
-
 ## Login Transition UX (Grace Period)
 
 Purpose: Smooth transition to magic-link auth without spiking support. During the transition, existing users can
@@ -210,12 +204,10 @@ Important constraints:
 
 ### Tasks
 
-- [ ] Backend: Add rate limiting for the shared-password endpoint at 5 attempts/hour/IP.
-- [ ] Backend: Add audit entries for self-provision attempts (success/failure) with context.
-- [ ] Backend: Implement daily digest job that aggregates self-provision events and emails `OPS_ALERT_EMAIL`.
-- [ ] Monitoring: Add metrics for known-email matches, unknown-email branches, shared-password success/failure, and
-      digest sends.
-- [ ] Documentation: Update user-facing copy for both screens and admin docs.
+- [x] Backend: Add rate limiting for the shared-password endpoint at 5 attempts/hour/IP.
+- [x] Backend: Add audit entries for self-provision attempts (success/failure) with context.
+- [x] Backend: Implement daily digest job that aggregates self-provision events and emails `OPS_ALERT_EMAIL`.
+- [ ] Monitoring: Add metrics for known-email matches, unknown-email branches, shared-password success/failure.
 
 ### Deferred (not in this change)
 
