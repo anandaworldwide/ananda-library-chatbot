@@ -136,6 +136,8 @@ Our battle-tested documentation covers every aspect of deployment and customizat
 - [Frontend Guidelines](docs/frontend-guidelines.md) - Styling and design rules for the frontend codebase
 - [Backend Structure](docs/backend-structure.md) - Architecture and organization of the backend services
 - [File Structure](docs/file-structure.md) - Organization of the project's files and directories
+- [Login Bootstrap Guide](docs/login-bootstrap-guide.md) - Initial superuser account creation if login is required for a
+  site.
 - [Security](docs/SECURITY-README.md) - Security implementation details and best practices
 - [Security TODO](docs/SECURITY-TODO.md) - Planned security improvements and tasks
 - [Testing](docs/TESTS-README.md) - Testing framework and guidelines

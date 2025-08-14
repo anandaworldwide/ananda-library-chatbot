@@ -27,7 +27,7 @@ The system determines the environment using this priority order:
 
 For S3-stored prompts, the system constructs paths as:
 
-```
+```url
 s3://bucket/site-config/{environment}/prompts/{template-file}
 ```
 
