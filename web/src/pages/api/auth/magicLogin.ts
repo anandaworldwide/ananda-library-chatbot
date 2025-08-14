@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "@/services/firebase";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
+import { isDevelopment } from "@/utils/env";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreGet } from "@/utils/server/firestoreRetryUtils";
 
@@ -113,10 +114,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       { expiresIn: "180d" }
     );
 
+    // Use proper HTTPS detection for secure cookies (same pattern as login.ts)
+    const isSecure = req.headers["x-forwarded-proto"] === "https" || !isDevelopment();
+
     cookies.set("auth", authToken, {
       httpOnly: true,
       sameSite: "strict",
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       maxAge: 180 * 24 * 60 * 60 * 1000,
       path: "/",
     });
@@ -124,7 +128,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     cookies.set("uuid", finalUuid as string, {
       httpOnly: false,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       maxAge: 180 * 24 * 60 * 60 * 1000,
       path: "/",
     });
