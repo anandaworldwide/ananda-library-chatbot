@@ -51,8 +51,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ error: "Invalid token" });
     }
 
+    // Use proper HTTPS detection for secure cookies (same pattern as login.ts)
+    const isSecure = req.headers["x-forwarded-proto"] === "https" || !isDevelopment();
+
+    // DEBUG: Log cookie configuration details
+    console.log("COOKIE DEBUG - verifyMagicLink.ts (early):", {
+      "x-forwarded-proto": req.headers["x-forwarded-proto"],
+      host: req.headers.host,
+      isDevelopment: isDevelopment(),
+      NODE_ENV: process.env.NODE_ENV,
+      isSecure: isSecure,
+    });
+
     // Transactional UUID reservation via index collection to ensure uniqueness
-    const cookies = new Cookies(req, res);
+    const cookies = new Cookies(req, res, { secure: isSecure });
     const cookieUuid = cookies.get("uuid");
     const hasCookieUuid = typeof cookieUuid === "string" && cookieUuid.length === 36;
     const accountUuid =
@@ -138,25 +150,30 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       { expiresIn: "180d" }
     );
 
-    // Use proper HTTPS detection for secure cookies (same pattern as login.ts)
-    const isSecure = req.headers["x-forwarded-proto"] === "https" || !isDevelopment();
+    try {
+      console.log("COOKIE DEBUG - Setting auth cookie...");
+      cookies.set("auth", authToken, {
+        httpOnly: true,
+        sameSite: "strict",
+        secure: isSecure,
+        maxAge: 180 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+      console.log("COOKIE DEBUG - Auth cookie set successfully");
 
-    cookies.set("auth", authToken, {
-      httpOnly: true,
-      sameSite: "strict",
-      secure: isSecure,
-      maxAge: 180 * 24 * 60 * 60 * 1000,
-      path: "/",
-    });
-
-    // Set client-readable uuid cookie to match the authoritative account UUID
-    cookies.set("uuid", finalUuid as string, {
-      httpOnly: false,
-      sameSite: "lax",
-      secure: isSecure,
-      maxAge: 180 * 24 * 60 * 60 * 1000,
-      path: "/",
-    });
+      console.log("COOKIE DEBUG - Setting uuid cookie...");
+      cookies.set("uuid", finalUuid as string, {
+        httpOnly: false,
+        sameSite: "lax",
+        secure: isSecure,
+        maxAge: 180 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+      console.log("COOKIE DEBUG - UUID cookie set successfully");
+    } catch (cookieError) {
+      console.error("COOKIE DEBUG - Error setting cookies:", cookieError);
+      throw cookieError;
+    }
 
     return res.status(200).json({ message: "ok", uuid: finalUuid });
   } catch (err) {
