@@ -19,6 +19,7 @@ export default function Login({ siteConfig }: LoginProps) {
   const [emailSent, setEmailSent] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(0);
   const [lastSendType, setLastSendType] = useState<"login" | "activation" | null>(null);
+  const [showPasswordInfo, setShowPasswordInfo] = useState(false);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
 
   // Tick countdown while active; when it reaches 0, re-enable button
@@ -208,6 +209,17 @@ export default function Login({ siteConfig }: LoginProps) {
               />
             </div>
             <div className="relative mb-2">
+              <div className="flex items-center gap-2 mb-1">
+                <label className="text-sm font-medium text-gray-700">Shared Password</label>
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordInfo(true)}
+                  className="w-4 h-4 rounded-full bg-gray-400 text-white text-xs flex items-center justify-center hover:bg-gray-500 transition-colors"
+                  title="Why do I need the shared password?"
+                >
+                  ?
+                </button>
+              </div>
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
@@ -282,6 +294,48 @@ export default function Login({ siteConfig }: LoginProps) {
           Open Source Project
         </a>
       </p>
+
+      {/* Password Info Modal */}
+      {showPasswordInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Why do I need the shared password?</h3>
+              <button
+                type="button"
+                onClick={() => setShowPasswordInfo(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="text-gray-700 space-y-3">
+              <p>
+                We're transitioning from a shared password system to individual user accounts for better security and
+                personalization.
+              </p>
+              <p>
+                To set up your personal account, please enter the shared password that you used to access the site
+                previously. This will verify your existing access and create your individual login.
+              </p>
+              <p className="text-sm text-gray-600">
+                After your account is created, you'll receive login links via email and won't need the shared password
+                anymore.
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPasswordInfo(false)}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
