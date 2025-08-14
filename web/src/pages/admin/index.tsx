@@ -7,6 +7,7 @@ import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import Link from "next/link";
+import { Breadcrumb } from "@/components/Breadcrumb";
 
 interface AdminDashboardProps {
   isSudoAdmin: boolean;
@@ -52,7 +53,7 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled, site
         <title>Admin · Dashboard</title>
       </Head>
       <div className="mx-auto max-w-3xl p-6 space-y-6">
-        <h1 className="text-2xl font-semibold">Admin · Dashboard</h1>
+        <Breadcrumb items={[{ label: "Admin Dashboard" }]} />
 
         {message && <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm">{message}</div>}
 

@@ -20,6 +20,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       const data = d.data() || {};
       return {
         email: data.email,
+        firstName: data.firstName || null,
+        lastName: data.lastName || null,
         uuid: data.uuid || null,
         role: data.role || undefined,
         verifiedAt: data.verifiedAt?.toDate?.() ?? null,

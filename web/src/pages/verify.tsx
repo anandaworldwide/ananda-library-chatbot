@@ -6,12 +6,14 @@ import { useRouter } from "next/router";
 export default function VerifyPage() {
   const router = useRouter();
   const { token, email } = router.query as { token?: string; email?: string };
-  const [status, setStatus] = useState<"idle" | "working" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "activating" | "collecting" | "saving" | "success" | "error">("idle");
   const [message, setMessage] = useState<string>("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
 
   useEffect(() => {
     if (!token || !email || status !== "idle") return;
-    setStatus("working");
+    setStatus("activating");
     (async () => {
       try {
         const res = await fetch("/api/verifyMagicLink", {
@@ -22,8 +24,8 @@ export default function VerifyPage() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || "Activation failed");
-        setStatus("success");
-        setMessage("Your account has been activated.");
+        setStatus("collecting");
+        setMessage("");
       } catch (e: any) {
         setStatus("error");
         setMessage(e?.message || "Activation failed");
@@ -31,14 +33,34 @@ export default function VerifyPage() {
     })();
   }, [token, email, status]);
 
-  // After successful activation, inform user and redirect to home after 3 seconds
+  // After profile save, redirect to home after 2 seconds
   useEffect(() => {
     if (status !== "success") return;
     const t = setTimeout(() => {
       router.replace("/");
-    }, 3000);
+    }, 2000);
     return () => clearTimeout(t);
   }, [status, router]);
+
+  async function onSubmitName(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setStatus("saving");
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Failed to save profile");
+      setStatus("success");
+      setMessage("Your account has been activated.");
+    } catch (e: any) {
+      setStatus("error");
+      setMessage(e?.message || "Failed to save profile");
+    }
+  }
 
   return (
     <>
@@ -47,23 +69,56 @@ export default function VerifyPage() {
       </Head>
       <main className="mx-auto max-w-xl p-6">
         <h1 className="text-2xl font-semibold mb-4">Account Verification</h1>
-        {status === "idle" || status === "working" ? (
+        {status === "idle" || status === "activating" ? (
           <div className="text-sm text-gray-700">Verifying your link…</div>
         ) : null}
+        {status === "collecting" ? (
+          <form onSubmit={onSubmitName} className="space-y-4">
+            <p className="text-sm text-gray-700">Welcome! Please tell us your name.</p>
+            <div>
+              <label htmlFor="firstName" className="block text-sm font-medium mb-1">
+                First name
+              </label>
+              <input
+                id="firstName"
+                className="w-full rounded border px-3 py-2"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="First name"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="lastName" className="block text-sm font-medium mb-1">
+                Last name
+              </label>
+              <input
+                id="lastName"
+                className="w-full rounded border px-3 py-2"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Last name"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+            >
+              Continue
+            </button>
+          </form>
+        ) : null}
+        {status === "saving" && <div>Saving your profile…</div>}
         {status === "success" ? (
           <div className="rounded border border-green-300 bg-green-50 p-3 text-sm mb-3">
             {message}
-            <div className="mt-1">Redirecting to home in three seconds.</div>
+            <div className="mt-1">Redirecting to home…</div>
           </div>
         ) : null}
         {status === "error" ? (
           <div className="rounded border border-red-300 bg-red-50 p-3 text-sm mb-3">{message}</div>
         ) : null}
-        <div className="mt-4">
-          <a href="/" className="text-blue-600 underline">
-            Go to Home
-          </a>
-        </div>
       </main>
     </>
   );

@@ -6,6 +6,7 @@ import { SiteConfig } from "@/types/siteConfig";
 import type { GetServerSideProps, NextApiRequest } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
+import { Breadcrumb } from "@/components/Breadcrumb";
 
 interface PendingUser {
   email: string;
@@ -15,6 +16,8 @@ interface PendingUser {
 
 interface ActiveUser {
   email: string;
+  firstName?: string | null;
+  lastName?: string | null;
   uuid?: string | null;
   role?: string;
   verifiedAt: string | null;
@@ -25,6 +28,33 @@ interface ActiveUser {
 interface AdminUsersPageProps {
   siteConfig: SiteConfig | null;
   isSudoAdmin: boolean;
+}
+
+// Helper component for date display (date only, no time)
+function DateDisplay({ dateString }: { dateString: string | null }) {
+  if (!dateString) return <span>–</span>;
+
+  // dateString is already formatted as locale string from the API
+  // Extract just the date part (before the comma and time)
+  const dateOnly = dateString.split(",")[0];
+
+  return <span>{dateOnly}</span>;
+}
+
+// Helper function to get display name
+function getDisplayName(user: ActiveUser): string {
+  const firstName = user.firstName?.trim() || "";
+  const lastName = user.lastName?.trim() || "";
+
+  if (firstName && lastName) {
+    return `${firstName} ${lastName}`;
+  } else if (firstName) {
+    return firstName;
+  } else if (lastName) {
+    return lastName;
+  } else {
+    return user.email; // Fallback to email if no name
+  }
 }
 
 export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
@@ -68,6 +98,8 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       if (!res.ok) throw new Error(data?.error || "Failed to load active users");
       const items: ActiveUser[] = (data.items || []).map((it: any) => ({
         email: it.email,
+        firstName: it.firstName ?? null,
+        lastName: it.lastName ?? null,
         uuid: it.uuid ?? null,
         role: it.role || undefined,
         verifiedAt: it.verifiedAt ? new Date(it.verifiedAt).toLocaleString() : null,
@@ -184,7 +216,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
         <title>Admin · Users</title>
       </Head>
       <div className="mx-auto max-w-3xl p-6">
-        <h1 className="text-2xl font-semibold mb-4">Admin · Users</h1>
+        <Breadcrumb items={[{ label: "Admin Dashboard", href: "/admin" }, { label: "Users" }]} />
 
         <form onSubmit={onSubmit} className="mb-8 space-y-3">
           <div>
@@ -263,34 +295,35 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="py-2">Email</th>
-                  <th className="py-2">UUID</th>
-                  <th className="py-2">Role</th>
-                  <th className="py-2">Verified</th>
-                  <th className="py-2">Last Login</th>
+                  <th className="py-2 pr-6">Name</th>
+                  <th className="py-2 pr-6">Email</th>
+                  <th className="py-2 pr-6">Role</th>
+                  <th className="py-2 pr-6">Last Login</th>
                   <th className="py-2">Entitlements</th>
-                  <th className="py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {active.map((u) => (
                   <tr key={u.email} className="border-b">
-                    <td className="py-2">{u.email}</td>
-                    <td className="py-2 font-mono text-xs text-gray-700">{u.uuid || "–"}</td>
-                    <td className="py-2">{u.role || "–"}</td>
-                    <td className="py-2">{u.verifiedAt || "–"}</td>
-                    <td className="py-2">{u.lastLoginAt || "–"}</td>
+                    <td className="py-2 pr-6">
+                      <a
+                        className="text-blue-600 underline hover:text-blue-800"
+                        href={`/admin/users/${encodeURIComponent(u.email)}`}
+                      >
+                        {getDisplayName(u)}
+                      </a>
+                    </td>
+                    <td className="py-2 pr-6">{u.email}</td>
+                    <td className="py-2 pr-6">{u.role || "–"}</td>
+                    <td className="py-2 pr-6">
+                      <DateDisplay dateString={u.lastLoginAt} />
+                    </td>
                     <td className="py-2">
                       {Object.keys(u.entitlements).length > 0
                         ? Object.keys(u.entitlements)
                             .filter((key) => u.entitlements[key])
                             .join(", ")
                         : "–"}
-                    </td>
-                    <td className="py-2">
-                      <a className="text-blue-600 underline" href={`/admin/users/${encodeURIComponent(u.email)}`}>
-                        Edit
-                      </a>
                     </td>
                   </tr>
                 ))}

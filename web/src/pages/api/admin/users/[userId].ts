@@ -68,6 +68,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           verifiedAt: data.verifiedAt?.toDate?.() ?? null,
           lastLoginAt: data.lastLoginAt?.toDate?.() ?? null,
           entitlements: data.entitlements || {},
+          firstName: typeof (data as any)?.firstName === "string" ? (data as any).firstName : null,
+          lastName: typeof (data as any)?.lastName === "string" ? (data as any).lastName : null,
         },
       });
     } catch (err: any) {
@@ -77,7 +79,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (req.method === "PATCH") {
     try {
-      const body = (req.body || {}) as { email?: string; role?: string };
+      const body = (req.body || {}) as { email?: string; role?: string; firstName?: string; lastName?: string };
       const updates: Record<string, any> = {};
       const now = firebase.firestore.Timestamp.now();
       const siteConfig = loadSiteConfigSync();
@@ -95,7 +97,21 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         updates.role = body.role;
       }
 
-      // If only role update (no email change)
+      // Optional name updates
+      if (body.firstName !== undefined) {
+        if (typeof body.firstName !== "string" || body.firstName.length > 100) {
+          return res.status(400).json({ error: "Invalid first name" });
+        }
+        updates.firstName = body.firstName.trim();
+      }
+      if (body.lastName !== undefined) {
+        if (typeof body.lastName !== "string" || body.lastName.length > 100) {
+          return res.status(400).json({ error: "Invalid last name" });
+        }
+        updates.lastName = body.lastName.trim();
+      }
+
+      // If only role/name update (no email change)
       if (!body.email || body.email.toLowerCase() === currentId) {
         if (Object.keys(updates).length === 0) {
           return res.status(400).json({ error: "No updates provided" });
@@ -117,6 +133,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             verifiedAt: data.verifiedAt?.toDate?.() ?? null,
             lastLoginAt: data.lastLoginAt?.toDate?.() ?? null,
             entitlements: data.entitlements || {},
+            firstName: typeof (data as any)?.firstName === "string" ? (data as any).firstName : null,
+            lastName: typeof (data as any)?.lastName === "string" ? (data as any).lastName : null,
           },
         });
       }
@@ -192,6 +210,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           verifiedAt: out.verifiedAt?.toDate?.() ?? null,
           lastLoginAt: out.lastLoginAt?.toDate?.() ?? null,
           entitlements: out.entitlements || {},
+          firstName: typeof (out as any)?.firstName === "string" ? (out as any).firstName : null,
+          lastName: typeof (out as any)?.lastName === "string" ? (out as any).lastName : null,
         },
       });
     } catch (err: any) {

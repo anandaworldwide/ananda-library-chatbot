@@ -5,6 +5,7 @@ import Layout from "@/components/layout";
 import type { GetServerSideProps } from "next";
 import type { SiteConfig } from "@/types/siteConfig";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
+import { getOrCreateUUID } from "@/utils/client/uuid";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 
 interface LikedAnswer {
@@ -15,10 +16,14 @@ interface LikedAnswer {
 
 export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | null }) {
   const [email, setEmail] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState<string>("");
+  const [lastName, setLastName] = useState<string>("");
   const [likedAnswers, setLikedAnswers] = useState<LikedAnswer[]>([]);
+  const [chats, setChats] = useState<Array<{ id: string; question: string; timestamp: any }>>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [role, setRole] = useState<string>("user");
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -42,6 +47,8 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
           if (profileRes.ok && profile?.email) {
             setEmail(profile.email);
             setRole(typeof profile?.role === "string" ? profile.role : "user");
+            setFirstName(typeof profile?.firstName === "string" ? profile.firstName : "");
+            setLastName(typeof profile?.lastName === "string" ? profile.lastName : "");
           } else {
             setEmail(null);
             setRole("user");
@@ -51,12 +58,8 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
           setRole("user");
         }
 
-        // Fetch liked answers via existing APIs
-        // 1) Get all liked answer IDs for current UUID
-        const uuidCookie = document.cookie
-          .split("; ")
-          .find((c) => c.startsWith("uuid="))
-          ?.split("=")[1];
+        // Ensure UUID exists (cookie-based)
+        const uuidCookie = getOrCreateUUID();
 
         if (!uuidCookie) {
           setLikedAnswers([]);
@@ -79,6 +82,18 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
         } else {
           setLikedAnswers([]);
         }
+
+        // Fetch recent chats for this UUID (reverse chronological order)
+        try {
+          const chatsRes = await fetchWithAuth(`/api/chats?uuid=${encodeURIComponent(uuidCookie)}&limit=50`);
+          const chatsData = (await chatsRes.json().catch(() => [])) as any[];
+          const mappedChats = (Array.isArray(chatsData) ? chatsData : []).map((c) => ({
+            id: c.id,
+            question: c.question,
+            timestamp: c.timestamp,
+          }));
+          setChats(mappedChats);
+        } catch {}
       } catch (e: any) {
         setMessage(e?.message || "Failed to load settings");
       } finally {
@@ -95,6 +110,25 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
       window.location.href = "/";
     } catch (e: any) {
       setMessage(e?.message || "Logout failed");
+    }
+  }
+
+  async function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setSavingProfile(true);
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Failed to save profile");
+      setMessage("Profile updated");
+    } catch (e: any) {
+      setMessage(e?.message || "Failed to save profile");
+    } finally {
+      setSavingProfile(false);
     }
   }
 
@@ -128,6 +162,62 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
                       </span>
                     )}
                   </div>
+                )}
+              </section>
+
+              <section className="mb-6">
+                <h2 className="text-lg font-semibold mb-1">Profile</h2>
+                <form onSubmit={handleSaveProfile} className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="firstName" className="block text-sm font-medium mb-1">
+                        First name
+                      </label>
+                      <input
+                        id="firstName"
+                        className="w-full rounded border px-3 py-2"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="First name"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="lastName" className="block text-sm font-medium mb-1">
+                        Last name
+                      </label>
+                      <input
+                        id="lastName"
+                        className="w-full rounded border px-3 py-2"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Last name"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={savingProfile}
+                    className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+                  >
+                    {savingProfile ? "Saving…" : "Save Profile"}
+                  </button>
+                </form>
+              </section>
+
+              <section className="mb-6">
+                <h2 className="text-lg font-semibold mb-2">Recent Chats</h2>
+                {chats.length === 0 ? (
+                  <div className="text-sm text-gray-600">No chats yet</div>
+                ) : (
+                  <ul className="list-disc pl-5 text-sm">
+                    {chats.map((c) => (
+                      <li key={c.id} className="mb-1">
+                        <a href={`/answers/${c.id}`} className="text-blue-600 underline">
+                          {c.question}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </section>
 

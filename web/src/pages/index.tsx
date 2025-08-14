@@ -45,6 +45,7 @@ import { StreamingResponseData } from "@/types/StreamingResponseData";
 import { RelatedQuestion } from "@/types/RelatedQuestion";
 import { SudoProvider, useSudo } from "@/contexts/SudoContext";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
+import { getOrCreateUUID } from "@/utils/client/uuid";
 
 // Main component for the chat interface
 export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) {
@@ -635,6 +636,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           privateSession,
           mediaTypes,
           sourceCount: sourceCount,
+          uuid: getOrCreateUUID(),
         }),
         signal: newAbortController.signal,
       });

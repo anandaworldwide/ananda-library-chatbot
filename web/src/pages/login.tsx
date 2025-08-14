@@ -224,7 +224,7 @@ export default function Login({ siteConfig }: LoginProps) {
               </button>
             </div>
             {siteConfig?.siteId === "ananda" && (
-              <p className="mt-1 text-sm">
+              <p className="mt-1 mb-4 text-sm">
                 Those with Ananda Library access can get the password from&nbsp;
                 <a
                   href="https://www.anandalibrary.org/content/ai-chatbot-intro/"
@@ -245,7 +245,7 @@ export default function Login({ siteConfig }: LoginProps) {
             {info}
           </p>
         )}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-4">
           <button
             type="submit"
             className="p-2 bg-blue-500 text-white rounded disabled:opacity-60"
@@ -261,7 +261,7 @@ export default function Login({ siteConfig }: LoginProps) {
           </button>
           {emailSent && resendSeconds > 0 && (
             <span className="ml-3 text-sm text-gray-600" aria-live="polite">
-              You can resend the {lastSendType === "activation" ? "activation email" : "login link"} in {resendSeconds}s
+              You can resend the {lastSendType === "activation" ? "invitation email" : "login link"} in {resendSeconds}s
             </span>
           )}
         </div>

@@ -242,6 +242,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
         historyB: historyB, // Separate history for model B
         sourceCount,
         useExtraSources: false,
+        uuid: getOrCreateUUID(),
       };
 
       console.log("Sending request with:", requestBody); // Debug log

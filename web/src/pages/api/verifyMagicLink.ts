@@ -37,7 +37,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const doc = await firestoreGet(userDocRef, "get user for verify", email);
     if (!doc.exists) return res.status(404).json({ error: "User not found" });
     const data = doc.data() as any;
-    if (data?.inviteStatus !== "pending") return res.status(400).json({ error: "Invalid status" });
+    // Allow both 'pending' (first time) and 'activated_pending_profile' (subsequent clicks before name entry)
+    if (data?.inviteStatus !== "pending" && data?.inviteStatus !== "activated_pending_profile") {
+      return res.status(400).json({ error: "Invalid status" });
+    }
     const now = Date.now();
     const exp = (data?.inviteExpiresAt?.toMillis?.() ?? 0) as number;
     if (!exp || now > exp) return res.status(400).json({ error: "Link expired" });
@@ -76,10 +79,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             if (!indexSnap.exists) {
               tx.set(indexRef, { email: emailLower, siteId: process.env.SITE_ID || "default", createdAt: nowTs });
             }
-            // Mark accepted and record initial login timestamp
+            // Mark as activated but pending profile completion
             tx.set(
               userDocRef,
-              { inviteStatus: "accepted", verifiedAt: nowTs, lastLoginAt: nowTs, updatedAt: nowTs },
+              { inviteStatus: "activated_pending_profile", verifiedAt: nowTs, lastLoginAt: nowTs, updatedAt: nowTs },
               { merge: true }
             );
             finalUuid = existingAccountUuid;
@@ -93,7 +96,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             tx.set(indexRef, { email: emailLower, siteId: process.env.SITE_ID || "default", createdAt: nowTs });
             tx.set(
               userDocRef,
-              { uuid: candidate, inviteStatus: "accepted", verifiedAt: nowTs, lastLoginAt: nowTs, updatedAt: nowTs },
+              {
+                uuid: candidate,
+                inviteStatus: "activated_pending_profile",
+                verifiedAt: nowTs,
+                lastLoginAt: nowTs,
+                updatedAt: nowTs,
+              },
               { merge: true }
             );
             finalUuid = candidate;

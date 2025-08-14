@@ -1,0 +1,61 @@
+// Lists chats (question/answer pairs) for a given UUID in reverse chronological order
+import type { NextApiRequest, NextApiResponse } from "next";
+import { db } from "@/services/firebase";
+import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
+import { firestoreQueryGet } from "@/utils/server/firestoreRetryUtils";
+import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", ["GET"]);
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // Basic rate limiting
+  const allowed = await genericRateLimiter(req, res, {
+    windowMs: 60 * 1000,
+    max: 60,
+    name: "chats-api",
+  });
+  if (!allowed) return;
+
+  const { uuid, limit } = req.query;
+  if (!uuid || typeof uuid !== "string") {
+    return res.status(400).json({ error: "uuid query parameter is required" });
+  }
+
+  const limitNum = Math.min(Math.max(parseInt(String(limit || 50), 10) || 50, 1), 200);
+
+  try {
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    // Query by uuid and order by timestamp desc
+    const query = db
+      .collection(getAnswersCollectionName())
+      .where("uuid", "==", uuid)
+      .orderBy("timestamp", "desc")
+      .limit(limitNum);
+
+    const snapshot = await firestoreQueryGet(query, "user chats list", `uuid: ${uuid}, limit: ${limitNum}`);
+
+    const chats = snapshot.docs.map((doc: any) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        question: data.question,
+        answer: data.answer,
+        timestamp: data.timestamp,
+        likeCount: data.likeCount || 0,
+        collection: data.collection,
+      };
+    });
+
+    return res.status(200).json(chats);
+  } catch (error: any) {
+    if (error?.message?.includes("indexes")) {
+      // Firestore may require a composite index for where+orderBy; surface guidance
+      return res.status(500).json({ error: "Firestore index required for uuid+timestamp query" });
+    }
+    return res.status(500).json({ error: error?.message || "Failed to fetch chats" });
+  }
+}
