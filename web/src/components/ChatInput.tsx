@@ -34,6 +34,7 @@ import {
   getEnabledMediaTypes,
 } from "@/utils/client/siteConfig";
 import { logEvent } from "@/utils/client/analytics";
+import { getOrCreateUUID } from "@/utils/client/uuid";
 
 // Define the props interface for the ChatInput component
 interface ChatInputProps {
@@ -105,6 +106,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   // Effect to set initial suggestions expanded state based on saved preference
   useEffect(() => {
+    // Ensure a persistent UUID exists for this user (cookie-based)
+    try {
+      getOrCreateUUID();
+    } catch {}
+
     const savedPreference = localStorage.getItem("suggestionsExpanded");
     setSuggestionsExpanded(savedPreference === null ? true : savedPreference === "true");
   }, [setSuggestionsExpanded]);

@@ -1,17 +1,18 @@
-import { useState } from 'react';
-import { Message } from '@/types/chat';
-import { Document } from 'langchain/document';
-import { logEvent } from '@/utils/client/analytics';
-import { getGreeting } from '@/utils/client/siteConfig';
-import { SiteConfig } from '@/types/siteConfig';
-import { fetchWithAuth } from '@/utils/client/tokenManager';
-import { ChatMessage, createChatMessages } from '@/utils/shared/chatHistory';
+import { useState } from "react";
+import { Message } from "@/types/chat";
+import { Document } from "langchain/document";
+import { logEvent } from "@/utils/client/analytics";
+import { getGreeting } from "@/utils/client/siteConfig";
+import { SiteConfig } from "@/types/siteConfig";
+import { fetchWithAuth } from "@/utils/client/tokenManager";
+import { ChatMessage, createChatMessages } from "@/utils/shared/chatHistory";
+import { getOrCreateUUID } from "@/utils/client/uuid";
 
 export function useChat(
   collection: string,
   privateSession: boolean,
   mediaTypes: { text: boolean; audio: boolean },
-  siteConfig?: SiteConfig | null,
+  siteConfig?: SiteConfig | null
 ) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +25,7 @@ export function useChat(
     messages: [
       {
         message: getGreeting(siteConfig ?? null),
-        type: 'apiMessage',
+        type: "apiMessage",
       },
     ],
     history: [],
@@ -41,7 +42,7 @@ export function useChat(
     setError(null);
 
     if (!query) {
-      alert('Please input a question');
+      alert("Please input a question");
       return;
     }
 
@@ -50,27 +51,27 @@ export function useChat(
       messages: [
         ...state.messages,
         {
-          type: 'userMessage',
+          type: "userMessage",
           message: query,
         },
       ],
     }));
 
     // Log event for all questions
-    logEvent('ask_question', 'Engagement', query);
+    logEvent("ask_question", "Engagement", query);
 
     // New: Log event specifically for private questions
     if (privateSession) {
-      logEvent('submit_private_question', 'Engagement', '');
+      logEvent("submit_private_question", "Engagement", "");
     }
 
     setLoading(true);
     try {
       // Use fetchWithAuth instead of fetch to automatically include the JWT token
-      const response = await fetchWithAuth('/api/chat/v1', {
-        method: 'POST',
+      const response = await fetchWithAuth("/api/chat/v1", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           collection,
@@ -79,30 +80,29 @@ export function useChat(
           privateSession,
           mediaTypes,
           siteConfig,
+          uuid: getOrCreateUUID(),
         }),
       });
       const data = await response.json();
 
       if (data.error) {
         setError(data.error);
-        console.log('ERROR: data error: ' + data.error);
+        console.log("ERROR: data error: " + data.error);
       } else {
-        const transformedSourceDocs = data.sourceDocuments.map(
-          (doc: Document) => ({
-            ...doc,
-            metadata: {
-              ...doc.metadata,
-              title: doc.metadata.title || 'Unknown source',
-            },
-          }),
-        );
+        const transformedSourceDocs = data.sourceDocuments.map((doc: Document) => ({
+          ...doc,
+          metadata: {
+            ...doc.metadata,
+            title: doc.metadata.title || "Unknown source",
+          },
+        }));
 
         setMessageState((state) => ({
           ...state,
           messages: [
             ...state.messages,
             {
-              type: 'apiMessage',
+              type: "apiMessage",
               message: data.text,
               sourceDocs: transformedSourceDocs,
               docId: data.docId,
@@ -117,10 +117,10 @@ export function useChat(
     } catch (error) {
       setLoading(false);
       setError(
-        'An error occurred while fetching the data. ' +
-          'Please click "Contact" in the site footer to email Michael and let him know!',
+        "An error occurred while fetching the data. " +
+          'Please click "Contact" in the site footer to email Michael and let him know!'
       );
-      console.log('error', error);
+      console.log("error", error);
     }
   };
 

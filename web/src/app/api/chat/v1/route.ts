@@ -113,6 +113,7 @@ interface ChatRequestBody {
   mediaTypes?: Partial<MediaTypes>;
   sourceCount?: number;
   siteId?: string;
+  uuid: string; // required client UUID (persisted regardless of auth)
 }
 
 interface ComparisonRequestBody extends ChatRequestBody {
@@ -199,10 +200,20 @@ async function validateAndPreprocessInput(
   // Sanitize the input to prevent XSS attacks
   const sanitizedQuestion = validator.escape(question.trim()).replaceAll("\n", " ");
 
+  // Strictly require a valid v4 UUID on all chat requests
+  const rawUuid = typeof requestBody.uuid === "string" ? requestBody.uuid.trim() : "";
+  const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!rawUuid || !uuidV4Regex.test(rawUuid)) {
+    const response = NextResponse.json({ error: "UUID is required and must be a valid v4 UUID" }, { status: 400 });
+    return corsMiddleware.addCorsHeaders(response, req, siteConfig);
+  }
+  const sanitizedUuid = rawUuid;
+
   return {
     sanitizedInput: {
       ...requestBody,
       question: sanitizedQuestion,
+      uuid: sanitizedUuid,
     },
     originalQuestion,
   };
@@ -338,7 +349,8 @@ async function saveOrUpdateDocument(
   collection: string,
   history: ChatMessage[],
   clientIP: string,
-  restatedQuestion: string
+  restatedQuestion: string,
+  uuid?: string | undefined
 ): Promise<string | null> {
   if (!db) {
     return null;
@@ -356,6 +368,7 @@ async function saveOrUpdateDocument(
     timestamp: fbadmin.firestore.FieldValue.serverTimestamp(), // Update timestamp on save/update
     relatedQuestionsV2: [], // Reset or handle related questions as needed
     restatedQuestion: restatedQuestion,
+    uuid: uuid || null, // legacy DB rows may be null; new writes always provide uuid
   };
 
   try {
@@ -917,7 +930,8 @@ async function handleChatRequest(req: NextRequest) {
               sanitizedInput.collection || "whole_library",
               sanitizedInput.history || [],
               clientIP,
-              restatedQuestion // Pass the restated question
+              restatedQuestion, // Pass the restated question
+              sanitizedInput.uuid // Persist client UUID when provided
             );
 
             if (savedDocId) {
