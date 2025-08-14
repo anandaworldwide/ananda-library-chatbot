@@ -129,12 +129,10 @@ Entitlements:
 
   - Append-only audit entries: action, actor, target, siteId, timestamp, context (requestId, IP), outcome.
 
-- [x] Environment-gated admin bootstrap (initial superusers/admins)
+- [x] Admin bootstrap via CLI only (initial superusers/admins)
 
-  - Implement env-gated route `POST /api/admin/bootstrap` (enabled only when `ENABLE_ADMIN_BOOTSTRAP=true`)
-  - Create site-scoped `superuser` (and optional `admin`) accounts from a vetted list (env or secure config)
-  - Vetted list source: read comma-separated emails from env var `ADMIN_BOOTSTRAP_SUPERUSERS` (typically 1–2 superusers)
-  - Single-use/limited-use; automatically disables itself after success; comprehensive audit logging
+  - Use CLI script: `npx tsx scripts/bootstrap-superuser.ts` (supports `--env`, `--email`, optional `--site`)
+  - Removed API route and all env flags (ENABLE_ADMIN_BOOTSTRAP, ADMIN_BOOTSTRAP_SUPERUSERS)
 
 - [ ] Admin edit user endpoints
 
@@ -251,9 +249,8 @@ Important constraints:
 - 🐣 Admin page gating rules by site type:
   - No-login sites: require `sudoCookie` (401/redirect when missing/invalid; success when present)
   - Login sites: require JWT role `admin` or `superuser`; do not require `sudoCookie`
-- 🐥 Role claim enforcement: attempts to set `role` or `entitlements` via request body are validated and audited
-- 🐥 Admin bootstrap security: disabled unless `ENABLE_ADMIN_BOOTSTRAP=true`; auto-disables after success; rejects
-  repeats
+- 🐥 Role claim enforcement: attempts to set `role` or `entitlements` via request body are validated and audited //
+  Admin bootstrap is CLI-only now; API and related env flags removed.
 - 🐣 Rate limiting present on admin endpoints (validate 429 after threshold using `genericRateLimiter` mocks)
 - 🐣 Profile endpoint exposes correct role and denies access without valid JWT
 - 🐣 Audit logging stub: verify audit write calls occur for admin actions (shape only; content verified later)

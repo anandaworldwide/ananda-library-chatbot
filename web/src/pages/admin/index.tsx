@@ -11,28 +11,11 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 
 interface AdminDashboardProps {
   isSudoAdmin: boolean;
-  bootstrapEnabled: boolean;
   siteConfig: SiteConfig | null;
 }
 
-export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled, siteConfig }: AdminDashboardProps) {
+export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDashboardProps) {
   const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function handleBootstrap() {
-    setMessage(null);
-    setBusy(true);
-    try {
-      const res = await fetch("/api/admin/bootstrap", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || data?.message || "Bootstrap failed");
-      setMessage("Bootstrap completed");
-    } catch (e: any) {
-      setMessage(e?.message || "Bootstrap failed");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (!isSudoAdmin) {
     return (
@@ -56,19 +39,6 @@ export default function AdminDashboardPage({ isSudoAdmin, bootstrapEnabled, site
         <Breadcrumb items={[{ label: "Admin Dashboard" }]} />
 
         {message && <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm">{message}</div>}
-
-        {loginRequired && bootstrapEnabled ? (
-          <section className="rounded border p-4">
-            <h2 className="text-lg font-semibold mb-2">Bootstrap</h2>
-            <button
-              className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
-              onClick={handleBootstrap}
-              disabled={busy}
-            >
-              {busy ? "Bootstrapping…" : "Bootstrap"}
-            </button>
-          </section>
-        ) : null}
 
         {loginRequired ? (
           <section className="rounded border p-4">
@@ -156,8 +126,6 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardProps> = async
   const siteConfig = await loadSiteConfig();
   const allowed = await isAdminPageAllowed(req, res, siteConfig);
   if (!allowed) return { notFound: true };
-  const bootstrapEnabled =
-    process.env.ENABLE_ADMIN_BOOTSTRAP === "true" || process.env.NEXT_PUBLIC_ENABLE_ADMIN_BOOTSTRAP === "true";
   // For render, treat allowed as sudo/admin presence
-  return { props: { isSudoAdmin: true, bootstrapEnabled, siteConfig } };
+  return { props: { isSudoAdmin: true, siteConfig } };
 };
