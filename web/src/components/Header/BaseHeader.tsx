@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { logEvent } from "@/utils/client/analytics";
 import { HeaderConfig } from "@/types/siteConfig";
 import { isDevelopment } from "@/utils/env";
-import { fetchWithAuth, initializeTokenManager, isAuthenticated } from "@/utils/client/tokenManager";
+import { initializeTokenManager, isAuthenticated } from "@/utils/client/tokenManager";
 
 interface BaseHeaderProps {
   config: HeaderConfig;
@@ -47,17 +47,6 @@ export default function BaseHeader({
       router.events.off("routeChangeComplete", handleRoute);
     };
   }, [router.events]);
-
-  const handleLogout = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    await fetchWithAuth("/api/logout", { method: "POST" });
-    // Clear both legacy and new authentication cookies
-    Cookies.remove("siteAuth", { path: "/" });
-    Cookies.remove("auth", { path: "/" });
-    Cookies.remove("isLoggedIn", { path: "/" });
-    setIsLoggedIn(false);
-    router.push("/");
-  };
 
   const handleBackToLibrary = () => {
     logEvent("click_back_to_library", "Navigation", "");
