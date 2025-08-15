@@ -96,28 +96,138 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     let resent = 0;
     let invalid = 0;
     let errors = 0;
-    const samples: Array<{ target?: string; outcome?: string }> = [];
+    const samples: Array<{
+      target?: string;
+      outcome?: string;
+      firstName?: string;
+      lastName?: string;
+      inviteStatus?: string;
+    }> = [];
 
+    // First pass: count outcomes and collect email addresses
+    const emailsToLookup: string[] = [];
     snap.forEach((doc) => {
       const data = doc.data() as any;
       const outcome = data?.details?.outcome as string | undefined;
+      const email = data?.target as string | undefined;
+
       if (outcome === "created_pending_user") created++;
       else if (outcome === "resent_pending_activation") resent++;
       else if (outcome === "invalid_password") invalid++;
       else if (outcome === "server_error") errors++;
-      if (samples.length < 10) samples.push({ target: data?.target, outcome });
+
+      if (samples.length < 10) {
+        samples.push({ target: email, outcome });
+        if (email && outcome !== "invalid_password" && outcome !== "server_error") {
+          emailsToLookup.push(email);
+        }
+      }
     });
+
+    // Second pass: fetch actual user data for created/resent users
+    const userDataMap = new Map<string, { firstName?: string; lastName?: string; inviteStatus?: string }>();
+    if (emailsToLookup.length > 0) {
+      try {
+        const userCollection = process.env.NODE_ENV === "production" ? "prod_users" : "dev_users";
+        const userQueries = emailsToLookup.map((email) =>
+          db!.collection(userCollection).where("email", "==", email).limit(1).get()
+        );
+
+        const userResults = await Promise.all(userQueries);
+        userResults.forEach((userSnap, index) => {
+          if (!userSnap.empty) {
+            const userData = userSnap.docs[0].data();
+            userDataMap.set(emailsToLookup[index], {
+              firstName: userData.firstName,
+              lastName: userData.lastName,
+              inviteStatus: userData.inviteStatus,
+            });
+          }
+        });
+      } catch (userFetchError) {
+        console.warn("Failed to fetch user data for digest:", userFetchError);
+      }
+    }
+
+    // Enrich samples with actual user data
+    samples.forEach((sample) => {
+      if (sample.target && userDataMap.has(sample.target)) {
+        const userData = userDataMap.get(sample.target);
+        sample.firstName = userData?.firstName;
+        sample.lastName = userData?.lastName;
+        sample.inviteStatus = userData?.inviteStatus;
+      }
+    });
+
+    // Format samples in a user-friendly way
+    const formatSamples = (
+      samples: Array<{
+        target?: string;
+        outcome?: string;
+        firstName?: string;
+        lastName?: string;
+        inviteStatus?: string;
+      }>
+    ) => {
+      if (samples.length === 0) return "No activity in the last 24 hours.";
+
+      return samples
+        .map((sample, index) => {
+          const email = sample.target || "unknown@email.com";
+          const outcome = sample.outcome || "unknown";
+
+          // Use real name if available, otherwise fall back to email prefix
+          const fullName =
+            sample.firstName && sample.lastName
+              ? `${sample.firstName} ${sample.lastName}`
+              : sample.firstName || email.split("@")[0];
+          const displayName = fullName;
+
+          // Use actual invite status if available, otherwise format outcome
+          let statusText: string;
+          if (sample.inviteStatus) {
+            statusText =
+              sample.inviteStatus === "accepted"
+                ? "Activated"
+                : sample.inviteStatus === "pending"
+                  ? "Pending activation"
+                  : sample.inviteStatus;
+          } else {
+            statusText =
+              {
+                created_pending_user: "Created (pending activation)",
+                resent_pending_activation: "Activation link resent",
+                invalid_password: "Invalid shared password",
+                server_error: "Server error occurred",
+              }[outcome] || outcome;
+          }
+
+          return `${index + 1}. ${displayName} (${email}) - ${statusText}`;
+        })
+        .join("\n");
+    };
 
     const body = [
       `Self-provision digest for site ${siteId} (last 24h)`,
-      `Created: ${created}`,
-      `Resent: ${resent}`,
-      `Invalid password: ${invalid}`,
-      `Server errors: ${errors}`,
-      `Samples: ${JSON.stringify(samples, null, 2)}`,
+      ``,
+      `SUMMARY:`,
+      `• Created: ${created}`,
+      `• Resent: ${resent}`,
+      `• Invalid password: ${invalid}`,
+      `• Server errors: ${errors}`,
+      ``,
+      `ACTIVITY DETAILS:`,
+      formatSamples(samples),
     ].join("\n");
 
-    await sendOpsAlert("Self-provision daily digest", body);
+    // Create subject line with error counts
+    const subjectParts = [];
+    if (invalid > 0) subjectParts.push(`${invalid} invalid password${invalid > 1 ? "s" : ""}`);
+    if (errors > 0) subjectParts.push(`${errors} error${errors > 1 ? "s" : ""}`);
+
+    const subject = `New user digest: ${created} created, ${invalid} invalid, ${errors} errors`;
+
+    await sendOpsAlert(subject, body);
     return res.status(200).json({ ok: true, counts: { created, resent, invalid, errors }, samples });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Failed to build digest" });
