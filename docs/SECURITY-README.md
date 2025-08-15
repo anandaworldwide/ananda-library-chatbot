@@ -402,20 +402,61 @@ function MyComponent() {
 
 ## Cron Job Security
 
-Cron-invoked endpoints are secured with a dedicated shared secret instead of JWTs. The secret is provided via the
-`Authorization` header and validated by the endpoint.
+Cron-invoked endpoints use a hybrid authentication pattern that supports both Vercel cron requests (with CRON_SECRET)
+and manual admin access (with JWT tokens). This provides flexibility while maintaining security.
 
-### Authentication Pattern
+### Hybrid Authentication Pattern
+
+The `withJwtOrCronAuth` middleware provides dual authentication support:
 
 ```typescript
-// Require Cron secret in Authorization header
-const authHeader = req.headers.authorization;
-if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-  return res.status(401).json({ error: "Unauthorized" });
+/**
+ * Middleware that allows either JWT authentication or Vercel cron requests
+ * @param handler The API route handler to wrap
+ * @returns A wrapped handler that checks for either valid JWT or Vercel cron
+ */
+function withJwtOrCronAuth(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
+  return async (req: NextApiRequest, res: NextApiResponse) => {
+    const userAgent = req.headers["user-agent"] || "";
+    const isVercelCron = userAgent.startsWith("vercel-cron/");
+    const authHeader = req.headers.authorization || "";
+
+    if (isVercelCron) {
+      // Verify that cron requests provide the correct secret
+      if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      // Allow authorized Vercel cron requests through
+      return handler(req, res);
+    } else {
+      // For all other requests, require JWT authentication
+      return withJwtAuth(handler)(req, res);
+    }
+  };
 }
 ```
 
-### Endpoints using CRON_SECRET
+### Implementation Pattern
+
+Cron endpoints use this pattern with API middleware:
+
+```typescript
+// Apply API middleware, skipping its default auth check and relying solely on withJwtOrCronAuth
+export default withApiMiddleware(withJwtOrCronAuth(handler), {
+  skipAuth: true,
+});
+```
+
+### Security Validation
+
+The system validates requests using two criteria:
+
+1. **Vercel Cron Detection**: Checks for `vercel-cron/` user-agent prefix
+2. **Secret Validation**: Verifies `CRON_SECRET` in Authorization header
+
+This dual validation ensures that only legitimate Vercel cron jobs can bypass JWT authentication.
+
+### Endpoints using Hybrid Authentication
 
 - `/api/admin/digestSelfProvision` (daily digest of self-provision attempts)
 - `/api/relatedQuestions` (batch updates)
@@ -424,15 +465,26 @@ if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET
 
 - Apply `genericRateLimiter` with conservative limits for cron endpoints (defense in depth)
 - Log failures for visibility (401s, rate-limit triggers, unexpected errors)
+- User-agent validation prevents spoofing attempts
+- Manual admin access still requires valid JWT tokens
 
 ### Vercel Configuration
 
 - Set `CRON_SECRET` in the project environment variables
-- In Vercel Cron configuration, add header:
+- Vercel automatically provides the correct user-agent header (`vercel-cron/1.0`)
+- Cron jobs automatically include the Authorization header:
 
 ```http
 Authorization: Bearer ${CRON_SECRET}
+User-Agent: vercel-cron/1.0
 ```
 
-This approach avoids embedding JWT logic into Vercel Cron while still ensuring only authorized jobs call these
-endpoints.
+### Benefits
+
+- **Flexibility**: Admins can manually trigger cron endpoints during development/debugging
+- **Security**: Vercel cron jobs bypass JWT requirements while maintaining secret validation
+- **Auditability**: All access is logged and can be traced back to either cron or admin users
+- **Consistency**: Uses the same middleware patterns as other protected endpoints
+
+This hybrid approach provides the best of both worlds: automated cron execution with CRON_SECRET validation, and manual
+admin access with full JWT authentication.

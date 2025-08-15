@@ -2,17 +2,37 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { db } from "@/services/firebase";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
+import { withJwtAuth } from "@/utils/server/jwtUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { sendOpsAlert } from "@/utils/server/emailOps";
 
-export default withApiMiddleware(async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST" && req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+/**
+ * Middleware that allows either JWT authentication or Vercel cron requests
+ * @param handler The API route handler to wrap
+ * @returns A wrapped handler that checks for either valid JWT or Vercel cron
+ */
+function withJwtOrCronAuth(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
+  return async (req: NextApiRequest, res: NextApiResponse) => {
+    const userAgent = req.headers["user-agent"] || "";
+    const isVercelCron = userAgent.startsWith("vercel-cron/");
+    const authHeader = req.headers.authorization || "";
 
-  // Require Cron secret in Authorization header
-  const authHeader = req.headers.authorization;
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+    if (isVercelCron) {
+      // Verify that cron requests provide the correct secret
+      if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      // Allow authorized Vercel cron requests through
+      return handler(req, res);
+    } else {
+      // For all other requests, require JWT authentication
+      return withJwtAuth(handler)(req, res);
+    }
+  };
+}
+
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST" && req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   // Light rate limit to avoid accidental rapid calls
   const allowed = await genericRateLimiter(req, res, { windowMs: 60 * 1000, max: 3, name: "digest-self-provision" });
@@ -63,4 +83,9 @@ export default withApiMiddleware(async function handler(req: NextApiRequest, res
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Failed to build digest" });
   }
+}
+
+// Apply API middleware, skipping its default auth check and relying solely on withJwtOrCronAuth
+export default withApiMiddleware(withJwtOrCronAuth(handler), {
+  skipAuth: true,
 });

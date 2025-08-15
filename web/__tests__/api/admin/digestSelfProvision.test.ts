@@ -63,6 +63,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer some-secret",
         },
       });
@@ -76,6 +77,9 @@ describe("/api/admin/digestSelfProvision", () => {
     it("returns 401 when Authorization header is missing", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          "user-agent": "vercel-cron/1.0",
+        },
       });
 
       await handler(req, res);
@@ -88,6 +92,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer wrong-secret",
         },
       });
@@ -106,6 +111,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -127,6 +133,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -140,6 +147,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "GET",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -153,6 +161,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "PUT",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -171,6 +180,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -195,6 +205,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -217,6 +228,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -242,6 +254,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -305,6 +318,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -347,6 +361,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -389,6 +404,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -416,6 +432,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -437,6 +454,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
@@ -455,6 +473,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
+          "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
         },
       });
