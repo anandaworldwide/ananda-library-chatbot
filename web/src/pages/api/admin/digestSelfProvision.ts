@@ -47,11 +47,50 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const collection = process.env.NODE_ENV === "production" ? "prod_admin_audit" : "dev_admin_audit";
 
     // Fetch last 24h self_provision_attempt entries
-    const snap = await db
-      .collection(collection)
-      .where("action", "==", "self_provision_attempt")
-      .where("createdAt", ">=", since)
-      .get();
+    let snap;
+    try {
+      snap = await db
+        .collection(collection)
+        .where("action", "==", "self_provision_attempt")
+        .where("createdAt", ">=", since)
+        .get();
+    } catch (firestoreError: any) {
+      // Handle missing Firestore index error
+      if (
+        firestoreError?.message?.includes("query requires an index") ||
+        firestoreError?.message?.includes("index is currently building")
+      ) {
+        // Extract the Firebase Console URL from the error message if available
+        const urlMatch = firestoreError.message.match(/https:\/\/console\.firebase\.google\.com[^\s]*/);
+        const indexUrl = urlMatch ? urlMatch[0] : null;
+
+        console.error("Missing Firestore index for digestSelfProvision query", {
+          indexUrl: indexUrl || "Check Firebase Console > Firestore > Indexes",
+          collection: collection,
+          fields: ["action", "createdAt", "__name__"],
+          originalError: firestoreError.message,
+        });
+
+        const isBuilding = firestoreError?.message?.includes("index is currently building");
+
+        return res.status(500).json({
+          error: "Database configuration error",
+          message: isBuilding
+            ? "Firestore index is currently building for self-provision audit queries"
+            : "Missing required Firestore index for self-provision audit queries",
+          action: isBuilding
+            ? "Wait for index to finish building (usually takes a few minutes)"
+            : "Create composite index: collection=admin_audit, fields=[action,createdAt,__name__]",
+          indexUrl: indexUrl || "Check Firebase Console > Firestore > Indexes",
+          details: isBuilding
+            ? "Index creation is in progress - the cron job will work once building completes"
+            : "This is a one-time setup required for the daily digest functionality",
+          originalError: firestoreError.message,
+        });
+      }
+      // Re-throw other Firestore errors
+      throw firestoreError;
+    }
 
     let created = 0;
     let resent = 0;

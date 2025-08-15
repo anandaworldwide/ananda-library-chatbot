@@ -485,5 +485,33 @@ describe("/api/admin/digestSelfProvision", () => {
         error: "Failed to build digest",
       });
     });
+
+    it("handles missing Firestore index with Firebase Console URL", async () => {
+      const indexError = new Error(
+        "The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/test-project/firestore/indexes?create_composite=ABC123"
+      );
+      mockFirestoreGet.mockRejectedValue(indexError);
+
+      const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+        method: "POST",
+        headers: {
+          "user-agent": "vercel-cron/1.0",
+          authorization: "Bearer test-cron-secret",
+        },
+      });
+
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(500);
+      const responseData = res._getJSONData();
+      expect(responseData.error).toBe("Database configuration error");
+      expect(responseData.message).toBe("Missing required Firestore index for self-provision audit queries");
+      expect(responseData.action).toContain("Create composite index");
+      expect(responseData.indexUrl).toBe(
+        "https://console.firebase.google.com/v1/r/project/test-project/firestore/indexes?create_composite=ABC123"
+      );
+      expect(responseData.details).toContain("one-time setup");
+      expect(responseData.originalError).toContain("query requires an index");
+    });
   });
 });
