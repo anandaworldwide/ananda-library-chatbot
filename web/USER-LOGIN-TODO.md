@@ -205,6 +205,7 @@ Important constraints:
 - [x] Backend: Add rate limiting for the shared-password endpoint at 5 attempts/hour/IP.
 - [x] Backend: Add audit entries for self-provision attempts (success/failure) with context.
 - [x] Backend: Implement daily digest job that aggregates self-provision events and emails `OPS_ALERT_EMAIL`.
+- [x] Add daily digest cron job to Vercel configuration (runs at 6:00 AM Pacific Time daily).
 - [ ] Allow user to change their email address
 - [ ] Monitoring: Add metrics for known-email matches, unknown-email branches, shared-password success/failure.
 
