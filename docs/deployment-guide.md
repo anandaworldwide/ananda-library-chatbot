@@ -143,7 +143,7 @@ The prompt management script implements file locking to prevent concurrent edits
 - Encrypt sensitive prompt content at rest
 - Use VPC endpoints for S3 access when possible
 
-### Environment Separation
+### Environment Separation (Security)
 
 - Never edit production prompts directly
 - Always use dev → prod promotion workflow
