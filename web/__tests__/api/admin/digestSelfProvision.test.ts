@@ -411,17 +411,16 @@ describe("/api/admin/digestSelfProvision", () => {
 
       await handler(req, res);
 
-      expect(sendOpsAlert).toHaveBeenCalledWith(
-        "Self-provision daily digest",
-        expect.stringContaining("Self-provision digest for site test-site (last 24h)")
-      );
+      const [subject, body] = (sendOpsAlert as jest.Mock).mock.calls[0];
+      expect(subject).toMatch(/^New user digest:/);
+      expect(body).toContain("Self-provision digest for site test-site (last 24h)");
 
       const emailBody = (sendOpsAlert as jest.Mock).mock.calls[0][1];
       expect(emailBody).toContain("Created: 1");
       expect(emailBody).toContain("Resent: 0");
       expect(emailBody).toContain("Invalid password: 1");
       expect(emailBody).toContain("Server errors: 0");
-      expect(emailBody).toContain("Samples:");
+      expect(emailBody).toContain("ACTIVITY DETAILS:");
     });
   });
 

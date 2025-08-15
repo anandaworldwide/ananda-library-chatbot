@@ -53,6 +53,8 @@ export default function EditUserPage({ siteConfig }: PageProps) {
   const [role, setRole] = useState<string>("user");
   const [firstName, setFirstName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function getToken() {
@@ -116,6 +118,33 @@ export default function EditUserPage({ siteConfig }: PageProps) {
       setError(e?.message || "Failed to save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onDelete() {
+    if (!user || !jwt) return;
+    setDeleting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to delete user");
+
+      // Redirect to users list after successful deletion
+      router.push("/admin/users");
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete user");
+      setShowDeleteModal(false);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -236,22 +265,68 @@ export default function EditUserPage({ siteConfig }: PageProps) {
                 </select>
                 <p className="mt-1 text-xs text-gray-600">Only superusers can change roles.</p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex justify-between">
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+                  >
+                    {saving ? "Saving…" : "Save Changes"}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded px-4 py-2 border"
+                    onClick={() => router.push("/admin/users")}
+                  >
+                    Back
+                  </button>
+                </div>
                 <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+                  type="button"
+                  onClick={() => setShowDeleteModal(true)}
+                  className="inline-flex items-center rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 transition-colors"
                 >
-                  {saving ? "Saving…" : "Save Changes"}
-                </button>
-                <button type="button" className="rounded px-4 py-2 border" onClick={() => router.push("/admin/users")}>
-                  Back
+                  Delete User
                 </button>
               </div>
             </form>
           </>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && user && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete User</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Are you sure you want to delete <strong>{getDisplayName(user)}</strong> ({user.email})?
+              <br />
+              <br />
+              <span className="text-red-600 font-medium">This action cannot be undone.</span>
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
+                className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : "Delete User"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

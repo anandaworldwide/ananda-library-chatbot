@@ -221,6 +221,71 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
   }
 
+  if (req.method === "DELETE") {
+    try {
+      const requesterRole = await resolveRequesterRole();
+      if (requesterRole !== "admin" && requesterRole !== "superuser") {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      // Get user data before deletion for audit log
+      const userDoc = await dbNonNull.collection(usersCol).doc(currentId).get();
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const userData = userDoc.data() || {};
+
+      // Prevent self-deletion - check both cookie and header tokens
+      try {
+        const cookieJwt = req.cookies?.["auth"];
+        let requesterEmail: string | null = null;
+
+        if (cookieJwt) {
+          const payload: any = verifyToken(cookieJwt);
+          requesterEmail = typeof payload?.email === "string" ? payload.email.toLowerCase() : null;
+        } else {
+          // Fallback to Authorization header
+          const headerPayload: any = getTokenFromRequest(req);
+          requesterEmail = typeof headerPayload?.email === "string" ? headerPayload.email.toLowerCase() : null;
+        }
+
+        if (requesterEmail === currentId) {
+          return res.status(400).json({ error: "Cannot delete your own account" });
+        }
+      } catch {
+        // Token verification failed, but we'll continue with deletion
+      }
+
+      // Delete the user document
+      await dbNonNull.collection(usersCol).doc(currentId).delete();
+
+      // Log the deletion with comprehensive audit info
+      await writeAuditLog(req, "admin_delete_user", currentId, {
+        deletedUser: {
+          email: userData.email || currentId,
+          role: userData.role || "user",
+          inviteStatus: userData.inviteStatus || null,
+          firstName: userData.firstName || null,
+          lastName: userData.lastName || null,
+          uuid: userData.uuid || null,
+          createdAt: userData.createdAt || null,
+          lastLoginAt: userData.lastLoginAt || null,
+        },
+        requesterRole,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "User deleted successfully",
+      });
+    } catch (err: any) {
+      const msg = err?.message || "Failed to delete user";
+      const status = msg.includes("not found") ? 404 : 500;
+      return res.status(status).json({ error: msg });
+    }
+  }
+
   return res.status(405).json({ error: "Method not allowed" });
 }
 
