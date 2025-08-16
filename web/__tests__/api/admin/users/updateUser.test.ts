@@ -201,6 +201,7 @@ describe("/api/admin/users/[userId] update user", () => {
     expect(data.user.id).toBe("to@example.com");
     expect(writeAuditLogSpy).toHaveBeenCalledWith(expect.anything(), "admin_change_email", "from@example.com", {
       newEmail: "to@example.com",
+      outcome: "success",
     });
   });
 
@@ -219,6 +220,7 @@ describe("/api/admin/users/[userId] update user", () => {
     expect(res.statusCode).toBe(200);
     expect(writeAuditLogSpy).toHaveBeenCalledWith(expect.anything(), "admin_change_role", "target@example.com", {
       role: "admin",
+      outcome: "success",
     });
   });
 

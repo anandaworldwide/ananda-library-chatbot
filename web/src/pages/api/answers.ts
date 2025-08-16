@@ -251,7 +251,7 @@ async function handleDeleteRequest(req: NextApiRequest, res: NextApiResponse) {
     }
 
     await deleteAnswerById(answerId);
-    await writeAuditLog(req, "admin_delete_answer", answerId);
+    await writeAuditLog(req, "admin_delete_answer", answerId, { outcome: "success" });
     res.status(200).json({ message: "Answer deleted successfully." });
   } catch (error: unknown) {
     // Error handling for DELETE requests

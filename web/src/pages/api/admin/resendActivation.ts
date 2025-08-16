@@ -59,7 +59,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       "resend activation"
     );
     await sendActivationEmail(email, token);
-    await writeAuditLog(req, "admin_resend_activation", email.toLowerCase());
+    await writeAuditLog(req, "admin_resend_activation", email.toLowerCase(), { outcome: "success" });
     return res.status(200).json({ message: "resent" });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

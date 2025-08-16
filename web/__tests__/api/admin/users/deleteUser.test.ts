@@ -169,6 +169,7 @@ describe("/api/admin/users/[userId] DELETE user", () => {
         lastLoginAt: null,
       },
       requesterRole: "admin",
+      outcome: "success",
     });
   });
 
@@ -213,7 +214,10 @@ describe("/api/admin/users/[userId] DELETE user", () => {
       req,
       "admin_delete_user",
       "target@example.com",
-      expect.objectContaining({ requesterRole: "superuser" })
+      expect.objectContaining({
+        requesterRole: "superuser",
+        outcome: "success",
+      })
     );
   });
 

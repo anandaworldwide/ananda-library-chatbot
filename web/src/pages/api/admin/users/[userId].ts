@@ -151,7 +151,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         updates.updatedAt = now;
         await db.collection(usersCol).doc(currentId).set(updates, { merge: true });
         if (updates.role) {
-          await writeAuditLog(req, "admin_change_role", currentId, { role: updates.role });
+          await writeAuditLog(req, "admin_change_role", currentId, {
+            role: updates.role,
+            outcome: "success",
+          });
         }
         const updated = await db.collection(usersCol).doc(currentId).get();
         const data = updated.data() || {};
@@ -228,7 +231,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         tx.delete(currentRef);
       });
 
-      await writeAuditLog(req, "admin_change_email", currentId, { newEmail });
+      await writeAuditLog(req, "admin_change_email", currentId, {
+        newEmail,
+        outcome: "success",
+      });
 
       const finalDoc = await (db as NonNullable<typeof db>).collection(usersCol).doc(newEmail).get();
       const out = finalDoc.data() || {};
@@ -365,6 +371,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           lastLoginAt: userData.lastLoginAt || null,
         },
         requesterRole,
+        outcome: "success",
       });
 
       return res.status(200).json({

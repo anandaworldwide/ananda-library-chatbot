@@ -95,7 +95,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     );
 
     await sendActivationEmail(email, token);
-    await writeAuditLog(req, "admin_add_user", email.toLowerCase(), { status: "created" });
+    await writeAuditLog(req, "admin_add_user", email.toLowerCase(), {
+      status: "created",
+      outcome: "success",
+    });
     return res.status(200).json({ message: "created" });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

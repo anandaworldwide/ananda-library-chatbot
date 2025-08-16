@@ -43,9 +43,11 @@ Entitlements:
 
 ### Phase I — Backend (no Salesforce gating)
 
-- [ ] Audit log
+- [x] Audit log
 
-  - Append-only audit entries: action, actor, target, siteId, timestamp, context (requestId, IP), outcome.
+  - ✅ Append-only audit entries: action, actor, target, timestamp, context (requestId, IP), outcome.
+  - ✅ Firestore security rules: server-only writes, admin/superuser reads, 365-day TTL retention.
+  - ✅ TTL implementation: expireAt field automatically set to current date + 1 year for Google Cloud TTL.
 
 - [ ] Email change behavior
 
