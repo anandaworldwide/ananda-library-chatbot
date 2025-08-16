@@ -3,7 +3,8 @@ import firebase from "firebase-admin";
 import { db } from "@/services/firebase";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { withJwtAuth, getTokenFromRequest, verifyToken } from "@/utils/server/jwtUtils";
-import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
+import { getUsersCollectionName, getAnswersCollectionName } from "@/utils/server/firestoreUtils";
+import { firestoreQueryGet } from "@/utils/server/firestoreRetryUtils";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
 import { writeAuditLog } from "@/utils/server/auditLog";
@@ -58,6 +59,36 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       const doc = await db.collection(usersCol).doc(currentId).get();
       if (!doc.exists) return res.status(404).json({ error: "User not found" });
       const data = doc.data() || {};
+
+      // Fetch user's chats only if requester is superuser and user has a UUID
+      let chats: any[] = [];
+      if (data.uuid && requesterRole === "superuser") {
+        try {
+          const query = db
+            .collection(getAnswersCollectionName())
+            .where("uuid", "==", data.uuid)
+            .orderBy("timestamp", "desc")
+            .limit(50);
+
+          const snapshot = await firestoreQueryGet(query, "admin user chats list", `uuid: ${data.uuid}, limit: 50`);
+
+          chats = snapshot.docs.map((doc: any) => {
+            const chatData = doc.data();
+            return {
+              id: doc.id,
+              question: chatData.question,
+              answer: chatData.answer,
+              timestamp: chatData.timestamp,
+              likeCount: chatData.likeCount || 0,
+              collection: chatData.collection,
+            };
+          });
+        } catch (chatError: any) {
+          // Don't fail the entire request if chats can't be fetched
+          console.warn("Failed to fetch user chats:", chatError?.message);
+        }
+      }
+
       return res.status(200).json({
         user: {
           id: currentId,
@@ -70,6 +101,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           entitlements: data.entitlements || {},
           firstName: typeof (data as any)?.firstName === "string" ? (data as any).firstName : null,
           lastName: typeof (data as any)?.lastName === "string" ? (data as any).lastName : null,
+          chats,
         },
       });
     } catch (err: any) {
@@ -123,6 +155,35 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         }
         const updated = await db.collection(usersCol).doc(currentId).get();
         const data = updated.data() || {};
+
+        // Fetch user's chats only if requester is superuser and user has a UUID
+        let chats: any[] = [];
+        if (data.uuid && requesterRole === "superuser") {
+          try {
+            const query = db
+              .collection(getAnswersCollectionName())
+              .where("uuid", "==", data.uuid)
+              .orderBy("timestamp", "desc")
+              .limit(50);
+
+            const snapshot = await firestoreQueryGet(query, "admin user chats list", `uuid: ${data.uuid}, limit: 50`);
+
+            chats = snapshot.docs.map((doc: any) => {
+              const chatData = doc.data();
+              return {
+                id: doc.id,
+                question: chatData.question,
+                answer: chatData.answer,
+                timestamp: chatData.timestamp,
+                likeCount: chatData.likeCount || 0,
+                collection: chatData.collection,
+              };
+            });
+          } catch (chatError: any) {
+            console.warn("Failed to fetch user chats:", chatError?.message);
+          }
+        }
+
         return res.status(200).json({
           user: {
             id: currentId,
@@ -135,6 +196,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             entitlements: data.entitlements || {},
             firstName: typeof (data as any)?.firstName === "string" ? (data as any).firstName : null,
             lastName: typeof (data as any)?.lastName === "string" ? (data as any).lastName : null,
+            chats,
           },
         });
       }
@@ -170,6 +232,35 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
       const finalDoc = await (db as NonNullable<typeof db>).collection(usersCol).doc(newEmail).get();
       const out = finalDoc.data() || {};
+
+      // Fetch user's chats only if requester is superuser and user has a UUID
+      let chats: any[] = [];
+      if (out.uuid && requesterRole === "superuser") {
+        try {
+          const query = db
+            .collection(getAnswersCollectionName())
+            .where("uuid", "==", out.uuid)
+            .orderBy("timestamp", "desc")
+            .limit(50);
+
+          const snapshot = await firestoreQueryGet(query, "admin user chats list", `uuid: ${out.uuid}, limit: 50`);
+
+          chats = snapshot.docs.map((doc: any) => {
+            const chatData = doc.data();
+            return {
+              id: doc.id,
+              question: chatData.question,
+              answer: chatData.answer,
+              timestamp: chatData.timestamp,
+              likeCount: chatData.likeCount || 0,
+              collection: chatData.collection,
+            };
+          });
+        } catch (chatError: any) {
+          console.warn("Failed to fetch user chats:", chatError?.message);
+        }
+      }
+
       // Attempt to notify both addresses about the change (suppressed during tests)
       if (process.env.NODE_ENV !== "test" && process.env.JEST_WORKER_ID === undefined) {
         try {
@@ -212,6 +303,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           entitlements: out.entitlements || {},
           firstName: typeof (out as any)?.firstName === "string" ? (out as any).firstName : null,
           lastName: typeof (out as any)?.lastName === "string" ? (out as any).lastName : null,
+          chats,
         },
       });
     } catch (err: any) {

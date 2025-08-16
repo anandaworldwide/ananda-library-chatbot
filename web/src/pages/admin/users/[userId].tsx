@@ -7,18 +7,28 @@ import type { GetServerSideProps, NextApiRequest } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { ChatList } from "@/components/ChatList";
+
+interface Chat {
+  id: string;
+  question: string;
+  answer: string;
+  timestamp: { _seconds: number; _nanoseconds: number } | Date | number | any;
+  likeCount: number;
+  collection: string;
+}
 
 interface UserDetail {
   id: string;
   email: string;
   uuid: string | null;
   role: string;
-  inviteStatus: string | null;
   verifiedAt: string | null;
   lastLoginAt: string | null;
   entitlements: Record<string, any>;
   firstName?: string | null;
   lastName?: string | null;
+  chats?: Chat[];
 }
 
 interface PageProps {
@@ -55,16 +65,28 @@ export default function EditUserPage({ siteConfig }: PageProps) {
   const [lastName, setLastName] = useState<string>("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<string>("user");
 
   useEffect(() => {
-    async function getToken() {
+    async function getTokenAndRole() {
       try {
         const res = await fetch("/api/web-token");
         const data = await res.json();
         if (res.ok && data?.token) setJwt(data.token);
+
+        // Also fetch current user's profile to get role
+        try {
+          const profileRes = await fetch("/api/profile");
+          const profileData = await profileRes.json();
+          if (profileRes.ok && profileData?.role) {
+            setCurrentUserRole(profileData.role);
+          }
+        } catch (e) {
+          // If profile fetch fails, keep default "user" role
+        }
       } catch (e) {}
     }
-    getToken();
+    getTokenAndRole();
   }, []);
 
   useEffect(() => {
@@ -197,24 +219,21 @@ export default function EditUserPage({ siteConfig }: PageProps) {
                     )}
                   </div>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-700">Invite Status:</span>
-                  <div className="mt-1">
-                    <span
-                      className={`px-2 py-1 rounded text-xs ${
-                        user.inviteStatus === "accepted"
-                          ? "bg-green-100 text-green-800"
-                          : user.inviteStatus === "pending"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {user.inviteStatus || "unknown"}
-                    </span>
-                  </div>
-                </div>
               </div>
             </div>
+
+            {/* Recent Chats Section - Only visible to superusers */}
+            {currentUserRole === "superuser" && (
+              <div className="mb-6 rounded border bg-gray-50 p-4">
+                <h2 className="text-lg font-semibold mb-3">Recent Chats</h2>
+                <ChatList
+                  chats={user.chats || []}
+                  showTimestamps={true}
+                  showLikeCounts={true}
+                  emptyMessage="No chats yet"
+                />
+              </div>
+            )}
 
             <form onSubmit={onSave} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

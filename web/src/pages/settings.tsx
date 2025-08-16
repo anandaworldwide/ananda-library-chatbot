@@ -7,6 +7,7 @@ import type { SiteConfig } from "@/types/siteConfig";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
+import { ChatList } from "@/components/ChatList";
 
 interface LikedAnswer {
   id: string;
@@ -206,37 +207,17 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
 
               <section className="mb-6">
                 <h2 className="text-lg font-semibold mb-2">Recent Chats</h2>
-                {chats.length === 0 ? (
-                  <div className="text-sm text-gray-600">No chats yet</div>
-                ) : (
-                  <ul className="list-disc pl-5 text-sm">
-                    {chats.map((c) => (
-                      <li key={c.id} className="mb-1">
-                        <a href={`/answers/${c.id}`} className="text-blue-600 underline">
-                          {c.question}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <ChatList chats={chats} showTimestamps={false} showLikeCounts={false} emptyMessage="No chats yet" />
               </section>
 
               <section className="mb-6">
                 <h2 className="text-lg font-semibold mb-2">Liked Answers</h2>
-                {likedAnswers.length === 0 ? (
-                  <div className="text-sm text-gray-600">No liked answers</div>
-                ) : (
-                  <ul className="list-disc pl-5 text-sm">
-                    {likedAnswers.map((a) => (
-                      <li key={a.id} className="mb-1">
-                        <a href={`/answers/${a.id}`} className="text-blue-600 underline">
-                          {a.question}
-                        </a>
-                        <span className="ml-2 text-gray-500">({a.likeCount} likes)</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <ChatList
+                  chats={likedAnswers}
+                  showTimestamps={false}
+                  showLikeCounts={true}
+                  emptyMessage="No liked answers"
+                />
               </section>
 
               <button onClick={handleLogout} className="rounded bg-gray-800 px-3 py-1 text-white disabled:opacity-50">

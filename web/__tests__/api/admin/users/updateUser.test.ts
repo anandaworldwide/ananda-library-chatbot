@@ -221,4 +221,35 @@ describe("/api/admin/users/[userId] update user", () => {
       role: "admin",
     });
   });
+
+  it("GET returns chats only for superusers", async () => {
+    const jwtUtils = await import("@/utils/server/jwtUtils");
+
+    // Test admin user - should not get chats
+    (jwtUtils.verifyToken as jest.Mock).mockReturnValue({ email: "admin@example.com", role: "admin" });
+    const adminReq = createMocks<NextApiRequest, NextApiResponse>({
+      method: "GET",
+      query: { userId: "target@example.com" },
+      cookies: { auth: "token" },
+    });
+
+    await handler(adminReq.req, adminReq.res);
+    expect(adminReq.res.statusCode).toBe(200);
+    const adminResponse = adminReq.res._getJSONData();
+    expect(adminResponse.user.chats).toEqual([]); // Empty array for non-superusers
+
+    // Test superuser - should get chats (mocked)
+    (jwtUtils.verifyToken as jest.Mock).mockReturnValue({ email: "super@example.com", role: "superuser" });
+    const superReq = createMocks<NextApiRequest, NextApiResponse>({
+      method: "GET",
+      query: { userId: "target@example.com" },
+      cookies: { auth: "token" },
+    });
+
+    await handler(superReq.req, superReq.res);
+    expect(superReq.res.statusCode).toBe(200);
+    const superResponse = superReq.res._getJSONData();
+    // Chats would be populated if the user had a UUID and chats existed
+    expect(superResponse.user).toHaveProperty("chats");
+  });
 });
