@@ -134,10 +134,14 @@ class WebsiteCrawler:
         site_config: dict,
         retry_failed: bool = False,
         debug: bool = False,
+        skip_db_init: bool = False,
+        skip_robots_init: bool = False,
+        dry_run: bool = False,
     ):
         self.site_id = site_id
         self.config = site_config
         self.debug = debug
+        self.dry_run = dry_run
         self.domain = self.config["domain"]
         self.start_url = ensure_scheme(self.domain)  # Start URL is now just the domain
         self.skip_patterns = self.config.get("skip_patterns", [])
@@ -159,12 +163,13 @@ class WebsiteCrawler:
                 "Debug mode enabled - detailed logging and screenshots will be saved"
             )
 
-        # Initialize robots.txt parser with 24-hour caching
+        # Initialize robots.txt parser with 24-hour caching (skip for tests)
         self.robots_url = f"{self.start_url.rstrip('/')}/robots.txt"
         self.robots_parser = None
         self.robots_cache_timestamp = None
         self.robots_cache_duration_hours = 24
-        self._load_robots_txt()
+        if not skip_robots_init:
+            self._load_robots_txt()
 
         # Initialize text splitter lazily to avoid loading spaCy models in tests
         self._text_splitter = None
@@ -173,7 +178,24 @@ class WebsiteCrawler:
         self._embeddings = None
         self._embedding_model_name = None
 
-        # Set up SQLite database for crawl queue
+        # Set up SQLite database for crawl queue (skip for tests)
+        self.conn = None
+        self.cursor = None
+        self.db_file = None
+        self.current_processing_url: str | None = None
+
+        if not skip_db_init:
+            self._init_database()
+
+            # Handle --retry-failed flag
+            if retry_failed:
+                self.retry_failed_urls()
+
+            # Run initialization logic
+            self._run_initialization_logic()
+
+    def _init_database(self):
+        """Initialize SQLite database - separated for testability."""
         db_dir = Path(__file__).parent / "db"
         db_dir.mkdir(exist_ok=True)
         self.db_file = db_dir / f"crawler_queue_{self.site_id}.db"
@@ -208,16 +230,6 @@ class WebsiteCrawler:
         )""")
 
         self.conn.commit()
-
-        # Track URL being processed
-        self.current_processing_url: str | None = None
-
-        # Handle --retry-failed flag
-        if retry_failed:
-            self.retry_failed_urls()
-
-        # Run initialization logic
-        self._run_initialization_logic()
 
     @property
     def text_splitter(self):
@@ -500,6 +512,22 @@ class WebsiteCrawler:
                 """,
                     (status, now, next_crawl, content_hash, normalized_url),
                 )
+            elif status == "deleted":
+                # Mark URL as deleted - no next crawl time needed
+                if self.dry_run:
+                    logging.info(
+                        f"[DRY RUN] Would mark URL as deleted: {normalized_url}"
+                    )
+                else:
+                    self.cursor.execute(
+                        """
+                    UPDATE crawl_queue 
+                    SET status = ?, last_crawl = ?, next_crawl = NULL, content_hash = ?,
+                        retry_count = 0, retry_after = NULL, failure_type = NULL, priority = 0
+                    WHERE url = ?
+                    """,
+                        (status, now, content_hash or "deleted", normalized_url),
+                    )
             elif status == "failed":
                 # Determine if failure is temporary or permanent
                 is_temporary = False
@@ -638,6 +666,7 @@ class WebsiteCrawler:
             "pending": 0,
             "visited": 0,
             "failed": 0,
+            "deleted": 0,
             "total": 0,
             "pending_retry": 0,  # URLs waiting to be retried
             "avg_retry_count": 0,  # Average retry count for URLs with retries
@@ -721,8 +750,10 @@ class WebsiteCrawler:
     def normalize_url(self, url: str) -> str:
         """Normalize URL for comparison."""
         parsed = urlparse(url)
-        # Strip www and fragments
+        # Strip www and fragments, but preserve query parameters
         normalized = parsed.netloc.replace("www.", "") + parsed.path.rstrip("/")
+        if parsed.query:
+            normalized += "?" + parsed.query
         return normalized.lower()
 
     def should_skip_url(self, url: str) -> bool:
@@ -1250,6 +1281,88 @@ class WebsiteCrawler:
 
         return vectors
 
+    def remove_url_from_pinecone(self, pinecone_index, url: str) -> int:
+        """
+        Remove all vectors for a specific URL from Pinecone using precise metadata queries.
+
+        Args:
+            pinecone_index: Pinecone index instance
+            url: URL to remove from Pinecone
+
+        Returns:
+            Number of vectors successfully deleted (or would be deleted in dry-run mode)
+        """
+        deleted_count = 0
+
+        try:
+            # Query Pinecone to find all vectors with this URL in metadata
+            # Use a dummy vector for the query (we only care about metadata filtering)
+            # Get vector dimension from environment
+            import os
+
+            vector_dimension = int(os.getenv("OPENAI_EMBEDDING_DIMENSION", 3072))
+            dummy_vector = [0.0] * vector_dimension
+
+            # Normalize URL for consistent matching (same as our query scripts)
+            normalized_url = self.normalize_url(url)
+            logging.debug(
+                f"Querying Pinecone for vectors with normalized URL: {normalized_url}"
+            )
+
+            # Query with metadata filter to find vectors for this URL
+            # Try both 'url' and 'source' fields since the metadata structure may vary
+            query_response = pinecone_index.query(
+                vector=dummy_vector,
+                filter={"$or": [{"url": normalized_url}, {"source": normalized_url}]},
+                top_k=1000,  # Get up to 1000 matching vectors (should be more than enough for one page)
+                include_metadata=True,
+                include_values=False,  # We don't need the vector values
+            )
+
+            if not query_response.matches:
+                logging.info(f"No vectors found in Pinecone for URL: {url}")
+                return 0
+
+            # Extract vector IDs from the matches
+            vector_ids = [match.id for match in query_response.matches]
+            logging.info(f"Found {len(vector_ids)} vectors to delete for URL: {url}")
+
+            if vector_ids:
+                # Delete vectors in batches of 100 (Pinecone batch limit)
+                batch_size = 100
+                for i in range(0, len(vector_ids), batch_size):
+                    batch_ids = vector_ids[i : i + batch_size]
+                    try:
+                        if self.dry_run:
+                            logging.info(
+                                f"[DRY RUN] Would delete batch of {len(batch_ids)} vectors for URL: {url}"
+                            )
+                            logging.debug(
+                                f"[DRY RUN] Vector IDs: {batch_ids[:3]}{'...' if len(batch_ids) > 3 else ''}"
+                            )
+                        else:
+                            pinecone_index.delete(ids=batch_ids)
+                            logging.debug(
+                                f"Deleted batch of {len(batch_ids)} vectors for URL: {url}"
+                            )
+                        deleted_count += len(batch_ids)
+                    except Exception as e:
+                        logging.error(
+                            f"Failed to delete vector batch for URL {url}: {e}"
+                        )
+                        # Continue with remaining batches
+                        continue
+
+                logging.info(
+                    f"Successfully deleted {deleted_count} vectors for URL: {url}"
+                )
+
+        except Exception as e:
+            logging.error(f"Error removing URL from Pinecone {url}: {e}")
+            # Return partial count if some deletions succeeded
+
+        return deleted_count
+
     def should_process_content(self, url: str, current_hash: str) -> bool:
         """Check if content has changed and should be processed"""
         self.cursor.execute(
@@ -1413,13 +1526,21 @@ class WebsiteCrawler:
             self.update_csv_tracking(csv_error=error_msg)
             return None
 
-    def _validate_csv_row(self, row: dict) -> tuple[str, datetime] | None:
-        """Validate CSV row and return (url, modified_date) tuple or None if invalid."""
+    def _validate_csv_row(self, row: dict) -> tuple[str, datetime, str] | None:
+        """Validate CSV row and return (url, modified_date, action) tuple or None if invalid."""
         try:
             url = row.get("URL", "").strip()
             modified_date_str = row.get("Modified Date", "").strip()
+            action = row.get("Required Action", "").strip().lower()
 
-            if not url or not modified_date_str:
+            if not url or not modified_date_str or not action:
+                return None
+
+            # Validate action values (case-insensitive)
+            if action not in ["add/update", "remove"]:
+                logging.warning(
+                    f"Invalid action '{action}' for URL {url}. Expected 'Add/Update' or 'remove'"
+                )
                 return None
 
             # Parse modified date
@@ -1427,7 +1548,7 @@ class WebsiteCrawler:
             if not modified_date:
                 return None
 
-            return url, modified_date
+            return url, modified_date, action
         except Exception:
             return None
 
@@ -1491,7 +1612,7 @@ class WebsiteCrawler:
         return True, ""
 
     def _process_single_csv_row(
-        self, row: dict, cutoff_date: datetime, stats: dict
+        self, row: dict, cutoff_date: datetime, stats: dict, pinecone_index=None
     ) -> None:
         """Process a single CSV row and update stats."""
         try:
@@ -1500,8 +1621,48 @@ class WebsiteCrawler:
             if not validation_result:
                 return
 
-            url, modified_date = validation_result
+            url, modified_date, action = validation_result
+            full_url = ensure_scheme(url)
 
+            if action == "remove":
+                # Handle removal action
+                logging.info(f"Processing removal for URL: {full_url}")
+
+                # Remove from Pinecone if index is provided
+                deleted_vectors = 0
+                if pinecone_index:
+                    deleted_vectors = self.remove_url_from_pinecone(
+                        pinecone_index, full_url
+                    )
+                    if deleted_vectors > 0:
+                        logging.info(
+                            f"Removed {deleted_vectors} vectors from Pinecone for URL: {full_url}"
+                        )
+                    else:
+                        logging.info(
+                            f"No vectors found in Pinecone for URL: {full_url}"
+                        )
+                else:
+                    logging.warning(
+                        f"No Pinecone index provided for removal of URL: {full_url}"
+                    )
+
+                # Mark as deleted in database (ignore if URL doesn't exist)
+                normalized_url = self.normalize_url(full_url)
+                self.cursor.execute(
+                    "SELECT url FROM crawl_queue WHERE url = ?", (normalized_url,)
+                )
+                if self.cursor.fetchone():
+                    self.mark_url_status(full_url, "deleted")
+                    stats["removed_from_db"] = stats.get("removed_from_db", 0) + 1
+                    logging.info(f"Marked URL as deleted in database: {full_url}")
+                else:
+                    logging.info(f"URL not found in database (ignoring): {full_url}")
+
+                stats["removed"] = stats.get("removed", 0) + 1
+                return
+
+            # Handle add/update action
             # Check if URL should be processed
             should_process, skip_reason = self._should_process_csv_url(
                 url, modified_date, cutoff_date
@@ -1511,7 +1672,6 @@ class WebsiteCrawler:
 
                 # If URL is being skipped due to validation/skip rules, remove it from database
                 if skip_reason == "skipped_validation":
-                    full_url = ensure_scheme(url)
                     normalized_url = self.normalize_url(full_url)
 
                     # Check if URL exists in database
@@ -1529,7 +1689,6 @@ class WebsiteCrawler:
                 return
 
             # Add to queue with high priority and modified date
-            full_url = ensure_scheme(url)
             modified_date_str = modified_date.isoformat()
             result = self.add_url_to_queue(
                 full_url, priority=10, modified_date=modified_date_str
@@ -1589,6 +1748,11 @@ class WebsiteCrawler:
                     f"{stats['skipped_validation']} URLs skipped (validation/skip rules)"
                 )
 
+        if stats["removed"] > 0:
+            messages.append(
+                f"{stats['removed']} URLs removed from Pinecone and marked as deleted"
+            )
+
         if stats["error"] > 0:
             messages.append(f"{stats['error']} URLs had processing errors")
 
@@ -1607,7 +1771,7 @@ class WebsiteCrawler:
         if total_processed > 0:
             logging.info(f"Total URLs ready for processing: {total_processed}")
 
-    def process_csv_data(self, csv_data: list[dict]) -> int:
+    def process_csv_data(self, csv_data: list[dict], pinecone_index=None) -> int:
         """Process CSV data and add modified URLs to queue with high priority"""
         if not csv_data:
             return 0
@@ -1623,12 +1787,13 @@ class WebsiteCrawler:
             "skipped_date": 0,
             "skipped_validation": 0,
             "skipped_already_current": 0,
+            "removed": 0,
             "error": 0,
         }
 
         # Process each CSV row
         for row in csv_data:
-            self._process_single_csv_row(row, cutoff_date, stats)
+            self._process_single_csv_row(row, cutoff_date, stats, pinecone_index)
 
         # Commit database changes (including any URL removals)
         self.conn.commit()
@@ -1765,7 +1930,7 @@ class WebsiteCrawler:
             logging.error(f"Error checking initial crawl status: {e}")
             return False
 
-    def check_and_process_csv(self, browser=None) -> int:
+    def check_and_process_csv(self, browser=None, pinecone_index=None) -> int:
         """Check if CSV should be processed and do it if needed"""
         if not self.should_check_csv():
             return 0
@@ -1776,7 +1941,7 @@ class WebsiteCrawler:
             self.update_csv_tracking(csv_error="Failed to download CSV data")
             return 0
 
-        added_count = self.process_csv_data(csv_data)
+        added_count = self.process_csv_data(csv_data, pinecone_index)
         self.update_csv_tracking(success=True)
 
         return added_count
@@ -2238,13 +2403,15 @@ def _handle_initial_crawl_completion(crawler: WebsiteCrawler) -> None:
             logging.info("Initial crawl completed - CSV mode now active")
 
 
-def _process_csv_updates(crawler: WebsiteCrawler, browser) -> str | None:
+def _process_csv_updates(
+    crawler: WebsiteCrawler, browser, pinecone_index=None
+) -> str | None:
     """Process CSV updates and return URL if found, None otherwise."""
     if not crawler.csv_mode_enabled:
         return None
 
     try:
-        csv_added_count = crawler.check_and_process_csv(browser)
+        csv_added_count = crawler.check_and_process_csv(browser, pinecone_index)
         if csv_added_count > 0:
             logging.info(
                 f"CSV check added {csv_added_count} URLs to high-priority queue"
@@ -2270,13 +2437,14 @@ def _handle_no_url_processing(
     pages_since_restart: int,
     batch_start_time: float,
     batch_results: list,
+    pinecone_index=None,
 ) -> tuple[int, int, bool, bool, tuple]:
     """Handle the case when no URL is available for processing."""
     # Check if we should mark initial crawl as completed
     _handle_initial_crawl_completion(crawler)
 
     # Check for CSV updates before going to sleep (high priority)
-    csv_url = _process_csv_updates(crawler, browser)
+    csv_url = _process_csv_updates(crawler, browser, pinecone_index)
     if csv_url:
         # Found URL from CSV, signal to continue with normal processing
         # The caller will call get_next_url_to_crawl() again to get the CSV URL
@@ -2405,6 +2573,7 @@ def _handle_crawl_loop_iteration(
             pages_since_restart,
             batch_start_time,
             batch_results,
+            pinecone_index,
         )
 
     # Check if browser restart is needed

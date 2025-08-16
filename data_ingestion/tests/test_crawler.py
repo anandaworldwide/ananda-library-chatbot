@@ -14,6 +14,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+# Import the crawler class
+import pytest
+from crawler.website_crawler import WebsiteCrawler
+
 # Mock spaCy only for the WebsiteCrawler module by patching the import
 # This avoids affecting other test files that need real spaCy
 mock_spacy = Mock()
@@ -70,7 +74,6 @@ urllib.request.urlopen = _robots_response  # type: ignore[assignment]
 
 # Load after mock setup.
 from crawler.website_crawler import (  # noqa: E402
-    WebsiteCrawler,
     ensure_scheme,
     load_config,
 )
@@ -543,16 +546,19 @@ https://example.com/page2,2025-07-13 09:30:00,Test Page 2
                 "URL": "https://example.com/recent-page",
                 "Modified Date": recent_date.strftime("%m/%d/%y %H:%M"),
                 "Post Title": "Recent Post",
+                "Action": "Add/Update",
             },
             {
                 "URL": "https://example.com/old-page",
                 "Modified Date": old_date.strftime("%m/%d/%y %H:%M"),
                 "Post Title": "Old Post",
+                "Action": "Add/Update",
             },
             {
                 "URL": "https://external.com/page",  # External domain
                 "Modified Date": recent_date.strftime("%m/%d/%y %H:%M"),
                 "Post Title": "External Post",
+                "Action": "Add/Update",
             },
         ]
 
@@ -668,6 +674,7 @@ https://example.com/page2,2025-07-13 09:30:00,Test Page 2
                 "URL": "https://example.com/recent-page",
                 "Modified Date": recent_date.strftime("%Y-%m-%d %H:%M:%S"),
                 "Post Title": "Recent Post",
+                "Action": "Add/Update",
             }
         ]
 
@@ -2463,6 +2470,164 @@ class TestCrawlerInitializationBug(BaseWebsiteCrawlerTest):
             self.assertIsNone(start_url_exists, "Start URL should NOT be in database")
 
             crawler.close()
+
+
+class TestCSVRemoval:
+    """Test CSV removal functionality."""
+
+    @pytest.fixture
+    def crawler(self):
+        """Create a test crawler instance without side effects."""
+        config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 14,
+        }
+        return WebsiteCrawler(
+            site_id="test",
+            site_config=config,
+            skip_db_init=True,  # Skip database initialization
+            skip_robots_init=True,  # Skip robots.txt loading
+        )
+
+    def test_validate_csv_row_add_update(self, crawler):
+        """Test CSV validation for add/update actions."""
+        row = {
+            "URL": "https://example.com/test",
+            "Modified Date": "2025-01-13 12:00:00",
+            "Action": "Add/Update",
+        }
+
+        result = crawler._validate_csv_row(row)
+
+        assert result is not None
+        url, modified_date, action = result
+        assert url == "https://example.com/test"
+        assert isinstance(modified_date, datetime)
+        assert action == "add/update"
+
+    def test_validate_csv_row_remove(self, crawler):
+        """Test CSV validation for remove actions."""
+        row = {
+            "URL": "https://example.com/test",
+            "Modified Date": "2025-01-13 12:00:00",
+            "Action": "remove",
+        }
+
+        result = crawler._validate_csv_row(row)
+
+        assert result is not None
+        url, modified_date, action = result
+        assert url == "https://example.com/test"
+        assert isinstance(modified_date, datetime)
+        assert action == "remove"
+
+    def test_validate_csv_row_case_insensitive(self, crawler):
+        """Test that action validation is case-insensitive."""
+        test_cases = ["REMOVE", "Remove", "ADD/UPDATE", "add/update", "Add/Update"]
+
+        for action_input in test_cases:
+            row = {
+                "URL": "https://example.com/test",
+                "Modified Date": "2025-01-13 12:00:00",
+                "Action": action_input,
+            }
+
+            result = crawler._validate_csv_row(row)
+            assert result is not None
+            _, _, action = result
+            assert action in ["add/update", "remove"]
+
+    def test_validate_csv_row_invalid_action(self, crawler):
+        """Test CSV validation with invalid action."""
+        row = {
+            "URL": "https://example.com/test",
+            "Modified Date": "2025-01-13 12:00:00",
+            "Action": "invalid",
+        }
+
+        result = crawler._validate_csv_row(row)
+        assert result is None
+
+    def test_validate_csv_row_missing_fields(self, crawler):
+        """Test CSV validation with missing required fields."""
+        # Missing URL
+        row1 = {"Modified Date": "2025-01-13 12:00:00", "Action": "remove"}
+        assert crawler._validate_csv_row(row1) is None
+
+        # Missing Modified Date
+        row2 = {"URL": "https://example.com/test", "Action": "remove"}
+        assert crawler._validate_csv_row(row2) is None
+
+        # Missing Action
+        row3 = {
+            "URL": "https://example.com/test",
+            "Modified Date": "2025-01-13 12:00:00",
+        }
+        assert crawler._validate_csv_row(row3) is None
+
+    def test_remove_url_from_pinecone_success(self, crawler):
+        """Test successful Pinecone vector removal."""
+        # Mock Pinecone index
+        mock_index = Mock()
+        mock_match = Mock()
+        mock_match.id = "test_vector_id"
+
+        mock_index.query.return_value = Mock(matches=[mock_match])
+        mock_index.delete.return_value = None
+
+        result = crawler.remove_url_from_pinecone(
+            mock_index, "https://example.com/test"
+        )
+
+        assert result == 1
+        mock_index.query.assert_called_once()
+        mock_index.delete.assert_called_once_with(ids=["test_vector_id"])
+
+    def test_remove_url_from_pinecone_no_vectors(self, crawler):
+        """Test Pinecone removal when no vectors found."""
+        # Mock Pinecone index with no matches
+        mock_index = Mock()
+        mock_index.query.return_value = Mock(matches=[])
+
+        result = crawler.remove_url_from_pinecone(
+            mock_index, "https://example.com/test"
+        )
+
+        assert result == 0
+        mock_index.query.assert_called_once()
+        mock_index.delete.assert_not_called()
+
+    def test_remove_url_from_pinecone_batch_deletion(self, crawler):
+        """Test Pinecone removal with multiple vectors (batch processing)."""
+        # Mock Pinecone index with multiple matches
+        mock_index = Mock()
+        mock_matches = [
+            Mock(id=f"vector_{i}") for i in range(150)
+        ]  # More than batch size
+        mock_index.query.return_value = Mock(matches=mock_matches)
+        mock_index.delete.return_value = None
+
+        result = crawler.remove_url_from_pinecone(
+            mock_index, "https://example.com/test"
+        )
+
+        assert result == 150
+        mock_index.query.assert_called_once()
+        # Should be called twice due to batch size of 100
+        assert mock_index.delete.call_count == 2
+
+    def test_remove_url_from_pinecone_error_handling(self, crawler):
+        """Test Pinecone removal error handling."""
+        # Mock Pinecone index that raises exception
+        mock_index = Mock()
+        mock_index.query.side_effect = Exception("Pinecone error")
+
+        result = crawler.remove_url_from_pinecone(
+            mock_index, "https://example.com/test"
+        )
+
+        assert result == 0  # Should return 0 on error
 
 
 if __name__ == "__main__":
