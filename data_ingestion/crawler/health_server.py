@@ -938,34 +938,26 @@ def get_log_activity_status() -> dict[str, Any]:
                 "is_wedged": True,
             }
 
-        # Read the last few lines of the log file to find recent activity
-        # We look for key patterns that indicate the crawler is actively working
-        activity_patterns = [
-            "Sleep completed - continuing loop...",
-            "No URLs ready for processing. Sleeping for one hour...",
-            "Starting crawl of",
-            "Processing URL:",
-            "CSV check completed",
-            "Found URL from CSV",
-        ]
-
         last_activity_time = None
         last_activity_line = None
 
-        # Read the last 500 lines to find the most recent activity
+        # Read the last few lines of the log file to find the most recent timestamped entry
         try:
             with open(log_file, encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()[-500:]  # Get last 500 lines
+                lines = f.readlines()[-100:]  # Get last 100 lines (reduced from 500)
 
                 for line in reversed(lines):  # Start from the most recent
                     line = line.strip()
 
-                    # Look for timestamp at the beginning of the line
+                    # Skip empty lines
+                    if not line:
+                        continue
+
+                    # Look for any line with a timestamp at the beginning
                     # Expected format: "2024-01-15 14:30:25,123 - INFO - message"
-                    if any(pattern in line for pattern in activity_patterns):
-                        # Extract timestamp from the log line
-                        try:
-                            # Parse timestamp from log format: "YYYY-MM-DD HH:MM:SS,mmm"
+                    try:
+                        # Check if line starts with timestamp pattern
+                        if " - " in line and "," in line:
                             timestamp_str = line.split(" - ")[
                                 0
                             ]  # Get the timestamp part
@@ -974,14 +966,15 @@ def get_log_activity_status() -> dict[str, Any]:
                                     0
                                 ]  # Remove milliseconds
 
+                            # Try to parse the timestamp
                             last_activity_time = datetime.strptime(
                                 timestamp_str, "%Y-%m-%d %H:%M:%S"
                             )
                             last_activity_line = line
                             break
-                        except (ValueError, IndexError):
-                            # If we can't parse the timestamp, continue looking
-                            continue
+                    except (ValueError, IndexError):
+                        # If we can't parse the timestamp, continue looking
+                        continue
 
         except Exception as e:
             return {
@@ -995,7 +988,7 @@ def get_log_activity_status() -> dict[str, Any]:
         if last_activity_time is None:
             return {
                 "log_file_exists": True,
-                "error": "No recent activity patterns found in log",
+                "error": "No timestamped log entries found",
                 "last_activity": None,
                 "minutes_since_activity": None,
                 "is_wedged": True,
@@ -1006,9 +999,10 @@ def get_log_activity_status() -> dict[str, Any]:
         time_diff = now - last_activity_time
         minutes_since_activity = int(time_diff.total_seconds() / 60)
 
-        # Consider crawler wedged if no activity for more than 90 minutes
-        # (Should wake up every 60 minutes, so 90 minutes gives some buffer)
-        is_wedged = minutes_since_activity > 90
+        # Consider crawler wedged if no activity for more than 65 minutes
+        # This accounts for the fact that when busy, crawler should be logging frequently
+        # When idle, it should wake up every 60 minutes, so 65 minutes gives a small buffer
+        is_wedged = minutes_since_activity > 65
 
         return {
             "log_file_exists": True,
