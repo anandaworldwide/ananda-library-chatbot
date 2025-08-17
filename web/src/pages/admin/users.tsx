@@ -1,4 +1,4 @@
-// Admin Users page: Add User form and Pending Users list with Resend
+// Admin Users page: Add Users modal and Pending Users list with Resend
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import Layout from "@/components/layout";
@@ -7,6 +7,7 @@ import type { GetServerSideProps, NextApiRequest } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { AddUsersModal } from "@/components/AddUsersModal";
 
 interface PendingUser {
   email: string;
@@ -58,7 +59,7 @@ function getDisplayName(user: ActiveUser): string {
 }
 
 export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
-  const [email, setEmail] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"info" | "error">("info");
@@ -106,6 +107,20 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
         lastLoginAt: it.lastLoginAt ? new Date(it.lastLoginAt).toLocaleString() : null,
         entitlements: it.entitlements || {},
       }));
+
+      // Sort users by last login descending (most recent first)
+      items.sort((a, b) => {
+        // Handle null values - users with no login go to the bottom
+        if (!a.lastLoginAt && !b.lastLoginAt) return 0;
+        if (!a.lastLoginAt) return 1;
+        if (!b.lastLoginAt) return -1;
+
+        // Compare dates (both are locale strings, need to convert back to Date for comparison)
+        const dateA = new Date(a.lastLoginAt);
+        const dateB = new Date(b.lastLoginAt);
+        return dateB.getTime() - dateA.getTime(); // Descending order
+      });
+
       setActive(items);
     } catch (e: any) {
       setMessage(e?.message || "Failed to load active users");
@@ -139,47 +154,84 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
     // Intentionally only depends on jwt to refetch if token is refreshed
   }, [jwt]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      setMessage("Enter a valid email");
-      setMessageType("error");
-      return;
-    }
+  async function handleAddUsers(emails: string[]) {
     setSubmitting(true);
     setMessage(null);
     setMessageType("info");
+
     try {
-      const res = await fetch("/api/admin/addUser", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to add user");
-      // Interpret backend messages for UI clarity
-      if (data?.message === "already active") {
-        setMessage("Not added: user already exists and is active");
-        setMessageType("error");
-      } else if (data?.message === "resent") {
-        setMessage(`Activation email resent to ${email.toLowerCase()}`);
-        setMessageType("info");
-      } else if (data?.message === "created") {
-        setMessage("User created and activation email sent");
-        setMessageType("info");
-      } else {
-        setMessage(data?.message || "User processed");
+      let successCount = 0;
+      let alreadyActiveCount = 0;
+      let resentCount = 0;
+      const errors: string[] = [];
+
+      // Process emails one by one to get detailed feedback
+      for (const email of emails) {
+        try {
+          const res = await fetch("/api/admin/addUser", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+            },
+            credentials: "include",
+            body: JSON.stringify({ email }),
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            errors.push(`${email}: ${data?.error || "Failed to add"}`);
+          } else {
+            // Interpret backend messages
+            if (data?.message === "already active") {
+              alreadyActiveCount++;
+            } else if (data?.message === "resent") {
+              resentCount++;
+            } else if (data?.message === "created") {
+              successCount++;
+            } else {
+              successCount++; // Default to success
+            }
+          }
+        } catch (e: any) {
+          errors.push(`${email}: ${e?.message || "Failed to add"}`);
+        }
+      }
+
+      // Generate summary message
+      const parts: string[] = [];
+      if (successCount > 0) {
+        parts.push(`${successCount} invitation${successCount === 1 ? "" : "s"} sent`);
+      }
+      if (resentCount > 0) {
+        parts.push(`${resentCount} invitation${resentCount === 1 ? "" : "s"} resent`);
+      }
+      if (alreadyActiveCount > 0) {
+        parts.push(`${alreadyActiveCount} user${alreadyActiveCount === 1 ? " was" : "s were"} already active`);
+      }
+
+      if (parts.length > 0) {
+        setMessage(parts.join(", "));
         setMessageType("info");
       }
-      setEmail("");
+
+      if (errors.length > 0) {
+        if (parts.length === 0) {
+          // All failed
+          setMessage(`Failed to add users: ${errors.join("; ")}`);
+          setMessageType("error");
+        } else {
+          // Some succeeded, some failed
+          setMessage(`${parts.join(", ")}. Errors: ${errors.join("; ")}`);
+          setMessageType("info");
+        }
+      }
+
+      // Refresh the lists
       await fetchPending();
       await fetchActive();
     } catch (e: any) {
-      setMessage(e?.message || "Failed to add user");
+      setMessage(e?.message || "Failed to add users");
       setMessageType("error");
     } finally {
       setSubmitting(false);
@@ -218,28 +270,22 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       <div className="mx-auto max-w-3xl p-6">
         <Breadcrumb items={[{ label: "Admin Dashboard", href: "/admin" }, { label: "Users" }]} />
 
-        <form onSubmit={onSubmit} className="mb-8 space-y-3">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              className="w-full rounded border px-3 py-2"
-              placeholder="user@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
+        <div className="mb-8">
           <button
-            type="submit"
+            onClick={() => setIsModalOpen(true)}
             disabled={submitting}
-            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? "Submitting…" : "Add User"}
+            Add Users
           </button>
-        </form>
+        </div>
+
+        <AddUsersModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onAddUsers={handleAddUsers}
+          isSubmitting={submitting}
+        />
 
         {message && (
           <div

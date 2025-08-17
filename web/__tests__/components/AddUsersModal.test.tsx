@@ -1,0 +1,190 @@
+import React from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom";
+import { AddUsersModal } from "@/components/AddUsersModal";
+
+describe("AddUsersModal", () => {
+  const defaultProps = {
+    isOpen: true,
+    onClose: jest.fn(),
+    onAddUsers: jest.fn(),
+    isSubmitting: false,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("renders when open", () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    expect(screen.getByText("Add Users")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email Addresses")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it("does not render when closed", () => {
+    render(<AddUsersModal {...defaultProps} isOpen={false} />);
+
+    expect(screen.queryByText("Add Users")).not.toBeInTheDocument();
+  });
+
+  it("disables submit button for empty input", () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    const submitButton = screen.getByRole("button", { name: /add 0 users/i });
+    expect(submitButton).toBeDisabled();
+
+    expect(defaultProps.onAddUsers).not.toHaveBeenCalled();
+  });
+
+  it("disables submit button for invalid emails", () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+    fireEvent.change(textarea, { target: { value: "invalid-email, another-invalid" } });
+
+    const submitButton = screen.getByRole("button", { name: /add 0 users/i });
+    expect(submitButton).toBeDisabled();
+
+    expect(defaultProps.onAddUsers).not.toHaveBeenCalled();
+  });
+
+  it("shows validation error for mixed valid and invalid emails", async () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+    fireEvent.change(textarea, { target: { value: "valid@example.com, invalid-email" } });
+
+    const submitButton = screen.getByRole("button", { name: /add 1 user/i });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid email format: invalid-email")).toBeInTheDocument();
+    });
+
+    expect(defaultProps.onAddUsers).not.toHaveBeenCalled();
+  });
+
+  it("submits valid emails successfully", async () => {
+    const mockOnAddUsers = jest.fn().mockResolvedValue(undefined);
+    render(<AddUsersModal {...defaultProps} onAddUsers={mockOnAddUsers} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+    fireEvent.change(textarea, { target: { value: "user1@example.com, user2@example.com" } });
+
+    const submitButton = screen.getByRole("button", { name: /add 2 users/i });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockOnAddUsers).toHaveBeenCalledWith(["user1@example.com", "user2@example.com"]);
+    });
+
+    expect(defaultProps.onClose).toHaveBeenCalled();
+  });
+
+  it("handles emails with names in angle brackets", async () => {
+    const mockOnAddUsers = jest.fn().mockResolvedValue(undefined);
+    render(<AddUsersModal {...defaultProps} onAddUsers={mockOnAddUsers} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+    fireEvent.change(textarea, { target: { value: "John Doe <john@example.com>\nJane Smith <jane@example.com>" } });
+
+    const submitButton = screen.getByRole("button", { name: /add 2 users/i });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockOnAddUsers).toHaveBeenCalledWith(["john@example.com", "jane@example.com"]);
+    });
+  });
+
+  it("shows live validation feedback", () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+    fireEvent.change(textarea, { target: { value: "user1@example.com, invalid-email, user2@example.com" } });
+
+    // Just check that the button shows the correct count - this is the most important validation feedback
+    expect(screen.getByRole("button", { name: /add 2 users/i })).toBeInTheDocument();
+
+    // Check that there are colored spans indicating validation status
+    const greenSpan = document.querySelector(".text-green-600");
+    const redSpan = document.querySelector(".text-red-600");
+    expect(greenSpan).toBeInTheDocument();
+    expect(redSpan).toBeInTheDocument();
+  });
+
+  it("updates button text based on valid email count", () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+
+    // No emails
+    expect(screen.getByRole("button", { name: /add 0 users/i })).toBeInTheDocument();
+
+    // One email
+    fireEvent.change(textarea, { target: { value: "user@example.com" } });
+    expect(screen.getByRole("button", { name: /add 1 user$/i })).toBeInTheDocument();
+
+    // Multiple emails
+    fireEvent.change(textarea, { target: { value: "user1@example.com, user2@example.com" } });
+    expect(screen.getByRole("button", { name: /add 2 users/i })).toBeInTheDocument();
+  });
+
+  it("disables form when submitting", () => {
+    render(<AddUsersModal {...defaultProps} isSubmitting={true} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+    const cancelButton = screen.getByRole("button", { name: /cancel/i });
+    const submitButton = screen.getByRole("button", { name: /adding/i });
+
+    expect(textarea).toBeDisabled();
+    expect(cancelButton).toBeDisabled();
+    expect(submitButton).toBeDisabled();
+  });
+
+  it("closes modal when cancel is clicked", () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    const cancelButton = screen.getByRole("button", { name: /cancel/i });
+    fireEvent.click(cancelButton);
+
+    expect(defaultProps.onClose).toHaveBeenCalled();
+  });
+
+  it("clears form when modal closes successfully", async () => {
+    const mockOnAddUsers = jest.fn().mockResolvedValue(undefined);
+    render(<AddUsersModal {...defaultProps} onAddUsers={mockOnAddUsers} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+    fireEvent.change(textarea, { target: { value: "user@example.com" } });
+
+    const submitButton = screen.getByRole("button", { name: /add 1 user/i });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockOnAddUsers).toHaveBeenCalled();
+    });
+
+    // Modal should close and form should be cleared
+    expect(defaultProps.onClose).toHaveBeenCalled();
+  });
+
+  it("does not close modal when there is an error", async () => {
+    const mockOnAddUsers = jest.fn().mockRejectedValue(new Error("API Error"));
+    render(<AddUsersModal {...defaultProps} onAddUsers={mockOnAddUsers} />);
+
+    const textarea = screen.getByLabelText("Email Addresses");
+    fireEvent.change(textarea, { target: { value: "user@example.com" } });
+
+    const submitButton = screen.getByRole("button", { name: /add 1 user/i });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockOnAddUsers).toHaveBeenCalled();
+    });
+
+    // Modal should not close on error
+    expect(defaultProps.onClose).not.toHaveBeenCalled();
+  });
+});
