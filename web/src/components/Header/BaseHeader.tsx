@@ -31,20 +31,34 @@ export default function BaseHeader({
 
   // Keep auth state in sync without extra network calls
   useEffect(() => {
+    const updateAuthState = () => {
+      const cookieLoggedIn = Cookies.get("isLoggedIn") === "true";
+      const tokenAuthenticated = isAuthenticated();
+      setIsLoggedIn(tokenAuthenticated || cookieLoggedIn);
+    };
+
     // Trigger (deduped) auth initialization so we can reflect JWT state
     initializeTokenManager()
       .then(() => {
-        setIsLoggedIn(isAuthenticated() || Cookies.get("isLoggedIn") === "true");
+        updateAuthState();
         setAuthReady(true);
       })
       .catch(() => {
+        // Even if token initialization fails, check cookie state
+        updateAuthState();
         setAuthReady(true);
       });
 
-    const handleRoute = () => setIsLoggedIn(isAuthenticated() || Cookies.get("isLoggedIn") === "true");
+    const handleRoute = () => updateAuthState();
     router.events.on("routeChangeComplete", handleRoute);
+
+    // Also listen for focus events to catch auth state changes when user returns to tab
+    const handleFocus = () => updateAuthState();
+    window.addEventListener("focus", handleFocus);
+
     return () => {
       router.events.off("routeChangeComplete", handleRoute);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [router.events]);
 

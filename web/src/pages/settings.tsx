@@ -8,6 +8,7 @@ import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { ChatList } from "@/components/ChatList";
+import { EmailChangeModal } from "@/components/EmailChangeModal";
 
 interface LikedAnswer {
   id: string;
@@ -25,6 +26,10 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
   const [message, setMessage] = useState<string | null>(null);
   const [role, setRole] = useState<string>("user");
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Email change state
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [isEmailChangeModalOpen, setIsEmailChangeModalOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -50,6 +55,7 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
             setRole(typeof profile?.role === "string" ? profile.role : "user");
             setFirstName(typeof profile?.firstName === "string" ? profile.firstName : "");
             setLastName(typeof profile?.lastName === "string" ? profile.lastName : "");
+            setPendingEmail(typeof profile?.pendingEmail === "string" ? profile.pendingEmail : null);
           } else {
             setEmail(null);
             setRole("user");
@@ -133,6 +139,16 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
     }
   }
 
+  function handleEmailChangeRequested(newEmail: string) {
+    setPendingEmail(newEmail);
+    setMessage("Verification email sent! Check your inbox.");
+  }
+
+  function handleEmailChangeCancelled() {
+    setPendingEmail(null);
+    setMessage("Email change cancelled");
+  }
+
   return (
     <>
       <Head>
@@ -149,7 +165,27 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
             <>
               <section className="mb-6">
                 <h2 className="text-lg font-semibold mb-1">Account</h2>
-                <div className="text-sm text-gray-700">{email ? `Email: ${email}` : "Signed in"}</div>
+                <div className="text-sm text-gray-700">
+                  {email ? (
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <span>Email: {email}</span>
+                        {pendingEmail && (
+                          <div className="text-xs text-amber-600 mt-1">Pending change to: {pendingEmail}</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setIsEmailChangeModalOpen(true)}
+                        className="text-xs text-blue-600 hover:text-blue-800 border border-blue-600 hover:border-blue-800 rounded px-2 py-1 transition-colors"
+                        aria-label="Change email address"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    "Signed in"
+                  )}
+                </div>
                 {(role === "admin" || role === "superuser") && (
                   <div className="mt-2 flex items-center gap-2">
                     {role === "admin" && (
@@ -226,6 +262,15 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
             </>
           )}
         </main>
+
+        <EmailChangeModal
+          isOpen={isEmailChangeModalOpen}
+          onClose={() => setIsEmailChangeModalOpen(false)}
+          currentEmail={email || ""}
+          pendingEmail={pendingEmail}
+          onEmailChangeRequested={handleEmailChangeRequested}
+          onEmailChangeCancelled={handleEmailChangeCancelled}
+        />
       </Layout>
     </>
   );

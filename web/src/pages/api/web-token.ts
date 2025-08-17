@@ -24,6 +24,7 @@ import { isTokenValid } from "@/utils/server/passwordUtils";
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
 import CryptoJS from "crypto-js";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
+import { verifyToken } from "@/utils/server/jwtUtils";
 
 /**
  * API handler for the web token endpoint
@@ -135,17 +136,31 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(500).json({ error: "Server configuration error" });
     }
 
-    // Create a JWT token directly using the secure token
-    try {
-      const webToken = jwt.sign(
-        {
-          client: "web",
-          iat: Math.floor(Date.now() / 1000),
-        },
-        process.env.SECURE_TOKEN,
-        { expiresIn: "15m" }
-      );
+    // Create JWT payload - conditionally include user info if authenticated
+    const payload: any = {
+      client: "web",
+      iat: Math.floor(Date.now() / 1000),
+    };
 
+    // Check for auth cookie and add user info if present and valid
+    const authCookie = req.cookies?.["auth"];
+    if (authCookie) {
+      try {
+        const userPayload = verifyToken(authCookie) as any;
+        if (userPayload?.email) {
+          payload.email = userPayload.email;
+          payload.role = userPayload.role || "user";
+        }
+      } catch (error) {
+        // If auth cookie is invalid, continue with anonymous token
+        // This allows graceful degradation for expired/invalid sessions
+        console.log("Invalid auth cookie, issuing anonymous token:", error);
+      }
+    }
+
+    // Create a JWT token with the conditional payload
+    try {
+      const webToken = jwt.sign(payload, process.env.SECURE_TOKEN, { expiresIn: "15m" });
       return res.status(200).json({ token: webToken });
     } catch (tokenError) {
       console.error("Error creating web token:", tokenError);

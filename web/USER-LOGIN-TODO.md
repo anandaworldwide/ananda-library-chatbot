@@ -60,8 +60,54 @@ Entitlements:
 - [x] Backend: Add audit entries for self-provision attempts (success/failure) with context.
 - [x] Backend: Implement daily digest job that aggregates self-provision events and emails `OPS_ALERT_EMAIL`.
 - [x] Add daily digest cron job to Vercel configuration (runs at 6:00 AM Pacific Time daily).
-- [ ] Allow user to change their email address
+- [x] Allow user to change their email address (see Email Change Implementation section below)
 - [ ] Monitoring: Add metrics for known-email matches, unknown-email branches, shared-password success/failure.
+
+#### Email Change Implementation
+
+**Goal**: Allow authenticated users to change their email address via a secure two-step verification process.
+
+**Architecture**: Since all user data is keyed by UUID (not email), this is a simple email field update with
+verification - no document moving required.
+
+**Security Requirements**:
+
+- Only authenticated users (valid JWT) can request changes
+- Verification required via magic link sent to new email address
+- Pending changes expire after 24 hours
+- Rate limiting: 3 requests per day per user
+- Audit all requests and outcomes
+- Prevent changes to emails already in use by other users
+
+**Data Model** (add to existing user document):
+
+- `pendingEmail` (string): The requested new email address
+- `emailChangeTokenHash` (string): bcrypt hash of verification token
+- `emailChangeExpiresAt` (timestamp): 24-hour expiry from request time
+
+**Implementation Steps**:
+
+- [x] 🐥 Backend: Create `/api/requestEmailChange` endpoint (POST, JWT auth)
+  - Validate new email format and uniqueness
+  - Generate and hash verification token (reuse existing patterns)
+  - Store pending email + token hash + 24h expiry on user doc
+  - Send verification email to new address
+  - Rate limit: 3/day/user, audit log request
+- [x] 🐥 Backend: Create `/api/verifyEmailChange` endpoint (POST, token-based)
+  - Verify token hash and expiry
+  - Update user.email field, clear pending fields
+  - Send confirmation emails to both old and new addresses
+  - Audit log successful verification
+- [x] 🐥 Frontend: Add email change form to `/settings.tsx`
+  - Input validation, loading states, success/error toasts
+  - Show pending change status if exists
+  - Allow cancellation of pending changes
+- [x] 🐥 Frontend: Create `/verify-email-change` page
+  - Handle verification links, redirect to settings with success message
+- [x] 🐥 Tests: Comprehensive coverage for full email change flow
+  - Unit tests: validation, token handling, expiry logic
+  - Integration tests: request → verify → confirm email updated
+  - Edge cases: expired tokens, duplicate emails, multiple requests
 
 #### Deprecate sudoCookie checks on login-required sites (comprehensive)
 

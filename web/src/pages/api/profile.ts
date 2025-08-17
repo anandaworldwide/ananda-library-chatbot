@@ -49,12 +49,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         role,
         firstName: typeof data?.firstName === "string" ? data.firstName : null,
         lastName: typeof data?.lastName === "string" ? data.lastName : null,
+        pendingEmail: typeof data?.pendingEmail === "string" ? data.pendingEmail : null,
+        emailChangeExpiresAt: data?.emailChangeExpiresAt || null,
       });
     }
 
     if (req.method === "PATCH") {
-      const body = (req.body || {}) as { firstName?: string; lastName?: string };
+      const body = (req.body || {}) as { firstName?: string; lastName?: string; cancelEmailChange?: boolean };
       const updates: Record<string, any> = {};
+
       if (body.firstName !== undefined) {
         if (typeof body.firstName !== "string" || body.firstName.length > 100) {
           return res.status(400).json({ error: "Invalid first name" });
@@ -67,6 +70,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         }
         updates.lastName = body.lastName.trim();
       }
+      if (body.cancelEmailChange === true) {
+        updates.pendingEmail = firebase.firestore.FieldValue.delete();
+        updates.emailChangeTokenHash = firebase.firestore.FieldValue.delete();
+        updates.emailChangeExpiresAt = firebase.firestore.FieldValue.delete();
+      }
+
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No updates provided" });
 
       // Check if this is the first profile completion after activation

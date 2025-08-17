@@ -170,6 +170,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         path: "/",
       });
       console.log("COOKIE DEBUG - UUID cookie set successfully");
+
+      // Set isLoggedIn cookie for header component compatibility
+      console.log("COOKIE DEBUG - Setting isLoggedIn cookie...");
+      cookies.set("isLoggedIn", "true", {
+        httpOnly: false,
+        sameSite: "lax",
+        secure: isSecure,
+        maxAge: 180 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+      console.log("COOKIE DEBUG - isLoggedIn cookie set successfully");
     } catch (cookieError) {
       console.error("COOKIE DEBUG - Error setting cookies:", cookieError);
       throw cookieError;
