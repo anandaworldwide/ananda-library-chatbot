@@ -389,6 +389,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /**
+   * Track ask the experts link click
+   * @param {string} linkText - The text of the clicked link
+   * @param {string} linkUrl - The URL of the clicked link
+   * @param {number} questionNumber - The sequence number of the question in the session
+   */
+  function trackAskTheExpertsLinkClick(linkText, linkUrl, questionNumber) {
+    sendGoogleAnalyticsEvent("chatbot_vivek_ask_experts_link_click", {
+      event_category: "chatbot_engagement",
+      link_text: linkText.substring(0, 100), // First 100 chars for analysis
+      link_url: linkUrl,
+      question_number: questionNumber,
+      session_questions_total: sessionQuestionCount,
+    });
+  }
+
+  /**
    * Track popup open via keyboard shortcut
    */
   function trackKeyboardShortcutOpen() {
@@ -477,6 +493,21 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Track the source link click
       trackSourceLinkClick(linkText, linkUrl, sessionQuestionCount);
+      
+      // The link will open in a new tab due to target="_blank"
+      // No need to prevent default or handle navigation manually
+    }
+  });
+
+  // Add click event delegation for ask the experts links
+  messages.addEventListener("click", (e) => {
+    const askExpertsLink = e.target.closest(".aichatbot-ask-the-experts-link");
+    if (askExpertsLink) {
+      const linkText = askExpertsLink.textContent;
+      const linkUrl = askExpertsLink.href;
+      
+      // Track the ask the experts link click
+      trackAskTheExpertsLinkClick(linkText, linkUrl, sessionQuestionCount);
       
       // The link will open in a new tab due to target="_blank"
       // No need to prevent default or handle navigation manually
@@ -777,6 +808,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
+                .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<li>${listContent}</li>`;
@@ -795,6 +827,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
+                .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<p>${paragraph}</p>`;
@@ -828,6 +861,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
+                .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<li>${listContent}</li>`;
@@ -846,6 +880,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
+                .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<p>${paragraph}</p>`;
@@ -875,6 +910,7 @@ document.addEventListener("DOMContentLoaded", () => {
             /\[(.*?)\]\(GETHUMAN\)/g,
             '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
           )
+          .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
           .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>')
           .replace(/\n/g, "<br />");
 
