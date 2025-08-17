@@ -376,15 +376,12 @@ document.addEventListener("DOMContentLoaded", () => {
    * Track source link click
    * @param {string} linkText - The text of the clicked link
    * @param {string} linkUrl - The URL of the clicked link
-   * @param {number} questionNumber - The sequence number of the question in the session
    */
-  function trackSourceLinkClick(linkText, linkUrl, questionNumber) {
+  function trackSourceLinkClick(linkText, linkUrl) {
     sendGoogleAnalyticsEvent("chatbot_vivek_source_link_click", {
       event_category: "chatbot_view_sources",
       link_text: linkText.substring(0, 100), // First 100 chars for analysis
       link_url: linkUrl,
-      question_number: questionNumber,
-      session_questions_total: sessionQuestionCount,
     });
   }
 
@@ -492,7 +489,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const linkUrl = sourceLink.href;
       
       // Track the source link click
-      trackSourceLinkClick(linkText, linkUrl, sessionQuestionCount);
+      trackSourceLinkClick(linkText, linkUrl);
       
       // The link will open in a new tab due to target="_blank"
       // No need to prevent default or handle navigation manually
