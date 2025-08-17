@@ -155,7 +155,7 @@ describe("/api/web-token", () => {
     expect(CryptoJS.SHA256).not.toHaveBeenCalled();
   });
 
-  it("should require siteAuth cookie when login is required", async () => {
+  it("should require JWT auth cookie when login is required", async () => {
     // Set site config to require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: true,
@@ -167,94 +167,29 @@ describe("/api/web-token", () => {
     // Should fail with authentication required
     expect(statusMock).toHaveBeenCalledWith(401);
     expect(jsonMock).toHaveBeenCalledWith({
-      error: "Authentication required (2)",
+      error: "Authentication required",
     });
   });
 
-  it("should validate siteAuth cookie format when login is required", async () => {
+  it("should reject legacy siteAuth cookie when login is required", async () => {
     // Set site config to require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: true,
     });
 
-    // Set invalid cookie format (no colon)
-    req.cookies = { siteAuth: "invalid-cookie-format" };
+    // Set legacy siteAuth cookie (should be rejected)
+    req.cookies = { siteAuth: "token-value:12345678" };
 
     await handler(req as NextApiRequest, res as NextApiResponse);
 
-    // Should fail with invalid format
+    // Should fail with authentication required (legacy cookies not accepted)
     expect(statusMock).toHaveBeenCalledWith(401);
     expect(jsonMock).toHaveBeenCalledWith({
-      error: "Invalid authentication format",
+      error: "Authentication required",
     });
-  });
-
-  it("should validate siteAuth cookie hash when login is required", async () => {
-    // Set site config to require login
-    (loadSiteConfigSync as jest.Mock).mockReturnValue({
-      requireLogin: true,
-    });
-
-    // Set valid cookie format but hash won't match
-    req.cookies = { siteAuth: "token-value:12345678" };
-
-    // Make hash validation fail
-    (CryptoJS.SHA256 as jest.Mock).mockReturnValue({
-      toString: () => "wrong-hash",
-    });
-
-    await handler(req as NextApiRequest, res as NextApiResponse);
-
-    // Should fail with invalid authentication
-    expect(statusMock).toHaveBeenCalledWith(401);
-    expect(jsonMock).toHaveBeenCalledWith({ error: "Invalid authentication" });
-    expect(CryptoJS.SHA256).toHaveBeenCalledWith("token-value");
-  });
-
-  it("should validate siteAuth cookie timestamp when login is required", async () => {
-    // Set site config to require login
-    (loadSiteConfigSync as jest.Mock).mockReturnValue({
-      requireLogin: true,
-    });
-
-    // Set valid cookie format with matching hash
-    req.cookies = { siteAuth: "token-value:12345678" };
-
-    // Make hash validation pass but timestamp validation fail
-    (CryptoJS.SHA256 as jest.Mock).mockReturnValue({
-      toString: () => "hashed-secure-token",
-    });
-    (passwordUtils.isTokenValid as jest.Mock).mockReturnValue(false);
-
-    await handler(req as NextApiRequest, res as NextApiResponse);
-
-    // Should fail with expired authentication
-    expect(statusMock).toHaveBeenCalledWith(401);
-    expect(jsonMock).toHaveBeenCalledWith({ error: "Expired authentication" });
-    expect(passwordUtils.isTokenValid).toHaveBeenCalledWith("token-value:12345678");
-  });
-
-  it("should allow request with valid authentication when login is required", async () => {
-    // Set site config to require login
-    (loadSiteConfigSync as jest.Mock).mockReturnValue({
-      requireLogin: true,
-    });
-
-    // Set valid cookie format with matching hash
-    req.cookies = { siteAuth: "token-value:12345678" };
-
-    // Make both hash and timestamp validation pass
-    (CryptoJS.SHA256 as jest.Mock).mockReturnValue({
-      toString: () => "hashed-secure-token",
-    });
-    (passwordUtils.isTokenValid as jest.Mock).mockReturnValue(true);
-
-    await handler(req as NextApiRequest, res as NextApiResponse);
-
-    // Should succeed with 200 status
-    expect(statusMock).toHaveBeenCalledWith(200);
-    expect(CryptoJS.SHA256).toHaveBeenCalledWith("token-value");
-    expect(passwordUtils.isTokenValid).toHaveBeenCalledWith("token-value:12345678");
+    // Should not use legacy validation methods
+    expect(CryptoJS.SHA256).not.toHaveBeenCalled();
+    expect(passwordUtils.isTokenValid).not.toHaveBeenCalled();
   });
 
   it("should accept auth JWT cookie when login is required", async () => {
@@ -277,87 +212,66 @@ describe("/api/web-token", () => {
     expect(passwordUtils.isTokenValid).not.toHaveBeenCalled();
   });
 
-  it("should fail if SECURE_TOKEN_HASH is missing when login is required", async () => {
-    // Set site config to require login
-    (loadSiteConfigSync as jest.Mock).mockReturnValue({
-      requireLogin: true,
-    });
-
-    // Set valid cookie
-    req.cookies = { siteAuth: "token-value:12345678" };
-
-    // Delete SECURE_TOKEN_HASH
-    delete process.env.SECURE_TOKEN_HASH;
-
-    await handler(req as NextApiRequest, res as NextApiResponse);
-
-    // Should fail with server configuration error
-    expect(statusMock).toHaveBeenCalledWith(500);
-    expect(jsonMock).toHaveBeenCalledWith({
-      error: "Server configuration error",
-    });
-  });
-
   // Tests for public JWT-only endpoints
 
-  it("should issue token for contact form requests without siteAuth cookie", async () => {
+  it("should issue token for contact form requests without auth cookie", async () => {
     // Set site config to require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: true,
     });
 
     // Setup request from contact form
-    req.cookies = {}; // No siteAuth cookie
+    req.cookies = {}; // No auth cookie
     req.headers = {
       referer: "https://example.com/contact",
     };
 
     await handler(req as NextApiRequest, res as NextApiResponse);
 
-    // Should succeed despite missing siteAuth cookie because it's from contact page
+    // Should succeed despite missing auth cookie because it's from contact page
     expect(statusMock).toHaveBeenCalledWith(200);
     expect(jsonMock).toHaveBeenCalledWith({ token: "test-jwt-token" });
     expect(jwt.sign).toHaveBeenCalled();
   });
 
-  it("should issue token for public answers page without siteAuth cookie", async () => {
+  it("should issue token for public answers page without auth cookie", async () => {
     // Set site config to require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: true,
     });
 
     // Setup request from public answers page
-    req.cookies = {}; // No siteAuth cookie
+    req.cookies = {}; // No auth cookie
     req.headers = {
       referer: "https://example.com/answers/abc123",
     };
 
     await handler(req as NextApiRequest, res as NextApiResponse);
 
-    // Should succeed despite missing siteAuth cookie because it's from public answers page
+    // Should succeed despite missing auth cookie because it's from public answers page
     expect(statusMock).toHaveBeenCalledWith(200);
     expect(jsonMock).toHaveBeenCalledWith({ token: "test-jwt-token" });
     expect(jwt.sign).toHaveBeenCalled();
   });
 
-  it("should still require siteAuth cookie for regular protected pages", async () => {
+  it("should still require JWT auth cookie for regular protected pages", async () => {
     // Set site config to require login
     (loadSiteConfigSync as jest.Mock).mockReturnValue({
       requireLogin: true,
     });
 
     // Setup request from a protected page
-    req.cookies = {}; // No siteAuth cookie
+    req.cookies = {}; // No auth cookie
     req.headers = {
       referer: "https://example.com/protected-page",
     };
 
     await handler(req as NextApiRequest, res as NextApiResponse);
 
-    // Should fail because it's missing siteAuth cookie and not from a public JWT-only endpoint
+    // Should fail because it's missing auth cookie and not from a public JWT-only endpoint
     expect(statusMock).toHaveBeenCalledWith(401);
     expect(jsonMock).toHaveBeenCalledWith({
-      error: "Authentication required (2)",
+      error: "Authentication required",
     });
     expect(jwt.sign).not.toHaveBeenCalled();
   });

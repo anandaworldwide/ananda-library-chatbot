@@ -12,7 +12,7 @@
  * - Only accessible via GET for simplicity
  * - Server-side environment variables are never exposed to the client
  * - Error messages are generic to avoid leaking implementation details
- * - Requires a valid siteAuth cookie for authentication when site config requires login
+ * - Requires a valid JWT auth cookie for authentication when site config requires login
  *   EXCEPT for certain public endpoints (contact form) that need JWT auth
  *   but don't require user login
  */
@@ -20,9 +20,7 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import jwt from "jsonwebtoken";
-import { isTokenValid } from "@/utils/server/passwordUtils";
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
-import CryptoJS from "crypto-js";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { verifyToken } from "@/utils/server/jwtUtils";
 
@@ -70,9 +68,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // Either check authentication if login is required, or skip if it's a public JWT path
     if (loginRequired && !isPublicJwtPath) {
-      // Check for new JWT auth cookie first, then fall back to legacy siteAuth
+      // Only accept JWT auth cookies when requireLogin is true - no legacy siteAuth fallback
       const authJwt = req.cookies["auth"];
-      const siteAuth = req.cookies["siteAuth"];
 
       if (authJwt) {
         // Verify the JWT token
@@ -91,42 +88,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           console.log("[401] Invalid JWT auth cookie:", jwtError);
           return res.status(401).json({ error: "Invalid authentication" });
         }
-      } else if (siteAuth) {
-        // Fall back to legacy siteAuth validation
-        // Cryptographically verify the token using the same method as middleware.ts
-        const storedHashedToken = process.env.SECURE_TOKEN_HASH;
-        if (!storedHashedToken) {
-          console.error("Missing SECURE_TOKEN_HASH environment variable");
-          return res.status(500).json({ error: "Server configuration error" });
-        }
-
-        // Split token to get hash part and timestamp part
-        const tokenParts = siteAuth.split(":");
-        if (tokenParts.length !== 2) {
-          console.log('[401] Invalid token format - expected 2 parts separated by ":"');
-          return res.status(401).json({ error: "Invalid authentication format" });
-        }
-
-        const [tokenValue] = tokenParts;
-
-        // Verify token hash matches stored hash
-        const calculatedHash = CryptoJS.SHA256(tokenValue).toString();
-        if (calculatedHash !== storedHashedToken) {
-          console.log("[401] Token hash mismatch");
-          console.log(`Expected: ${storedHashedToken}`);
-          console.log(`Received: ${calculatedHash}`);
-          return res.status(401).json({ error: "Invalid authentication" });
-        }
-
-        // Validate the siteAuth cookie using passwordUtils (timestamp check)
-        if (!isTokenValid(siteAuth)) {
-          console.log("[401] Token timestamp validation failed");
-          console.log(`Token: ${siteAuth}`);
-          return res.status(401).json({ error: "Expired authentication" });
-        }
       } else {
-        console.log("[401] Missing authentication - no auth or siteAuth cookie");
-        return res.status(401).json({ error: "Authentication required (2)" });
+        console.log("[401] Missing authentication - no valid auth cookie found");
+        return res.status(401).json({ error: "Authentication required" });
       }
     }
 
