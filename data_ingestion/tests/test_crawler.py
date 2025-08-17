@@ -546,19 +546,19 @@ https://example.com/page2,2025-07-13 09:30:00,Test Page 2
                 "URL": "https://example.com/recent-page",
                 "Modified Date": recent_date.strftime("%m/%d/%y %H:%M"),
                 "Post Title": "Recent Post",
-                "Action": "Add/Update",
+                "Required Action": "Add/Update",
             },
             {
                 "URL": "https://example.com/old-page",
                 "Modified Date": old_date.strftime("%m/%d/%y %H:%M"),
                 "Post Title": "Old Post",
-                "Action": "Add/Update",
+                "Required Action": "Add/Update",
             },
             {
                 "URL": "https://external.com/page",  # External domain
                 "Modified Date": recent_date.strftime("%m/%d/%y %H:%M"),
                 "Post Title": "External Post",
-                "Action": "Add/Update",
+                "Required Action": "Add/Update",
             },
         ]
 
@@ -674,7 +674,7 @@ https://example.com/page2,2025-07-13 09:30:00,Test Page 2
                 "URL": "https://example.com/recent-page",
                 "Modified Date": recent_date.strftime("%Y-%m-%d %H:%M:%S"),
                 "Post Title": "Recent Post",
-                "Action": "Add/Update",
+                "Required Action": "Add/Update",
             }
         ]
 
@@ -2495,7 +2495,7 @@ class TestCSVRemoval:
         row = {
             "URL": "https://example.com/test",
             "Modified Date": "2025-01-13 12:00:00",
-            "Action": "Add/Update",
+            "Required Action": "Add/Update",
         }
 
         result = crawler._validate_csv_row(row)
@@ -2511,7 +2511,7 @@ class TestCSVRemoval:
         row = {
             "URL": "https://example.com/test",
             "Modified Date": "2025-01-13 12:00:00",
-            "Action": "remove",
+            "Required Action": "remove",
         }
 
         result = crawler._validate_csv_row(row)
@@ -2530,7 +2530,7 @@ class TestCSVRemoval:
             row = {
                 "URL": "https://example.com/test",
                 "Modified Date": "2025-01-13 12:00:00",
-                "Action": action_input,
+                "Required Action": action_input,
             }
 
             result = crawler._validate_csv_row(row)
@@ -2543,7 +2543,7 @@ class TestCSVRemoval:
         row = {
             "URL": "https://example.com/test",
             "Modified Date": "2025-01-13 12:00:00",
-            "Action": "invalid",
+            "Required Action": "invalid",
         }
 
         result = crawler._validate_csv_row(row)
@@ -2552,11 +2552,11 @@ class TestCSVRemoval:
     def test_validate_csv_row_missing_fields(self, crawler):
         """Test CSV validation with missing required fields."""
         # Missing URL
-        row1 = {"Modified Date": "2025-01-13 12:00:00", "Action": "remove"}
+        row1 = {"Modified Date": "2025-01-13 12:00:00", "Required Action": "remove"}
         assert crawler._validate_csv_row(row1) is None
 
         # Missing Modified Date
-        row2 = {"URL": "https://example.com/test", "Action": "remove"}
+        row2 = {"URL": "https://example.com/test", "Required Action": "remove"}
         assert crawler._validate_csv_row(row2) is None
 
         # Missing Action

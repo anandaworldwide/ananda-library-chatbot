@@ -229,6 +229,13 @@ class WebsiteCrawler:
             last_error TEXT
         )""")
 
+        # Create removal log table to track processed removals and prevent redundant work
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS removal_log (
+            url TEXT PRIMARY KEY,
+            removed_at TEXT NOT NULL
+        )""")
+
         self.conn.commit()
 
     @property
@@ -1626,6 +1633,19 @@ class WebsiteCrawler:
 
             if action == "remove":
                 # Handle removal action
+                normalized_url = self.normalize_url(full_url)
+
+                # Check if we've already processed this removal
+                self.cursor.execute(
+                    "SELECT 1 FROM removal_log WHERE url = ?", (normalized_url,)
+                )
+                if self.cursor.fetchone():
+                    logging.debug(f"Removal already processed, skipping: {full_url}")
+                    stats["skipped_already_removed"] = (
+                        stats.get("skipped_already_removed", 0) + 1
+                    )
+                    return
+
                 logging.info(f"Processing removal for URL: {full_url}")
 
                 # Remove from Pinecone if index is provided
@@ -1648,7 +1668,6 @@ class WebsiteCrawler:
                     )
 
                 # Mark as deleted in database (ignore if URL doesn't exist)
-                normalized_url = self.normalize_url(full_url)
                 self.cursor.execute(
                     "SELECT url FROM crawl_queue WHERE url = ?", (normalized_url,)
                 )
@@ -1658,6 +1677,14 @@ class WebsiteCrawler:
                     logging.info(f"Marked URL as deleted in database: {full_url}")
                 else:
                     logging.info(f"URL not found in database (ignoring): {full_url}")
+
+                # Record this removal in the log to prevent reprocessing
+                self.cursor.execute(
+                    "INSERT OR REPLACE INTO removal_log (url, removed_at) VALUES (?, datetime('now'))",
+                    (normalized_url,),
+                )
+                self.conn.commit()
+                logging.debug(f"Recorded removal in log: {full_url}")
 
                 stats["removed"] = stats.get("removed", 0) + 1
                 return
@@ -1751,6 +1778,11 @@ class WebsiteCrawler:
         if stats["removed"] > 0:
             messages.append(
                 f"{stats['removed']} URLs removed from Pinecone and marked as deleted"
+            )
+
+        if stats.get("skipped_already_removed", 0) > 0:
+            messages.append(
+                f"{stats['skipped_already_removed']} URLs skipped (already removed previously)"
             )
 
         if stats["error"] > 0:
