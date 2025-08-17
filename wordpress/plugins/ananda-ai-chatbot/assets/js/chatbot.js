@@ -976,6 +976,7 @@ document.addEventListener("DOMContentLoaded", () => {
           privateSession: privateSession,
           mediaTypes: mediaTypes,
           sourceCount: sourceCount,
+          uuid: npsUserUuid, // Add UUID for backend validation
         }),
         signal: currentAbortController.signal,
       });
