@@ -380,7 +380,7 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   function trackSourceLinkClick(linkText, linkUrl, questionNumber) {
     sendGoogleAnalyticsEvent("chatbot_vivek_source_link_click", {
-      event_category: "chatbot_engagement",
+      event_category: "chatbot_view_sources",
       link_text: linkText.substring(0, 100), // First 100 chars for analysis
       link_url: linkUrl,
       question_number: questionNumber,
@@ -396,7 +396,7 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   function trackAskTheExpertsLinkClick(linkText, linkUrl, questionNumber) {
     sendGoogleAnalyticsEvent("chatbot_vivek_ask_experts_link_click", {
-      event_category: "chatbot_engagement",
+      event_category: "chatbot_ask_experts",
       link_text: linkText.substring(0, 100), // First 100 chars for analysis
       link_url: linkUrl,
       question_number: questionNumber,
