@@ -373,6 +373,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /**
+   * Track source link click
+   * @param {string} linkText - The text of the clicked link
+   * @param {string} linkUrl - The URL of the clicked link
+   * @param {number} questionNumber - The sequence number of the question in the session
+   */
+  function trackSourceLinkClick(linkText, linkUrl, questionNumber) {
+    sendGoogleAnalyticsEvent("chatbot_vivek_source_link_click", {
+      event_category: "chatbot_engagement",
+      link_text: linkText.substring(0, 100), // First 100 chars for analysis
+      link_url: linkUrl,
+      question_number: questionNumber,
+      session_questions_total: sessionQuestionCount,
+    });
+  }
+
+  /**
    * Track popup open via keyboard shortcut
    */
   function trackKeyboardShortcutOpen() {
@@ -449,6 +465,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (trigger) {
       e.preventDefault();
       showIntercom();
+    }
+  });
+
+  // Add click event delegation for source links
+  messages.addEventListener("click", (e) => {
+    const sourceLink = e.target.closest(".aichatbot-source-link");
+    if (sourceLink) {
+      const linkText = sourceLink.textContent;
+      const linkUrl = sourceLink.href;
+      
+      // Track the source link click
+      trackSourceLinkClick(linkText, linkUrl, sessionQuestionCount);
+      
+      // The link will open in a new tab due to target="_blank"
+      // No need to prevent default or handle navigation manually
     }
   });
 
@@ -746,7 +777,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
-                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<li>${listContent}</li>`;
             } else {
@@ -764,7 +795,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
-                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<p>${paragraph}</p>`;
             }
@@ -797,7 +828,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
-                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<li>${listContent}</li>`;
             } else {
@@ -815,7 +846,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
-                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<p>${paragraph}</p>`;
             }
@@ -844,7 +875,7 @@ document.addEventListener("DOMContentLoaded", () => {
             /\[(.*?)\]\(GETHUMAN\)/g,
             '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
           )
-          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')
+          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>')
           .replace(/\n/g, "<br />");
 
         html += `<p>${paragraph}</p>`;
