@@ -33,9 +33,10 @@ import { queryFetch } from "@/utils/client/reactQueryConfig";
 
 interface AllAnswersProps {
   siteConfig: SiteConfig | null;
+  authorizationError?: boolean;
 }
 
-const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
+const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
   const router = useRouter();
   const { isSudoUser, checkSudoStatus } = useSudo();
 
@@ -360,134 +361,160 @@ const AllAnswers = ({ siteConfig }: AllAnswersProps) => {
   return (
     <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
       <Layout siteConfig={siteConfig}>
-        {/* Sort controls */}
-        <div className="bg-white shadow">
+        {/* Authorization error display */}
+        {authorizationError && (
           <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center">
-                <span className="text-gray-700 mr-4">Sort by:</span>
-                <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                  <button
-                    onClick={() => handleSortChange("mostRecent")}
-                    disabled={isLoading || !isSortByInitialized}
-                    className={`px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      sortBy === "mostRecent"
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100"
-                    } disabled:cursor-not-allowed disabled:opacity-50`}
-                  >
-                    Most Recent
-                  </button>
-                  <button
-                    onClick={() => handleSortChange("mostPopular")}
-                    disabled={isLoading || !isSortByInitialized}
-                    className={`px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 border-l ${
-                      sortBy === "mostPopular"
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100"
-                    } disabled:cursor-not-allowed disabled:opacity-50`}
-                  >
-                    Most Popular
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
-          {/* Loading spinner */}
-          {(isLoading && !initialLoadComplete) || isChangingPage ? (
-            <div className="flex flex-col justify-center items-center h-screen">
-              <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
-              <p className="text-lg text-gray-600 mt-4">
-                {showExtendedLoadingMessage
-                  ? "Still loading... This is taking longer than expected."
-                  : showDelayedSpinner
-                    ? "Still loading..."
-                    : "Loading..."}
-              </p>
-              {showExtendedLoadingMessage && (
-                <p className="text-sm text-gray-500 mt-2 max-w-md text-center">
-                  We were unable to load the content. You can try refreshing the page if this continues.
+            <div className="flex flex-col justify-center items-center min-h-screen">
+              <div className="text-center">
+                <h1 className="text-6xl font-bold text-gray-400 mb-4">403</h1>
+                <h2 className="text-2xl font-semibold text-gray-800 mb-4">Access Restricted</h2>
+                <p className="text-gray-600 mb-8 max-w-md">
+                  You don't have permission to access this page. This page is restricted to authorized users only.
                 </p>
-              )}
-
-              {showExtendedLoadingMessage && (
                 <button
-                  onClick={() => window.location.reload()}
-                  className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  onClick={() => router.push("/")}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  Refresh Page
+                  Go to Chat
                 </button>
-              )}
-            </div>
-          ) : (
-            <div key={`${currentPage}-${sortBy}`}>
-              {/* Error state */}
-              {error && (
-                <div className="text-red-500 text-center my-6">
-                  {error instanceof Error ? error.message : "Error loading answers"}
-                </div>
-              )}
-
-              {/* List of answers */}
-              <div>
-                {answersData.map((answer) => (
-                  <AnswerItem
-                    key={answer.id}
-                    answer={answer}
-                    siteConfig={siteConfig}
-                    handleLikeCountChange={handleLikeCountChange}
-                    handleCopyLink={handleCopyLink}
-                    handleDelete={isSudoUser ? handleDelete : undefined}
-                    linkCopied={linkCopied}
-                    likeStatuses={likeStatuses}
-                    isSudoUser={isSudoUser}
-                    isFullPage={false}
-                    showRelatedQuestions={showRelatedQuestions}
-                  />
-                ))}
               </div>
+            </div>
+          </div>
+        )}
 
-              {/* Empty state */}
-              {answersData.length === 0 && !isLoading && !error && (
-                <div className="text-center py-8">
-                  <p>No answers found.</p>
+        {/* Main content - only show if no authorization error */}
+        {!authorizationError && (
+          <>
+            {/* Sort controls */}
+            <div className="bg-white shadow">
+              <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
+                <div className="flex items-center justify-between h-16">
+                  <div className="flex items-center">
+                    <span className="text-gray-700 mr-4">Sort by:</span>
+                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                      <button
+                        onClick={() => handleSortChange("mostRecent")}
+                        disabled={isLoading || !isSortByInitialized}
+                        className={`px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          sortBy === "mostRecent"
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100"
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                      >
+                        Most Recent
+                      </button>
+                      <button
+                        onClick={() => handleSortChange("mostPopular")}
+                        disabled={isLoading || !isSortByInitialized}
+                        className={`px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 border-l ${
+                          sortBy === "mostPopular"
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100"
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                      >
+                        Most Popular
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
+            </div>
+            <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
+              {/* Loading spinner */}
+              {(isLoading && !initialLoadComplete) || isChangingPage ? (
+                <div className="flex flex-col justify-center items-center h-screen">
+                  <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
+                  <p className="text-lg text-gray-600 mt-4">
+                    {showExtendedLoadingMessage
+                      ? "Still loading... This is taking longer than expected."
+                      : showDelayedSpinner
+                        ? "Still loading..."
+                        : "Loading..."}
+                  </p>
+                  {showExtendedLoadingMessage && (
+                    <p className="text-sm text-gray-500 mt-2 max-w-md text-center">
+                      We were unable to load the content. You can try refreshing the page if this continues.
+                    </p>
+                  )}
 
-              {/* Pagination controls */}
-              {answersData.length > 0 && (
-                <div className="flex justify-center mt-4">
-                  <button
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1 || isChangingPage}
-                    className="px-4 py-2 mr-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
-                  >
-                    Previous
-                  </button>
-                  <span className="px-4 py-2">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages || isChangingPage}
-                    className="px-4 py-2 ml-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
-                  >
-                    Next
-                  </button>
+                  {showExtendedLoadingMessage && (
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    >
+                      Refresh Page
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div key={`${currentPage}-${sortBy}`}>
+                  {/* Error state */}
+                  {error && (
+                    <div className="text-red-500 text-center my-6">
+                      {error instanceof Error ? error.message : "Error loading answers"}
+                    </div>
+                  )}
+
+                  {/* List of answers */}
+                  <div>
+                    {answersData.map((answer) => (
+                      <AnswerItem
+                        key={answer.id}
+                        answer={answer}
+                        siteConfig={siteConfig}
+                        handleLikeCountChange={handleLikeCountChange}
+                        handleCopyLink={handleCopyLink}
+                        handleDelete={isSudoUser ? handleDelete : undefined}
+                        linkCopied={linkCopied}
+                        likeStatuses={likeStatuses}
+                        isSudoUser={isSudoUser}
+                        isFullPage={false}
+                        showRelatedQuestions={showRelatedQuestions}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Empty state */}
+                  {answersData.length === 0 && !isLoading && !error && (
+                    <div className="text-center py-8">
+                      <p>No answers found.</p>
+                    </div>
+                  )}
+
+                  {/* Pagination controls */}
+                  {answersData.length > 0 && (
+                    <div className="flex justify-center mt-4">
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1 || isChangingPage}
+                        className="px-4 py-2 mr-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+                      >
+                        Previous
+                      </button>
+                      <span className="px-4 py-2">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages || isChangingPage}
+                        className="px-4 py-2 ml-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Error messages */}
-        {likeError && <div className="text-red-500 text-sm mt-2 text-center">{likeError}</div>}
-        {deleteMutation.isError && (
-          <div className="text-red-500 text-sm mt-2 text-center">
-            {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Failed to delete answer"}
-          </div>
+            {/* Error messages */}
+            {likeError && <div className="text-red-500 text-sm mt-2 text-center">{likeError}</div>}
+            {deleteMutation.isError && (
+              <div className="text-red-500 text-sm mt-2 text-center">
+                {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Failed to delete answer"}
+              </div>
+            )}
+          </>
         )}
       </Layout>
     </SudoProvider>
@@ -514,7 +541,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
     if (!sudoStatus.sudoCookieValue) {
       return {
-        notFound: true,
+        props: {
+          siteConfig,
+          authorizationError: true,
+        },
       };
     }
   }
