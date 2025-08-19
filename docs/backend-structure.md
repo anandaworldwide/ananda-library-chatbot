@@ -376,6 +376,40 @@ material) from search results based on site configuration.
   3. If admin, a separate "sudo mode" cookie is set (`sudoCookieUtils.ts`).
   4. Certain operations might check for this cookie to allow privileged actions.
 
+### Site-Specific Authentication Rules
+
+### Critical Rule: No Sudo on Login-Required Sites
+
+The authentication system behaves differently based on the site's `requireLogin` configuration:
+
+- **Login-Required Sites** (`siteConfig.requireLogin === true`):
+
+  - Examples: `ananda`, `jairam` sites
+  - **Admin Authorization**: Always uses JWT `role` field (`admin` or `superuser`)
+  - **No Sudo Cookie**: `sudoCookie` checks are completely bypassed
+  - **Implementation**: All admin pages and API endpoints use `isAdminPageAllowed()` and role-based checks
+  - **Client Components**: Avoid `SudoContext` - derive admin capability from JWT role
+
+- **No-Login Sites** (`siteConfig.requireLogin === false`):
+  - Examples: `ananda-public`, `crystal` sites
+  - **Admin Authorization**: Uses `sudoCookie` (legacy bless flow)
+  - **No JWT Roles**: No user authentication system, so role checks are not applicable
+  - **Implementation**: Admin access gated by `getSudoCookie()` validation
+
+**Enforcement Pattern:**
+
+```typescript
+// Correct pattern for admin gating
+if (siteConfig?.requireLogin) {
+  // Use JWT role-based authorization
+  const allowed = await isAdminPageAllowed(req, res, siteConfig);
+} else {
+  // Use sudo cookie for no-login sites
+  const sudo = getSudoCookie(req, res);
+  const allowed = !!sudo.sudoCookieValue;
+}
+```
+
 ---
 
 ## 5. Server-Side Logic

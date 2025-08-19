@@ -67,7 +67,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
   const [isVoteModalOpen, setIsVoteModalOpen] = useState(false);
   const [selectedWinner, setSelectedWinner] = useState<"A" | "B" | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
-  const [isSudoAdmin, setIsSudoAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showThankYouMessage, setShowThankYouMessage] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
   const [sourceCount, setSourceCount] = useState<number>(savedState.sourceCount);
@@ -152,21 +152,30 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
   }, [modelA, modelB, temperatureA, temperatureB, mediaTypes, collection, onStateChange, sourceCount]);
 
   useEffect(() => {
-    const checkSudoStatus = async () => {
+    const checkAdminStatus = async () => {
       try {
         if (siteConfig?.requireLogin) {
-          setIsSudoAdmin(false);
-          return;
+          // For login-required sites, check user role via profile endpoint
+          const response = await fetchWithAuth("/api/profile");
+          if (response.ok) {
+            const data = await response.json();
+            const role = data.role?.toLowerCase();
+            setIsAdmin(role === "admin" || role === "superuser");
+          } else {
+            setIsAdmin(false);
+          }
+        } else {
+          // For no-login sites, use sudo cookie
+          const response = await fetchWithAuth("/api/sudoCookie");
+          const data = await response.json();
+          setIsAdmin(data.sudoCookieValue);
         }
-        const response = await fetchWithAuth("/api/sudoCookie");
-        const data = await response.json();
-        setIsSudoAdmin(data.sudoCookieValue);
       } catch (error) {
-        console.error("Failed to check sudo status:", error);
-        setIsSudoAdmin(false);
+        console.error("Failed to check admin status:", error);
+        setIsAdmin(false);
       }
     };
-    checkSudoStatus();
+    checkAdminStatus();
   }, [siteConfig?.requireLogin]);
 
   useEffect(() => {
@@ -742,7 +751,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
       {voteError && (
         <div className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow">{voteError}</div>
       )}
-      {isSudoAdmin && (
+      {isAdmin && (
         <div className="mt-8 flex justify-center gap-4">
           <button onClick={handleExport} className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
             Export Data

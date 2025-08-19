@@ -254,4 +254,65 @@ describe("/api/admin/users/[userId] update user", () => {
     // Chats would be populated if the user had a UUID and chats existed
     expect(superResponse.user).toHaveProperty("chats");
   });
+
+  it("should update JWT cookie when admin changes their own email", async () => {
+    // Mock JWT token verification to return admin@example.com as the requester
+    const mockVerifyToken = jest.requireMock("@/utils/server/jwtUtils").verifyToken;
+    mockVerifyToken.mockReturnValue({
+      email: "admin@example.com",
+      role: "admin",
+      site: "test",
+      client: "web",
+    });
+
+    // Mock environment variables for JWT signing
+    process.env.SECURE_TOKEN = "test-jwt-secret";
+    process.env.SITE_ID = "test";
+
+    // Set up initial admin user document
+    const mockDb = jest.requireMock("@/services/firebase").db;
+    mockDb.__docMap["admin@example.com"] = {
+      email: "admin@example.com",
+      role: "admin",
+      uuid: "admin-uuid-123",
+      firstName: "Admin",
+      lastName: "User",
+    };
+
+    // Create request for admin changing their own email
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "PATCH",
+      query: { userId: "admin@example.com" },
+      body: { email: "newadmin@example.com" },
+      cookies: { auth: "mock-jwt-token" },
+      headers: { "x-forwarded-proto": "https" },
+    });
+
+    const handler = jest.requireActual("@/pages/api/admin/users/[userId]").default;
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+
+    // Verify the user document was moved to new email
+    expect(mockDb.__docMap["admin@example.com"]).toBeUndefined();
+    expect(mockDb.__docMap["newadmin@example.com"]).toBeDefined();
+    expect(mockDb.__docMap["newadmin@example.com"].email).toBe("newadmin@example.com");
+
+    // Verify JWT cookie was updated
+    const setCookieHeaders = res.getHeaders()["set-cookie"] as string[];
+    expect(setCookieHeaders).toBeDefined();
+    expect(setCookieHeaders.length).toBeGreaterThan(0);
+
+    const authCookie = setCookieHeaders.find((cookie) => cookie.startsWith("auth="));
+    expect(authCookie).toBeDefined();
+    expect(authCookie).toContain("HttpOnly");
+    expect(authCookie).toContain("Secure");
+    expect(authCookie).toContain("SameSite=Strict");
+
+    // Verify audit log was written
+    expect(writeAuditLogSpy).toHaveBeenCalledWith(expect.anything(), "admin_change_email", "admin@example.com", {
+      newEmail: "newadmin@example.com",
+      outcome: "success",
+    });
+  });
 });

@@ -85,7 +85,7 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
           <>
             <div className="space-y-6">
               {data.answers.map((answer: Answer) => (
-                <DownvotedAnswerReview key={answer.id} answer={answer} siteConfig={siteConfig} />
+                <DownvotedAnswerReview key={answer.id} answer={answer} siteConfig={siteConfig} isSudoAdmin={true} />
               ))}
             </div>
 

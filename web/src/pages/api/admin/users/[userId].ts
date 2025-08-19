@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import firebase from "firebase-admin";
+import jwt from "jsonwebtoken";
 import { db } from "@/services/firebase";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { withJwtAuth, getTokenFromRequest, verifyToken } from "@/utils/server/jwtUtils";
@@ -8,6 +9,7 @@ import { firestoreQueryGet } from "@/utils/server/firestoreRetryUtils";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
 import { writeAuditLog } from "@/utils/server/auditLog";
+import { isDevelopment } from "@/utils/env";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!db) return res.status(503).json({ error: "Database not available" });
@@ -235,6 +237,38 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         newEmail,
         outcome: "success",
       });
+
+      // Check if admin is changing their own email and update JWT cookie if so
+      try {
+        const cookieJwt = req.cookies?.["auth"];
+        if (cookieJwt) {
+          const payload: any = verifyToken(cookieJwt);
+          const requesterEmail = typeof payload?.email === "string" ? payload.email.toLowerCase() : null;
+
+          // If admin is changing their own email, update the JWT cookie
+          if (requesterEmail === currentId) {
+            const jwtSecret = process.env.SECURE_TOKEN;
+            if (jwtSecret) {
+              const newAuthPayload = {
+                client: "web",
+                email: newEmail,
+                role: payload.role || "user",
+                site: process.env.SITE_ID || "default",
+              };
+              const newAuthToken = jwt.sign(newAuthPayload, jwtSecret, { expiresIn: "180d" });
+
+              // Set the updated auth cookie
+              const isSecure = req.headers["x-forwarded-proto"] === "https" || !isDevelopment();
+              res.setHeader("Set-Cookie", [
+                `auth=${newAuthToken}; HttpOnly; ${isSecure ? "Secure; " : ""}SameSite=Strict; Path=/; Max-Age=${180 * 24 * 60 * 60}`,
+              ]);
+            }
+          }
+        }
+      } catch (cookieError) {
+        console.error("Failed to update auth cookie after admin email change:", cookieError);
+        // Don't fail the email change if cookie update fails - user can manually re-login
+      }
 
       const finalDoc = await (db as NonNullable<typeof db>).collection(usersCol).doc(newEmail).get();
       const out = finalDoc.data() || {};

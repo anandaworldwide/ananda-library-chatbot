@@ -1,41 +1,50 @@
 // This file handles API requests for retrieving model comparison vote data.
 // It returns paginated data of model comparison votes, primarily for admin dashboards.
 
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { db } from '@/services/firebase';
-import { withApiMiddleware } from '@/utils/server/apiMiddleware';
-import { withJwtAuth } from '@/utils/server/jwtUtils';
-import { isDevelopment } from '@/utils/env';
-import { getSudoCookie } from '@/utils/server/sudoCookieUtils';
-import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
+import type { NextApiRequest, NextApiResponse } from "next";
+import { db } from "@/services/firebase";
+import { withApiMiddleware } from "@/utils/server/apiMiddleware";
+import { withJwtAuth } from "@/utils/server/jwtUtils";
+import { isDevelopment } from "@/utils/env";
+import { getSudoCookie } from "@/utils/server/sudoCookieUtils";
+import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
+import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
+import { requireAdminRole } from "@/utils/server/authz";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Apply rate limiting
   const isAllowed = await genericRateLimiter(req, res, {
     windowMs: 5 * 60 * 1000, // 5 minutes
     max: 10, // 10 requests per 5 minutes
-    name: 'model-comparison-data-api',
+    name: "model-comparison-data-api",
   });
 
   if (!isAllowed) {
     return; // Response is already sent by the rate limiter
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Check sudo cookie authentication
-  const sudoStatus = getSudoCookie(req, res);
-  if (!sudoStatus.sudoCookieValue) {
-    return res
-      .status(403)
-      .json({ error: 'Unauthorized: Sudo access required' });
+  // Use role-based authorization for login sites, sudo for no-login sites
+  const siteConfig = loadSiteConfigSync();
+  const loginRequired = !!siteConfig?.requireLogin;
+
+  if (loginRequired) {
+    if (!requireAdminRole(req)) {
+      return res.status(403).json({ error: "Unauthorized: Admin access required" });
+    }
+  } else {
+    const sudoStatus = getSudoCookie(req, res);
+    if (!sudoStatus.sudoCookieValue) {
+      return res.status(403).json({ error: "Unauthorized: Sudo access required" });
+    }
   }
 
   // Check if db is available
   if (!db) {
-    return res.status(503).json({ error: 'Database not available' });
+    return res.status(503).json({ error: "Database not available" });
   }
 
   const page = parseInt(req.query.page as string) || 1;
@@ -43,7 +52,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const offset = (page - 1) * limit;
 
   try {
-    const prefix = isDevelopment() ? 'dev_' : 'prod_';
+    const prefix = isDevelopment() ? "dev_" : "prod_";
     const collectionRef = db.collection(`${prefix}model_comparison_votes`);
 
     // Get total count
@@ -51,11 +60,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const total = snapshot.data().count;
 
     // Get paginated data
-    const querySnapshot = await collectionRef
-      .orderBy('timestamp', 'desc')
-      .offset(offset)
-      .limit(limit)
-      .get();
+    const querySnapshot = await collectionRef.orderBy("timestamp", "desc").offset(offset).limit(limit).get();
 
     const comparisons = querySnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -70,8 +75,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       limit,
     });
   } catch (error) {
-    console.error('Error fetching model comparisons:', error);
-    res.status(500).json({ error: 'Failed to fetch model comparisons' });
+    console.error("Error fetching model comparisons:", error);
+    res.status(500).json({ error: "Failed to fetch model comparisons" });
   }
 }
 

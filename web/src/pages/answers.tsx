@@ -39,6 +39,7 @@ interface AllAnswersProps {
 const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
   const router = useRouter();
   const { isSudoUser, checkSudoStatus } = useSudo();
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Parse query parameters
   const urlPage = router.query.page ? Number(router.query.page) : 1;
@@ -62,6 +63,31 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
   // State for delayed spinner
   const [showDelayedSpinner, setShowDelayedSpinner] = useState(false);
   const [showExtendedLoadingMessage, setShowExtendedLoadingMessage] = useState(false);
+
+  // Check admin status for login-required sites
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (siteConfig?.requireLogin) {
+        try {
+          const response = await queryFetch("/api/profile");
+          if (response.ok) {
+            const data = await response.json();
+            const role = data.role?.toLowerCase();
+            setIsAdmin(role === "admin" || role === "superuser");
+          } else {
+            setIsAdmin(false);
+          }
+        } catch (error) {
+          console.error("Failed to check admin status:", error);
+          setIsAdmin(false);
+        }
+      } else {
+        // For no-login sites, use sudo status
+        setIsAdmin(isSudoUser);
+      }
+    };
+    checkAdminStatus();
+  }, [siteConfig?.requireLogin, isSudoUser]);
 
   // Use React Query for data fetching with JWT authentication
   const { data, isLoading, error } = useAnswers(currentPage, sortBy, {
@@ -464,10 +490,10 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
                         siteConfig={siteConfig}
                         handleLikeCountChange={handleLikeCountChange}
                         handleCopyLink={handleCopyLink}
-                        handleDelete={isSudoUser ? handleDelete : undefined}
+                        handleDelete={isAdmin ? handleDelete : undefined}
                         linkCopied={linkCopied}
                         likeStatuses={likeStatuses}
-                        isSudoUser={isSudoUser}
+                        isSudoUser={isAdmin}
                         isFullPage={false}
                         showRelatedQuestions={showRelatedQuestions}
                       />

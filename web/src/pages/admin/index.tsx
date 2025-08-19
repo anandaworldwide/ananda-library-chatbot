@@ -15,7 +15,7 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDashboardProps) {
-  const [message, setMessage] = useState<string | null>(null);
+  const [message] = useState<string | null>(null);
 
   if (!isSudoAdmin) {
     return (
@@ -62,61 +62,8 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
             </Link>
           </div>
         </section>
-
-        {loginRequired ? (
-          <section className="rounded border p-4">
-            <h2 className="text-lg font-semibold mb-2">Bind UUID to Account</h2>
-            <p className="text-sm text-gray-600 mb-2">
-              Binds this browser's uuid cookie to the specified user email. Sudo only.
-            </p>
-            <BindUuidForm onResult={(t) => setMessage(t)} />
-          </section>
-        ) : null}
       </div>
     </Layout>
-  );
-}
-
-function BindUuidForm({ onResult }: { onResult: (msg: string) => void }) {
-  const [email, setEmail] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  return (
-    <form
-      onSubmit={async (e) => {
-        e.preventDefault();
-        onResult("");
-        setBusy(true);
-        try {
-          const res = await fetch("/api/admin/bindUuid", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ email }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || "Failed to bind uuid");
-          onResult(`UUID bound: ${data.uuid}`);
-          setEmail("");
-        } catch (e: any) {
-          onResult(e?.message || "Failed to bind uuid");
-        } finally {
-          setBusy(false);
-        }
-      }}
-      className="space-y-2"
-    >
-      <input
-        type="email"
-        className="w-full rounded border px-3 py-2"
-        placeholder="user@example.com"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-      />
-      <button type="submit" disabled={busy} className="rounded bg-gray-800 px-3 py-1 text-white disabled:opacity-50">
-        {busy ? "Binding…" : "Bind UUID"}
-      </button>
-    </form>
   );
 }
 

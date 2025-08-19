@@ -277,9 +277,14 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
 }
 
 export const getServerSideProps: GetServerSideProps = async () => {
-  const siteConfig = await loadSiteConfig();
-  if (!siteConfig?.requireLogin) {
+  try {
+    const siteConfig = await loadSiteConfig();
+    if (!siteConfig?.requireLogin) {
+      return { notFound: true };
+    }
+    return { props: { siteConfig } } as any;
+  } catch (error) {
+    console.error("Failed to load site config for settings page:", error);
     return { notFound: true };
   }
-  return { props: { siteConfig } } as any;
 };

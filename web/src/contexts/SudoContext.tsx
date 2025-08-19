@@ -23,7 +23,8 @@ export const SudoProvider: React.FC<{ children: React.ReactNode; disableChecks?:
         setErrorMessage(null);
         return;
       }
-      // Skip sudo checks on public auth pages to avoid noisy 401s
+
+      // Skip sudo checks on auth pages to avoid noisy 401s
       if (
         typeof window !== "undefined" &&
         (window.location.pathname === "/login" || window.location.pathname === "/magic-login")

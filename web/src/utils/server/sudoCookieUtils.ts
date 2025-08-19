@@ -5,6 +5,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { isDevelopment } from "@/utils/env";
 import validator from "validator";
 import { getClientIp } from "./ipUtils";
+import { loadSiteConfigSync } from "./loadSiteConfig";
 
 const secretKey = crypto
   .createHash("sha256")
@@ -71,6 +72,17 @@ async function setSudoCookie(req: NextApiRequest, res: NextApiResponse, password
 }
 
 function getSudoCookie(req: NextApiRequest, res?: NextApiResponse) {
+  // Log telemetry when sudo checks are used on login-required sites
+  try {
+    const siteConfig = loadSiteConfigSync();
+    if (siteConfig?.requireLogin) {
+      console.warn(`[TELEMETRY] Sudo check on login-required site: ${req.url} - should use role-based auth instead`);
+    }
+  } catch (error) {
+    // Don't fail the function if site config loading fails
+    console.error("Failed to load site config for telemetry:", error);
+  }
+
   const isSecure = req.headers["x-forwarded-proto"] === "https" || !isDevelopment();
 
   // For server-side rendering (SSR) context where we don't have access to Response object
