@@ -241,33 +241,53 @@ class DaemonManager:
         return True
 
     def start(self) -> bool:
-        """Start the daemon."""
+        """Start the daemon by loading it into launchd."""
         print(f"Starting crawler daemon '{self.service_name}'...")
 
+        # Check if already loaded
         returncode, stdout, stderr = self._run_command(
-            ["launchctl", "start", self.service_name]
+            ["launchctl", "list", self.service_name]
+        )
+
+        if returncode == 0:
+            print("⚠️  Service is already loaded and running")
+            return True
+
+        # Load the service (this starts it due to RunAtLoad=true)
+        returncode, stdout, stderr = self._run_command(
+            ["launchctl", "load", str(self.plist_file)]
         )
 
         if returncode != 0:
-            print(f"❌ Failed to start service: {stderr}")
+            print(f"❌ Failed to load service: {stderr}")
             return False
 
-        print("✅ Service start command sent")
+        print("✅ Service loaded and started successfully")
         return True
 
     def stop(self) -> bool:
-        """Stop the daemon."""
+        """Stop the daemon by unloading it from launchd."""
         print(f"Stopping crawler daemon '{self.service_name}'...")
 
+        # Check if the service is loaded
         returncode, stdout, stderr = self._run_command(
-            ["launchctl", "stop", self.service_name]
+            ["launchctl", "list", self.service_name]
         )
 
         if returncode != 0:
-            print(f"⚠️  Stop command failed: {stderr}")
-            # This might be normal if the service wasn't running
+            print("⚠️  Service is not currently loaded")
+            return True
 
-        print("✅ Service stop command sent")
+        # Unload the service (this stops it completely)
+        returncode, stdout, stderr = self._run_command(
+            ["launchctl", "unload", str(self.plist_file)]
+        )
+
+        if returncode != 0:
+            print(f"❌ Failed to unload service: {stderr}")
+            return False
+
+        print("✅ Service unloaded and stopped successfully")
         return True
 
     def restart(self) -> bool:

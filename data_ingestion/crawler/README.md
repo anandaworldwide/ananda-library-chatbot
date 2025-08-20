@@ -19,6 +19,7 @@ retrieval-augmented generation (RAG) systems.
 
 - **Database-Driven Queue**: SQLite-based crawl queue with retry logic and exponential backoff
 - **Health Check Server**: Flask-based monitoring endpoint with detailed statistics
+- **Email Alerts**: Automatic email notifications for critical issues (process down, wedged crawler, database errors)
 - **Daemon Support**: macOS LaunchAgent integration for automatic startup and restart
 - **Log Rotation**: Uses macOS newsyslog for automatic log management with compression
 - **Graceful Shutdown**: Proper signal handling and state preservation

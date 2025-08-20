@@ -158,6 +158,83 @@ The health server automatically:
 - Monitors the crawler database
 - Shows queue statistics and progress
 - Displays configuration settings
+- **Sends email alerts for critical issues** (requires configuration)
+
+## Email Notifications
+
+The health server can automatically send email alerts when crawler problems are detected. This helps ensure rapid
+response to issues even when not actively monitoring the dashboard.
+
+### Email Alert Configuration
+
+To enable email notifications, set the following environment variables in your `.env.{site}` file:
+
+```bash
+# Required: Semicolon-separated list of email addresses for ops alerts
+OPS_ALERT_EMAIL="ops@yourdomain.com;admin@yourdomain.com"
+
+# Required: AWS SES credentials for sending emails
+AWS_REGION="us-east-1"
+AWS_ACCESS_KEY_ID="your_aws_access_key"
+AWS_SECRET_ACCESS_KEY="your_aws_secret_key"
+
+# Optional: Email address to use as sender (defaults to noreply@ananda.org)
+CONTACT_EMAIL="crawler-alerts@yourdomain.com"
+
+# Required: Site identifier for email subject lines
+SITE_ID="ananda-public"
+```
+
+### Alert Types
+
+The health server sends email alerts for the following critical issues:
+
+1. **Crawler Process Down** - No crawler processes detected
+2. **Crawler Wedged** - No activity for more than 65 minutes (expected: hourly wake-ups)
+3. **Database Missing** - Database file not found
+4. **Database Errors** - Database connection or query failures
+
+### Alert Rate Limiting
+
+To prevent email spam, alerts are rate-limited:
+
+- **Same alert type**: Maximum once per hour (60 minutes cooldown)
+- **Multiple recipients**: All configured addresses receive each alert
+- **Test mode suppression**: No emails sent during testing/development
+
+### Email Format
+
+Alert emails include:
+
+- **Subject**: `[ENV-SITE] Alert Type` (e.g., `[PROD-ananda-public] Crawler Wedged`)
+- **Message**: Human-readable description of the issue
+- **Error Details**: Technical details, context, and troubleshooting info
+- **System Info**: Timestamp, environment, site ID, Python version
+
+### Testing Email Alerts
+
+Test your email configuration:
+
+```bash
+# Test the email system directly
+cd /path/to/ananda-library-chatbot
+python -c "
+import os
+os.environ['OPS_ALERT_EMAIL'] = 'your-email@domain.com'
+os.environ['AWS_REGION'] = 'us-east-1'
+# ... set other required env vars ...
+from pyutil.email_ops import send_ops_alert_sync
+result = send_ops_alert_sync('Test Alert', 'This is a test message')
+print('Email sent successfully!' if result else 'Email failed to send')
+"
+```
+
+Or use the test script:
+
+```bash
+cd pyutil
+python email_ops.py "Test message from crawler health system"
+```
 
 ## Troubleshooting
 

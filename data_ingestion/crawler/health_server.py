@@ -32,9 +32,56 @@ from typing import Any
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template_string
 
-# Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add parent directories to path for imports
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)  # data_ingestion
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)  # project root
 from crawler.website_crawler import load_config
+
+from pyutil.email_ops import (
+    send_crawler_process_down_alert,
+    send_crawler_wedged_alert,
+    send_database_error_alert,
+)
+
+
+def format_user_friendly_timestamp(iso_timestamp):
+    """Convert ISO timestamp to user-friendly format like 'August 20th, 2025 at 2:03 PM'."""
+    if not iso_timestamp:
+        return "Never"
+
+    try:
+        # Handle both full ISO format and truncated format
+        if isinstance(iso_timestamp, str):
+            # Remove microseconds if present and parse
+            if "." in iso_timestamp:
+                iso_timestamp = iso_timestamp.split(".")[0]
+            if "T" in iso_timestamp:
+                dt = datetime.fromisoformat(iso_timestamp.replace("T", " "))
+            else:
+                dt = datetime.fromisoformat(iso_timestamp)
+        elif isinstance(iso_timestamp, datetime):
+            dt = iso_timestamp
+        else:
+            return str(iso_timestamp)
+
+        # Format as "August 20th, 2025 at 2:03 PM"
+        day = dt.day
+        if 4 <= day <= 20 or 24 <= day <= 30:
+            suffix = "th"
+        else:
+            suffix = ["st", "nd", "rd"][day % 10 - 1]
+
+        formatted_date = dt.strftime(f"%B {day}{suffix}, %Y at %-I:%M %p")
+        return formatted_date
+
+    except (ValueError, AttributeError) as e:
+        logging.warning(f"Error formatting timestamp {iso_timestamp}: {e}")
+        return str(iso_timestamp)
+
 
 app = Flask(__name__)
 
@@ -42,6 +89,11 @@ app = Flask(__name__)
 SITE_ID = None
 SITE_CONFIG = None
 DB_FILE = None
+
+# Email alert rate limiting - prevent spam for recurring issues
+# Track when each type of alert was last sent to avoid flooding ops team
+LAST_ALERT_TIMES: dict[str, datetime] = {}
+ALERT_COOLDOWN_MINUTES = 60  # Don't send same alert type more than once per hour
 
 # HTML Dashboard Template
 DASHBOARD_TEMPLATE = """
@@ -424,7 +476,7 @@ DASHBOARD_TEMPLATE = """
                 Overall Status: <span id="status-text">{{ status.title() }}</span>
             </div>
             <div class="last-updated">
-                Last Updated: <span id="last-updated">{{ timestamp }}</span>
+                Last Updated: <span id="last-updated">{{ formatted_timestamp }}</span>
             </div>
         </div>
     </div>
@@ -527,7 +579,7 @@ DASHBOARD_TEMPLATE = """
                             {% if log_activity.last_activity %}
                             <li class="status-item">
                                 <span class="status-label">Last Activity</span>
-                                <span class="status-value" id="process-last-activity">{{ log_activity.last_activity[:19] }}</span>
+                                <span class="status-value" id="process-last-activity">{{ format_user_friendly_timestamp(log_activity.last_activity) }}</span>
                             </li>
                             <li class="status-item">
                                 <span class="status-label">Minutes Since Activity</span>
@@ -605,7 +657,7 @@ DASHBOARD_TEMPLATE = """
                     </li>
                     <li class="status-item">
                         <span class="status-label">Last Activity</span>
-                        <span class="status-value">{{ database.last_activity[:19] if database.last_activity else 'Never' }}</span>
+                        <span class="status-value">{{ format_user_friendly_timestamp(database.last_activity) }}</span>
                     </li>
                     <li class="status-item">
                         <span class="status-label">Database Status</span>
@@ -695,7 +747,33 @@ DASHBOARD_TEMPLATE = """
                 .then(data => {
                     // Update status indicators
                     document.getElementById('status-text').textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
-                    document.getElementById('last-updated').textContent = new Date(data.timestamp).toLocaleString();
+                    // Format timestamp in user-friendly way
+                    const date = new Date(data.timestamp);
+                    const options = { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric', 
+                        hour: 'numeric', 
+                        minute: '2-digit',
+                        hour12: true 
+                    };
+                    const formatter = new Intl.DateTimeFormat('en-US', options);
+                    const formattedDate = formatter.format(date).replace(/(\\d+),/, (match, day) => {
+                        const dayNum = parseInt(day);
+                        let suffix;
+                        if (dayNum >= 11 && dayNum <= 13) {
+                            suffix = 'th';
+                        } else {
+                            switch (dayNum % 10) {
+                                case 1: suffix = 'st'; break;
+                                case 2: suffix = 'nd'; break;
+                                case 3: suffix = 'rd'; break;
+                                default: suffix = 'th';
+                            }
+                        }
+                        return `${dayNum}${suffix},`;
+                    }).replace(' at ', ' at ');
+                    document.getElementById('last-updated').textContent = formattedDate;
                     
                     // Update queue metrics
                     document.getElementById('total-urls').textContent = data.database.total_urls;
@@ -718,7 +796,33 @@ DASHBOARD_TEMPLATE = """
                     if (data.log_activity) {
                         const processLastActivity = document.getElementById('process-last-activity');
                         if (processLastActivity && data.log_activity.last_activity) {
-                            processLastActivity.textContent = data.log_activity.last_activity.substring(0, 19);
+                            // Format the log activity timestamp
+                            const logDate = new Date(data.log_activity.last_activity);
+                            const logOptions = { 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric', 
+                                hour: 'numeric', 
+                                minute: '2-digit',
+                                hour12: true 
+                            };
+                            const logFormatter = new Intl.DateTimeFormat('en-US', logOptions);
+                            const formattedLogDate = logFormatter.format(logDate).replace(/(\\d+),/, (match, day) => {
+                                const dayNum = parseInt(day);
+                                let suffix;
+                                if (dayNum >= 11 && dayNum <= 13) {
+                                    suffix = 'th';
+                                } else {
+                                    switch (dayNum % 10) {
+                                        case 1: suffix = 'st'; break;
+                                        case 2: suffix = 'nd'; break;
+                                        case 3: suffix = 'rd'; break;
+                                        default: suffix = 'th';
+                                    }
+                                }
+                                return `${dayNum}${suffix},`;
+                            });
+                            processLastActivity.textContent = formattedLogDate;
                         }
                         
                         const processMinutesSince = document.getElementById('process-minutes-since');
@@ -1023,49 +1127,156 @@ def get_log_activity_status() -> dict[str, Any]:
         }
 
 
-def get_health_data():
-    """Get health data for both API and dashboard."""
-    timestamp = datetime.now().isoformat()
+def should_send_alert(alert_type: str) -> bool:
+    """
+    Check if we should send an alert of the given type based on rate limiting.
 
-    # Get database statistics
-    db_stats = get_database_stats()
+    Args:
+        alert_type: Type of alert (e.g., 'wedged', 'process_down', 'database_error')
 
-    # Get process information
-    process_info = get_crawler_process_info()
+    Returns:
+        bool: True if alert should be sent, False if in cooldown period
+    """
+    global LAST_ALERT_TIMES
 
-    # Get log activity status to detect wedged crawler
-    log_activity = get_log_activity_status()
+    now = datetime.now()
+    last_sent = LAST_ALERT_TIMES.get(alert_type)
 
-    # Determine overall health status
-    health_status = "healthy"
-    issues = []
+    if last_sent is None:
+        # Never sent this type of alert before
+        LAST_ALERT_TIMES[alert_type] = now
+        return True
 
+    # Check if enough time has passed since last alert
+    time_since_last = now - last_sent
+    if time_since_last.total_seconds() >= (ALERT_COOLDOWN_MINUTES * 60):
+        LAST_ALERT_TIMES[alert_type] = now
+        return True
+
+    # Still in cooldown period
+    minutes_left = ALERT_COOLDOWN_MINUTES - int(time_since_last.total_seconds() / 60)
+    logging.info(
+        f"Alert type '{alert_type}' is in cooldown for {minutes_left} more minutes"
+    )
+    return False
+
+
+def _check_database_health(db_stats, health_status, issues):
+    """Check database health and send alerts if needed."""
     if not db_stats.get("database_exists", False):
         health_status = "degraded"
         issues.append("Database file not found")
 
+        # Send email alert for database missing
+        if should_send_alert("database_missing"):
+            try:
+                send_database_error_alert(SITE_ID, "Database file not found")
+                logging.info("Sent email alert for missing database file")
+            except Exception as e:
+                logging.error(f"Failed to send database missing alert: {e}")
+
     if "error" in db_stats:
         health_status = "degraded"
-        issues.append(f"Database error: {db_stats['error']}")
+        error_msg = db_stats["error"]
+        issues.append(f"Database error: {error_msg}")
 
+        # Send email alert for database error
+        if should_send_alert("database_error"):
+            try:
+                send_database_error_alert(SITE_ID, error_msg)
+                logging.info(f"Sent email alert for database error: {error_msg}")
+            except Exception as e:
+                logging.error(f"Failed to send database error alert: {e}")
+
+    return health_status, issues
+
+
+def _check_process_health(process_info, health_status, issues):
+    """Check process health and send alerts if needed."""
     if not process_info.get("crawler_running"):
         health_status = "warning"
         issues.append("No crawler processes detected")
 
-    # NEW: Check if crawler is wedged based on log activity
-    if log_activity.get("is_wedged", False):
-        if health_status == "healthy":
-            health_status = "warning"
+        # Send email alert for process down
+        if should_send_alert("process_down"):
+            try:
+                send_crawler_process_down_alert(SITE_ID)
+                logging.info("Sent email alert for crawler process down")
+            except Exception as e:
+                logging.error(f"Failed to send process down alert: {e}")
 
-        if log_activity.get("error"):
-            issues.append(f"Log activity check failed: {log_activity['error']}")
-        elif log_activity.get("minutes_since_activity") is not None:
-            minutes = log_activity["minutes_since_activity"]
-            issues.append(
-                f"Crawler appears wedged - no activity for {minutes} minutes (expected: hourly wake-ups)"
-            )
-        else:
-            issues.append("Crawler appears wedged - no recent activity detected")
+    return health_status, issues
+
+
+def _check_log_activity_health(log_activity, health_status, issues):
+    """Check log activity health and send alerts if needed."""
+    if not log_activity.get("is_wedged", False):
+        return health_status, issues
+
+    if health_status == "healthy":
+        health_status = "warning"
+
+    if log_activity.get("error"):
+        issues.append(f"Log activity check failed: {log_activity['error']}")
+    elif log_activity.get("minutes_since_activity") is not None:
+        minutes = log_activity["minutes_since_activity"]
+        issues.append(
+            f"Crawler appears wedged - no activity for {minutes} minutes (expected: hourly wake-ups)"
+        )
+
+        # Send email alert for wedged crawler
+        if should_send_alert("wedged"):
+            try:
+                send_crawler_wedged_alert(SITE_ID, minutes)
+                logging.info(f"Sent email alert for wedged crawler ({minutes} minutes)")
+            except Exception as e:
+                logging.error(f"Failed to send wedged crawler alert: {e}")
+    else:
+        issues.append("Crawler appears wedged - no recent activity detected")
+
+        # Send email alert for wedged crawler (unknown duration)
+        if should_send_alert("wedged"):
+            try:
+                send_crawler_wedged_alert(
+                    SITE_ID, 999
+                )  # Use 999 to indicate unknown duration
+                logging.info("Sent email alert for wedged crawler (unknown duration)")
+            except Exception as e:
+                logging.error(f"Failed to send wedged crawler alert: {e}")
+
+    return health_status, issues
+
+
+def _build_configuration_data():
+    """Build configuration data for health response."""
+    if not SITE_CONFIG:
+        return {"error": "Configuration not loaded"}
+
+    return {
+        "domain": SITE_CONFIG.get("domain", "Unknown"),
+        "csv_mode_enabled": bool(SITE_CONFIG.get("csv_export_url")),
+        "crawl_frequency_days": SITE_CONFIG.get("crawl_frequency_days", "Unknown"),
+    }
+
+
+def get_health_data():
+    """Get health data for both API and dashboard."""
+    timestamp = datetime.now().isoformat()
+
+    # Get statistics and status information
+    db_stats = get_database_stats()
+    process_info = get_crawler_process_info()
+    log_activity = get_log_activity_status()
+
+    # Check health status and collect issues
+    health_status = "healthy"
+    issues = []
+
+    health_status, issues = _check_database_health(db_stats, health_status, issues)
+    health_status, issues = _check_process_health(process_info, health_status, issues)
+    health_status, issues = _check_log_activity_health(
+        log_activity, health_status, issues
+    )
 
     response = {
         "timestamp": timestamp,
@@ -1074,18 +1285,8 @@ def get_health_data():
         "issues": issues,
         "database": db_stats,
         "processes": process_info,
-        "log_activity": log_activity,  # NEW: Include log activity data
-        "configuration": {
-            "domain": SITE_CONFIG.get("domain") if SITE_CONFIG else "Unknown",
-            "csv_mode_enabled": bool(SITE_CONFIG.get("csv_export_url"))
-            if SITE_CONFIG
-            else False,
-            "crawl_frequency_days": SITE_CONFIG.get("crawl_frequency_days", "Unknown")
-            if SITE_CONFIG
-            else "Unknown",
-        }
-        if SITE_CONFIG
-        else {"error": "Configuration not loaded"},
+        "log_activity": log_activity,
+        "configuration": _build_configuration_data(),
     }
 
     return response, health_status
@@ -1126,12 +1327,14 @@ def dashboard_endpoint():
         DASHBOARD_TEMPLATE,
         site_id=SITE_ID,
         timestamp=response["timestamp"],
+        formatted_timestamp=format_user_friendly_timestamp(response["timestamp"]),
         status=health_status,
         issues=response["issues"],
         database=response["database"],
         processes=response["processes"],
         log_activity=response["log_activity"],
         config=response["configuration"],
+        format_user_friendly_timestamp=format_user_friendly_timestamp,
     )
 
 
