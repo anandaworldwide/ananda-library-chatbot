@@ -4,7 +4,7 @@ This directory contains automated CI/CD workflows for the Ananda Library Chatbot
 
 ## Workflows
 
-### `python-ci.yml` - Pull Request Validation
+### `monorepo-ci.yml` - Pull Request Validation
 
 **Triggers:**
 
@@ -25,7 +25,7 @@ This directory contains automated CI/CD workflows for the Ananda Library Chatbot
 
 **Status:** This workflow must pass before PRs can be merged.
 
-### `python-nightly.yml` - Comprehensive Testing
+### `monorepo-nightly.yml` - Comprehensive Testing
 
 **Triggers:**
 

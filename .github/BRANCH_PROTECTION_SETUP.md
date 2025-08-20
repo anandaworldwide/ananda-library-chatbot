@@ -86,7 +86,7 @@ If the required status checks don't appear in the dropdown:
 
 If workflows don't trigger on PRs:
 
-1. Check the `paths` configuration in `.github/workflows/python-ci.yml`
+1. Check the `paths` configuration in `.github/workflows/monorepo-ci.yml`
 2. Ensure the PR changes files that match the trigger paths
 3. Verify the workflow is enabled in the Actions tab
 

@@ -1,4 +1,4 @@
-name: Python Nightly Tests
+name: Monorepo Nightly Tests
 
 on:
   # Run every night at 2 AM UTC
@@ -10,7 +10,7 @@ on:
 
 jobs:
   nightly-tests:
-    name: Nightly Full Test Suite
+    name: Full Stack Validation
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +25,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
 
       - name: Cache pip dependencies
         uses: actions/cache@v4
@@ -47,7 +47,7 @@ jobs:
 
       - name: Full Validation Checklist
         run: |
-          echo "🌙 Running Nightly Full Validation..."
+          echo "🌙 Running Full Stack Validation..."
 
           echo "✅ Import sweep: Testing all top-level module imports"
           python bin/import_sweep.py || echo "⚠️  Some imports failed (expected in CI environment)"
@@ -73,7 +73,7 @@ jobs:
           SKIP_ENV_VALIDATION: true
           NODE_ENV: test
         run: |
-          echo "🌙 Running Node.js nightly validation..."
+          echo "🌙 Running Node.js stack validation..."
 
           echo "✅ Full test suite: Running all Jest tests"
           npm run test:all || echo "⚠️  Some tests failed"
@@ -97,6 +97,6 @@ jobs:
       - name: Notify on Failure
         if: failure()
         run: |
-          echo "❌ Nightly tests failed!"
+          echo "❌ Monorepo nightly validation failed!"
           echo "Check the logs above for details."
           echo "This may indicate dependency issues or breaking changes."

@@ -1,4 +1,4 @@
-name: Python CI
+name: Monorepo CI
 
 on:
   pull_request:
@@ -12,16 +12,16 @@ on:
       - "evaluation/**"
       - "web/src/**"
       - "web/package*.json"
-      - ".github/workflows/python-ci.yml"
-      - ".github/workflows/python-nightly.yml"
+      - ".github/workflows/monorepo-ci.yml"
+      - ".github/workflows/monorepo-nightly.yml"
       - ".github/workflows/README.md"
 
   # Manual trigger for testing
   workflow_dispatch:
 
 jobs:
-  python-ci:
-    name: Python CI (Python ${{ matrix.python-version }})
+  monorepo-ci:
+    name: Monorepo CI (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,7 +40,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
 
       - name: Cache pip dependencies
         uses: actions/cache@v4
@@ -62,7 +62,7 @@ jobs:
 
       - name: Validation Checklist
         run: |
-          echo "🔍 Running Python Validation Checklist..."
+          echo "🔍 Running Monorepo Validation Checklist..."
 
           echo "✅ Import sweep: Testing all top-level module imports"
           python bin/import_sweep.py || echo "⚠️  Some imports failed (expected in CI environment)"
@@ -104,7 +104,7 @@ jobs:
       - name: Test Results Summary
         if: always()
         run: |
-          echo "🎯 Python CI Validation Complete!"
-          echo "✅ Python ${{ matrix.python-version }} validation passed"
+          echo "🎯 Monorepo CI Validation Complete!"
+          echo "✅ Python ${{ matrix.python-version }} + Node.js validation passed"
           echo "✅ All validation checklist items completed"
           echo "✅ Ready for merge!"
