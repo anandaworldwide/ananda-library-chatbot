@@ -8,6 +8,8 @@ interface EmailTemplateOptions {
   loginImageUrl?: string | null;
   baseUrl?: string;
   siteId?: string;
+  actionUrl?: string; // The main URL for the action (e.g., login, activation)
+  actionText?: string; // The text for the action link (e.g., "Click here to sign in")
 }
 
 /**
@@ -35,11 +37,46 @@ export function generateEmailContent(options: EmailTemplateOptions): {
     loginImageUrl = `${baseUrl}/${siteConfig.loginImage}`;
   }
 
+  // Format message content for HTML and text versions
+  function formatMessageContent(
+    message: string,
+    actionUrl?: string,
+    actionText?: string
+  ): { html: string; text: string } {
+    if (actionUrl && actionText) {
+      // Replace the action text with a proper link in HTML
+      let htmlMessage = message.replace(
+        actionText,
+        `<a href="${actionUrl}" style="color: #3498db; text-decoration: none; font-weight: bold;">${actionText}</a>`
+      );
+
+      // Make the parenthetical URL smaller in HTML version
+      const urlPattern = new RegExp(`\\(Or click ${actionUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "g");
+      htmlMessage = htmlMessage.replace(
+        urlPattern,
+        `<span style="font-size: 12px; color: #666;">(Or click ${actionUrl})</span>`
+      );
+
+      // For text version, keep it as is (already formatted with raw URL)
+      return {
+        html: htmlMessage,
+        text: message,
+      };
+    }
+
+    return {
+      html: message,
+      text: message,
+    };
+  }
+
+  const messageContent = formatMessageContent(options.message, options.actionUrl, options.actionText);
+
   // Generate plain text version
   const textContent = [
     emailGreeting,
     "",
-    options.message,
+    messageContent.text,
     "",
     `-- ${signature}`,
     loginImageUrl ? `\nView online: ${baseUrl}` : "",
@@ -116,7 +153,7 @@ export function generateEmailContent(options: EmailTemplateOptions): {
   <div class="email-container">
     <div class="greeting">${emailGreeting}</div>
     
-    <div class="message">${options.message}</div>
+    <div class="message">${messageContent.html}</div>
     
     <div class="signature">-- ${signature}</div>
     

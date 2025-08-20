@@ -46,7 +46,9 @@ export async function sendEmailChangeVerificationEmail(newEmail: string, token: 
 
   const message = `You requested to change your email address from ${currentEmail} to ${newEmail}.
 
-Click to verify your new email address: ${url}
+Click here to verify your new email address.
+
+(Or click ${url})
 
 This link expires in 24 hours.
 
@@ -56,6 +58,8 @@ If you didn't request this change, please ignore this email.`;
     message,
     baseUrl,
     siteId: process.env.SITE_ID,
+    actionUrl: url,
+    actionText: "Click here to verify your new email address.",
   });
 
   await ses.send(new SendEmailCommand(params));

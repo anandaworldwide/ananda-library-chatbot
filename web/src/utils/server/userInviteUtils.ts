@@ -32,7 +32,9 @@ export async function sendActivationEmail(email: string, token: string) {
   const siteConfig = loadSiteConfigSync();
   const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
-  const message = `Click to activate: ${url}
+  const message = `Click here to activate your account.
+
+(Or click ${url})
 
 This link expires in 14 days.`;
 
@@ -44,6 +46,8 @@ This link expires in 14 days.`;
       message,
       baseUrl,
       siteId: process.env.SITE_ID,
+      actionUrl: url,
+      actionText: "Click here to activate your account.",
     }
   );
 

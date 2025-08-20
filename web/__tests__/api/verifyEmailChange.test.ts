@@ -4,7 +4,6 @@ import handler from "@/pages/api/verifyEmailChange";
 import { db } from "@/services/firebase";
 import { writeAuditLog } from "@/utils/server/auditLog";
 import { sendEmailChangeConfirmationEmails } from "@/utils/server/userEmailChangeUtils";
-import { firestoreSet } from "@/utils/server/firestoreRetryUtils";
 import bcrypt from "bcryptjs";
 
 // Mock dependencies
@@ -30,10 +29,6 @@ jest.mock("@/utils/server/apiMiddleware", () => ({
 }));
 jest.mock("@/utils/server/auditLog");
 jest.mock("@/utils/server/userEmailChangeUtils");
-jest.mock("@/utils/server/firestoreRetryUtils", () => ({
-  firestoreGet: jest.fn(),
-  firestoreSet: jest.fn(),
-}));
 jest.mock("bcryptjs");
 
 const mockDb = db as any;

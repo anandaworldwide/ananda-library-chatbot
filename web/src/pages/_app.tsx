@@ -87,15 +87,21 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
           return;
         }
 
-        // Show session expired modal instead of toast for better UX
-        setSessionExpired(true);
-
-        // Still show toast for immediate feedback
-        toast.warning("Authentication issue detected. Please restore your session.", {
-          position: "top-center",
-          autoClose: 3000,
-          hideProgressBar: false,
-        });
+        // Auto-restore session silently (no toasts - auth should be invisible)
+        // Attempt automatic session restoration silently
+        initializeTokenManager()
+          .then(() => {
+            // Session restored successfully - no user notification needed
+          })
+          .catch((error) => {
+            console.error("Auto-restore failed:", error);
+            // Only show modal if auto-restore fails
+            setSessionExpired(true);
+            toast.error("Could not restore session. Please try manually.", {
+              position: "top-center",
+              autoClose: 5000,
+            });
+          });
       }
     };
 

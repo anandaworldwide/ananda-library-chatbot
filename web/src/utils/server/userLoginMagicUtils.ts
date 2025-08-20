@@ -33,7 +33,9 @@ export async function sendLoginEmail(email: string, token: string, redirect?: st
   const siteConfig = loadSiteConfigSync();
   const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
-  const message = `Click to sign in: ${url}
+  const message = `Click here to sign in.
+
+(Or click ${url})
 
 This link expires in one hour.`;
 
@@ -41,6 +43,8 @@ This link expires in one hour.`;
     message,
     baseUrl,
     siteId: process.env.SITE_ID,
+    actionUrl: url,
+    actionText: "Click here to sign in.",
   });
 
   await ses.send(new SendEmailCommand(params));

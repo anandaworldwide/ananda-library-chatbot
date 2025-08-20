@@ -31,8 +31,9 @@ let tokenData: TokenData | null = null;
 // Dedupe concurrent token fetches across the app
 let inflightFetchPromise: Promise<string> | null = null;
 
-// Time buffer before expiration to refresh token (30 seconds)
-const EXPIRATION_BUFFER = 30 * 1000;
+// Time buffer before expiration to refresh token (5 seconds)
+// Reduced from 30s to 5s to prevent false session expiration warnings
+const EXPIRATION_BUFFER = 5 * 1000;
 
 // Maximum number of retry attempts
 const MAX_RETRY_ATTEMPTS = 3;
@@ -85,9 +86,11 @@ async function fetchNewToken(): Promise<string> {
 
     if (!response.ok) {
       // On login or magic-login pages, a 401 is expected - don't treat it as an error
+      // BUT: After magic login succeeds, we should have valid cookies, so don't use placeholder
       if (
         response.status === 401 &&
-        (window.location.pathname === "/login" || window.location.pathname === "/magic-login")
+        (window.location.pathname === "/login" ||
+          (window.location.pathname === "/magic-login" && !document.cookie.includes("isLoggedIn=true")))
       ) {
         console.log("No authentication on login page - this is expected");
         // Return an empty placeholder token for the login page
@@ -125,7 +128,11 @@ async function fetchNewToken(): Promise<string> {
     return token;
   } catch (error) {
     // Special handling for the login or magic-login pages - don't throw errors
-    if (window.location.pathname === "/login" || window.location.pathname === "/magic-login") {
+    // BUT: After magic login succeeds, we should have valid cookies, so don't use placeholder
+    if (
+      window.location.pathname === "/login" ||
+      (window.location.pathname === "/magic-login" && !document.cookie.includes("isLoggedIn=true"))
+    ) {
       console.log("Token fetch failed on login page, using placeholder token");
       const placeholderToken = "login-page-placeholder";
       tokenData = {

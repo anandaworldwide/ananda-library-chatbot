@@ -8,8 +8,8 @@
  * - Configures default query settings
  */
 
-import { QueryClient } from '@tanstack/react-query';
-import { withAuth, initializeTokenManager } from './tokenManager';
+import { QueryClient } from "@tanstack/react-query";
+import { withAuth, initializeTokenManager } from "./tokenManager";
 
 // Track if initialization has been attempted
 let hasInitialized = false;
@@ -33,49 +33,59 @@ declare global {
  * @param options - Fetch options
  * @returns Promise with fetch response
  */
-export async function queryFetch(
-  url: string,
-  options: RequestInit = {},
-): Promise<Response> {
+export async function queryFetch(url: string, options: RequestInit = {}): Promise<Response> {
   // Ensure token manager is initialized before making requests
   if (!hasInitialized) {
     try {
       await initializeTokenManager();
       hasInitialized = true;
     } catch (error) {
-      console.warn(
-        'Failed to initialize token manager, proceeding anyway:',
-        error,
-      );
+      console.warn("Failed to initialize token manager, proceeding anyway:", error);
       // We continue even if initialization fails, as withAuth will retry
     }
   }
 
   const authOptions = await withAuth(options);
-  const response = await fetch(url, authOptions);
+  let response = await fetch(url, authOptions);
+
+  // Silent retry logic for 401 errors (especially for like API race conditions)
+  if (response.status === 401 && url.includes("/api/like")) {
+    try {
+      // Force token refresh and retry once
+      await initializeTokenManager();
+      const retryAuthOptions = await withAuth(options);
+      const retryResponse = await fetch(url, retryAuthOptions);
+
+      if (retryResponse.ok) {
+        return retryResponse;
+      } else {
+        response = retryResponse; // Use retry response for error handling below
+      }
+    } catch (retryError) {
+      // Continue with original response for error handling
+    }
+  }
 
   // If the response is not ok, emit a custom event for global error handling
   if (!response.ok) {
     // Create a custom event with the response details
-    const errorEvent = new CustomEvent('fetchError', {
+    const errorEvent = new CustomEvent("fetchError", {
       detail: {
         url,
         status: response.status,
         statusText: response.statusText,
-        method: options.method || 'GET',
+        method: options.method || "GET",
       },
     });
 
     // Dispatch the event
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       window.dispatchEvent(errorEvent);
     }
 
     // Log the error in development
-    if (process.env.NODE_ENV === 'development') {
-      console.error(
-        `API Error: ${response.status} ${response.statusText} for ${url}`,
-      );
+    if (process.env.NODE_ENV === "development") {
+      console.error(`API Error: ${response.status} ${response.statusText} for ${url}`);
     }
   }
 
@@ -100,7 +110,7 @@ export function createQueryClient(): QueryClient {
         refetchOnWindowFocus: false,
         retry: (failureCount: number, error: unknown) => {
           // Don't retry if status code is 4xx other than 401
-          if (error instanceof Error && 'status' in error) {
+          if (error instanceof Error && "status" in error) {
             const status = (error as ErrorWithStatus).status;
             if (status && status >= 400 && status < 500 && status !== 401) {
               return false;
@@ -112,11 +122,7 @@ export function createQueryClient(): QueryClient {
         // Custom retry delay for auth failures
         retryDelay: (attemptIndex: number, error: unknown) => {
           // For auth failures, try immediately after token refresh
-          if (
-            error instanceof Error &&
-            'status' in error &&
-            (error as ErrorWithStatus).status === 401
-          ) {
+          if (error instanceof Error && "status" in error && (error as ErrorWithStatus).status === 401) {
             return 0;
           }
           // For other errors, use exponential backoff
@@ -127,11 +133,7 @@ export function createQueryClient(): QueryClient {
         // Don't retry mutations by default except for auth failures
         retry: (failureCount: number, error: unknown) => {
           // Only retry once on auth failure
-          if (
-            error instanceof Error &&
-            'status' in error &&
-            (error as ErrorWithStatus).status === 401
-          ) {
+          if (error instanceof Error && "status" in error && (error as ErrorWithStatus).status === 401) {
             return failureCount < 1;
           }
           return false;
@@ -150,11 +152,8 @@ export const queryClient = createQueryClient();
  * Custom query key factory to ensure consistent keys
  */
 export const queryKeys = {
-  answers: (page?: number, sortBy?: string) => ['answers', page, sortBy],
-  relatedQuestions: (docId: string) => ['relatedQuestions', docId],
-  downvotedAnswers: () => ['downvotedAnswers'],
-  modelComparison: (queryParams?: Record<string, any>) => [
-    'modelComparison',
-    queryParams,
-  ],
+  answers: (page?: number, sortBy?: string) => ["answers", page, sortBy],
+  relatedQuestions: (docId: string) => ["relatedQuestions", docId],
+  downvotedAnswers: () => ["downvotedAnswers"],
+  modelComparison: (queryParams?: Record<string, any>) => ["modelComparison", queryParams],
 };

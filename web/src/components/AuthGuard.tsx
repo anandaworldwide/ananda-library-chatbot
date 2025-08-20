@@ -2,6 +2,7 @@ import { useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/router";
 import { SiteConfig } from "@/types/siteConfig";
 import { isPublicPage } from "@/utils/client/authConfig";
+import { initializeTokenManager, isAuthenticated } from "@/utils/client/tokenManager";
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -15,7 +16,7 @@ interface AuthGuardProps {
 export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userAuthenticated, setUserAuthenticated] = useState(false);
   const [showLoading, setShowLoading] = useState(false);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
       // If page is public, no auth check needed
       if (isPagePublic) {
         clearTimeout(loadingTimer);
-        setIsAuthenticated(true);
+        setUserAuthenticated(true);
         setAuthChecked(true);
         return;
       }
@@ -40,25 +41,23 @@ export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
       // If site doesn't require login, allow access
       if (siteConfig && !siteConfig.requireLogin) {
         clearTimeout(loadingTimer);
-        setIsAuthenticated(true);
+        setUserAuthenticated(true);
         setAuthChecked(true);
         return;
       }
 
-      // For protected pages, check authentication by calling the web-token endpoint directly
+      // For protected pages, check authentication using token manager
       try {
-        const response = await fetch("/api/web-token", {
-          headers: {
-            Referer: window.location.href,
-          },
-        });
+        // Initialize token manager and check if user is authenticated
+        await initializeTokenManager();
+        const authenticated = isAuthenticated();
 
-        if (response.ok) {
+        if (authenticated) {
           // User is authenticated
           clearTimeout(loadingTimer);
-          setIsAuthenticated(true);
+          setUserAuthenticated(true);
           setAuthChecked(true);
-        } else if (response.status === 401) {
+        } else {
           // User is not authenticated - redirect to login immediately
           clearTimeout(loadingTimer);
           console.log("User not authenticated, redirecting to login");
@@ -71,20 +70,14 @@ export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
           router.replace(redirectUrl);
 
           // Keep showing loading state during redirect
-          setIsAuthenticated(false);
+          setUserAuthenticated(false);
           // Don't set authChecked to true - this prevents content flash
-        } else {
-          // Other error - treat as unauthenticated
-          clearTimeout(loadingTimer);
-          console.error("Authentication check failed:", response.status);
-          setIsAuthenticated(false);
-          setAuthChecked(true);
         }
       } catch (error) {
         // Network error - treat as unauthenticated
         clearTimeout(loadingTimer);
         console.error("Authentication check error:", error);
-        setIsAuthenticated(false);
+        setUserAuthenticated(false);
         setAuthChecked(true);
       }
     };
@@ -113,7 +106,7 @@ export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
   }
 
   // Only render children if authenticated
-  if (!isAuthenticated) {
+  if (!userAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">

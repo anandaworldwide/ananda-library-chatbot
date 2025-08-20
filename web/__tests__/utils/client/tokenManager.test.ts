@@ -247,8 +247,8 @@ describe("Token Manager", () => {
     });
 
     it("should fetch new token if current one is near expiration", async () => {
-      // Create token that expires in 20 seconds (within buffer)
-      const expiredToken = createJwtToken(20);
+      // Create token that expires in 3 seconds (within 5-second buffer)
+      const expiredToken = createJwtToken(3);
       const newToken = createJwtToken(900);
 
       fetchMock

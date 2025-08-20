@@ -8,6 +8,7 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import { useRouter } from "next/router";
 import AuthGuard from "@/components/AuthGuard";
 import { isPublicPage } from "@/utils/client/authConfig";
+import { initializeTokenManager, isAuthenticated } from "@/utils/client/tokenManager";
 
 // Mock dependencies
 jest.mock("next/router", () => ({
@@ -16,6 +17,11 @@ jest.mock("next/router", () => ({
 
 jest.mock("@/utils/client/authConfig", () => ({
   isPublicPage: jest.fn(),
+}));
+
+jest.mock("@/utils/client/tokenManager", () => ({
+  initializeTokenManager: jest.fn(),
+  isAuthenticated: jest.fn(),
 }));
 
 // Mock fetch globally
@@ -88,6 +94,12 @@ describe("AuthGuard", () => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
     (isPublicPage as jest.Mock).mockReturnValue(false);
+
+    // Default to successful authentication
+    (initializeTokenManager as jest.Mock).mockResolvedValue(undefined);
+    (isAuthenticated as jest.Mock).mockReturnValue(true);
+
+    // Default to successful fetch response (for backwards compatibility)
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       status: 200,
@@ -100,12 +112,8 @@ describe("AuthGuard", () => {
     jest.useFakeTimers();
 
     // Mock fetch to never resolve (simulating slow auth)
-    let resolveAuth: (value: any) => void;
     (global.fetch as jest.Mock).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveAuth = resolve;
-        })
+      () => new Promise(() => {}) // Never resolves
     );
 
     render(
@@ -175,18 +183,13 @@ describe("AuthGuard", () => {
       expect(screen.getByText("Protected Content")).toBeInTheDocument();
     });
 
-    expect(global.fetch).toHaveBeenCalledWith("/api/web-token", {
-      headers: {
-        Referer: "http://localhost/",
-      },
-    });
+    expect(initializeTokenManager).toHaveBeenCalled();
+    expect(isAuthenticated).toHaveBeenCalled();
   });
 
   it("redirects to login when authentication fails with 401", async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: false,
-      status: 401,
-    });
+    // Mock authentication failure
+    (isAuthenticated as jest.Mock).mockReturnValue(false);
     mockRouter.asPath = "/protected-page?param=value";
 
     render(
