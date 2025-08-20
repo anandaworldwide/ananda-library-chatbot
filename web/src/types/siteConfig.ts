@@ -17,6 +17,7 @@ export interface SiteConfig {
   name: string;
   tagline: string;
   greeting: string;
+  emailGreeting?: string;
   parent_site_url: string;
   parent_site_name: string;
   help_url: string;

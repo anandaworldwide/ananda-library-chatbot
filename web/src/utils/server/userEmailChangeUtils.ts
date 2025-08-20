@@ -3,6 +3,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { loadSiteConfigSync } from "./loadSiteConfig";
+import { createEmailParams } from "./emailTemplates";
 
 const ses = new SESClient({
   region: process.env.AWS_REGION || "us-west-2",
@@ -43,22 +44,25 @@ export async function sendEmailChangeVerificationEmail(newEmail: string, token: 
   const siteConfig = loadSiteConfigSync();
   const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
-  const params = {
-    Source: contactEmail,
-    Destination: { ToAddresses: [newEmail] },
-    Message: {
-      Subject: { Data: `Verify your new email address for ${brand}` },
-      Body: {
-        Text: {
-          Data: `You requested to change your email address from ${currentEmail} to ${newEmail}.\n\nClick to verify your new email address: ${url}\n\nThis link expires in 24 hours.\n\nIf you didn't request this change, please ignore this email.`,
-        },
-      },
-    },
-  };
+  const message = `You requested to change your email address from ${currentEmail} to ${newEmail}.
+
+Click to verify your new email address: ${url}
+
+This link expires in 24 hours.
+
+If you didn't request this change, please ignore this email.`;
+
+  const params = createEmailParams(contactEmail, newEmail, `Verify your new email address for ${brand}`, {
+    message,
+    baseUrl,
+    siteId: process.env.SITE_ID,
+  });
+
   await ses.send(new SendEmailCommand(params));
 }
 
 export async function sendEmailChangeConfirmationEmails(oldEmail: string, newEmail: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const contactEmail = process.env.CONTACT_EMAIL;
 
   if (!contactEmail) {
@@ -70,32 +74,26 @@ export async function sendEmailChangeConfirmationEmails(oldEmail: string, newEma
   const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
   // Email to old address
-  const oldEmailParams = {
-    Source: contactEmail,
-    Destination: { ToAddresses: [oldEmail] },
-    Message: {
-      Subject: { Data: `Your ${brand} email address has been changed` },
-      Body: {
-        Text: {
-          Data: `Your email address has been successfully changed from ${oldEmail} to ${newEmail}.\n\nIf you didn't make this change, please contact support immediately.`,
-        },
-      },
-    },
-  };
+  const oldEmailMessage = `Your email address has been successfully changed from ${oldEmail} to ${newEmail}.
+
+If you didn't make this change, please contact support immediately.`;
+
+  const oldEmailParams = createEmailParams(contactEmail, oldEmail, `Your ${brand} email address has been changed`, {
+    message: oldEmailMessage,
+    baseUrl,
+    siteId: process.env.SITE_ID,
+  });
 
   // Email to new address
-  const newEmailParams = {
-    Source: contactEmail,
-    Destination: { ToAddresses: [newEmail] },
-    Message: {
-      Subject: { Data: `Email address updated for your ${brand} account` },
-      Body: {
-        Text: {
-          Data: `Your email address has been successfully changed to ${newEmail}.\n\nYou can now use this email address to sign in to your account.`,
-        },
-      },
-    },
-  };
+  const newEmailMessage = `Your email address has been successfully changed to ${newEmail}.
+
+You can now use this email address to sign in to your account.`;
+
+  const newEmailParams = createEmailParams(contactEmail, newEmail, `Email address updated for your ${brand} account`, {
+    message: newEmailMessage,
+    baseUrl,
+    siteId: process.env.SITE_ID,
+  });
 
   // Send both emails
   await Promise.all([ses.send(new SendEmailCommand(oldEmailParams)), ses.send(new SendEmailCommand(newEmailParams))]);

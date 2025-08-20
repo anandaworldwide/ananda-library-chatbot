@@ -3,6 +3,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { loadSiteConfigSync } from "./loadSiteConfig";
+import { createEmailParams } from "./emailTemplates";
 
 const ses = new SESClient({
   region: process.env.AWS_REGION || "us-west-2",
@@ -32,13 +33,15 @@ export async function sendLoginEmail(email: string, token: string, redirect?: st
   const siteConfig = loadSiteConfigSync();
   const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
-  const params = {
-    Source: process.env.CONTACT_EMAIL || "noreply@ananda.org",
-    Destination: { ToAddresses: [email] },
-    Message: {
-      Subject: { Data: `Sign in to ${brand}` },
-      Body: { Text: { Data: `Click to sign in: ${url}\nThis link expires in one hour.` } },
-    },
-  };
+  const message = `Click to sign in: ${url}
+
+This link expires in one hour.`;
+
+  const params = createEmailParams(process.env.CONTACT_EMAIL || "noreply@ananda.org", email, `Sign in to ${brand}`, {
+    message,
+    baseUrl,
+    siteId: process.env.SITE_ID,
+  });
+
   await ses.send(new SendEmailCommand(params));
 }

@@ -3,6 +3,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { loadSiteConfigSync } from "./loadSiteConfig";
+import { createEmailParams } from "./emailTemplates";
 
 const ses = new SESClient({
   region: process.env.AWS_REGION || "us-west-2",
@@ -31,13 +32,20 @@ export async function sendActivationEmail(email: string, token: string) {
   const siteConfig = loadSiteConfigSync();
   const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
-  const params = {
-    Source: process.env.CONTACT_EMAIL || "noreply@ananda.org",
-    Destination: { ToAddresses: [email] },
-    Message: {
-      Subject: { Data: `Activate your account with ${brand}` },
-      Body: { Text: { Data: `Click to activate: ${url}\nThis link expires in 14 days.` } },
-    },
-  };
+  const message = `Click to activate: ${url}
+
+This link expires in 14 days.`;
+
+  const params = createEmailParams(
+    process.env.CONTACT_EMAIL || "noreply@ananda.org",
+    email,
+    `Activate your account with ${brand}`,
+    {
+      message,
+      baseUrl,
+      siteId: process.env.SITE_ID,
+    }
+  );
+
   await ses.send(new SendEmailCommand(params));
 }
