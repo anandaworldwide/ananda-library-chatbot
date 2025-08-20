@@ -422,6 +422,70 @@ describe("/api/admin/digestSelfProvision", () => {
       expect(emailBody).toContain("Server errors: 0");
       expect(emailBody).toContain("ACTIVITY DETAILS:");
     });
+
+    it("formats status text using audit entry outcomes, not current user status", async () => {
+      const mockDocs = [
+        {
+          data: () => ({
+            details: { outcome: "created_pending_user" },
+            target: "user1@example.com",
+          }),
+        },
+        {
+          data: () => ({
+            details: { outcome: "resent_pending_activation" },
+            target: "user2@example.com",
+          }),
+        },
+        {
+          data: () => ({
+            details: { outcome: "invalid_password" },
+            target: "user3@example.com",
+          }),
+        },
+        {
+          data: () => ({
+            details: { outcome: "server_error" },
+            target: "user4@example.com",
+          }),
+        },
+      ];
+
+      const mockForEach = jest.fn((callback) => {
+        mockDocs.forEach(callback);
+      });
+
+      mockFirestoreGet.mockResolvedValue({
+        forEach: mockForEach,
+      });
+
+      const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+        method: "POST",
+        headers: {
+          "user-agent": "vercel-cron/1.0",
+          authorization: "Bearer test-cron-secret",
+        },
+      });
+
+      await handler(req, res);
+
+      const emailBody = (sendOpsAlert as jest.Mock).mock.calls[0][1];
+
+      // Verify that status text comes from audit entry outcomes, not current user status
+      expect(emailBody).toContain("Created (pending activation)");
+      expect(emailBody).toContain("Activation link resent");
+      expect(emailBody).toContain("Invalid shared password");
+      expect(emailBody).toContain("Server error occurred");
+
+      // Verify it does NOT contain "Activated" status (which would indicate bug)
+      expect(emailBody).not.toContain("Activated");
+
+      // Verify proper formatting with email prefixes as names
+      expect(emailBody).toContain("1. user1 (user1@example.com) - Created (pending activation)");
+      expect(emailBody).toContain("2. user2 (user2@example.com) - Activation link resent");
+      expect(emailBody).toContain("3. user3 (user3@example.com) - Invalid shared password");
+      expect(emailBody).toContain("4. user4 (user4@example.com) - Server error occurred");
+    });
   });
 
   describe("Error Handling", () => {
