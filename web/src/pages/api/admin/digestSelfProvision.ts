@@ -101,7 +101,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       outcome?: string;
       firstName?: string;
       lastName?: string;
-      inviteStatus?: string;
     }> = [];
 
     // First pass: count outcomes and collect email addresses
@@ -124,8 +123,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
     });
 
-    // Second pass: fetch actual user data for created/resent users
-    const userDataMap = new Map<string, { firstName?: string; lastName?: string; inviteStatus?: string }>();
+    // Second pass: fetch actual user data for names only (not status)
+    const userDataMap = new Map<string, { firstName?: string; lastName?: string }>();
     if (emailsToLookup.length > 0) {
       try {
         const userCollection = process.env.NODE_ENV === "production" ? "prod_users" : "dev_users";
@@ -140,7 +139,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             userDataMap.set(emailsToLookup[index], {
               firstName: userData.firstName,
               lastName: userData.lastName,
-              inviteStatus: userData.inviteStatus,
+              // Don't include inviteStatus - use audit entry outcome instead
             });
           }
         });
@@ -149,13 +148,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
     }
 
-    // Enrich samples with actual user data
+    // Enrich samples with actual user data (names only)
     samples.forEach((sample) => {
       if (sample.target && userDataMap.has(sample.target)) {
         const userData = userDataMap.get(sample.target);
         sample.firstName = userData?.firstName;
         sample.lastName = userData?.lastName;
-        sample.inviteStatus = userData?.inviteStatus;
+        // Don't set inviteStatus - use audit entry outcome instead
       }
     });
 
@@ -166,7 +165,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         outcome?: string;
         firstName?: string;
         lastName?: string;
-        inviteStatus?: string;
       }>
     ) => {
       if (samples.length === 0) return "No activity in the last 24 hours.";
@@ -183,24 +181,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
               : sample.firstName || email.split("@")[0];
           const displayName = fullName;
 
-          // Use actual invite status if available, otherwise format outcome
-          let statusText: string;
-          if (sample.inviteStatus) {
-            statusText =
-              sample.inviteStatus === "accepted"
-                ? "Activated"
-                : sample.inviteStatus === "pending"
-                  ? "Pending activation"
-                  : sample.inviteStatus;
-          } else {
-            statusText =
-              {
-                created_pending_user: "Created (pending activation)",
-                resent_pending_activation: "Activation link resent",
-                invalid_password: "Invalid shared password",
-                server_error: "Server error occurred",
-              }[outcome] || outcome;
-          }
+          // Always use audit entry outcome, not current user status
+          const statusText =
+            {
+              created_pending_user: "Created (pending activation)",
+              resent_pending_activation: "Activation link resent",
+              invalid_password: "Invalid shared password",
+              server_error: "Server error occurred",
+            }[outcome] || outcome;
 
           return `${index + 1}. ${displayName} (${email}) - ${statusText}`;
         })
