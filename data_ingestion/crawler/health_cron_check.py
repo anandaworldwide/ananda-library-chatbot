@@ -31,12 +31,7 @@ sys.path.append(
 
 # No longer importing load_config - we'll construct database path directly
 
-# Import crawler-specific alerts after setting up sys.path
-from data_ingestion.crawler.crawler_alerts import (
-    send_crawler_process_down_alert,
-    send_crawler_wedged_alert,
-    send_database_error_alert,
-)
+# Import only what we need - no individual alerts anymore
 from pyutil.email_ops import send_ops_alert_sync
 from pyutil.env_utils import load_env
 from pyutil.logging_utils import configure_logging
@@ -226,56 +221,32 @@ def get_log_activity_status(site_id: str) -> dict[str, Any]:
         }
 
 
-def check_database_health(db_stats: dict, site_id: str) -> list[str]:
-    """Check database health and send alerts if needed."""
+def check_database_health(db_stats: dict) -> list[str]:
+    """Check database health and return list of issues."""
     issues = []
 
     if not db_stats.get("database_exists", False):
         issues.append("Database file not found")
 
-        # Send email alert for database missing
-        if should_send_alert("database_missing"):
-            try:
-                send_database_error_alert(site_id, "Database file not found")
-                logging.info("Sent email alert for missing database file")
-            except Exception as e:
-                logging.error(f"Failed to send database missing alert: {e}")
-
     if "error" in db_stats:
         error_msg = db_stats["error"]
         issues.append(f"Database error: {error_msg}")
 
-        # Send email alert for database error
-        if should_send_alert("database_error"):
-            try:
-                send_database_error_alert(site_id, error_msg)
-                logging.info(f"Sent email alert for database error: {error_msg}")
-            except Exception as e:
-                logging.error(f"Failed to send database error alert: {e}")
-
     return issues
 
 
-def check_process_health(process_info: dict, site_id: str) -> list[str]:
-    """Check process health and send alerts if needed."""
+def check_process_health(process_info: dict) -> list[str]:
+    """Check process health and return list of issues."""
     issues = []
 
     if not process_info.get("crawler_running"):
         issues.append("No crawler processes detected")
 
-        # Send email alert for process down
-        if should_send_alert("process_down"):
-            try:
-                send_crawler_process_down_alert(site_id)
-                logging.info("Sent email alert for crawler process down")
-            except Exception as e:
-                logging.error(f"Failed to send process down alert: {e}")
-
     return issues
 
 
-def check_log_activity_health(log_activity: dict, site_id: str) -> list[str]:
-    """Check log activity health and send alerts if needed."""
+def check_log_activity_health(log_activity: dict) -> list[str]:
+    """Check log activity health and return list of issues."""
     issues = []
 
     if not log_activity.get("is_wedged", False):
@@ -288,28 +259,88 @@ def check_log_activity_health(log_activity: dict, site_id: str) -> list[str]:
         issues.append(
             f"Crawler appears wedged - no activity for {minutes} minutes (expected: hourly wake-ups)"
         )
-
-        # Send email alert for wedged crawler
-        if should_send_alert("wedged"):
-            try:
-                send_crawler_wedged_alert(site_id, minutes)
-                logging.info(f"Sent email alert for wedged crawler ({minutes} minutes)")
-            except Exception as e:
-                logging.error(f"Failed to send wedged crawler alert: {e}")
     else:
         issues.append("Crawler appears wedged - no recent activity detected")
 
-        # Send email alert for wedged crawler (unknown duration)
-        if should_send_alert("wedged"):
-            try:
-                send_crawler_wedged_alert(
-                    site_id, 999
-                )  # Use 999 to indicate unknown duration
-                logging.info("Sent email alert for wedged crawler (unknown duration)")
-            except Exception as e:
-                logging.error(f"Failed to send wedged crawler alert: {e}")
-
     return issues
+
+
+def send_comprehensive_health_alert(
+    site_id: str,
+    status: str,
+    issues: list[str],
+    db_stats: dict,
+    process_info: dict,
+    log_activity: dict,
+) -> bool:
+    """Send one comprehensive health alert with all detected issues."""
+    # Build subject line with status and issue count
+    status_emoji = {
+        "healthy": "✅",
+        "warning": "⚠️",
+        "degraded": "❌",
+        "error": "💥",
+    }.get(status, "❓")
+
+    subject = f"{status_emoji} Crawler Health Alert: {len(issues)} issue{'s' if len(issues) != 1 else ''} detected"
+
+    # Build comprehensive message
+    message = f"Health check for site '{site_id}' detected {len(issues)} issue(s):\n\n"
+
+    for i, issue in enumerate(issues, 1):
+        message += f"{i}. {issue}\n"
+
+    # Add context details
+    message += "\n--- System Status ---\n"
+
+    # Database info
+    if db_stats.get("database_exists"):
+        total_urls = db_stats.get("total_urls", 0)
+        ready_urls = db_stats.get("ready_for_crawling", 0)
+        message += (
+            f"Database: {total_urls:,} total URLs, {ready_urls:,} ready for crawling\n"
+        )
+    else:
+        message += "Database: Not accessible\n"
+
+    # Process info
+    process_count = process_info.get("process_count", 0)
+    if process_count > 0:
+        message += f"Processes: {process_count} crawler process(es) running\n"
+    else:
+        message += "Processes: No crawler processes detected\n"
+
+    # Log activity info
+    if log_activity.get("minutes_since_activity") is not None:
+        minutes = log_activity["minutes_since_activity"]
+        message += f"Last Activity: {minutes} minutes ago\n"
+    else:
+        message += "Last Activity: Unknown\n"
+
+    # Add recommended actions based on issues
+    message += "\n--- Recommended Actions ---\n"
+    if any("process" in issue.lower() for issue in issues):
+        message += "• Check crawler daemon status and restart if necessary\n"
+    if any("wedged" in issue.lower() for issue in issues):
+        message += "• Investigate crawler logs for errors or hanging processes\n"
+    if any("database" in issue.lower() for issue in issues):
+        message += "• Verify database file permissions and disk space\n"
+
+    # Send the alert
+    return send_ops_alert_sync(
+        subject=subject,
+        message=message,
+        error_details={
+            "context": {
+                "site_id": site_id,
+                "status": status,
+                "issues_count": len(issues),
+                "database_accessible": db_stats.get("database_exists", False),
+                "processes_running": process_info.get("process_count", 0),
+                "minutes_since_activity": log_activity.get("minutes_since_activity"),
+            }
+        },
+    )
 
 
 def perform_health_check(site_id: str) -> dict[str, Any]:
@@ -326,11 +357,11 @@ def perform_health_check(site_id: str) -> dict[str, Any]:
     process_info = get_crawler_process_info(site_id)
     log_activity = get_log_activity_status(site_id)
 
-    # Check for issues and send alerts
+    # Check for issues (no individual alerts - we'll send one comprehensive alert)
     all_issues = []
-    all_issues.extend(check_database_health(db_stats, site_id))
-    all_issues.extend(check_process_health(process_info, site_id))
-    all_issues.extend(check_log_activity_health(log_activity, site_id))
+    all_issues.extend(check_database_health(db_stats))
+    all_issues.extend(check_process_health(process_info))
+    all_issues.extend(check_log_activity_health(log_activity))
 
     # Determine overall status
     if all_issues:
@@ -340,6 +371,18 @@ def perform_health_check(site_id: str) -> dict[str, Any]:
             status = "warning"
     else:
         status = "healthy"
+
+    # Send one comprehensive alert if there are issues
+    if all_issues and should_send_alert("health_check_issues"):
+        try:
+            send_comprehensive_health_alert(
+                site_id, status, all_issues, db_stats, process_info, log_activity
+            )
+            logging.info(
+                f"Sent comprehensive health alert for {len(all_issues)} issues"
+            )
+        except Exception as e:
+            logging.error(f"Failed to send comprehensive health alert: {e}")
 
     return {
         "timestamp": timestamp,
