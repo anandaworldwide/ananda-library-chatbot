@@ -208,6 +208,33 @@ python daemon/logrotate.py --site ananda-public --max-size 100MB --keep 10
 6. **Vector Storage**: Store in Pinecone with metadata
 7. **Status Tracking**: Update database with crawl status and next crawl time
 
+### Error Handling and 404 Processing
+
+The crawler implements intelligent error handling with special processing for 404 errors:
+
+#### 404 Error Handling
+
+- **Detection**: 404 HTTP status codes are automatically detected during crawling
+- **Retry Logic**: 404 errors are given up to 3 retry attempts (1hr, 6hr, 24hr intervals) in case they are temporary
+  server issues
+- **Database Status**: Only after retry exhaustion are URLs marked with `status = 'deleted'` for Pinecone cleanup
+- **Pinecone Cleanup**: The system automatically removes all vector embeddings for permanently deleted URLs
+- **Processing Flow**:
+  1. URL returns 404 during recrawl
+  2. URL is marked as `'pending'` with `failure_type = '404_retriable'` for retry
+  3. After 3 failed retry attempts, URL status is set to `'deleted'` with `failure_type = '404_permanent'`
+  4. During maintenance cycles, pending deletions are processed
+  5. All vectors for the URL are queried and removed from Pinecone
+  6. URL is marked as `'pinecone_cleaned'` to prevent reprocessing
+
+#### Other Error Types
+
+- **Temporary Failures** (5xx, timeouts, connection issues): Scheduled for retry with exponential backoff
+- **Permanent Failures** (4xx except 404, forbidden): Marked as failed, no retry
+- **Rate Limiting**: Automatic backoff and retry with increased delays
+
+This ensures that the vector database stays clean and doesn't contain stale content for pages that no longer exist.
+
 ### Database Schema
 
 ```sql

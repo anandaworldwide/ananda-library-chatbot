@@ -493,6 +493,161 @@ class WebsiteCrawler:
             logging.error(f"Error getting next URL to crawl: {e}")
             return None
 
+    def _handle_404_retry_logic(
+        self, normalized_url: str, error_msg: str, now: str
+    ) -> bool:
+        """Handle 404 retry logic. Returns True if URL was processed, False if not a 404."""
+        if not error_msg or "404" not in error_msg:
+            return False
+
+        # This is a 404 error - handle retry logic
+        retry_count = 0
+        self.cursor.execute(
+            "SELECT retry_count FROM crawl_queue WHERE url = ?",
+            (normalized_url,),
+        )
+        result = self.cursor.fetchone()
+        if result and result[0] is not None:
+            retry_count = result[0] + 1
+
+        max_retries = 3  # Allow 3 retries for 404s
+
+        if retry_count <= max_retries:
+            # Set up retry with exponential backoff: 1hr, 6hr, 24hr
+            hours_to_wait = [1, 6, 24][min(retry_count - 1, 2)]
+            retry_after = (datetime.now() + timedelta(hours=hours_to_wait)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            self.cursor.execute(
+                """
+                UPDATE crawl_queue 
+                SET status = 'pending', last_error = ?, retry_count = ?, 
+                    retry_after = ?, failure_type = '404_retriable', next_crawl = ?
+                WHERE url = ?
+                """,
+                (
+                    f"{error_msg} [retry {retry_count}/{max_retries}]",
+                    retry_count,
+                    retry_after,
+                    retry_after,
+                    normalized_url,
+                ),
+            )
+            logging.info(
+                f"404 error for {normalized_url}, scheduling retry {retry_count}/{max_retries} in {hours_to_wait} hours"
+            )
+        else:
+            # Retry exhausted - mark as deleted for Pinecone cleanup
+            self.cursor.execute(
+                """
+                UPDATE crawl_queue 
+                SET status = 'deleted', last_crawl = ?, last_error = ?, content_hash = 'needs_pinecone_cleanup',
+                    retry_count = ?, failure_type = '404_permanent'
+                WHERE url = ?
+                """,
+                (
+                    now,
+                    f"{error_msg} [404 confirmed after {max_retries} retries]",
+                    retry_count,
+                    normalized_url,
+                ),
+            )
+            logging.info(
+                f"404 error for {normalized_url} confirmed after {max_retries} retries, marking for Pinecone cleanup"
+            )
+
+        return True
+
+    def _handle_temporary_failure_retry(
+        self, normalized_url: str, error_msg: str
+    ) -> bool:
+        """Handle temporary failure retry logic. Returns True if retry was set up, False for permanent failure."""
+        # Check for typical temporary failure patterns
+        temporary_patterns = [
+            "timeout",
+            "timed out",
+            "connection",
+            "reset",
+            "refused",
+            "network",
+            "unreachable",
+            "server error",
+            "5",
+            "503",
+            "502",
+            "overloaded",
+            "too many requests",
+            "429",
+            "temporarily",
+            "try again",
+        ]
+
+        is_temporary = False
+        if error_msg:
+            error_lower = error_msg.lower()
+            is_temporary = any(pattern in error_lower for pattern in temporary_patterns)
+
+        if not is_temporary:
+            return False
+
+        # Handle temporary failure retry logic
+        retry_count = 0
+        self.cursor.execute(
+            "SELECT retry_count FROM crawl_queue WHERE url = ?",
+            (normalized_url,),
+        )
+        result = self.cursor.fetchone()
+        if result and result[0] is not None:
+            retry_count = result[0] + 1
+
+        # Exponential backoff: wait longer between retries
+        # Cap at 10 retries (retry_count starts at 1 for first retry)
+        if retry_count <= 10:
+            # 5min, 15min, 1hr, 4hr, 12hr, 24hr, 48hr, 72hr, 96hr, 120hr
+            minutes_to_wait = 5 * (3 ** min(retry_count, 9))
+            retry_after = (
+                datetime.now() + timedelta(minutes=minutes_to_wait)
+            ).strftime("%Y-%m-%d %H:%M:%S")
+
+            self.cursor.execute(
+                """
+                UPDATE crawl_queue 
+                SET status = 'pending', last_error = ?, retry_count = ?, 
+                    retry_after = ?, failure_type = 'temporary', next_crawl = ?
+                WHERE url = ?
+                """,
+                (
+                    f"{error_msg} [retry {retry_count}/10]",
+                    retry_count,
+                    retry_after,
+                    retry_after,
+                    normalized_url,
+                ),
+            )
+            logging.info(
+                f"Temporary failure for {normalized_url}, retry {retry_count}/10 in {minutes_to_wait} minutes"
+            )
+            return True
+        else:
+            # Retry exhausted - fall through to permanent failure
+            self.cursor.execute(
+                """
+                UPDATE crawl_queue 
+                SET status = 'failed', last_error = ?, retry_count = ?, failure_type = 'permanent'
+                WHERE url = ?
+                """,
+                (
+                    f"{error_msg} [retry exhausted after 10 attempts]",
+                    retry_count,
+                    normalized_url,
+                ),
+            )
+            logging.info(
+                f"Retry exhausted for {normalized_url}, marking as permanently failed"
+            )
+            return True
+
     def mark_url_status(
         self,
         url: str,
@@ -529,116 +684,36 @@ class WebsiteCrawler:
                     self.cursor.execute(
                         """
                     UPDATE crawl_queue 
-                    SET status = ?, last_crawl = ?, next_crawl = NULL, content_hash = ?,
+                    SET status = ?, last_crawl = ?, next_crawl = NULL, content_hash = ?, last_error = ?,
                         retry_count = 0, retry_after = NULL, failure_type = NULL, priority = 0
                     WHERE url = ?
                     """,
-                        (status, now, content_hash or "deleted", normalized_url),
+                        (
+                            status,
+                            now,
+                            content_hash or "deleted",
+                            error_msg,
+                            normalized_url,
+                        ),
                     )
             elif status == "failed":
-                # Determine if failure is temporary or permanent
-                is_temporary = False
-
-                # Check for typical temporary failure patterns
-                temporary_patterns = [
-                    "timeout",
-                    "timed out",
-                    "connection",
-                    "reset",
-                    "refused",
-                    "network",
-                    "unreachable",
-                    "server error",
-                    "5",
-                    "503",
-                    "502",
-                    "overloaded",
-                    "too many requests",
-                    "429",
-                    "temporarily",
-                    "try again",
-                ]
-
-                if error_msg:
-                    error_lower = error_msg.lower()
-                    is_temporary = any(
-                        pattern in error_lower for pattern in temporary_patterns
-                    )
-
-                failure_type = "temporary" if is_temporary else "permanent"
-
-                # For temporary failures, set up retry with backoff
-                if is_temporary:
-                    retry_count = 0
-                    self.cursor.execute(
-                        "SELECT retry_count FROM crawl_queue WHERE url = ?",
-                        (normalized_url,),
-                    )
-                    result = self.cursor.fetchone()
-                    if result and result[0] is not None:
-                        retry_count = result[0] + 1
-
-                    # Exponential backoff: wait longer between retries
-                    # Cap at 10 retries (retry_count starts at 1 for first retry)
-                    if retry_count <= 10:
-                        # 5min, 15min, 1hr, 4hr, 12hr, 24hr, 48hr, 72hr, 96hr, 120hr
-                        minutes_to_wait = 5 * (3 ** min(retry_count, 9))
-                        retry_after = (
-                            datetime.now() + timedelta(minutes=minutes_to_wait)
-                        ).isoformat()
-
-                        self.cursor.execute(
-                            """
-                        UPDATE crawl_queue 
-                        SET status = 'pending', last_crawl = ?, last_error = ?, 
-                            retry_count = ?, retry_after = ?, failure_type = ?
-                        WHERE url = ?
-                        """,
-                            (
-                                now,
-                                error_msg,
-                                retry_count,
-                                retry_after,
-                                failure_type,
-                                normalized_url,
-                            ),
-                        )
-
-                        logging.info(
-                            f"Temporary failure for {url} (retry {retry_count}/10): Will retry in {minutes_to_wait} minutes"
-                        )
-                    else:
-                        # After 10 retries, mark as permanent failure
-                        self.cursor.execute(
-                            """
-                        UPDATE crawl_queue 
-                        SET status = 'failed', last_crawl = ?, last_error = ?, 
-                            retry_count = ?, failure_type = 'permanent'
-                        WHERE url = ?
-                        """,
-                            (
-                                now,
-                                f"{error_msg} [Exceeded max retries]",
-                                retry_count,
-                                normalized_url,
-                            ),
-                        )
-
-                        logging.warning(
-                            f"Failed URL {url} exceeded maximum retry attempts (10): {error_msg}"
-                        )
+                # Try 404 retry logic first
+                if self._handle_404_retry_logic(normalized_url, error_msg, now):
+                    pass  # 404 retry logic handled it
+                # Try temporary failure retry logic
+                elif self._handle_temporary_failure_retry(normalized_url, error_msg):
+                    pass  # Temporary failure retry logic handled it
                 else:
                     # Permanent failure, don't retry automatically
                     self.cursor.execute(
                         """
                     UPDATE crawl_queue 
                     SET status = ?, last_crawl = ?, last_error = ?, 
-                        retry_count = 0, retry_after = NULL, failure_type = ?
+                        retry_count = 0, retry_after = NULL, failure_type = 'permanent'
                     WHERE url = ?
                     """,
-                        (status, now, error_msg, failure_type, normalized_url),
+                        (status, now, error_msg, normalized_url),
                     )
-
                     logging.info(f"Permanent failure for {url}: {error_msg}")
             else:
                 # Other status updates (like setting to 'pending')
@@ -1243,6 +1318,8 @@ class WebsiteCrawler:
             logging.error(
                 f"Giving up on {url} after exhausting retries or encountering fatal error. Last error: {last_exception}"
             )
+
+            # Mark as failed and let the retry logic in mark_url_status handle 404s
             self.mark_url_status(url, "failed", error_message)
 
         return None, [], restart_needed
@@ -1287,6 +1364,32 @@ class WebsiteCrawler:
             )
 
         return vectors
+
+    def get_urls_pending_pinecone_deletion(self) -> list[str]:
+        """Get URLs marked as 'deleted' that need Pinecone cleanup."""
+        try:
+            self.cursor.execute(
+                "SELECT url FROM crawl_queue WHERE status = 'deleted' AND content_hash != 'pinecone_cleaned'"
+            )
+            results = self.cursor.fetchall()
+            return [row[0] for row in results] if results else []
+        except Exception as e:
+            logging.error(f"Error fetching URLs pending Pinecone deletion: {e}")
+            return []
+
+    def mark_pinecone_cleanup_complete(self, url: str) -> bool:
+        """Mark that Pinecone cleanup has been completed for a URL."""
+        try:
+            normalized_url = self.normalize_url(url)
+            self.cursor.execute(
+                "UPDATE crawl_queue SET content_hash = 'pinecone_cleaned' WHERE url = ?",
+                (normalized_url,),
+            )
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Error marking Pinecone cleanup complete for {url}: {e}")
+            return False
 
     def remove_url_from_pinecone(self, pinecone_index, url: str) -> int:
         """
@@ -1632,163 +1735,190 @@ class WebsiteCrawler:
             full_url = ensure_scheme(url)
 
             if action == "remove":
-                # Handle removal action
-                normalized_url = self.normalize_url(full_url)
-
-                # Check if we've already processed this removal
-                self.cursor.execute(
-                    "SELECT 1 FROM removal_log WHERE url = ?", (normalized_url,)
-                )
-                if self.cursor.fetchone():
-                    logging.debug(f"Removal already processed, skipping: {full_url}")
-                    stats["skipped_already_removed"] = (
-                        stats.get("skipped_already_removed", 0) + 1
-                    )
-                    return
-
-                logging.info(f"Processing removal for URL: {full_url}")
-
-                # Remove from Pinecone if index is provided
-                deleted_vectors = 0
-                if pinecone_index:
-                    deleted_vectors = self.remove_url_from_pinecone(
-                        pinecone_index, full_url
-                    )
-                    if deleted_vectors > 0:
-                        logging.info(
-                            f"Removed {deleted_vectors} vectors from Pinecone for URL: {full_url}"
-                        )
-                    else:
-                        logging.info(
-                            f"No vectors found in Pinecone for URL: {full_url}"
-                        )
-                else:
-                    logging.warning(
-                        f"No Pinecone index provided for removal of URL: {full_url}"
-                    )
-
-                # Mark as deleted in database (ignore if URL doesn't exist)
-                self.cursor.execute(
-                    "SELECT url FROM crawl_queue WHERE url = ?", (normalized_url,)
-                )
-                if self.cursor.fetchone():
-                    self.mark_url_status(full_url, "deleted")
-                    stats["removed_from_db"] = stats.get("removed_from_db", 0) + 1
-                    logging.info(f"Marked URL as deleted in database: {full_url}")
-                else:
-                    logging.info(f"URL not found in database (ignoring): {full_url}")
-
-                # Record this removal in the log to prevent reprocessing
-                self.cursor.execute(
-                    "INSERT OR REPLACE INTO removal_log (url, removed_at) VALUES (?, datetime('now'))",
-                    (normalized_url,),
-                )
-                self.conn.commit()
-                logging.debug(f"Recorded removal in log: {full_url}")
-
-                stats["removed"] = stats.get("removed", 0) + 1
-                return
-
-            # Handle add/update action
-            # Check if URL should be processed
-            should_process, skip_reason = self._should_process_csv_url(
-                url, modified_date, cutoff_date
-            )
-            if not should_process:
-                stats[skip_reason] += 1
-
-                # If URL is being skipped due to validation/skip rules, remove it from database
-                if skip_reason == "skipped_validation":
-                    normalized_url = self.normalize_url(full_url)
-
-                    # Check if URL exists in database
-                    self.cursor.execute(
-                        "SELECT url FROM crawl_queue WHERE url = ?", (normalized_url,)
-                    )
-                    if self.cursor.fetchone():
-                        # Remove the URL from database
-                        self.cursor.execute(
-                            "DELETE FROM crawl_queue WHERE url = ?", (normalized_url,)
-                        )
-                        logging.debug(f"Removed invalid URL from database: {full_url}")
-                        stats["removed_from_db"] = stats.get("removed_from_db", 0) + 1
-
-                return
-
-            # Add to queue with high priority and modified date
-            modified_date_str = modified_date.isoformat()
-            result = self.add_url_to_queue(
-                full_url, priority=10, modified_date=modified_date_str
-            )
-            stats[result] += 1
-
-            if result in ["inserted", "updated_priority", "updated_modified_date"]:
-                modified_date_str = row.get("Modified Date", "").strip()
-                logging.debug(
-                    f"CSV URL {result}: {full_url} (modified: {modified_date_str})"
+                self._handle_csv_removal(full_url, stats, pinecone_index)
+            else:
+                self._handle_csv_add_update(
+                    full_url, row, modified_date, cutoff_date, stats
                 )
 
         except Exception as e:
             stats["error"] += 1
             logging.warning(f"Error processing CSV row {row}: {e}")
 
+    def _handle_csv_removal(
+        self, full_url: str, stats: dict, pinecone_index=None
+    ) -> None:
+        """Handle removal action for CSV row."""
+        normalized_url = self.normalize_url(full_url)
+
+        # Check if we've already processed this removal
+        self.cursor.execute(
+            "SELECT 1 FROM removal_log WHERE url = ?", (normalized_url,)
+        )
+        if self.cursor.fetchone():
+            logging.debug(f"Removal already processed, skipping: {full_url}")
+            stats["skipped_already_removed"] = (
+                stats.get("skipped_already_removed", 0) + 1
+            )
+            return
+
+        logging.info(f"Processing removal for URL: {full_url}")
+
+        # Remove from Pinecone if index is provided
+        deleted_vectors = 0
+        if pinecone_index:
+            deleted_vectors = self.remove_url_from_pinecone(pinecone_index, full_url)
+            if deleted_vectors > 0:
+                logging.info(
+                    f"Removed {deleted_vectors} vectors from Pinecone for URL: {full_url}"
+                )
+            else:
+                logging.info(f"No vectors found in Pinecone for URL: {full_url}")
+        else:
+            logging.warning(
+                f"No Pinecone index provided for removal of URL: {full_url}"
+            )
+
+        # Mark as deleted in database (ignore if URL doesn't exist)
+        self.cursor.execute(
+            "SELECT url FROM crawl_queue WHERE url = ?", (normalized_url,)
+        )
+        if self.cursor.fetchone():
+            self.mark_url_status(full_url, "deleted")
+            stats["removed_from_db"] = stats.get("removed_from_db", 0) + 1
+            logging.info(f"Marked URL as deleted in database: {full_url}")
+        else:
+            logging.info(f"URL not found in database (ignoring): {full_url}")
+
+        # Record this removal in the log to prevent reprocessing
+        self.cursor.execute(
+            "INSERT OR REPLACE INTO removal_log (url, removed_at) VALUES (?, datetime('now'))",
+            (normalized_url,),
+        )
+        self.conn.commit()
+        logging.debug(f"Recorded removal in log: {full_url}")
+
+        stats["removed"] = stats.get("removed", 0) + 1
+
+    def _handle_csv_add_update(
+        self,
+        full_url: str,
+        row: dict,
+        modified_date: datetime,
+        cutoff_date: datetime,
+        stats: dict,
+    ) -> None:
+        """Handle add/update action for CSV row."""
+        # Check if URL should be processed
+        should_process, skip_reason = self._should_process_csv_url(
+            row.get("URL", "").strip(), modified_date, cutoff_date
+        )
+        if not should_process:
+            stats[skip_reason] += 1
+
+            # If URL is being skipped due to validation/skip rules, remove it from database
+            if skip_reason == "skipped_validation":
+                normalized_url = self.normalize_url(full_url)
+
+                # Check if URL exists in database
+                self.cursor.execute(
+                    "SELECT url FROM crawl_queue WHERE url = ?", (normalized_url,)
+                )
+                if self.cursor.fetchone():
+                    # Remove the URL from database
+                    self.cursor.execute(
+                        "DELETE FROM crawl_queue WHERE url = ?", (normalized_url,)
+                    )
+                    logging.debug(f"Removed invalid URL from database: {full_url}")
+                    stats["removed_from_db"] = stats.get("removed_from_db", 0) + 1
+
+            return
+
+        # Add to queue with high priority and modified date
+        modified_date_str = modified_date.isoformat()
+        result = self.add_url_to_queue(
+            full_url, priority=10, modified_date=modified_date_str
+        )
+        stats[result] += 1
+
+        if result in ["inserted", "updated_priority", "updated_modified_date"]:
+            modified_date_str = row.get("Modified Date", "").strip()
+            logging.debug(
+                f"CSV URL {result}: {full_url} (modified: {modified_date_str})"
+            )
+
     def _create_csv_processing_messages(self, stats: dict) -> list[str]:
         """Create concise logging messages for CSV processing results."""
         messages = []
 
-        if stats["inserted"] > 0:
-            messages.append(f"{stats['inserted']} new URLs added to queue")
+        # Build list of message templates and their conditions
+        message_templates = self._get_csv_message_templates(stats)
 
-        if stats["updated_priority"] > 0:
-            messages.append(
-                f"{stats['updated_priority']} existing URLs updated with higher priority"
-            )
+        # Process each template and add to messages if condition is met
+        for _, count, message_template in message_templates:
+            if count > 0:
+                messages.append(message_template)
 
-        if stats["updated_modified_date"] > 0:
-            messages.append(
-                f"{stats['updated_modified_date']} existing URLs updated with newer modified date"
-            )
+        return messages
 
-        if stats["exists_lower_priority"] > 0:
-            messages.append(
-                f"{stats['exists_lower_priority']} URLs already in queue with equal/higher priority"
-            )
+    def _get_csv_message_templates(self, stats: dict) -> list[tuple[str, int, str]]:
+        """Get message templates for CSV processing results."""
+        templates = [
+            (
+                "inserted",
+                stats["inserted"],
+                f"{stats['inserted']} new URLs added to queue",
+            ),
+            (
+                "updated_priority",
+                stats["updated_priority"],
+                f"{stats['updated_priority']} existing URLs updated with higher priority",
+            ),
+            (
+                "updated_modified_date",
+                stats["updated_modified_date"],
+                f"{stats['updated_modified_date']} existing URLs updated with newer modified date",
+            ),
+            (
+                "exists_lower_priority",
+                stats["exists_lower_priority"],
+                f"{stats['exists_lower_priority']} URLs already in queue with equal/higher priority",
+            ),
+            (
+                "skipped_date",
+                stats["skipped_date"],
+                f"{stats['skipped_date']} URLs skipped (not modified within {self.csv_modified_days_threshold} days)",
+            ),
+            (
+                "skipped_already_current",
+                stats["skipped_already_current"],
+                f"{stats['skipped_already_current']} URLs skipped (already crawled after modification date)",
+            ),
+            (
+                "removed",
+                stats["removed"],
+                f"{stats['removed']} URLs removed from Pinecone and marked as deleted",
+            ),
+            (
+                "skipped_already_removed",
+                stats.get("skipped_already_removed", 0),
+                f"{stats.get('skipped_already_removed', 0)} URLs skipped (already removed previously)",
+            ),
+            ("error", stats["error"], f"{stats['error']} URLs had processing errors"),
+        ]
 
-        if stats["skipped_date"] > 0:
-            messages.append(
-                f"{stats['skipped_date']} URLs skipped (not modified within {self.csv_modified_days_threshold} days)"
-            )
-
-        if stats["skipped_already_current"] > 0:
-            messages.append(
-                f"{stats['skipped_already_current']} URLs skipped (already crawled after modification date)"
-            )
-
+        # Handle special case for skipped_validation
         if stats["skipped_validation"] > 0:
             removed_count = stats.get("removed_from_db", 0)
             if removed_count > 0:
-                messages.append(
-                    f"{stats['skipped_validation']} URLs skipped (validation/skip rules), {removed_count} removed from database"
-                )
+                validation_msg = f"{stats['skipped_validation']} URLs skipped (validation/skip rules), {removed_count} removed from database"
             else:
-                messages.append(
-                    f"{stats['skipped_validation']} URLs skipped (validation/skip rules)"
-                )
-
-        if stats["removed"] > 0:
-            messages.append(
-                f"{stats['removed']} URLs removed from Pinecone and marked as deleted"
+                validation_msg = f"{stats['skipped_validation']} URLs skipped (validation/skip rules)"
+            templates.append(
+                ("skipped_validation", stats["skipped_validation"], validation_msg)
             )
 
-        if stats.get("skipped_already_removed", 0) > 0:
-            messages.append(
-                f"{stats['skipped_already_removed']} URLs skipped (already removed previously)"
-            )
-
-        if stats["error"] > 0:
-            messages.append(f"{stats['error']} URLs had processing errors")
-
-        return messages
+        return templates
 
     def _log_csv_processing_results(self, stats: dict, total_processed: int) -> None:
         """Log CSV processing results in a concise format."""
@@ -2435,6 +2565,37 @@ def _handle_initial_crawl_completion(crawler: WebsiteCrawler) -> None:
             logging.info("Initial crawl completed - CSV mode now active")
 
 
+def _process_pinecone_deletions(crawler: WebsiteCrawler, pinecone_index) -> int:
+    """Process pending Pinecone deletions for 404'd URLs. Returns count of URLs processed."""
+    if not pinecone_index:
+        return 0
+
+    pending_urls = crawler.get_urls_pending_pinecone_deletion()
+    if not pending_urls:
+        return 0
+
+    processed_count = 0
+    for url in pending_urls:
+        try:
+            deleted_vectors = crawler.remove_url_from_pinecone(pinecone_index, url)
+            if deleted_vectors >= 0:  # Success (even if 0 vectors found)
+                crawler.mark_pinecone_cleanup_complete(url)
+                processed_count += 1
+                logging.info(
+                    f"Pinecone cleanup completed for 404'd URL: {url} ({deleted_vectors} vectors removed)"
+                )
+            else:
+                logging.warning(f"Failed to clean up Pinecone vectors for {url}")
+        except Exception as e:
+            logging.error(f"Error processing Pinecone deletion for {url}: {e}")
+            continue
+
+    if processed_count > 0:
+        logging.info(f"Processed Pinecone deletions for {processed_count} URLs")
+
+    return processed_count
+
+
 def _process_csv_updates(
     crawler: WebsiteCrawler, browser, pinecone_index=None
 ) -> str | None:
@@ -2474,6 +2635,9 @@ def _handle_no_url_processing(
     """Handle the case when no URL is available for processing."""
     # Check if we should mark initial crawl as completed
     _handle_initial_crawl_completion(crawler)
+
+    # Process pending Pinecone deletions for 404'd URLs (high priority)
+    _process_pinecone_deletions(crawler, pinecone_index)
 
     # Check for CSV updates before going to sleep (high priority)
     csv_url = _process_csv_updates(crawler, browser, pinecone_index)

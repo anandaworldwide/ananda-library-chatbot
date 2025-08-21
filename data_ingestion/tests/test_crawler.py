@@ -818,11 +818,11 @@ class TestFailureHandling(BaseWebsiteCrawlerTest):
     def test_permanent_failure(self):
         """Test that permanent failures are marked as failed."""
         crawler = WebsiteCrawler(self.site_id, self.site_config)
-        test_url_raw = "https://example.com/not-found"
+        test_url_raw = "https://example.com/forbidden"
         normalized_test_url = crawler.normalize_url(test_url_raw)
         crawler.add_url_to_queue(normalized_test_url)
 
-        error_msg = "HTTP 404 Not Found"
+        error_msg = "HTTP 403 Forbidden"
         crawler.mark_url_status(normalized_test_url, "failed", error_msg=error_msg)
 
         cursor = crawler.conn.cursor()
@@ -2470,6 +2470,442 @@ class TestCrawlerInitializationBug(BaseWebsiteCrawlerTest):
             self.assertIsNone(start_url_exists, "Start URL should NOT be in database")
 
             crawler.close()
+
+
+class Test404PineconeDeletion(BaseWebsiteCrawlerTest):
+    """Test cases for 404 error handling with Pinecone vector deletion."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()  # Set up environment variables
+        self.temp_dir = tempfile.mkdtemp()
+        self.site_id = "test-site"
+        self.site_config = {
+            "domain": "example.com",
+            "skip_patterns": [],
+            "crawl_frequency_days": 7,
+        }
+        self.path_patcher = patch("crawler.website_crawler.Path")
+        mock_path_constructor = self.path_patcher.start()
+        mock_path_constructor.return_value.parent.return_value = Path(self.temp_dir)
+
+        self.original_sqlite_connect = sqlite3.connect
+        self.connect_patcher = patch("sqlite3.connect")
+        mock_sqlite_connect = self.connect_patcher.start()
+        mock_sqlite_connect.side_effect = (
+            lambda db_path_arg: self.original_sqlite_connect(":memory:")
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        self.path_patcher.stop()
+        self.connect_patcher.stop()
+        shutil.rmtree(self.temp_dir)
+        super().tearDown()  # Clean up environment variables
+
+    def test_validate_response_detects_404(self):
+        """Test that _validate_response correctly identifies 404 errors."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Mock response object with 404 status
+        mock_response = Mock()
+        mock_response.status = 404
+        mock_response.header_value.return_value = "text/html"
+
+        should_continue, exception = crawler._validate_response(
+            mock_response, "https://example.com/missing"
+        )
+
+        self.assertFalse(should_continue)
+        self.assertIsNotNone(exception)
+        self.assertIn("HTTP 404", str(exception))
+
+        crawler.close()
+
+    def test_validate_response_non_404_error(self):
+        """Test that _validate_response correctly handles non-404 errors."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Mock response object with 500 status
+        mock_response = Mock()
+        mock_response.status = 500
+        mock_response.header_value.return_value = "text/html"
+
+        should_continue, exception = crawler._validate_response(
+            mock_response, "https://example.com/error"
+        )
+
+        self.assertFalse(should_continue)
+        self.assertIsNotNone(exception)
+        self.assertIn("HTTP 500", str(exception))
+
+        crawler.close()
+
+    def test_404_retry_logic(self):
+        """Test that 404 errors go through retry logic before being marked as deleted."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+        test_url = "https://example.com/missing-page"
+        normalized_url = crawler.normalize_url(test_url)
+
+        # Add URL to queue
+        crawler.add_url_to_queue(test_url)
+
+        # First 404 error should mark as pending for retry
+        error_msg = "HTTP 404"
+        crawler.mark_url_status(test_url, "failed", error_msg)
+
+        # Check database status - should be pending for retry
+        cursor = crawler.conn.cursor()
+        cursor.execute(
+            "SELECT status, failure_type, retry_count FROM crawl_queue WHERE url = ?",
+            (normalized_url,),
+        )
+        row = cursor.fetchone()
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row["status"], "pending")  # Should be scheduled for retry
+        self.assertEqual(row["failure_type"], "404_retriable")
+        self.assertEqual(row["retry_count"], 1)
+
+        crawler.close()
+
+    def test_404_exhausted_retries_marks_deleted(self):
+        """Test that 404 errors are marked as deleted after retry exhaustion."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+        test_url = "https://example.com/missing-page"
+        normalized_url = crawler.normalize_url(test_url)
+
+        # Add URL to queue and simulate it already has 3 retries
+        crawler.add_url_to_queue(test_url)
+        crawler.cursor.execute(
+            "UPDATE crawl_queue SET retry_count = 3 WHERE url = ?", (normalized_url,)
+        )
+        crawler.conn.commit()
+
+        # Fourth 404 error should mark as deleted
+        error_msg = "HTTP 404"
+        crawler.mark_url_status(test_url, "failed", error_msg)
+
+        # Check database status - should be deleted
+        cursor = crawler.conn.cursor()
+        cursor.execute(
+            "SELECT status, failure_type, last_error FROM crawl_queue WHERE url = ?",
+            (normalized_url,),
+        )
+        row = cursor.fetchone()
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row["status"], "deleted")
+        self.assertEqual(row["failure_type"], "404_permanent")
+        self.assertIn("404 confirmed after 3 retries", row["last_error"])
+
+        crawler.close()
+
+    def test_get_urls_pending_pinecone_deletion(self):
+        """Test that get_urls_pending_pinecone_deletion returns correct URLs."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Add some URLs with different statuses
+        test_urls = [
+            "https://example.com/deleted1",
+            "https://example.com/deleted2",
+            "https://example.com/failed",
+            "https://example.com/visited",
+        ]
+
+        for url in test_urls:
+            crawler.add_url_to_queue(url)
+
+        # Mark some as deleted, some as other statuses
+        crawler.mark_url_status(test_urls[0], "deleted", "HTTP 404")
+        crawler.mark_url_status(test_urls[1], "deleted", "HTTP 404")
+        crawler.mark_url_status(test_urls[2], "failed", "HTTP 500")
+        crawler.mark_url_status(test_urls[3], "visited")
+
+        # Mark one as already cleaned
+        normalized_url1 = crawler.normalize_url(test_urls[1])
+        crawler.cursor.execute(
+            "UPDATE crawl_queue SET content_hash = 'pinecone_cleaned' WHERE url = ?",
+            (normalized_url1,),
+        )
+        crawler.conn.commit()
+
+        # Get pending deletions
+        pending_urls = crawler.get_urls_pending_pinecone_deletion()
+
+        # Should only return the first URL (not cleaned yet)
+        self.assertEqual(len(pending_urls), 1)
+        self.assertEqual(pending_urls[0], crawler.normalize_url(test_urls[0]))
+
+        crawler.close()
+
+    def test_mark_pinecone_cleanup_complete(self):
+        """Test that mark_pinecone_cleanup_complete updates the database correctly."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+        test_url = "https://example.com/deleted-page"
+        normalized_url = crawler.normalize_url(test_url)
+
+        # Add and mark as deleted
+        crawler.add_url_to_queue(test_url)
+        crawler.mark_url_status(test_url, "deleted", "HTTP 404")
+
+        # Mark cleanup complete
+        result = crawler.mark_pinecone_cleanup_complete(test_url)
+        self.assertTrue(result)
+
+        # Check database
+        cursor = crawler.conn.cursor()
+        cursor.execute(
+            "SELECT content_hash FROM crawl_queue WHERE url = ?", (normalized_url,)
+        )
+        row = cursor.fetchone()
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row["content_hash"], "pinecone_cleaned")
+
+        crawler.close()
+
+    @patch.dict(os.environ, {"OPENAI_EMBEDDING_DIMENSION": "1536"})
+    def test_remove_url_from_pinecone(self):
+        """Test that remove_url_from_pinecone calls Pinecone correctly."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+        test_url = "https://example.com/test-page"
+
+        # Mock Pinecone index
+        mock_index = Mock()
+        mock_matches = [Mock(id="vec1"), Mock(id="vec2")]
+        mock_query_response = Mock(matches=mock_matches)
+        mock_index.query.return_value = mock_query_response
+
+        # Test removal
+        deleted_count = crawler.remove_url_from_pinecone(mock_index, test_url)
+
+        # Verify Pinecone was called correctly
+        mock_index.query.assert_called_once()
+        call_args = mock_index.query.call_args
+        self.assertEqual(
+            len(call_args[1]["vector"]), 1536
+        )  # Should use dimension from env
+        self.assertIn("$or", call_args[1]["filter"])
+        self.assertEqual(call_args[1]["top_k"], 1000)
+
+        # Verify delete was called
+        mock_index.delete.assert_called_once_with(ids=["vec1", "vec2"])
+        self.assertEqual(deleted_count, 2)
+
+        crawler.close()
+
+    @patch.dict(os.environ, {"OPENAI_EMBEDDING_DIMENSION": "1536"})
+    def test_remove_url_from_pinecone_no_vectors(self):
+        """Test remove_url_from_pinecone when no vectors are found."""
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+        test_url = "https://example.com/no-vectors"
+
+        # Mock Pinecone index with no matches
+        mock_index = Mock()
+        mock_query_response = Mock(matches=[])
+        mock_index.query.return_value = mock_query_response
+
+        # Test removal
+        deleted_count = crawler.remove_url_from_pinecone(mock_index, test_url)
+
+        # Verify no delete was called
+        mock_index.delete.assert_not_called()
+        self.assertEqual(deleted_count, 0)
+
+        crawler.close()
+
+    def test_process_pinecone_deletions_function(self):
+        """Test the _process_pinecone_deletions function."""
+        from crawler.website_crawler import _process_pinecone_deletions
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+        mock_index = Mock()
+
+        # Add some URLs pending deletion
+        test_urls = ["https://example.com/deleted1", "https://example.com/deleted2"]
+
+        for url in test_urls:
+            crawler.add_url_to_queue(url)
+            crawler.mark_url_status(url, "deleted", "HTTP 404")
+
+        # Mock the remove_url_from_pinecone method
+        crawler.remove_url_from_pinecone = Mock(return_value=3)
+        crawler.mark_pinecone_cleanup_complete = Mock(return_value=True)
+
+        # Process deletions
+        processed_count = _process_pinecone_deletions(crawler, mock_index)
+
+        # Verify calls
+        self.assertEqual(processed_count, 2)
+        self.assertEqual(crawler.remove_url_from_pinecone.call_count, 2)
+        self.assertEqual(crawler.mark_pinecone_cleanup_complete.call_count, 2)
+
+        crawler.close()
+
+    @patch.dict(os.environ, {"OPENAI_EMBEDDING_DIMENSION": "1536"})
+    def test_end_to_end_404_pinecone_cleanup_integration(self):
+        """Test the complete end-to-end flow: 404 retry exhaustion -> automatic Pinecone cleanup."""
+        from crawler.website_crawler import _process_pinecone_deletions
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+        test_url = "https://example.com/deleted-after-retries"
+        normalized_url = crawler.normalize_url(test_url)
+
+        # Mock Pinecone index with some vectors to delete
+        mock_index = Mock()
+        mock_matches = [Mock(id="vec1"), Mock(id="vec2"), Mock(id="vec3")]
+        mock_query_response = Mock(matches=mock_matches)
+        mock_index.query.return_value = mock_query_response
+
+        # Step 1: Add URL to queue
+        crawler.add_url_to_queue(test_url)
+
+        # Step 2: Simulate exhausted 404 retries (4th attempt)
+        crawler.cursor.execute(
+            "UPDATE crawl_queue SET retry_count = 3 WHERE url = ?", (normalized_url,)
+        )
+        crawler.conn.commit()
+
+        # Step 3: Mark as failed (should trigger deletion due to retry exhaustion)
+        error_msg = "HTTP 404"
+        crawler.mark_url_status(test_url, "failed", error_msg)
+
+        # Verify URL is marked as deleted
+        cursor = crawler.conn.cursor()
+        cursor.execute(
+            "SELECT status, failure_type FROM crawl_queue WHERE url = ?",
+            (normalized_url,),
+        )
+        row = cursor.fetchone()
+        self.assertEqual(row["status"], "deleted")
+        self.assertEqual(row["failure_type"], "404_permanent")
+
+        # Step 4: Verify URL appears in pending deletions
+        pending_urls = crawler.get_urls_pending_pinecone_deletion()
+        self.assertIn(normalized_url, pending_urls)
+
+        # Step 5: Run the maintenance cycle (this should trigger Pinecone cleanup)
+        processed_count = _process_pinecone_deletions(crawler, mock_index)
+
+        # Verify the maintenance cycle processed the URL
+        self.assertEqual(processed_count, 1)
+
+        # Verify Pinecone operations were called correctly
+        mock_index.query.assert_called_once()
+        query_call_args = mock_index.query.call_args
+        self.assertEqual(len(query_call_args[1]["vector"]), 1536)
+        self.assertIn("$or", query_call_args[1]["filter"])
+
+        # Verify vectors were deleted
+        mock_index.delete.assert_called_once_with(ids=["vec1", "vec2", "vec3"])
+
+        # Step 6: Verify URL is marked as cleaned up
+        cursor.execute(
+            "SELECT content_hash FROM crawl_queue WHERE url = ?", (normalized_url,)
+        )
+        row = cursor.fetchone()
+        self.assertEqual(row["content_hash"], "pinecone_cleaned")
+
+        # Step 7: Verify URL no longer appears in pending deletions
+        pending_urls_after = crawler.get_urls_pending_pinecone_deletion()
+        self.assertNotIn(normalized_url, pending_urls_after)
+
+        crawler.close()
+
+    def test_maintenance_cycle_handles_multiple_deleted_urls(self):
+        """Test that the maintenance cycle can handle multiple 404'd URLs at once."""
+        from crawler.website_crawler import _process_pinecone_deletions
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Create multiple deleted URLs
+        test_urls = [
+            "https://example.com/deleted1",
+            "https://example.com/deleted2",
+            "https://example.com/deleted3",
+        ]
+
+        for url in test_urls:
+            crawler.add_url_to_queue(url)
+            # Directly mark as deleted (simulating retry exhaustion)
+            crawler.mark_url_status(
+                url, "deleted", "HTTP 404 [404 confirmed after 3 retries]"
+            )
+
+        # Mock Pinecone index
+        mock_index = Mock()
+        mock_query_response = Mock(matches=[Mock(id=f"vec{i}") for i in range(2)])
+        mock_index.query.return_value = mock_query_response
+
+        # Verify all URLs are pending deletion
+        pending_urls = crawler.get_urls_pending_pinecone_deletion()
+        self.assertEqual(len(pending_urls), 3)
+
+        # Run maintenance cycle
+        processed_count = _process_pinecone_deletions(crawler, mock_index)
+
+        # Verify all URLs were processed
+        self.assertEqual(processed_count, 3)
+        self.assertEqual(mock_index.query.call_count, 3)  # One query per URL
+        self.assertEqual(mock_index.delete.call_count, 3)  # One delete per URL
+
+        # Verify no URLs are pending deletion anymore
+        pending_urls_after = crawler.get_urls_pending_pinecone_deletion()
+        self.assertEqual(len(pending_urls_after), 0)
+
+        crawler.close()
+
+    def test_maintenance_cycle_handles_pinecone_errors_gracefully(self):
+        """Test that Pinecone errors don't stop the maintenance cycle."""
+        from crawler.website_crawler import _process_pinecone_deletions
+
+        crawler = WebsiteCrawler(self.site_id, self.site_config)
+
+        # Create URLs: one that will succeed, one that will fail
+        success_url = "https://example.com/success"
+        failure_url = "https://example.com/failure"
+
+        for url in [success_url, failure_url]:
+            crawler.add_url_to_queue(url)
+            crawler.mark_url_status(url, "deleted", "HTTP 404")
+
+        # Mock the remove_url_from_pinecone method directly to control success/failure
+        success_normalized = crawler.normalize_url(success_url)
+        failure_normalized = crawler.normalize_url(failure_url)
+
+        def mock_remove_side_effect(pinecone_index, url):
+            if success_normalized in url:
+                return 1  # Success: 1 vector deleted
+            else:
+                raise Exception("Pinecone error")  # This will be caught and continue
+
+        crawler.remove_url_from_pinecone = Mock(side_effect=mock_remove_side_effect)
+
+        # Create a mock index (needed for the function call)
+        mock_index = Mock()
+
+        # Run maintenance cycle
+        processed_count = _process_pinecone_deletions(crawler, mock_index)
+
+        # Should process 1 successfully despite the error
+        self.assertEqual(processed_count, 1)
+
+        # Success URL should be cleaned up
+        success_normalized = crawler.normalize_url(success_url)
+        cursor = crawler.conn.cursor()
+        cursor.execute(
+            "SELECT content_hash FROM crawl_queue WHERE url = ?", (success_normalized,)
+        )
+        row = cursor.fetchone()
+        self.assertEqual(row["content_hash"], "pinecone_cleaned")
+
+        # Failure URL should still be pending
+        pending_urls = crawler.get_urls_pending_pinecone_deletion()
+        failure_normalized = crawler.normalize_url(failure_url)
+        self.assertIn(failure_normalized, pending_urls)
+
+        crawler.close()
 
 
 class TestCSVRemoval:
