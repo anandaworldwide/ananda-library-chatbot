@@ -38,6 +38,68 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _validate_email_config() -> list[str] | None:
+    """Validate email configuration and return recipient list."""
+    ops_email = os.getenv("OPS_ALERT_EMAIL")
+    if not ops_email:
+        logger.error("OPS_ALERT_EMAIL environment variable is not set")
+        return None
+
+    # Split multiple email addresses by semicolon
+    recipient_emails = [
+        email.strip() for email in ops_email.split(";") if email.strip()
+    ]
+
+    if not recipient_emails:
+        logger.error("No valid email addresses found in OPS_ALERT_EMAIL")
+        return None
+
+    return recipient_emails
+
+
+def _should_suppress_alert(subject: str) -> bool:
+    """Check if alert should be suppressed (test mode)."""
+    if os.getenv("NODE_ENV") == "test" or os.getenv("PYTEST_CURRENT_TEST"):
+        logger.info(f"[TEST MODE] Suppressing ops alert: {subject}")
+        return True
+    return False
+
+
+def _build_email_body(message: str, error_details: dict[str, Any] | None) -> str:
+    """Build complete email body with error details and system info."""
+    email_body = message
+
+    if error_details:
+        email_body += "\n\n--- Error Details ---\n"
+
+        if error_details.get("error"):
+            error = error_details["error"]
+            email_body += f"Error: {str(error)}\n"
+            email_body += f"Type: {type(error).__name__}\n"
+
+        if error_details.get("stack"):
+            email_body += f"Stack Trace:\n{error_details['stack']}\n"
+
+        if error_details.get("context"):
+            email_body += f"Context: {json.dumps(error_details['context'], indent=2)}\n"
+
+    # Add timestamp and environment info
+    email_body += "\n\n--- System Info ---\n"
+    email_body += f"Timestamp: {datetime.now().isoformat()}\n"
+    email_body += f"Environment: {os.getenv('NODE_ENV', 'unknown')}\n"
+    email_body += f"Site ID: {os.getenv('SITE_ID', 'unknown')}\n"
+    email_body += f"Python Version: {os.sys.version}\n"
+
+    return email_body
+
+
+def _format_subject_line(subject: str) -> str:
+    """Format subject line with environment and site prefix."""
+    environment = "prod" if os.getenv("NODE_ENV") == "production" else "dev"
+    site_name = os.getenv("SITE_ID", "unknown")
+    return f"[{environment.upper()}-{site_name}] {subject}"
+
+
 async def send_ops_alert(
     subject: str, message: str, error_details: dict[str, Any] | None = None
 ) -> bool:
@@ -56,58 +118,22 @@ async def send_ops_alert(
         bool: True if email was sent successfully, false otherwise
     """
     try:
-        ops_email = os.getenv("OPS_ALERT_EMAIL")
-        if not ops_email:
-            logger.error("OPS_ALERT_EMAIL environment variable is not set")
-            return False
-
-        # Split multiple email addresses by semicolon
-        recipient_emails = [
-            email.strip() for email in ops_email.split(";") if email.strip()
-        ]
-
+        # Validate configuration
+        recipient_emails = _validate_email_config()
         if not recipient_emails:
-            logger.error("No valid email addresses found in OPS_ALERT_EMAIL")
             return False
 
-        # Suppress alerts during testing to prevent spam when tests intentionally fail
-        if os.getenv("NODE_ENV") == "test" or os.getenv("PYTEST_CURRENT_TEST"):
-            logger.info(f"[TEST MODE] Suppressing ops alert: {subject}")
-            return True  # Return true to indicate successful "sending" for test compatibility
+        # Check for test mode suppression
+        if _should_suppress_alert(subject):
+            return True
 
         if not AWS_AVAILABLE:
             logger.error("boto3 not available - cannot send email alerts")
             return False
 
-        # Build email body with error details if provided
-        email_body = message
-
-        if error_details:
-            email_body += "\n\n--- Error Details ---\n"
-
-            if error_details.get("error"):
-                error = error_details["error"]
-                email_body += f"Error: {str(error)}\n"
-                email_body += f"Type: {type(error).__name__}\n"
-
-            if error_details.get("stack"):
-                email_body += f"Stack Trace:\n{error_details['stack']}\n"
-
-            if error_details.get("context"):
-                email_body += (
-                    f"Context: {json.dumps(error_details['context'], indent=2)}\n"
-                )
-
-        # Add timestamp and environment info
-        email_body += "\n\n--- System Info ---\n"
-        email_body += f"Timestamp: {datetime.now().isoformat()}\n"
-        email_body += f"Environment: {os.getenv('NODE_ENV', 'unknown')}\n"
-        email_body += f"Site ID: {os.getenv('SITE_ID', 'unknown')}\n"
-        email_body += f"Python Version: {os.sys.version}\n"
-
-        # Determine environment and site for subject line
-        environment = "prod" if os.getenv("NODE_ENV") == "production" else "dev"
-        site_name = os.getenv("SITE_ID", "unknown")
+        # Build email content
+        email_body = _build_email_body(message, error_details)
+        formatted_subject = _format_subject_line(subject)
 
         # Create SES client
         ses_client = boto3.client(
@@ -122,10 +148,7 @@ async def send_ops_alert(
             Source=os.getenv("CONTACT_EMAIL", "noreply@ananda.org"),
             Destination={"ToAddresses": recipient_emails},
             Message={
-                "Subject": {
-                    "Data": f"[{environment.upper()}-{site_name}] {subject}",
-                    "Charset": "UTF-8",
-                },
+                "Subject": {"Data": formatted_subject, "Charset": "UTF-8"},
                 "Body": {"Text": {"Data": email_body, "Charset": "UTF-8"}},
             },
         )
@@ -174,53 +197,6 @@ def send_ops_alert_sync(
     except Exception as e:
         logger.error(f"Error in synchronous ops alert wrapper: {e}")
         return False
-
-
-# Convenience functions for common alert types
-def send_crawler_wedged_alert(site_id: str, minutes_since_activity: int) -> bool:
-    """Send alert when crawler appears to be wedged."""
-    return send_ops_alert_sync(
-        subject="Crawler Wedged",
-        message=f"The crawler for site '{site_id}' appears to be wedged with no activity for {minutes_since_activity} minutes.",
-        error_details={
-            "context": {
-                "site_id": site_id,
-                "minutes_since_activity": minutes_since_activity,
-                "expected_wake_interval": "60 minutes",
-                "alert_threshold": "65 minutes",
-            }
-        },
-    )
-
-
-def send_crawler_process_down_alert(site_id: str) -> bool:
-    """Send alert when no crawler processes are detected."""
-    return send_ops_alert_sync(
-        subject="Crawler Process Down",
-        message=f"No crawler processes detected for site '{site_id}'. The crawler daemon may have stopped or crashed.",
-        error_details={
-            "context": {
-                "site_id": site_id,
-                "issue_type": "process_not_running",
-                "recommended_action": "Check daemon status and restart if necessary",
-            }
-        },
-    )
-
-
-def send_database_error_alert(site_id: str, error_message: str) -> bool:
-    """Send alert when database errors are detected."""
-    return send_ops_alert_sync(
-        subject="Crawler Database Error",
-        message=f"Database error detected for site '{site_id}' crawler: {error_message}",
-        error_details={
-            "context": {
-                "site_id": site_id,
-                "issue_type": "database_error",
-                "error_message": error_message,
-            }
-        },
-    )
 
 
 if __name__ == "__main__":

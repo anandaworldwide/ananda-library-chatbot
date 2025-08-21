@@ -100,16 +100,17 @@ python website_crawler.py --site ananda-public --fresh-start
 
 ### Health Monitoring
 
+The crawler includes a comprehensive health monitoring system using cron jobs:
+
 ```bash
-# Start health check server
-python health_server.py --site ananda-public --port 8080
+# Run hourly health check (sends alerts if issues detected)
+python health_cron_check.py --site ananda-public
 
-# Check health status
-curl http://localhost:8080/health
-
-# Get quick statistics
-curl http://localhost:8080/stats
+# Run daily health report (comprehensive email report)
+python health_daily_report.py --site ananda-public
 ```
+
+See [HEALTH_CRON_README.md](HEALTH_CRON_README.md) for detailed setup instructions.
 
 ### Daemon Management
 
@@ -266,8 +267,8 @@ Daemon logs are stored in `~/Library/Logs/AnandaCrawler/`:
 cd data_ingestion
 python -m pytest tests/test_crawler.py -v
 
-# Run health server tests
-python -m pytest tests/test_health_server.py -v
+# Run all tests
+python -m pytest tests/ -v
 
 # Run with coverage
 python -m pytest tests/ --cov=crawler --cov-report=html
