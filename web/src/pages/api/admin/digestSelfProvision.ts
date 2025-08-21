@@ -94,7 +94,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     let created = 0;
     let resent = 0;
-    let invalid = 0;
     let errors = 0;
     const samples: Array<{
       target?: string;
@@ -112,12 +111,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
       if (outcome === "created_pending_user") created++;
       else if (outcome === "resent_pending_activation") resent++;
-      else if (outcome === "invalid_password") invalid++;
       else if (outcome === "server_error") errors++;
+      // Skip invalid_password entries entirely
 
-      if (samples.length < 10) {
+      if (samples.length < 10 && outcome !== "invalid_password") {
         samples.push({ target: email, outcome });
-        if (email && outcome !== "invalid_password" && outcome !== "server_error") {
+        if (email && outcome !== "server_error") {
           emailsToLookup.push(email);
         }
       }
@@ -186,7 +185,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             {
               created_pending_user: "Created (pending activation)",
               resent_pending_activation: "Activation link resent",
-              invalid_password: "Invalid shared password",
               server_error: "Server error occurred",
             }[outcome] || outcome;
 
@@ -201,7 +199,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       `SUMMARY:`,
       `• Created: ${created}`,
       `• Resent: ${resent}`,
-      `• Invalid password: ${invalid}`,
       `• Server errors: ${errors}`,
       ``,
       `ACTIVITY DETAILS:`,
@@ -210,13 +207,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // Create subject line with error counts
     const subjectParts = [];
-    if (invalid > 0) subjectParts.push(`${invalid} invalid password${invalid > 1 ? "s" : ""}`);
     if (errors > 0) subjectParts.push(`${errors} error${errors > 1 ? "s" : ""}`);
 
-    const subject = `New user digest: ${created} created, ${invalid} invalid, ${errors} errors`;
+    const subject = `New user digest: ${created} created, ${errors} errors`;
 
     await sendOpsAlert(subject, body);
-    return res.status(200).json({ ok: true, counts: { created, resent, invalid, errors }, samples });
+    return res.status(200).json({ ok: true, counts: { created, resent, errors }, samples });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Failed to build digest" });
   }

@@ -331,11 +331,10 @@ describe("/api/admin/digestSelfProvision", () => {
       expect(responseData.counts).toEqual({
         created: 2,
         resent: 1,
-        invalid: 1,
         errors: 1,
       });
 
-      expect(responseData.samples).toHaveLength(5);
+      expect(responseData.samples).toHaveLength(4); // invalid_password entries are now excluded
       expect(responseData.samples[0]).toEqual({
         target: "user1@example.com",
         outcome: "created_pending_user",
@@ -418,7 +417,7 @@ describe("/api/admin/digestSelfProvision", () => {
       const emailBody = (sendOpsAlert as jest.Mock).mock.calls[0][1];
       expect(emailBody).toContain("Created: 1");
       expect(emailBody).toContain("Resent: 0");
-      expect(emailBody).toContain("Invalid password: 1");
+      expect(emailBody).not.toContain("Invalid password"); // Invalid passwords no longer included
       expect(emailBody).toContain("Server errors: 0");
       expect(emailBody).toContain("ACTIVITY DETAILS:");
     });
@@ -474,17 +473,17 @@ describe("/api/admin/digestSelfProvision", () => {
       // Verify that status text comes from audit entry outcomes, not current user status
       expect(emailBody).toContain("Created (pending activation)");
       expect(emailBody).toContain("Activation link resent");
-      expect(emailBody).toContain("Invalid shared password");
+      expect(emailBody).not.toContain("Invalid shared password"); // Invalid passwords no longer included
       expect(emailBody).toContain("Server error occurred");
 
       // Verify it does NOT contain "Activated" status (which would indicate bug)
       expect(emailBody).not.toContain("Activated");
 
-      // Verify proper formatting with email prefixes as names
+      // Verify proper formatting with email prefixes as names (invalid_password entries are excluded)
       expect(emailBody).toContain("1. user1 (user1@example.com) - Created (pending activation)");
       expect(emailBody).toContain("2. user2 (user2@example.com) - Activation link resent");
-      expect(emailBody).toContain("3. user3 (user3@example.com) - Invalid shared password");
-      expect(emailBody).toContain("4. user4 (user4@example.com) - Server error occurred");
+      expect(emailBody).toContain("3. user4 (user4@example.com) - Server error occurred");
+      expect(emailBody).not.toContain("user3"); // Invalid password entry excluded from samples
     });
   });
 
