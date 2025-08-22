@@ -197,8 +197,10 @@ async function validateAndPreprocessInput(
   }
 
   const originalQuestion = question;
-  // Sanitize the input to prevent XSS attacks
-  const sanitizedQuestion = validator.escape(question.trim()).replaceAll("\n", " ");
+  // Basic sanitization: trim whitespace and normalize newlines
+  // Note: No HTML escaping needed since question text is used for AI processing,
+  // not direct HTML rendering. Frontend uses React/ReactMarkdown for safe rendering.
+  const sanitizedQuestion = question.trim().replaceAll("\n", " ");
 
   // Strictly require a valid v4 UUID on all chat requests
   const rawUuid = typeof requestBody.uuid === "string" ? requestBody.uuid.trim() : "";
@@ -906,7 +908,7 @@ async function handleChatRequest(req: NextRequest) {
         // Execute the full chain
         const { fullResponse, finalDocs, restatedQuestion } = await setupAndExecuteLanguageModelChain(
           retriever,
-          sanitizedInput.question,
+          sanitizedInput.question, // Use sanitized question (whitespace normalized) for AI processing
           sanitizedInput.history || [],
           sendData,
           sourceCount,
