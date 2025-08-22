@@ -18,7 +18,7 @@ Chatbot application.
 
 #### Chat Interaction Flow
 
-```
+```text
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
 │    User     │    │  Frontend   │    │   Backend   │    │   AI/Data   │
 │             │    │   (Next.js) │    │    APIs     │    │  Services   │
@@ -70,7 +70,7 @@ Chatbot application.
 
 #### B. Authenticated User Flow
 
-```
+```text
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
 │    User     │    │  Frontend   │    │   Backend   │    │  Database   │
 │             │    │   (Next.js) │    │    APIs     │    │ (Firestore) │
