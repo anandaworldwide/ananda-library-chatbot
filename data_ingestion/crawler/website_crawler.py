@@ -1503,15 +1503,30 @@ class WebsiteCrawler:
 
     def _establish_csv_session(self, page) -> bool:
         """Establish session by visiting main site. Returns True if successful."""
-        main_response = page.goto(self.start_url, timeout=15000)
-
-        if main_response and main_response.status < 400:
-            page.wait_for_timeout(2000)  # Wait for session setup
-            return True
-        else:
-            logging.warning(
-                f"Failed to establish session: HTTP {main_response.status if main_response else 'No response'}"
+        try:
+            main_response = page.goto(
+                self.start_url, timeout=15000, wait_until="networkidle"
             )
+
+            if main_response and main_response.status < 400:
+                # Wait for session setup with timeout handling
+                try:
+                    page.wait_for_timeout(2000)
+                except Exception as wait_error:
+                    logging.warning(f"Timeout during session setup wait: {wait_error}")
+                return True
+            else:
+                logging.warning(
+                    f"Failed to establish session: HTTP {main_response.status if main_response else 'No response'}"
+                )
+                return False
+        except PlaywrightTimeout as timeout_error:
+            logging.warning(
+                f"Session establishment timeout after 15 seconds: {timeout_error}"
+            )
+            return False
+        except Exception as e:
+            logging.warning(f"Session establishment failed: {e}")
             return False
 
     def _create_download_handler(self, download_info: dict):
@@ -1555,24 +1570,45 @@ class WebsiteCrawler:
             return content
 
     def _navigate_to_csv_url(self, page, download_info: dict) -> None:
-        """Navigate to CSV URL and handle download/content extraction."""
+        """Navigate to CSV URL and handle download/content extraction with proper timeout handling."""
         try:
-            page.goto(self.csv_export_url, timeout=30000)
+            # Navigate with explicit timeout and error handling
+            response = page.goto(
+                self.csv_export_url, timeout=30000, wait_until="networkidle"
+            )
+
+            # Check response status
+            if response and response.status >= 400:
+                raise Exception(f"HTTP {response.status} error when accessing CSV URL")
 
             # If we get here without download, try to get page content
             if not download_info["content"] and not download_info["error"]:
-                # Wait a moment for potential download
-                page.wait_for_timeout(3000)
+                # Wait a moment for potential download with timeout
+                try:
+                    page.wait_for_timeout(3000)
+                except Exception as wait_error:
+                    logging.warning(f"Timeout during download wait: {wait_error}")
 
                 if not download_info["content"]:
                     download_info["content"] = self._extract_page_content_csv(page)
 
+        except PlaywrightTimeout as timeout_error:
+            # Handle Playwright timeouts specifically
+            raise Exception(
+                f"Navigation timeout after 30 seconds: {timeout_error}"
+            ) from timeout_error
         except Exception as e:
             if "Download is starting" in str(e):
-                # This is expected - wait for download to complete
-                page.wait_for_timeout(5000)
+                # This is expected - wait for download to complete with timeout
+                try:
+                    page.wait_for_timeout(5000)
+                except Exception as download_wait_error:
+                    logging.warning(
+                        f"Timeout during download completion wait: {download_wait_error}"
+                    )
             else:
-                raise e
+                # Re-raise with more context
+                raise Exception(f"Navigation failed: {e}") from e
 
     def _parse_csv_content(self, content: str) -> list[dict]:
         """Parse CSV content and return list of dictionaries."""
@@ -1588,7 +1624,7 @@ class WebsiteCrawler:
         return csv_data
 
     def download_csv_data(self, browser=None) -> list[dict] | None:
-        """Download and parse CSV data using existing Playwright browser context"""
+        """Download and parse CSV data using existing Playwright browser context with retry logic"""
         if not self.csv_export_url:
             return None
 
@@ -1596,45 +1632,72 @@ class WebsiteCrawler:
             logging.error("No browser context provided for CSV download")
             return None
 
-        try:
-            logging.info(
-                f"Downloading CSV data with existing browser from: {self.csv_export_url}"
-            )
-
-            # Create a new page in the existing browser context
-            page = browser.new_page()
-            page.set_extra_http_headers({"User-Agent": USER_AGENT})
-
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                # Establish session
-                self._establish_csv_session(page)
+                logging.info(
+                    f"Downloading CSV data with existing browser from: {self.csv_export_url} (attempt {attempt + 1}/{max_retries})"
+                )
 
-                # Set up download handling
-                download_info = {"content": None, "error": None}
-                handle_download = self._create_download_handler(download_info)
-                page.on("download", handle_download)
+                # Create a new page in the existing browser context
+                page = browser.new_page()
+                page.set_extra_http_headers({"User-Agent": USER_AGENT})
+                # Set default timeout to prevent indefinite hangs
+                page.set_default_timeout(30000)  # 30 seconds
 
-                # Navigate to CSV URL and handle download/content
-                self._navigate_to_csv_url(page, download_info)
+                try:
+                    # Establish session with timeout
+                    session_established = self._establish_csv_session(page)
+                    if not session_established:
+                        raise Exception("Failed to establish session with main site")
 
-                # Check for errors and validate content
-                if download_info["error"]:
-                    raise Exception(f"Download error: {download_info['error']}")
+                    # Set up download handling
+                    download_info = {"content": None, "error": None}
+                    handle_download = self._create_download_handler(download_info)
+                    page.on("download", handle_download)
 
-                # Parse CSV content
-                csv_data = self._parse_csv_content(download_info["content"])
+                    # Navigate to CSV URL and handle download/content with timeout
+                    self._navigate_to_csv_url(page, download_info)
 
-                self.update_csv_tracking(success=True)
-                return csv_data
+                    # Check for errors and validate content
+                    if download_info["error"]:
+                        raise Exception(f"Download error: {download_info['error']}")
 
-            finally:
-                page.close()
+                    # Parse CSV content
+                    csv_data = self._parse_csv_content(download_info["content"])
 
-        except Exception as e:
-            error_msg = f"Failed to download CSV data with existing browser: {e}"
-            logging.error(error_msg)
-            self.update_csv_tracking(csv_error=error_msg)
-            return None
+                    self.update_csv_tracking(success=True)
+                    logging.info(
+                        f"Successfully downloaded and parsed CSV data with {len(csv_data)} rows"
+                    )
+                    return csv_data
+
+                finally:
+                    try:
+                        page.close()
+                    except Exception as close_error:
+                        logging.warning(
+                            f"Error closing CSV download page: {close_error}"
+                        )
+
+            except Exception as e:
+                error_msg = f"CSV download attempt {attempt + 1} failed: {e}"
+                logging.error(error_msg)
+
+                # If this is the last attempt, update tracking and return None
+                if attempt == max_retries - 1:
+                    self.update_csv_tracking(
+                        csv_error=f"All {max_retries} CSV download attempts failed. Last error: {e}"
+                    )
+                    return None
+                else:
+                    # Wait before retry (exponential backoff)
+                    retry_delay = min(30, 5 * (2**attempt))  # 5s, 10s, 20s max
+                    logging.info(f"Retrying CSV download in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    continue
+
+        return None
 
     def _validate_csv_row(self, row: dict) -> tuple[str, datetime, str] | None:
         """Validate CSV row and return (url, modified_date, action) tuple or None if invalid."""
@@ -2604,6 +2667,14 @@ def _process_csv_updates(
         return None
 
     try:
+        # Check browser health before CSV processing
+        if not _is_browser_healthy(browser):
+            logging.warning(
+                "Browser appears unhealthy before CSV processing, but continuing with existing browser"
+            )
+            # Note: We don't restart the browser here as it's managed by the main loop
+            # The main loop will handle browser restarts as needed
+
         csv_added_count = crawler.check_and_process_csv(browser, pinecone_index)
         if csv_added_count > 0:
             logging.info(
@@ -2618,8 +2689,39 @@ def _process_csv_updates(
                 logging.info("CSV check completed but no URLs ready for processing")
     except Exception as e:
         logging.error(f"Error during CSV check: {e}")
+        # Check if the error suggests browser issues
+        if any(
+            keyword in str(e).lower()
+            for keyword in ["browser", "connection", "timeout", "disconnected"]
+        ):
+            logging.warning(
+                "CSV error appears to be browser-related - main loop should consider browser restart"
+            )
 
     return None
+
+
+def _is_browser_healthy(browser) -> bool:
+    """Check if browser is healthy and responsive."""
+    if not browser:
+        return False
+
+    try:
+        # Check if browser is still connected
+        if not browser.is_connected():
+            logging.warning("Browser is not connected")
+            return False
+
+        # Try to get browser contexts (lightweight operation)
+        contexts = browser.contexts
+        if not contexts:
+            logging.warning("Browser has no contexts")
+            return False
+
+        return True
+    except Exception as e:
+        logging.warning(f"Browser health check failed: {e}")
+        return False
 
 
 def _handle_no_url_processing(
