@@ -84,7 +84,14 @@
     "showSourceCountSelector": true,
     "temperature": 0.4,
     "modelName": "gpt-4o",
-    "enableGeoAwareness": true
+    "enableGeoAwareness": true,
+    "redirectMappings": {
+      "mg": {
+        "url": "https://www.ananda.org/contact-us/",
+        "event": "Minister Guidance Click",
+        "description": "Connect with minister for private spiritual counseling"
+      }
+    }
   },
   "ananda-public": {
     "name": "The Ananda.org Chatbot",
