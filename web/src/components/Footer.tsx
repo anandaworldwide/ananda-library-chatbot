@@ -18,6 +18,12 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
   useEffect(() => {
     let mounted = true;
     async function checkRole() {
+      // Only check admin role on sites that require login
+      if (!siteConfig?.requireLogin) {
+        if (mounted) setIsAdminRole(false);
+        return;
+      }
+
       try {
         const res = await fetch("/api/profile", { credentials: "include" });
         if (!res.ok) {
@@ -36,7 +42,7 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
     return () => {
       mounted = false;
     };
-  }, [router.asPath]);
+  }, [router.asPath, siteConfig?.requireLogin]);
   const footerConfig = getFooterConfig(siteConfig);
 
   const showAdminSection = siteConfig?.requireLogin ? isAdminRole : isSudoUser;

@@ -7,7 +7,7 @@
 //   are automatically converted to links to the Ananda contact page (https://www.ananda.org/contact-us/)
 
 // React and Next.js imports
-import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 
 // Component imports
 import Layout from "@/components/layout";
@@ -16,6 +16,7 @@ import LikePrompt from "@/components/LikePrompt";
 import { ChatInput } from "@/components/ChatInput";
 import MessageItem from "@/components/MessageItem";
 import FeedbackModal from "@/components/FeedbackModal";
+import ChatHistorySidebar from "@/components/ChatHistorySidebar";
 
 // Hook imports
 import usePopup from "@/hooks/usePopup";
@@ -81,6 +82,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // UI state variables
   const [showLikePrompt] = useState<boolean>(false);
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   // Refs for DOM elements and scroll management
   const lastMessageRef = useRef<HTMLDivElement>(null);
@@ -995,118 +997,142 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Main component render
   return (
     <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
-      <Layout siteConfig={siteConfig}>
+      <Layout siteConfig={siteConfig} useWideLayout={siteConfig?.requireLogin}>
         {showPopup && popupMessage && <Popup message={popupMessage} onClose={closePopup} siteConfig={siteConfig} />}
         <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />
-        <div className="flex flex-col h-full">
-          {/* Private session banner */}
-          {privateSession && (
-            <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-              <span className="material-icons text-2xl mr-2">lock</span>
-              You are in a Private Session (
-              <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
-                end private session
-              </button>
-              )
-            </div>
+        <div className="flex h-full">
+          {/* Chat History Sidebar - Only show on sites that require login */}
+          {siteConfig?.requireLogin && (
+            <ChatHistorySidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
           )}
-          <div className="flex-grow overflow-hidden answers-container">
-            <div ref={messageListRef} className="h-full overflow-y-auto">
-              {/* Render chat messages */}
-              {messages.map((message, index) => (
-                <MessageItem
-                  key={`chatMessage-${index}`}
-                  messageKey={`chatMessage-${index}`}
-                  message={message}
-                  previousMessage={index > 0 ? messages[index - 1] : undefined}
-                  index={index}
-                  isLastMessage={index === messages.length - 1}
-                  loading={loading}
-                  privateSession={privateSession}
-                  collectionChanged={collectionChanged}
-                  hasMultipleCollections={hasMultipleCollections}
-                  likeStatuses={likeStatuses}
-                  linkCopied={linkCopied}
-                  votes={votes}
-                  siteConfig={siteConfig}
-                  handleLikeCountChange={handleLikeCountChange}
-                  handleCopyLink={handleCopyLink}
-                  handleVote={handleVote}
-                  lastMessageRef={lastMessageRef}
-                  voteError={voteError}
-                  allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
-                  showRelatedQuestions={showRelatedQuestions}
-                />
-              ))}
-              {/* Display timing metrics for sudo users */}
-              {isSudoUser && timingMetrics && !loading && messages.length > 0 && (
-                <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded m-2">{formatTimingMetrics()}</div>
-              )}
-              <div ref={bottomOfListRef} style={{ height: "1px" }} />
-            </div>
 
-            {/* Container to anchor the scroll button at the right edge of the content */}
-            <div ref={scrollButtonContainerRef} className="relative w-full">
-              {/* Animated Scroll Down Button */}
-              <div
-                className={`fixed z-50 right-5 bottom-5 transition-all duration-300 ease-out transform 
+          {/* Main Content Area */}
+          <div className="flex flex-col flex-1 min-w-0 lg:ml-0">
+            <div className="mx-auto w-full max-w-4xl px-4">
+              {/* Hamburger Menu Button - Only show on sites that require login */}
+              {siteConfig?.requireLogin && (
+                <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+                  <button
+                    onClick={() => setSidebarOpen(true)}
+                    className="p-2 rounded-md hover:bg-gray-100"
+                    aria-label="Open chat history"
+                  >
+                    <span className="material-icons text-gray-600">menu</span>
+                  </button>
+                  <h1 className="text-lg font-semibold text-gray-900">Chat</h1>
+                  <div className="w-10"></div> {/* Spacer for centering */}
+                </div>
+              )}
+              {/* Private session banner */}
+              {privateSession && (
+                <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
+                  <span className="material-icons text-2xl mr-2">lock</span>
+                  You are in a Private Session (
+                  <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
+                    end private session
+                  </button>
+                  )
+                </div>
+              )}
+              <div className="flex-grow overflow-hidden answers-container">
+                <div ref={messageListRef} className="h-full overflow-y-auto">
+                  {/* Render chat messages */}
+                  {messages.map((message, index) => (
+                    <MessageItem
+                      key={`chatMessage-${index}`}
+                      messageKey={`chatMessage-${index}`}
+                      message={message}
+                      previousMessage={index > 0 ? messages[index - 1] : undefined}
+                      index={index}
+                      isLastMessage={index === messages.length - 1}
+                      loading={loading}
+                      privateSession={privateSession}
+                      collectionChanged={collectionChanged}
+                      hasMultipleCollections={hasMultipleCollections}
+                      likeStatuses={likeStatuses}
+                      linkCopied={linkCopied}
+                      votes={votes}
+                      siteConfig={siteConfig}
+                      handleLikeCountChange={handleLikeCountChange}
+                      handleCopyLink={handleCopyLink}
+                      handleVote={handleVote}
+                      lastMessageRef={lastMessageRef}
+                      voteError={voteError}
+                      allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
+                      showRelatedQuestions={showRelatedQuestions}
+                    />
+                  ))}
+                  {/* Display timing metrics for sudo users */}
+                  {isSudoUser && timingMetrics && !loading && messages.length > 0 && (
+                    <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded m-2">{formatTimingMetrics()}</div>
+                  )}
+                  <div ref={bottomOfListRef} style={{ height: "1px" }} />
+                </div>
+
+                {/* Container to anchor the scroll button at the right edge of the content */}
+                <div ref={scrollButtonContainerRef} className="relative w-full">
+                  {/* Animated Scroll Down Button */}
+                  <div
+                    className={`fixed z-50 right-5 bottom-5 transition-all duration-300 ease-out transform 
                   ${showScrollDownButton ? "translate-y-0 opacity-100 pointer-events-auto" : "translate-y-8 opacity-0 pointer-events-none"}`}
-                style={{ willChange: "transform, opacity" }}
-              >
-                <button
-                  onClick={handleScrollDownClick}
-                  aria-label="Scroll to bottom"
-                  className="bg-white text-gray-600 rounded-full shadow-sm hover:shadow-md p-2 border border-gray-200 focus:outline-none"
-                >
-                  <span className="material-icons text-xl">expand_more</span>
-                </button>
+                    style={{ willChange: "transform, opacity" }}
+                  >
+                    <button
+                      onClick={handleScrollDownClick}
+                      aria-label="Scroll to bottom"
+                      className="bg-white text-gray-600 rounded-full shadow-sm hover:shadow-md p-2 border border-gray-200 focus:outline-none"
+                    >
+                      <span className="material-icons text-xl">expand_more</span>
+                    </button>
+                  </div>
+                </div>
               </div>
+              <div className="mt-4 px-2 md:px-0">
+                {/* Render chat input component */}
+                {isLoadingQueries ? null : (
+                  <ChatInput
+                    loading={loading}
+                    handleSubmit={handleSubmit}
+                    handleEnter={handleEnter}
+                    handleClick={handleClick}
+                    handleCollectionChange={handleCollectionChange}
+                    handlePrivateSessionChange={handlePrivateSessionChange}
+                    collection={collection}
+                    privateSession={privateSession}
+                    error={chatError}
+                    setError={setError}
+                    randomQueries={randomQueries}
+                    shuffleQueries={shuffleQueries}
+                    textAreaRef={textAreaRef}
+                    mediaTypes={mediaTypes}
+                    handleMediaTypeChange={handleMediaTypeChange}
+                    siteConfig={siteConfig}
+                    input={query}
+                    handleInputChange={handleInputChange}
+                    setQuery={setQuery}
+                    setShouldAutoScroll={setIsNearBottom}
+                    handleStop={handleStop}
+                    isNearBottom={isNearBottom}
+                    setIsNearBottom={setIsNearBottom}
+                    isLoadingQueries={isLoadingQueries}
+                    sourceCount={sourceCount}
+                    setSourceCount={setSourceCount}
+                  />
+                )}
+              </div>
+              {/* Private session banner (bottom) */}
+              {privateSession && (
+                <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
+                  <span className="material-icons text-2xl mr-2">lock</span>
+                  You are in a Private Session (
+                  <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
+                    end private session
+                  </button>
+                  )
+                </div>
+              )}
             </div>
           </div>
-          <div className="mt-4 px-2 md:px-0">
-            {/* Render chat input component */}
-            {isLoadingQueries ? null : (
-              <ChatInput
-                loading={loading}
-                handleSubmit={handleSubmit}
-                handleEnter={handleEnter}
-                handleClick={handleClick}
-                handleCollectionChange={handleCollectionChange}
-                handlePrivateSessionChange={handlePrivateSessionChange}
-                collection={collection}
-                privateSession={privateSession}
-                error={chatError}
-                setError={setError}
-                randomQueries={randomQueries}
-                shuffleQueries={shuffleQueries}
-                textAreaRef={textAreaRef}
-                mediaTypes={mediaTypes}
-                handleMediaTypeChange={handleMediaTypeChange}
-                siteConfig={siteConfig}
-                input={query}
-                handleInputChange={handleInputChange}
-                setQuery={setQuery}
-                setShouldAutoScroll={setIsNearBottom}
-                handleStop={handleStop}
-                isNearBottom={isNearBottom}
-                setIsNearBottom={setIsNearBottom}
-                isLoadingQueries={isLoadingQueries}
-                sourceCount={sourceCount}
-                setSourceCount={setSourceCount}
-              />
-            )}
-          </div>
-          {/* Private session banner (bottom) */}
-          {privateSession && (
-            <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-              <span className="material-icons text-2xl mr-2">lock</span>
-              You are in a Private Session (
-              <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
-                end private session
-              </button>
-              )
-            </div>
-          )}
         </div>
 
         {/* Render the Feedback Modal */}

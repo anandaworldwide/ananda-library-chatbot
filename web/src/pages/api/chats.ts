@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   if (!allowed) return;
 
-  const { uuid, limit } = req.query;
+  const { uuid, limit, convId } = req.query;
   if (!uuid || typeof uuid !== "string") {
     return res.status(400).json({ error: "uuid query parameter is required" });
   }
@@ -29,14 +29,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     if (!db) return res.status(503).json({ error: "Database not available" });
 
-    // Query by uuid and order by timestamp desc
-    const query = db
-      .collection(getAnswersCollectionName())
-      .where("uuid", "==", uuid)
-      .orderBy("timestamp", "desc")
-      .limit(limitNum);
+    // Build query based on whether convId is specified
+    let query = db.collection(getAnswersCollectionName()).where("uuid", "==", uuid);
 
-    const snapshot = await firestoreQueryGet(query, "user chats list", `uuid: ${uuid}, limit: ${limitNum}`);
+    // Add convId filter if specified
+    if (convId && typeof convId === "string") {
+      query = query.where("convId", "==", convId);
+    }
+
+    query = query.orderBy("timestamp", "desc").limit(limitNum);
+
+    const contextString = convId
+      ? `uuid: ${uuid}, convId: ${convId}, limit: ${limitNum}`
+      : `uuid: ${uuid}, limit: ${limitNum}`;
+
+    const snapshot = await firestoreQueryGet(query, "user chats list", contextString);
 
     const chats = snapshot.docs.map((doc: any) => {
       const data = doc.data();
@@ -47,6 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         timestamp: data.timestamp,
         likeCount: data.likeCount || 0,
         collection: data.collection,
+        convId: data.convId || null, // Include convId in response
       };
     });
 

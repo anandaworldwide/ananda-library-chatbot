@@ -118,7 +118,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       } catch (error) {
         // If auth cookie is invalid, continue with anonymous token
         // This allows graceful degradation for expired/invalid sessions
-        console.log("Invalid auth cookie, issuing anonymous token:", error);
+        // Invalid auth cookie is expected for anonymous users - issue anonymous token
+        console.log("Invalid auth cookie, issuing anonymous token");
       }
     }
 
