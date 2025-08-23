@@ -64,6 +64,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         likeCount: data.likeCount || 0,
         collection: data.collection,
         convId: data.convId || null, // Include convId in response
+        title: data.title || null, // Include title in response
+        sources: data.sources || null, // Include sources in response
       };
     });
 

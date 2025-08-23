@@ -47,6 +47,8 @@ import { RelatedQuestion } from "@/types/RelatedQuestion";
 import { SudoProvider, useSudo } from "@/contexts/SudoContext";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
+import { loadConversationByConvId } from "@/utils/client/conversationLoader";
+import { getGreeting } from "@/utils/client/siteConfig";
 
 // Main component for the chat interface
 export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) {
@@ -105,6 +107,39 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           return { ...prev, [type]: newValue };
         });
       }
+    }
+  };
+
+  // Function to load a conversation from chat history
+  const handleLoadConversation = async (convId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const loadedConversation = await loadConversationByConvId(convId);
+
+      // Update the message state with the loaded conversation
+      setMessageState({
+        messages: [
+          {
+            message: getGreeting(siteConfig),
+            type: "apiMessage",
+          },
+          ...loadedConversation.messages,
+        ],
+        history: loadedConversation.history,
+      });
+
+      // Close sidebar after loading
+      setSidebarOpen(false);
+
+      // Log analytics event
+      logEvent("chat_history_conversation_loaded", "Chat History", convId, loadedConversation.messages.length);
+    } catch (error) {
+      console.error("Error loading conversation:", error);
+      setError(error instanceof Error ? error.message : "Failed to load conversation");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1003,7 +1038,14 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         <div className="flex h-full">
           {/* Chat History Sidebar - Only show on sites that require login */}
           {siteConfig?.requireLogin && (
-            <ChatHistorySidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <ChatHistorySidebar
+              isOpen={sidebarOpen}
+              onClose={() => {
+                logEvent("chat_history_sidebar_close", "Chat History", "close_button");
+                setSidebarOpen(false);
+              }}
+              onLoadConversation={handleLoadConversation}
+            />
           )}
 
           {/* Main Content Area */}
@@ -1013,7 +1055,10 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
               {siteConfig?.requireLogin && (
                 <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
                   <button
-                    onClick={() => setSidebarOpen(true)}
+                    onClick={() => {
+                      logEvent("chat_history_sidebar_open", "Chat History", "hamburger_menu");
+                      setSidebarOpen(true);
+                    }}
                     className="p-2 rounded-md hover:bg-gray-100"
                     aria-label="Open chat history"
                   >

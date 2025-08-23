@@ -48,6 +48,7 @@ import { OpenAIEmbeddings } from "@langchain/openai";
 import { PineconeStore } from "@langchain/pinecone";
 import { makeChain, setupAndExecuteLanguageModelChain } from "@/utils/server/makechain";
 import { getCachedPineconeIndex } from "@/utils/server/pinecone-client";
+import { generateAndUpdateTitle } from "@/utils/server/titleGeneration";
 import { getPineconeIndexName } from "@/utils/server/pinecone-config";
 import * as fbadmin from "firebase-admin";
 import { db } from "@/services/firebase";
@@ -992,6 +993,14 @@ async function handleChatRequest(req: NextRequest) {
 
             if (savedDocId) {
               sendData({ docId: savedDocId }); // Send the new docId to the client
+
+              // Generate title asynchronously for new conversations only
+              if ((sanitizedInput.history || []).length === 0) {
+                // Fire-and-forget title generation - don't await
+                generateAndUpdateTitle(savedDocId, originalQuestion).catch((error) =>
+                  console.error("Async title generation failed:", error)
+                );
+              }
             }
           } catch (saveError) {
             // Silently handle save errors to avoid breaking the chat flow

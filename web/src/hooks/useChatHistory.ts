@@ -10,6 +10,8 @@ export interface ChatHistoryItem {
   likeCount: number;
   collection: string;
   convId?: string;
+  title?: string; // AI-generated title
+  sources?: string; // JSON string of source documents
 }
 
 export interface ConversationGroup {
@@ -75,9 +77,13 @@ export function useChatHistory(limit: number = 20) {
 
           const lastMessage = sortedMessages[0];
 
-          // Generate title: use full question if < 7 words, otherwise truncate to 5 words
-          const questionWords = lastMessage.question.trim().split(/\s+/);
-          const title = questionWords.length < 7 ? lastMessage.question : questionWords.slice(0, 5).join(" ") + "...";
+          // Use AI-generated title if available, otherwise generate fallback title
+          let title = lastMessage.title;
+          if (!title) {
+            // Fallback: use full question if < 7 words, otherwise truncate to 4 words
+            const questionWords = lastMessage.question.trim().split(/\s+/);
+            title = questionWords.length < 7 ? lastMessage.question : questionWords.slice(0, 4).join(" ") + "...";
+          }
 
           return {
             convId,

@@ -5,7 +5,7 @@
 This document outlines the plan to add chat history on the home page, including a left rail (hamburger on mobile),
 AI-generated titles, conversation grouping, URL navigation, and sharing support. Key requirements:
 
-- Left rail shows last 20 conversations (lazy-load more), using AI titles (~5 words) or truncated questions (full if <7
+- Left rail shows last 20 conversations (lazy-load more), using AI titles (~4 words) or truncated questions (full if <7
   words).
 - Clicking loads full conversation up to that point, allowing continuation.
 - URLs: Dynamically change to `/answers/[answerId]` post-answer; reload restores state.
@@ -18,10 +18,10 @@ AI-generated titles, conversation grouping, URL navigation, and sharing support.
 ## Finalized Database Schema Changes
 
 - Add `convId` (string, UUID v4): Groups docs in a conversation. New convos generate new ID; follow-ups reuse it.
-- Add `title` (string): AI-generated (~5 words) on initial doc only; follow-ups reference it.
+- Add `title` (string): AI-generated (~4 words) on initial doc only; follow-ups reference it.
 - Backward-compatible: Existing docs treated as single-message convos.
 - Migration: Assign unique `convId` to each existing doc (no grouping).
-- Title Generation: Use fast model (e.g., `gpt-3.5-turbo`) with prompt: "Generate a concise 5-word title for this
+- Title Generation: Use fast model (e.g., `gpt-3.5-turbo`) with prompt: "Generate a concise four-word title for this
   question: [question]". Fallback to truncated question.
 
 ## URL and Sharing Details
@@ -47,10 +47,10 @@ Deliver: Grouped convos in DB; API to fetch raw history; simple rail showing ung
       group.
 - [x] **Backend**: Create migration script (e.g., `/migrations/migrate-conv-ids.ts`): Assign unique convId to each
       existing doc.
-- [x] **Database Indexes**: Create `firestore.indexes.json` file with composite indexes for new queries (uuid + convId,
-      uuid + timestamp + convId).
-- [x] **Index Deployment**: Run `firebase deploy --only firestore:indexes --project <project-name> --force` to create
-      indexes in development.
+- [x] **Database Indexes**: Create `firestore.indexes.dev.json` file with composite indexes for new queries (uuid +
+      convId, uuid + timestamp + convId, convId + uuid + timestamp + **name**).
+- [x] **Index Deployment**: Run `firebase deploy --only firestore:indexes --config firebase.dev.json` to create indexes
+      in development.
 - [x] **Frontend**: Create `ChatHistoryFetcher` hook (async fetch via `/api/chats.ts` after main content loads).
 - [x] **Frontend**: In `index.tsx`, add basic left rail (list raw questions, grouped by convId). Mobile: Hamburger menu
       (Tailwind responsive).
@@ -60,14 +60,15 @@ Deliver: Grouped convos in DB; API to fetch raw history; simple rail showing ung
 
 Deliver: Clickable rail with titles; mobile menu; view full grouped convos on click.
 
-- [ ] **Backend**: Add title generation in `makechain.ts` (post-answer, fast model); store in `title` field for new
-      convos only. Fallback to truncated question (~5 words or full if <7).
-- [ ] **Backend**: Update `/api/chats.ts` and new `/api/conversation/[convId]` to include titles.
-- [ ] **Frontend**: Enhance rail: Display titles (fallback per above), last 20 items (lazy-load more). Auto-update after
+- [x] **Backend**: Add async title generation in API route (post-answer, fire-and-forget); store in `title` field for
+      new convos only. Fallback to truncated question (~4 words or full if <7). Include Google Analytics events for
+      sidebar usage.
+- [x] **Backend**: Update `/api/chats.ts` and new `/api/conversation/[convId]` to include titles.
+- [x] **Frontend**: Enhance rail: Display titles (fallback per above), last 20 items (lazy-load more). Auto-update after
       new questions (no retitling for follow-ups). Styling: Gray bg (Tailwind `bg-gray-100`).
-- [ ] **Frontend**: On rail click, load full grouped convo into main area (fetch via API; render in chat UI). Support
+- [x] **Frontend**: On rail click, load full grouped convo into main area (fetch via API; render in chat UI). Support
       viewing up to clicked point (filter by timestamp).
-- [ ] **Testing**: Tests for title generation (mock AI); UI tests for rail clicks/titles/mobile. Run `npm run test:all`.
+- [x] **Testing**: Tests for title generation (mock AI); UI tests for rail clicks/titles/mobile. Run `npm run test:all`.
 
 ### Phase 3: URL Navigation + Sharing/Continuation
 
@@ -89,10 +90,11 @@ Deliver: Feature deployed to production across all sites with proper migration a
 
 - [ ] **Migration**: Run `migrate-conv-ids.ts` script on production Firestore (all sites: ananda, ananda-public,
       crystal, jairam) to backfill `convId` for existing documents.
-- [ ] **Database Indexes**: Create `firestore.indexes.json` file with composite indexes for new queries (uuid + convId,
-      uuid + timestamp + convId) and deploy via Firebase CLI.
-- [ ] **Index Deployment**: Run `firebase deploy --only firestore:indexes --project <project-name> --force` to create
-      indexes programmatically.
+- [x] **Database Indexes**: Create `firestore.indexes.dev.json` and `firestore.indexes.prod.json` files with composite
+      indexes for new queries (uuid + convId, uuid + timestamp + convId, convId + uuid + timestamp + **name**).
+- [ ] **Index Deployment**: Deploy indexes using separate config files: - Development:
+      `firebase deploy --only firestore:indexes --config firebase.dev.json` - Production:
+      `firebase deploy --only firestore:indexes --config firebase.prod.json`
 - [ ] **Vercel Deployment**: Deploy to production via GitHub main branch; monitor build logs and function deployments.
 - [ ] **Site Testing**: Manual QA on all production sites (ananda, ananda-public, crystal, jairam) for chat history, URL
       navigation, sharing, mobile responsiveness.

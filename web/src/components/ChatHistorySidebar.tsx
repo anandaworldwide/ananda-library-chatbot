@@ -1,24 +1,37 @@
 import React from "react";
 import { useChatHistory, ConversationGroup } from "@/hooks/useChatHistory";
 import { useRouter } from "next/router";
+import { logEvent } from "@/utils/client/analytics";
 
 interface ChatHistorySidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  onLoadConversation?: (convId: string) => void;
 }
 
-export default function ChatHistorySidebar({ isOpen, onClose }: ChatHistorySidebarProps) {
+export default function ChatHistorySidebar({ isOpen, onClose, onLoadConversation }: ChatHistorySidebarProps) {
   const { loading, error, conversations, hasMore, loadMore } = useChatHistory(20);
   const router = useRouter();
 
   const handleConversationClick = (conversation: ConversationGroup) => {
-    // Navigate to the last message in the conversation
-    router.push(`/answers/${conversation.lastMessage.id}`);
-    onClose(); // Close sidebar on mobile after navigation
+    // Track conversation click event
+    logEvent("chat_history_conversation_click", "Chat History", conversation.convId, conversation.messageCount);
+
+    if (onLoadConversation) {
+      // Load conversation into the home page chat interface
+      onLoadConversation(conversation.convId);
+    } else {
+      // Fallback: Navigate to the last message in the conversation
+      router.push(`/answers/${conversation.lastMessage.id}`);
+      onClose(); // Close sidebar on mobile after navigation
+    }
   };
 
   const handleLoadMore = () => {
     if (!loading && hasMore) {
+      // Track load more event
+      logEvent("chat_history_load_more", "Chat History", "load_more_conversations", conversations.length);
+
       loadMore();
     }
   };
