@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   if (!allowed) return;
 
-  const { uuid, limit, convId } = req.query;
+  const { uuid, limit, convId, startAfter } = req.query;
   if (!uuid || typeof uuid !== "string") {
     return res.status(400).json({ error: "uuid query parameter is required" });
   }
@@ -37,11 +37,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       query = query.where("convId", "==", convId);
     }
 
-    query = query.orderBy("timestamp", "desc").limit(limitNum);
+    query = query.orderBy("timestamp", "desc");
+
+    // Add pagination cursor if provided
+    if (startAfter && typeof startAfter === "string") {
+      // Parse the timestamp from ISO string
+      const startAfterDate = new Date(startAfter);
+      query = query.startAfter(startAfterDate);
+    }
+
+    query = query.limit(limitNum);
 
     const contextString = convId
-      ? `uuid: ${uuid}, convId: ${convId}, limit: ${limitNum}`
-      : `uuid: ${uuid}, limit: ${limitNum}`;
+      ? `uuid: ${uuid}, convId: ${convId}, limit: ${limitNum}, startAfter: ${startAfter || "none"}`
+      : `uuid: ${uuid}, limit: ${limitNum}, startAfter: ${startAfter || "none"}`;
 
     const snapshot = await firestoreQueryGet(query, "user chats list", contextString);
 

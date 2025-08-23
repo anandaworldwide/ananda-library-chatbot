@@ -63,9 +63,9 @@ export default function Layout({ children, siteConfig, useWideLayout = false }: 
   if (!isClient) return null;
 
   return (
-    <div className="h-screen flex flex-col app-container-wrap">
+    <div className={`h-screen flex flex-col ${useWideLayout ? "w-full" : "app-container-wrap"}`}>
       <div
-        className={`flex-grow mx-auto flex flex-col ${useWideLayout ? "max-w-none w-full" : "max-w-[800px]"} app-container`}
+        className={`flex-grow flex flex-col ${useWideLayout ? "max-w-none w-full" : "max-w-[800px] mx-auto"} app-container`}
       >
         {renderHeader()}
         <div className="flex-grow overflow-auto main-content-wrap">

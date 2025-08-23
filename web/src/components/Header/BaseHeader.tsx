@@ -74,7 +74,7 @@ export default function BaseHeader({
         <div className="bg-blue-500 text-white text-center py-1 w-full">Dev server (site: {process.env.SITE_ID})</div>
       )}
       <div
-        className={`h-16 border-b border-b-slate-200 py-4 ${constrainWidth ? "lg:grid lg:grid-cols-[320px_1fr] lg:px-0" : "px-4"}`}
+        className={`h-16 border-b border-b-slate-200 py-4 ${constrainWidth ? "lg:grid lg:grid-cols-[288px_1fr] lg:px-0" : "px-4"}`}
       >
         {constrainWidth && <div className="hidden lg:block"></div>}
         <div className={`flex justify-between items-center ${constrainWidth ? "mx-auto w-full max-w-4xl px-4" : ""}`}>

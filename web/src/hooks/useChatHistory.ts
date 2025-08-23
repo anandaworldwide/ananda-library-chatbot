@@ -24,6 +24,7 @@ export function useChatHistory(limit: number = 20) {
   const [error, setError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationGroup[]>([]);
   const [hasMore, setHasMore] = useState<boolean>(true);
+  const [lastTimestamp, setLastTimestamp] = useState<string | null>(null);
 
   // Fetch conversations grouped by convId
   const fetchConversations = async (loadMore: boolean = false) => {
@@ -34,7 +35,14 @@ export function useChatHistory(limit: number = 20) {
 
     try {
       const uuid = getOrCreateUUID();
-      const response = await fetchWithAuth(`/api/chats?uuid=${uuid}&limit=${limit}`, {
+
+      // Build URL with pagination cursor for "load more"
+      let url = `/api/chats?uuid=${uuid}&limit=${limit}`;
+      if (loadMore && lastTimestamp) {
+        url += `&startAfter=${encodeURIComponent(lastTimestamp)}`;
+      }
+
+      const response = await fetchWithAuth(url, {
         method: "GET",
       });
 
@@ -91,6 +99,30 @@ export function useChatHistory(limit: number = 20) {
         setConversations((prev) => [...prev, ...groupedConversations]);
       } else {
         setConversations(groupedConversations);
+        // Reset pagination cursor on initial load
+        setLastTimestamp(null);
+      }
+
+      // Update pagination cursor with the timestamp of the last chat
+      if (chats.length > 0) {
+        const lastChat = chats[chats.length - 1];
+        const timestamp = lastChat.timestamp;
+
+        // Convert Firestore timestamp to ISO string for API
+        let timestampString: string;
+        if (timestamp?.seconds) {
+          // Firestore timestamp format
+          timestampString = new Date(timestamp.seconds * 1000).toISOString();
+        } else if (timestamp?._seconds) {
+          // Alternative Firestore timestamp format
+          timestampString = new Date(timestamp._seconds * 1000).toISOString();
+        } else if (timestamp instanceof Date) {
+          timestampString = timestamp.toISOString();
+        } else {
+          timestampString = new Date(timestamp).toISOString();
+        }
+
+        setLastTimestamp(timestampString);
       }
 
       // Check if there are more conversations to load

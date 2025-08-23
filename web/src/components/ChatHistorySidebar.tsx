@@ -31,14 +31,15 @@ export default function ChatHistorySidebar({ isOpen, onClose }: ChatHistorySideb
       {/* Sidebar */}
       <div
         className={`
-        fixed top-0 left-0 h-full w-80 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-50
+        fixed top-0 left-0 h-full w-72 shadow-lg transform transition-transform duration-300 ease-in-out z-50
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
-        lg:relative lg:translate-x-0 lg:shadow-none lg:border-r lg:border-gray-200
+        lg:relative lg:translate-x-0 lg:shadow-none
       `}
+        style={{ backgroundColor: "#f8f7f6" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Chats</h2>
+        <div className="flex items-center justify-between p-4">
+          <h2 className="text-lg font-semibold text-gray-400">Chats</h2>
           <button onClick={onClose} className="lg:hidden p-1 rounded-md hover:bg-gray-100" aria-label="Close sidebar">
             <span className="material-icons text-gray-500">close</span>
           </button>
@@ -68,20 +69,15 @@ export default function ChatHistorySidebar({ isOpen, onClose }: ChatHistorySideb
                 <button
                   key={conversation.convId}
                   onClick={() => handleConversationClick(conversation)}
-                  className="w-full text-left p-2 rounded-lg hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-colors duration-150 mb-1 group"
+                  className="w-full text-left p-2 rounded-lg hover:bg-white hover:bg-opacity-60 transition-colors duration-150 mb-1 group"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">
-                        {conversation.title}
-                      </p>
-                      {conversation.messageCount > 1 && (
-                        <p className="text-xs text-gray-500 mt-1">{conversation.messageCount} messages</p>
-                      )}
-                    </div>
-                    <span className="material-icons text-gray-400 text-sm ml-2 group-hover:text-blue-500">
-                      arrow_forward_ios
-                    </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">
+                      {conversation.title}
+                    </p>
+                    {conversation.messageCount > 1 && (
+                      <p className="text-xs text-gray-500 mt-1">{conversation.messageCount} messages</p>
+                    )}
                   </div>
                 </button>
               ))}

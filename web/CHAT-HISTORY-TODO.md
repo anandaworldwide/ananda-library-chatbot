@@ -87,15 +87,12 @@ Deliver: Persistent URLs; share loads convo up to point; view-only for others.
 
 Deliver: Feature deployed to production across all sites with proper migration and monitoring.
 
-- [ ] **Pre-Deployment**: Create production deployment branch from development branch with all Phase 1-3 changes.
 - [ ] **Migration**: Run `migrate-conv-ids.ts` script on production Firestore (all sites: ananda, ananda-public,
       crystal, jairam) to backfill `convId` for existing documents.
 - [ ] **Database Indexes**: Create `firestore.indexes.json` file with composite indexes for new queries (uuid + convId,
       uuid + timestamp + convId) and deploy via Firebase CLI.
 - [ ] **Index Deployment**: Run `firebase deploy --only firestore:indexes --project <project-name> --force` to create
       indexes programmatically.
-- [ ] **Environment Variables**: Verify all required env vars are set in production (OPENAI_API_KEY for title
-      generation, etc.).
 - [ ] **Vercel Deployment**: Deploy to production via GitHub main branch; monitor build logs and function deployments.
 - [ ] **Site Testing**: Manual QA on all production sites (ananda, ananda-public, crystal, jairam) for chat history, URL
       navigation, sharing, mobile responsiveness.

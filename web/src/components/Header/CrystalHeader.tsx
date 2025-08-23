@@ -14,7 +14,7 @@ export default function CrystalHeader({ siteConfig, constrainWidth }: CrystalHea
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0092e3] text-white">
-      <div className={`h-24 ${constrainWidth ? "lg:grid lg:grid-cols-[320px_1fr] lg:px-0" : "px-4"}`}>
+      <div className={`h-24 ${constrainWidth ? "lg:grid lg:grid-cols-[288px_1fr] lg:px-0" : "px-4"}`}>
         {constrainWidth && <div className="hidden lg:block"></div>}
         <div className={`flex justify-between items-center ${constrainWidth ? "mx-auto w-full max-w-4xl px-4" : ""}`}>
           <div className="flex items-center">
