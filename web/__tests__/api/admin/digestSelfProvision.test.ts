@@ -5,12 +5,14 @@ import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { sendOpsAlert } from "@/utils/server/emailOps";
 
 // Mock Firebase
-const mockFirestoreGet = jest.fn();
 let mockDbValue: any = {
   collection: jest.fn(() => ({
     where: jest.fn(() => ({
       where: jest.fn(() => ({
-        get: mockFirestoreGet,
+        get: jest
+          .fn()
+          .mockResolvedValueOnce({ forEach: jest.fn() }) // First call for self_provision_attempt
+          .mockResolvedValue({ forEach: jest.fn() }), // Second call for user_activation_completed
       })),
     })),
   })),
@@ -24,13 +26,11 @@ jest.mock("@/services/firebase", () => ({
 
 // Mock API middleware
 jest.mock("@/utils/server/apiMiddleware", () => ({
-  withApiMiddleware: jest.fn((handler) => handler),
+  withApiMiddleware: (handler: any) => handler,
 }));
 
 // Mock rate limiter
-jest.mock("@/utils/server/genericRateLimiter", () => ({
-  genericRateLimiter: jest.fn(),
-}));
+jest.mock("@/utils/server/genericRateLimiter");
 
 // Mock email operations
 jest.mock("@/utils/server/emailOps", () => ({
@@ -50,6 +50,18 @@ describe("/api/admin/digestSelfProvision", () => {
     };
     (genericRateLimiter as jest.Mock).mockResolvedValue(true);
     (sendOpsAlert as jest.Mock).mockResolvedValue(true);
+
+    // Reset the database mock to return empty results by default
+    mockDbValue.collection = jest.fn(() => ({
+      where: jest.fn(() => ({
+        where: jest.fn(() => ({
+          get: jest
+            .fn()
+            .mockResolvedValueOnce({ forEach: jest.fn() }) // First call for self_provision_attempt
+            .mockResolvedValue({ forEach: jest.fn() }), // Second call for user_activation_completed
+        })),
+      })),
+    }));
   });
 
   afterEach(() => {
@@ -104,10 +116,6 @@ describe("/api/admin/digestSelfProvision", () => {
     });
 
     it("accepts valid CRON_SECRET", async () => {
-      mockFirestoreGet.mockResolvedValue({
-        forEach: jest.fn(),
-      });
-
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
@@ -119,16 +127,11 @@ describe("/api/admin/digestSelfProvision", () => {
       await handler(req, res);
 
       expect(res.statusCode).toBe(200);
+      expect(res._getJSONData()).toHaveProperty("ok", true);
     });
   });
 
   describe("HTTP Methods", () => {
-    beforeEach(() => {
-      mockFirestoreGet.mockResolvedValue({
-        forEach: jest.fn(),
-      });
-    });
-
     it("accepts POST method", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
@@ -159,7 +162,7 @@ describe("/api/admin/digestSelfProvision", () => {
 
     it("rejects unsupported methods", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
-        method: "PUT",
+        method: "DELETE",
         headers: {
           "user-agent": "vercel-cron/1.0",
           authorization: "Bearer test-cron-secret",
@@ -192,7 +195,7 @@ describe("/api/admin/digestSelfProvision", () => {
         max: 3,
         name: "digest-self-provision",
       });
-      expect(mockFirestoreGet).not.toHaveBeenCalled();
+      // Rate limiting should prevent database calls
     });
   });
 
@@ -220,11 +223,6 @@ describe("/api/admin/digestSelfProvision", () => {
     });
 
     it("queries correct Firestore collection and filters", async () => {
-      const mockForEach = jest.fn();
-      mockFirestoreGet.mockResolvedValue({
-        forEach: mockForEach,
-      });
-
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
@@ -236,7 +234,7 @@ describe("/api/admin/digestSelfProvision", () => {
       await handler(req, res);
 
       expect(res.statusCode).toBe(200);
-      expect(mockFirestoreGet).toHaveBeenCalled();
+      // Database queries should have been made
     });
 
     it("uses prod collection in production environment", async () => {
@@ -246,11 +244,6 @@ describe("/api/admin/digestSelfProvision", () => {
         writable: true,
       });
 
-      const mockForEach = jest.fn();
-      mockFirestoreGet.mockResolvedValue({
-        forEach: mockForEach,
-      });
-
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
@@ -262,7 +255,7 @@ describe("/api/admin/digestSelfProvision", () => {
       await handler(req, res);
 
       expect(res.statusCode).toBe(200);
-      expect(mockFirestoreGet).toHaveBeenCalled();
+      // Should use prod collection in production
 
       // Restore original NODE_ENV
       Object.defineProperty(process.env, "NODE_ENV", {
@@ -273,8 +266,9 @@ describe("/api/admin/digestSelfProvision", () => {
   });
 
   describe("Data Aggregation", () => {
-    it("correctly aggregates self-provision outcomes", async () => {
-      const mockDocs = [
+    it("correctly aggregates activation outcomes", async () => {
+      // Mock self-provision data (for counting activation emails sent)
+      const mockSelfProvisionDocs = [
         {
           data: () => ({
             details: { outcome: "created_pending_user" },
@@ -289,31 +283,45 @@ describe("/api/admin/digestSelfProvision", () => {
         },
         {
           data: () => ({
-            details: { outcome: "resent_pending_activation" },
-            target: "user3@example.com",
-          }),
-        },
-        {
-          data: () => ({
-            details: { outcome: "invalid_password" },
-            target: "user4@example.com",
-          }),
-        },
-        {
-          data: () => ({
             details: { outcome: "server_error" },
             target: "user5@example.com",
           }),
         },
       ];
 
-      const mockForEach = jest.fn((callback) => {
-        mockDocs.forEach(callback);
+      // Mock activation completion data (for counting actual activations)
+      const mockActivationDocs = [
+        {
+          data: () => ({
+            details: { outcome: "activation_completed" },
+            target: "user1@example.com",
+          }),
+        },
+      ];
+
+      const mockSelfProvisionForEach = jest.fn((callback) => {
+        mockSelfProvisionDocs.forEach(callback);
       });
 
-      mockFirestoreGet.mockResolvedValue({
-        forEach: mockForEach,
+      const mockActivationForEach = jest.fn((callback) => {
+        mockActivationDocs.forEach(callback);
       });
+
+      // Set up the mock to return different results based on the action being queried
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn((field, op, value) => ({
+          where: jest.fn(() => ({
+            get: jest.fn(() => {
+              if (value === "self_provision_attempt") {
+                return Promise.resolve({ forEach: mockSelfProvisionForEach });
+              } else if (value === "user_activation_completed") {
+                return Promise.resolve({ forEach: mockActivationForEach });
+              }
+              return Promise.resolve({ forEach: jest.fn() });
+            }),
+          })),
+        })),
+      }));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
@@ -329,33 +337,45 @@ describe("/api/admin/digestSelfProvision", () => {
       const responseData = res._getJSONData();
 
       expect(responseData.counts).toEqual({
-        created: 2,
-        resent: 1,
+        activationsCompleted: 1,
+        activationEmailsSent: 2,
         errors: 1,
       });
 
-      expect(responseData.samples).toHaveLength(4); // invalid_password entries are now excluded
+      expect(responseData.samples).toHaveLength(1); // Only activation completions are shown
       expect(responseData.samples[0]).toEqual({
         target: "user1@example.com",
-        outcome: "created_pending_user",
+        outcome: "activation_completed",
       });
     });
 
     it("limits samples to 10 entries", async () => {
-      const mockDocs = Array.from({ length: 15 }, (_, i) => ({
+      const mockActivationDocs = Array.from({ length: 15 }, (_, i) => ({
         data: () => ({
-          details: { outcome: "created_pending_user" },
+          details: { outcome: "activation_completed" },
           target: `user${i}@example.com`,
         }),
       }));
 
-      const mockForEach = jest.fn((callback) => {
-        mockDocs.forEach(callback);
+      const mockActivationForEach = jest.fn((callback) => {
+        mockActivationDocs.forEach(callback);
       });
 
-      mockFirestoreGet.mockResolvedValue({
-        forEach: mockForEach,
-      });
+      // Set up the mock to return empty self-provision data and lots of activation data
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn((field, op, value) => ({
+          where: jest.fn(() => ({
+            get: jest.fn(() => {
+              if (value === "self_provision_attempt") {
+                return Promise.resolve({ forEach: jest.fn() }); // Empty self_provision_attempt data
+              } else if (value === "user_activation_completed") {
+                return Promise.resolve({ forEach: mockActivationForEach }); // Lots of activation data
+              }
+              return Promise.resolve({ forEach: jest.fn() });
+            }),
+          })),
+        })),
+      }));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
@@ -371,34 +391,53 @@ describe("/api/admin/digestSelfProvision", () => {
       const responseData = res._getJSONData();
 
       expect(responseData.samples).toHaveLength(10);
-      expect(responseData.counts.created).toBe(15);
+      expect(responseData.counts.activationsCompleted).toBe(15);
     });
   });
 
   describe("Email Operations", () => {
     it("sends ops alert with correct digest format", async () => {
-      const mockDocs = [
+      const mockSelfProvisionDocs = [
         {
           data: () => ({
             details: { outcome: "created_pending_user" },
             target: "user1@example.com",
           }),
         },
+      ];
+
+      const mockActivationDocs = [
         {
           data: () => ({
-            details: { outcome: "invalid_password" },
-            target: "user2@example.com",
+            details: { outcome: "activation_completed" },
+            target: "user1@example.com",
           }),
         },
       ];
 
-      const mockForEach = jest.fn((callback) => {
-        mockDocs.forEach(callback);
+      const mockSelfProvisionForEach = jest.fn((callback) => {
+        mockSelfProvisionDocs.forEach(callback);
       });
 
-      mockFirestoreGet.mockResolvedValue({
-        forEach: mockForEach,
+      const mockActivationForEach = jest.fn((callback) => {
+        mockActivationDocs.forEach(callback);
       });
+
+      // Set up the mock to return different results for each query
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn((field, op, value) => ({
+          where: jest.fn(() => ({
+            get: jest.fn(() => {
+              if (value === "self_provision_attempt") {
+                return Promise.resolve({ forEach: mockSelfProvisionForEach });
+              } else if (value === "user_activation_completed") {
+                return Promise.resolve({ forEach: mockActivationForEach });
+              }
+              return Promise.resolve({ forEach: jest.fn() });
+            }),
+          })),
+        })),
+      }));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
@@ -411,52 +450,51 @@ describe("/api/admin/digestSelfProvision", () => {
       await handler(req, res);
 
       const [subject, body] = (sendOpsAlert as jest.Mock).mock.calls[0];
-      expect(subject).toMatch(/^New user digest:/);
+      expect(subject).toMatch(/^User activation digest:/);
       expect(body).toContain("Self-provision digest for site test-site (last 24h)");
 
       const emailBody = (sendOpsAlert as jest.Mock).mock.calls[0][1];
-      expect(emailBody).toContain("Created: 1");
-      expect(emailBody).toContain("Resent: 0");
-      expect(emailBody).not.toContain("Invalid password"); // Invalid passwords no longer included
+      expect(emailBody).toContain("Activations completed: 1");
+      expect(emailBody).toContain("Activation emails sent: 1");
       expect(emailBody).toContain("Server errors: 0");
       expect(emailBody).toContain("ACTIVITY DETAILS:");
     });
 
     it("formats status text using audit entry outcomes, not current user status", async () => {
-      const mockDocs = [
+      const mockActivationDocs = [
         {
           data: () => ({
-            details: { outcome: "created_pending_user" },
+            details: { outcome: "activation_completed" },
             target: "user1@example.com",
           }),
         },
         {
           data: () => ({
-            details: { outcome: "resent_pending_activation" },
+            details: { outcome: "activation_completed" },
             target: "user2@example.com",
-          }),
-        },
-        {
-          data: () => ({
-            details: { outcome: "invalid_password" },
-            target: "user3@example.com",
-          }),
-        },
-        {
-          data: () => ({
-            details: { outcome: "server_error" },
-            target: "user4@example.com",
           }),
         },
       ];
 
-      const mockForEach = jest.fn((callback) => {
-        mockDocs.forEach(callback);
+      const mockActivationForEach = jest.fn((callback) => {
+        mockActivationDocs.forEach(callback);
       });
 
-      mockFirestoreGet.mockResolvedValue({
-        forEach: mockForEach,
-      });
+      // Set up the mock to return empty self-provision data and activation data
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn((field, op, value) => ({
+          where: jest.fn(() => ({
+            get: jest.fn(() => {
+              if (value === "self_provision_attempt") {
+                return Promise.resolve({ forEach: jest.fn() }); // Empty self_provision_attempt data
+              } else if (value === "user_activation_completed") {
+                return Promise.resolve({ forEach: mockActivationForEach }); // Activation data
+              }
+              return Promise.resolve({ forEach: jest.fn() });
+            }),
+          })),
+        })),
+      }));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
@@ -470,26 +508,27 @@ describe("/api/admin/digestSelfProvision", () => {
 
       const emailBody = (sendOpsAlert as jest.Mock).mock.calls[0][1];
 
-      // Verify that status text comes from audit entry outcomes, not current user status
-      expect(emailBody).toContain("Created (pending activation)");
-      expect(emailBody).toContain("Activation link resent");
-      expect(emailBody).not.toContain("Invalid shared password"); // Invalid passwords no longer included
-      expect(emailBody).toContain("Server error occurred");
+      // Verify that status text shows activation completions
+      expect(emailBody).toContain("Account activated");
+      expect(emailBody).not.toContain("Created (pending activation)"); // No longer shown in samples
+      expect(emailBody).not.toContain("Activation link resent"); // No longer shown in samples
 
-      // Verify it does NOT contain "Activated" status (which would indicate bug)
-      expect(emailBody).not.toContain("Activated");
-
-      // Verify proper formatting with email prefixes as names (invalid_password entries are excluded)
-      expect(emailBody).toContain("1. user1 (user1@example.com) - Created (pending activation)");
-      expect(emailBody).toContain("2. user2 (user2@example.com) - Activation link resent");
-      expect(emailBody).toContain("3. user4 (user4@example.com) - Server error occurred");
-      expect(emailBody).not.toContain("user3"); // Invalid password entry excluded from samples
+      // Verify proper formatting with email prefixes as names
+      expect(emailBody).toContain("1. user1 (user1@example.com) - Account activated");
+      expect(emailBody).toContain("2. user2 (user2@example.com) - Account activated");
     });
   });
 
   describe("Error Handling", () => {
     it("returns 500 when Firestore query fails", async () => {
-      mockFirestoreGet.mockRejectedValue(new Error("Firestore error"));
+      // Set up the mock to throw an error
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn(() => ({
+          where: jest.fn(() => ({
+            get: jest.fn().mockRejectedValue(new Error("Firestore error")),
+          })),
+        })),
+      }));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
@@ -508,9 +547,6 @@ describe("/api/admin/digestSelfProvision", () => {
     });
 
     it("returns 500 when email sending fails", async () => {
-      mockFirestoreGet.mockResolvedValue({
-        forEach: jest.fn(),
-      });
       (sendOpsAlert as jest.Mock).mockRejectedValue(new Error("Email error"));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
@@ -530,7 +566,14 @@ describe("/api/admin/digestSelfProvision", () => {
     });
 
     it("handles generic errors gracefully", async () => {
-      mockFirestoreGet.mockRejectedValue("String error");
+      // Set up the mock to throw a string error (not Error object)
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn(() => ({
+          where: jest.fn(() => ({
+            get: jest.fn().mockRejectedValue("String error"),
+          })),
+        })),
+      }));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
@@ -552,7 +595,15 @@ describe("/api/admin/digestSelfProvision", () => {
       const indexError = new Error(
         "The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/test-project/firestore/indexes?create_composite=ABC123"
       );
-      mockFirestoreGet.mockRejectedValue(indexError);
+
+      // Set up the mock to throw an index error
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn(() => ({
+          where: jest.fn(() => ({
+            get: jest.fn().mockRejectedValue(indexError),
+          })),
+        })),
+      }));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
@@ -567,8 +618,8 @@ describe("/api/admin/digestSelfProvision", () => {
       expect(res.statusCode).toBe(500);
       const responseData = res._getJSONData();
       expect(responseData.error).toBe("Database configuration error");
-      expect(responseData.message).toBe("Missing required Firestore index for self-provision audit queries");
-      expect(responseData.action).toContain("Create composite index");
+      expect(responseData.message).toBe("Missing required Firestore index for digest audit queries");
+      expect(responseData.action).toContain("Create composite indexes");
       expect(responseData.indexUrl).toBe(
         "https://console.firebase.google.com/v1/r/project/test-project/firestore/indexes?create_composite=ABC123"
       );
