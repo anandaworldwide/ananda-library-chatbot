@@ -35,7 +35,8 @@ describe("titleGeneration", () => {
           }) as any
       );
 
-      const result = await generateTitle("How do I meditate properly?");
+      // Use a question longer than 5 words to trigger AI generation
+      const result = await generateTitle("How do I meditate properly for better results?");
 
       expect(result).toBe("Meditation Technique Guide");
       expect(mockInvoke).toHaveBeenCalledWith(expect.stringContaining("Generate a concise four-word title"));
@@ -56,7 +57,7 @@ describe("titleGeneration", () => {
       expect(result).toBe("How do I meditate...");
     });
 
-    it("should use full question when less than 7 words", async () => {
+    it("should use full question when 5 words or less", async () => {
       const mockInvoke = jest.fn().mockRejectedValue(new Error("AI failed"));
 
       mockChatOpenAI.mockImplementation(
@@ -69,6 +70,25 @@ describe("titleGeneration", () => {
       const result = await generateTitle("What is meditation?");
 
       expect(result).toBe("What is meditation?");
+      // Should not call AI for short questions
+      expect(mockInvoke).not.toHaveBeenCalled();
+    });
+
+    it("should use full question for exactly 5 words", async () => {
+      const mockInvoke = jest.fn().mockRejectedValue(new Error("AI failed"));
+
+      mockChatOpenAI.mockImplementation(
+        () =>
+          ({
+            invoke: mockInvoke,
+          }) as any
+      );
+
+      const result = await generateTitle("How do I meditate properly?");
+
+      expect(result).toBe("How do I meditate properly?");
+      // Should not call AI for 5-word questions
+      expect(mockInvoke).not.toHaveBeenCalled();
     });
 
     it("should handle AI response that is too long", async () => {
@@ -104,6 +124,24 @@ describe("titleGeneration", () => {
 
       expect(result).toBe("How do I meditate...");
     });
+
+    it("should generate title in same language as question", async () => {
+      const mockInvoke = jest.fn().mockResolvedValue({
+        content: "Principios Básicos Meditación Espiritual",
+      });
+
+      mockChatOpenAI.mockImplementation(
+        () =>
+          ({
+            invoke: mockInvoke,
+          }) as any
+      );
+
+      const result = await generateTitle("¿Cuáles son los principios más importantes para realizar a Dios?");
+
+      expect(result).toBe("Principios Básicos Meditación Espiritual");
+      expect(mockInvoke).toHaveBeenCalledWith(expect.stringContaining("SAME LANGUAGE as the original question"));
+    });
   });
 
   describe("generateAndUpdateTitle", () => {
@@ -131,7 +169,8 @@ describe("titleGeneration", () => {
 
       mockFirestoreUpdate.mockResolvedValue(undefined);
 
-      await generateAndUpdateTitle("doc123", "How do I meditate properly?");
+      // Use a question longer than 5 words to trigger AI generation
+      await generateAndUpdateTitle("doc123", "How do I meditate properly for better results?");
 
       expect(mockFirestoreUpdate).toHaveBeenCalledWith(
         mockDocRef,

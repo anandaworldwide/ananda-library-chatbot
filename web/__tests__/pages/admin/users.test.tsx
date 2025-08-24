@@ -15,6 +15,7 @@ jest.mock("next/router", () => ({
 // Mock fetchWithAuth from tokenManager
 jest.mock("@/utils/client/tokenManager", () => ({
   fetchWithAuth: jest.fn(),
+  isAuthenticated: jest.fn().mockReturnValue(true), // Mock as authenticated by default
 }));
 
 // Mock the site config

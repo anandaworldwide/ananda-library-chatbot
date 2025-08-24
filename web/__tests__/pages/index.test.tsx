@@ -24,6 +24,10 @@ jest.mock("next/image", () => ({
 jest.mock("next/router", () => ({
   useRouter: () => ({
     push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+    query: {}, // Empty query object by default
+    asPath: "/",
   }),
 }));
 

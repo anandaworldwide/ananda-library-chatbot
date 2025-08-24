@@ -38,6 +38,7 @@ Requirements:
 - Capture the main topic
 - No punctuation
 - Title case
+- IMPORTANT: Generate the title in the SAME LANGUAGE as the original question
 
 Examples:
 Question: "How do I meditate properly?"
@@ -45,6 +46,12 @@ Title: "Proper Meditation Technique Guide"
 
 Question: "What are Yogananda's teachings about love?"
 Title: "Yogananda Love Teaching Wisdom"
+
+Question: "¿Cuáles son los principios de meditación?"
+Title: "Principios Básicos Meditación Espiritual"
+
+Question: "Comment méditer correctement selon Yogananda?"
+Title: "Méditation Correcte Selon Yogananda"
 
 Title:`;
 
