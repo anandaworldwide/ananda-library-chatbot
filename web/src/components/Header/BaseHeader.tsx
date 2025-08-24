@@ -97,6 +97,7 @@ export default function BaseHeader({
                   <Link
                     key={item.path}
                     href={item.path}
+                    onClick={item.path === "/" && onNewChat ? () => onNewChat() : undefined}
                     className={`hover:text-slate-600 cursor-pointer ${
                       isActive(item.path) ? "text-slate-800 font-bold" : ""
                     }`}

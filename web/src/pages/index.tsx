@@ -88,6 +88,23 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Track current conversation ID for follow-up messages
   const [currentConvId, setCurrentConvId] = useState<string | null>(null);
 
+  // Local ref to track latest path since we sometimes manipulate history without
+  // involving Next.js router (pushState). This prevents stale router.asPath
+  // values from confusing handleUrlBasedLoading.
+  const pathRef = useRef<string>(typeof window !== "undefined" ? window.location.pathname : "/");
+
+  // Track the current question being processed (for adding to sidebar)
+  const [currentQuestion, setCurrentQuestion] = useState<string>("");
+
+  // References to sidebar functions for adding/updating conversations
+  const sidebarFunctionsRef = useRef<{
+    addNewConversation: (convId: string, title: string, question: string) => void;
+    updateConversationTitle: (convId: string, newTitle: string) => void;
+  } | null>(null);
+
+  // (Removed pushedConvIdRef – no longer needed now that we update URL via
+  // window.history.replaceState without triggering navigation.)
+
   // UI state variables
   const [showLikePrompt] = useState<boolean>(false);
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
@@ -117,52 +134,103 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     }
   };
 
+  // Helper function to load conversation content without URL updates
+  const loadConversationDirectly = useCallback(
+    async (convId: string) => {
+      try {
+        console.debug(
+          `[DEBUG] loadConversationDirectly called for ${convId} | Current messages length: ${messageState.messages.length}`
+        );
+        setLoading(true);
+        setError(null);
+
+        const loadedConversation = await loadConversationByConvId(convId);
+        console.debug(`[DEBUG] Loaded conversation has ${loadedConversation.messages.length} messages`);
+
+        // Update the message state with the loaded conversation
+        setMessageState({
+          messages: [
+            {
+              message: getGreeting(siteConfig),
+              type: "apiMessage",
+            },
+            ...loadedConversation.messages,
+          ],
+          history: loadedConversation.history,
+        });
+
+        // Set the current conversation ID for follow-up messages
+        setCurrentConvId(convId);
+
+        // Log analytics event
+        logEvent("chat_history_conversation_loaded", "Chat History", convId, loadedConversation.messages.length);
+      } catch (error) {
+        console.error("Error loading conversation:", error);
+        setError(error instanceof Error ? error.message : "Failed to load conversation");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [siteConfig, setLoading, setError, setMessageState, setCurrentConvId]
+  );
+
   // Function to load a conversation from chat history
   const handleLoadConversation = async (convId: string) => {
-    try {
-      setLoading(true);
-      setError(null);
+    // Load the conversation content
+    await loadConversationDirectly(convId);
 
-      const loadedConversation = await loadConversationByConvId(convId);
+    // Update URL without triggering a full Next.js navigation to prevent flash.
+    window.history.pushState(null, "", `/chat/${convId}`);
+    pathRef.current = `/chat/${convId}`;
 
-      // Update the message state with the loaded conversation
-      setMessageState({
-        messages: [
-          {
-            message: getGreeting(siteConfig),
-            type: "apiMessage",
-          },
-          ...loadedConversation.messages,
-        ],
-        history: loadedConversation.history,
-      });
-
-      // Set the current conversation ID for follow-up messages
-      setCurrentConvId(convId);
-
-      // Close sidebar after loading
-      setSidebarOpen(false);
-
-      // Log analytics event
-      logEvent("chat_history_conversation_loaded", "Chat History", convId, loadedConversation.messages.length);
-    } catch (error) {
-      console.error("Error loading conversation:", error);
-      setError(error instanceof Error ? error.message : "Failed to load conversation");
-    } finally {
-      setLoading(false);
-    }
+    // Close sidebar after loading
+    setSidebarOpen(false);
   };
 
   // Function to handle URL-based conversation loading
   const handleUrlBasedLoading = useCallback(async () => {
-    const path = router.asPath;
+    const path = pathRef.current;
+    console.debug(
+      `[DEBUG] handleUrlBasedLoading called | path=${path} | currentConvId=${currentConvId} | loading=${loading}`
+    );
+
+    // Don't interfere with ongoing streaming/loading operations
+    if (loading) {
+      console.debug(`[DEBUG] Skipping handleUrlBasedLoading due to active loading`);
+      return;
+    }
+
+    // Handle root path (/) – reset only when a conversation has already started.
+    // This avoids wiping in-progress streaming for the first message.
+    if (path === "/" && currentConvId !== null) {
+      // If we’re mid-conversation (more than greeting), keep it; otherwise reset.
+      if (messageState.messages.length <= 1) {
+        setCurrentConvId(null);
+        setCurrentQuestion("");
+        setMessageState({
+          messages: [
+            {
+              message: getGreeting(siteConfig),
+              type: "apiMessage",
+            },
+          ],
+          history: [],
+        });
+        setError(null);
+        setViewOnlyMode(false);
+      }
+      return;
+    }
 
     // Handle /chat/[convId] URLs
     if (path.startsWith("/chat/")) {
       const convId = path.split("/chat/")[1];
-      if (convId && convId !== router.query.convId) {
-        await handleLoadConversation(convId);
-        // URL is already correct, no need to update it
+      console.debug(`[DEBUG] Loading conversation: convId=${convId} | Check: ${convId !== currentConvId}`);
+      // Prevent infinite loop by checking if we've already loaded this conversation
+      if (convId && convId !== currentConvId) {
+        console.debug(`[DEBUG] About to call loadConversationDirectly for ${convId}`);
+        // Load conversation without updating URL (since URL is already correct)
+        await loadConversationDirectly(convId);
       }
       return;
     }
@@ -224,7 +292,18 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       }
       return;
     }
-  }, [router.asPath, router.query.convId, siteConfig]);
+  }, [
+    pathRef.current,
+    currentConvId,
+    loading,
+    siteConfig,
+    loadConversationDirectly,
+    setCurrentConvId,
+    setMessageState,
+    setError,
+    setViewOnlyMode,
+    messageState.messages.length,
+  ]);
 
   // URL detection effect
   useEffect(() => {
@@ -237,10 +316,10 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   useEffect(() => {
     const handlePopState = () => {
       const currentPath = window.location.pathname;
+      pathRef.current = currentPath; // keep ref in sync
 
-      // If user navigated back to home page (/), reset to fresh chat
       if (currentPath === "/") {
-        // Reset all chat state to initial values
+        // Back to home: reset chat
         setMessageState({
           messages: [
             {
@@ -254,12 +333,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         setViewOnlyMode(false);
         setQuery("");
         setError(null);
-
-        // Clear any existing conversation data
         setLoading(false);
-
-        // Log analytics event
         logEvent("navigation_back_to_home", "Navigation", "fresh_chat_reset");
+      } else if (currentPath.startsWith("/chat/")) {
+        // Navigate to a specific conversation via browser history
+        handleUrlBasedLoading();
       }
     };
 
@@ -269,7 +347,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [siteConfig, setMessageState, setError, setLoading]);
+  }, [siteConfig, setMessageState, setError, setLoading, handleUrlBasedLoading]);
 
   // Custom hook for displaying popup messages
   const { showPopup, closePopup, popupMessage } = usePopup(
@@ -292,10 +370,14 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
   // Function to start a new chat conversation
   const handleNewChat = () => {
-    // Reset conversation ID to start fresh
+    // Push a new history entry for '/' without triggering a Next.js navigation.
+    window.history.pushState(null, "", "/");
+    pathRef.current = "/";
+    // Immediately reset local chat state so UI clears without waiting for
+    // handleUrlBasedLoading. This guarantees the New-Chat button and the
+    // “Ask” nav item always start from a blank conversation.
     setCurrentConvId(null);
-
-    // Reset message state to initial greeting
+    setCurrentQuestion("");
     setMessageState({
       messages: [
         {
@@ -305,9 +387,8 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       ],
       history: [],
     });
-
-    // Clear any errors
     setError(null);
+    setViewOnlyMode(false);
 
     // Log analytics event
     logEvent("new_chat_started", "Chat", "header_button");
@@ -540,9 +621,83 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         }
       }
 
+      if (data.docId) {
+        // Save the docId with the message immediately (buttons won't show until loading=false)
+        setMessageState((prevState) => {
+          const updatedMessages = [...prevState.messages];
+          // Make sure we're getting the API message (it should be the last one)
+          const lastMessage = updatedMessages[updatedMessages.length - 1];
+
+          if (lastMessage.type === "apiMessage") {
+            // Update the API message with the docId
+            updatedMessages[updatedMessages.length - 1] = {
+              ...lastMessage,
+              docId: data.docId,
+            };
+          } else if (prevState.messages.length >= 2) {
+            // If the last message isn't an API message, find the most recent API message
+            for (let i = updatedMessages.length - 1; i >= 0; i--) {
+              if (updatedMessages[i].type === "apiMessage") {
+                updatedMessages[i] = {
+                  ...updatedMessages[i],
+                  docId: data.docId,
+                };
+                break;
+              }
+            }
+          } else {
+            console.warn(`No API message found to attach docId to`);
+          }
+
+          return {
+            ...prevState,
+            messages: updatedMessages,
+          };
+        });
+
+        // Save the docId in a separate state variable for later reference
+        // This ensures we have it even if the message object wasn't ready when it arrived
+        setSavedDocId(data.docId);
+
+        // Update current conversation ID if provided
+        if (data.convId) {
+          console.debug(
+            `[DEBUG] Received convId: ${data.convId} | Current state: currentConvId=${currentConvId} | loading=${loading}`
+          );
+
+          const isNewConversation = !currentConvId;
+          console.debug(`[DEBUG] Setting currentConvId to ${data.convId} | isNewConversation=${isNewConversation}`);
+          setCurrentConvId(data.convId);
+
+          // For new conversations, update URL and sidebar
+          if (isNewConversation) {
+            console.debug(`[DEBUG] Pushing URL for new convId: ${data.convId}`);
+            // Use pushState so the browser back button will return to '/'.
+            window.history.pushState(null, "", `/chat/${data.convId}`);
+            pathRef.current = `/chat/${data.convId}`;
+
+            // Add new conversation to sidebar (only for first question in conversation)
+            if (sidebarFunctionsRef.current && currentQuestion) {
+              // Create a temporary title from the question
+              const questionWords = currentQuestion.trim().split(/\s+/);
+              const tempTitle =
+                questionWords.length <= 5 ? currentQuestion : questionWords.slice(0, 4).join(" ") + "...";
+
+              console.debug(`[DEBUG] Adding to sidebar: convId=${data.convId} | tempTitle=${tempTitle}`);
+              sidebarFunctionsRef.current.addNewConversation(data.convId, tempTitle, currentQuestion);
+
+              // Clear the current question now that we've used it
+              setCurrentQuestion("");
+            }
+          }
+          // Note: For follow-up questions, URL stays the same since convId is consistent
+        }
+      }
+
       if (data.done) {
         // Check for docId one more time right when done is received.
         // Immediately set loading to false so the buttons appear right away
+        console.debug(`[DEBUG] Setting loading to false (streaming complete)`);
         setLoading(false);
 
         // Reset accumulated response when done
@@ -621,80 +776,28 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
           return { ...prevState };
         });
+
+        // Start fetching related questions in the background
+        if (savedDocId) {
+          fetchRelatedQuestions(savedDocId).then((relatedQuestions) => {
+            const completionTimestamp = new Date().toISOString().substr(11, 12);
+            console.log(`[${completionTimestamp}] Completed fetching related questions for docId: ${savedDocId}`);
+            if (relatedQuestions) {
+              setMessageState((prevState) => ({
+                ...prevState,
+                messages: prevState.messages.map((msg) =>
+                  msg.docId === savedDocId ? { ...msg, relatedQuestions } : msg
+                ),
+              }));
+              setLastRelatedQuestionsUpdate(savedDocId ?? null);
+            }
+          });
+        }
       }
 
       if (data.error) {
         console.error(`Stream ERROR:`, data.error);
         setError(data.error);
-      }
-
-      if (data.docId) {
-        // Save the docId in a separate state variable for later reference
-        // This ensures we have it even if the message object wasn't ready when it arrived
-        setSavedDocId(data.docId);
-
-        // Update current conversation ID if provided
-        if (data.convId) {
-          setCurrentConvId(data.convId);
-
-          // Update URL based on conversation state
-          // For first question in session, use window.history.pushState to create new history entry
-          // For follow-up questions, URL should already be correct since convId doesn't change
-          if (!currentConvId) {
-            // First question - create new history entry for /chat/[convId] so back button works
-            window.history.pushState(null, "", `/chat/${data.convId}`);
-          }
-          // Note: For follow-up questions, URL stays the same since convId is consistent
-        }
-
-        // Store the docId with the message immediately (buttons won't show until loading=false)
-        setMessageState((prevState) => {
-          const updatedMessages = [...prevState.messages];
-          // Make sure we're getting the API message (it should be the last one)
-          const lastMessage = updatedMessages[updatedMessages.length - 1];
-
-          if (lastMessage.type === "apiMessage") {
-            // Update the API message with the docId
-            updatedMessages[updatedMessages.length - 1] = {
-              ...lastMessage,
-              docId: data.docId,
-            };
-          } else if (prevState.messages.length >= 2) {
-            // If the last message isn't an API message, find the most recent API message
-            for (let i = updatedMessages.length - 1; i >= 0; i--) {
-              if (updatedMessages[i].type === "apiMessage") {
-                updatedMessages[i] = {
-                  ...updatedMessages[i],
-                  docId: data.docId,
-                };
-                break;
-              }
-            }
-          } else {
-            console.warn(`No API message found to attach docId to`);
-          }
-
-          return {
-            ...prevState,
-            messages: updatedMessages,
-          };
-        });
-
-        // Start fetching related questions in the background
-
-        fetchRelatedQuestions(data.docId).then((relatedQuestions) => {
-          const completionTimestamp = new Date().toISOString().substr(11, 12);
-          console.log(`[${completionTimestamp}] Completed fetching related questions for docId: ${data.docId}`);
-          if (relatedQuestions) {
-            setMessageState((prevState) => ({
-              ...prevState,
-              messages: prevState.messages.map((msg) =>
-                msg.docId === data.docId ? { ...msg, relatedQuestions } : msg
-              ),
-            }));
-            setLastRelatedQuestionsUpdate(data.docId ?? null);
-          }
-        });
       }
     },
     [
@@ -777,6 +880,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   const handleSubmit = async (e: React.FormEvent, submittedQuery: string) => {
     e.preventDefault();
     if (submittedQuery.trim() === "") return;
+
+    // Store the current question for sidebar updates
+    setCurrentQuestion(submittedQuery);
 
     // Reset timing metrics when starting a new query
     setTimingMetrics(null);
@@ -1211,6 +1317,10 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                 setSidebarOpen(false);
               }}
               onLoadConversation={handleLoadConversation}
+              currentConvId={currentConvId}
+              onGetSidebarFunctions={(functions) => {
+                sidebarFunctionsRef.current = functions;
+              }}
             />
           )}
 

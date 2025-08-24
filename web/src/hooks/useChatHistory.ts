@@ -159,6 +159,42 @@ export function useChatHistory(limit: number = 20) {
     return () => clearTimeout(timer);
   }, []);
 
+  // Function to add a new conversation to the top of the list
+  const addNewConversation = (convId: string, title: string, question: string) => {
+    console.debug(`[DEBUG] addNewConversation called: convId=${convId} | title=${title} | question=${question}`);
+
+    const newConversation: ConversationGroup = {
+      convId,
+      title,
+      lastMessage: {
+        id: `temp_${convId}`,
+        question,
+        answer: "", // Will be populated when response comes
+        timestamp: { seconds: Math.floor(Date.now() / 1000) }, // Current timestamp
+        likeCount: 0,
+        collection: "",
+        convId,
+        title,
+      },
+      messageCount: 1,
+    };
+
+    // Add to the top of the conversations list and remove duplicates
+    setConversations((prev) => {
+      console.debug(`[DEBUG] Updating conversations | Previous count: ${prev.length} | Adding at top`);
+      // Remove any existing conversation with the same convId to prevent duplicates
+      const filtered = prev.filter((conv) => conv.convId !== convId);
+      const newList = [newConversation, ...filtered];
+      console.debug(`[DEBUG] New conversations list has ${newList.length} items`);
+      return newList;
+    });
+  };
+
+  // Function to update an existing conversation's title
+  const updateConversationTitle = (convId: string, newTitle: string) => {
+    setConversations((prev) => prev.map((conv) => (conv.convId === convId ? { ...conv, title: newTitle } : conv)));
+  };
+
   return {
     loading,
     error,
@@ -167,5 +203,7 @@ export function useChatHistory(limit: number = 20) {
     fetchConversations,
     refetch: () => fetchConversations(false),
     loadMore: () => fetchConversations(true),
+    addNewConversation,
+    updateConversationTitle,
   };
 }

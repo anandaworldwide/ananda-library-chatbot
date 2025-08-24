@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useChatHistory, ConversationGroup } from "@/hooks/useChatHistory";
 import { useRouter } from "next/router";
 import { logEvent } from "@/utils/client/analytics";
@@ -7,11 +7,33 @@ interface ChatHistorySidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onLoadConversation?: (convId: string) => void;
+  currentConvId?: string | null;
+  onGetSidebarFunctions?: (functions: {
+    addNewConversation: (convId: string, title: string, question: string) => void;
+    updateConversationTitle: (convId: string, newTitle: string) => void;
+  }) => void;
 }
 
-export default function ChatHistorySidebar({ isOpen, onClose, onLoadConversation }: ChatHistorySidebarProps) {
-  const { loading, error, conversations, hasMore, loadMore } = useChatHistory(20);
+export default function ChatHistorySidebar({
+  isOpen,
+  onClose,
+  onLoadConversation,
+  currentConvId,
+  onGetSidebarFunctions,
+}: ChatHistorySidebarProps) {
+  const { loading, error, conversations, hasMore, loadMore, addNewConversation, updateConversationTitle } =
+    useChatHistory(20);
   const router = useRouter();
+
+  // Expose the internal functions to the parent component
+  useEffect(() => {
+    if (onGetSidebarFunctions) {
+      onGetSidebarFunctions({
+        addNewConversation,
+        updateConversationTitle,
+      });
+    }
+  }, [onGetSidebarFunctions, addNewConversation, updateConversationTitle]);
 
   const handleConversationClick = (conversation: ConversationGroup) => {
     // Track conversation click event
@@ -78,19 +100,28 @@ export default function ChatHistorySidebar({ isOpen, onClose, onLoadConversation
             </div>
           ) : (
             <div className="p-2">
-              {conversations.map((conversation) => (
-                <button
-                  key={conversation.convId}
-                  onClick={() => handleConversationClick(conversation)}
-                  className="w-full text-left p-2 rounded-lg hover:bg-white hover:bg-opacity-60 transition-colors duration-150 mb-1 group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">
-                      {conversation.title}
-                    </p>
-                  </div>
-                </button>
-              ))}
+              {conversations.map((conversation) => {
+                const isCurrentConversation = currentConvId === conversation.convId;
+                return (
+                  <button
+                    key={conversation.convId}
+                    onClick={() => handleConversationClick(conversation)}
+                    className={`w-full text-left p-2 rounded-lg transition-colors duration-150 mb-1 group ${
+                      isCurrentConversation ? "bg-white bg-opacity-80 shadow-sm" : "hover:bg-white hover:bg-opacity-60"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`text-sm font-medium truncate ${
+                          isCurrentConversation ? "text-blue-700" : "text-gray-900 group-hover:text-blue-600"
+                        }`}
+                      >
+                        {conversation.title}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
 
               {/* Load more button */}
               {hasMore && (
