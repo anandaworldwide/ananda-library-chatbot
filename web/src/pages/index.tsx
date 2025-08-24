@@ -138,14 +138,10 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   const loadConversationDirectly = useCallback(
     async (convId: string) => {
       try {
-        console.debug(
-          `[DEBUG] loadConversationDirectly called for ${convId} | Current messages length: ${messageState.messages.length}`
-        );
         setLoading(true);
         setError(null);
 
         const loadedConversation = await loadConversationByConvId(convId);
-        console.debug(`[DEBUG] Loaded conversation has ${loadedConversation.messages.length} messages`);
 
         // Update the message state with the loaded conversation
         setMessageState({
@@ -190,13 +186,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Function to handle URL-based conversation loading
   const handleUrlBasedLoading = useCallback(async () => {
     const path = pathRef.current;
-    console.debug(
-      `[DEBUG] handleUrlBasedLoading called | path=${path} | currentConvId=${currentConvId} | loading=${loading}`
-    );
 
     // Don't interfere with ongoing streaming/loading operations
     if (loading) {
-      console.debug(`[DEBUG] Skipping handleUrlBasedLoading due to active loading`);
       return;
     }
 
@@ -225,10 +217,8 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     // Handle /chat/[convId] URLs
     if (path.startsWith("/chat/")) {
       const convId = path.split("/chat/")[1];
-      console.debug(`[DEBUG] Loading conversation: convId=${convId} | Check: ${convId !== currentConvId}`);
       // Prevent infinite loop by checking if we've already loaded this conversation
       if (convId && convId !== currentConvId) {
-        console.debug(`[DEBUG] About to call loadConversationDirectly for ${convId}`);
         // Load conversation without updating URL (since URL is already correct)
         await loadConversationDirectly(convId);
       }
@@ -661,17 +651,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
         // Update current conversation ID if provided
         if (data.convId) {
-          console.debug(
-            `[DEBUG] Received convId: ${data.convId} | Current state: currentConvId=${currentConvId} | loading=${loading}`
-          );
-
           const isNewConversation = !currentConvId;
-          console.debug(`[DEBUG] Setting currentConvId to ${data.convId} | isNewConversation=${isNewConversation}`);
           setCurrentConvId(data.convId);
 
           // For new conversations, update URL and sidebar
           if (isNewConversation) {
-            console.debug(`[DEBUG] Pushing URL for new convId: ${data.convId}`);
             // Use pushState so the browser back button will return to '/'.
             window.history.pushState(null, "", `/chat/${data.convId}`);
             pathRef.current = `/chat/${data.convId}`;
@@ -683,7 +667,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
               const tempTitle =
                 questionWords.length <= 5 ? currentQuestion : questionWords.slice(0, 4).join(" ") + "...";
 
-              console.debug(`[DEBUG] Adding to sidebar: convId=${data.convId} | tempTitle=${tempTitle}`);
               sidebarFunctionsRef.current.addNewConversation(data.convId, tempTitle, currentQuestion);
 
               // Clear the current question now that we've used it
@@ -697,7 +680,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       if (data.done) {
         // Check for docId one more time right when done is received.
         // Immediately set loading to false so the buttons appear right away
-        console.debug(`[DEBUG] Setting loading to false (streaming complete)`);
         setLoading(false);
 
         // Reset accumulated response when done
