@@ -20,7 +20,7 @@ export interface LoadedConversation {
 /**
  * Loads a full conversation by convId and transforms it for the chat interface
  */
-export async function loadConversationByConvId(convId: string): Promise<LoadedConversation> {
+export async function loadConversationByConvId(convId: string, upToTimestamp?: any): Promise<LoadedConversation> {
   try {
     const uuid = getOrCreateUUID();
 
@@ -40,11 +40,20 @@ export async function loadConversationByConvId(convId: string): Promise<LoadedCo
     }
 
     // Sort chats by timestamp (oldest first for proper conversation flow)
-    const sortedChats = chats.sort((a, b) => {
+    let sortedChats = chats.sort((a, b) => {
       const timeA = a.timestamp?.seconds || a.timestamp?._seconds || 0;
       const timeB = b.timestamp?.seconds || b.timestamp?._seconds || 0;
       return timeA - timeB;
     });
+
+    // Filter chats up to the specified timestamp if provided
+    if (upToTimestamp) {
+      const upToTime = upToTimestamp.seconds || upToTimestamp._seconds || upToTimestamp;
+      sortedChats = sortedChats.filter((chat) => {
+        const chatTime = chat.timestamp?.seconds || chat.timestamp?._seconds || 0;
+        return chatTime <= upToTime;
+      });
+    }
 
     // Transform chats into Message[] format for the chat interface
     const messages: Message[] = [];
@@ -112,6 +121,43 @@ export async function loadConversationByConvId(convId: string): Promise<LoadedCo
     };
   } catch (error) {
     console.error("Error loading conversation:", error);
+    throw error;
+  }
+}
+
+/**
+ * Loads conversation by document ID with ownership and timestamp logic
+ */
+export async function loadConversationByDocId(
+  docId: string
+): Promise<LoadedConversation & { isOwner: boolean; viewOnly: boolean }> {
+  try {
+    // First fetch the document to get convId and ownership info
+    const docResponse = await fetch(`/api/document/${docId}`);
+
+    if (!docResponse.ok) {
+      if (docResponse.status === 404) {
+        throw new Error("Document not found");
+      }
+      throw new Error(`Failed to fetch document: ${docResponse.statusText}`);
+    }
+
+    const docData = await docResponse.json();
+    const { convId, uuid: docUuid, timestamp } = docData;
+
+    const currentUuid = getOrCreateUUID();
+    const isOwner = currentUuid === docUuid;
+
+    // Load conversation - full if owner, up to timestamp if not
+    const conversation = await loadConversationByConvId(convId, isOwner ? undefined : timestamp);
+
+    return {
+      ...conversation,
+      isOwner,
+      viewOnly: !isOwner,
+    };
+  } catch (error) {
+    console.error("Error loading conversation by doc ID:", error);
     throw error;
   }
 }

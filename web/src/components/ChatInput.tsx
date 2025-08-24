@@ -39,6 +39,7 @@ import { getOrCreateUUID } from "@/utils/client/uuid";
 // Define the props interface for the ChatInput component
 interface ChatInputProps {
   loading: boolean;
+  disabled?: boolean;
   handleSubmit: (e: React.FormEvent, query: string) => void;
   handleStop: () => void;
   handleEnter: (e: React.KeyboardEvent<HTMLTextAreaElement>, query: string) => void;
@@ -69,6 +70,7 @@ interface ChatInputProps {
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   loading,
+  disabled = false,
   handleSubmit,
   handleStop,
   handleEnter,
@@ -293,13 +295,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               maxLength={4000}
               id="userInput"
               name="userInput"
-              placeholder={hasInteracted ? "" : placeholderText}
-              className="flex-grow p-2 border border-gray-300 rounded-md resize-none focus:outline-none min-h-[40px] overflow-hidden"
+              placeholder={disabled ? "View-only mode" : hasInteracted ? "" : placeholderText}
+              disabled={disabled}
+              className={`flex-grow p-2 border border-gray-300 rounded-md resize-none focus:outline-none min-h-[40px] overflow-hidden ${
+                disabled ? "bg-gray-100 cursor-not-allowed" : ""
+              }`}
               style={{ height: "auto" }}
             />
             <button
               type="submit"
-              className="bg-blue-500 text-white p-2 rounded-full flex-shrink-0 w-10 h-10 flex items-center justify-center"
+              disabled={disabled}
+              className={`p-2 rounded-full flex-shrink-0 w-10 h-10 flex items-center justify-center ${
+                disabled ? "bg-gray-400 text-gray-600 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600"
+              }`}
             >
               {loading ? (
                 <span className="material-icons text-2xl leading-none">stop</span>

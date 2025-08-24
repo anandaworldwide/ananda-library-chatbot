@@ -21,8 +21,8 @@ export default function ChatHistorySidebar({ isOpen, onClose, onLoadConversation
       // Load conversation into the home page chat interface
       onLoadConversation(conversation.convId);
     } else {
-      // Fallback: Navigate to the last message in the conversation
-      router.push(`/answers/${conversation.lastMessage.id}`);
+      // Fallback: Navigate to the conversation using new chat URL format
+      router.push(`/chat/${conversation.convId}`);
       onClose(); // Close sidebar on mobile after navigation
     }
   };

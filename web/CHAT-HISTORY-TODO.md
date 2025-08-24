@@ -72,15 +72,29 @@ Deliver: Clickable rail with titles; mobile menu; view full grouped convos on cl
 
 ### Phase 3: URL Navigation + Sharing/Continuation
 
-Deliver: Persistent URLs; share loads convo up to point; view-only for others.
+Deliver: Persistent URLs with conversation ID vs document ID separation; share loads convo up to point; view-only for
+others.
 
-- [ ] **Backend**: Enhance APIs: Respect UUID (prevent cross-user access). Add read-only mode if viewer UUID != doc
-      UUID.
-- [ ] **Frontend**: After answer streams (in `handleStreamingResponse`), push `/answers/[lastDocId]` (enhance
-      `/answers/[answerId].tsx` to fetch/render full convo up to that doc).
-- [ ] **Frontend**: On share load, check viewer UUID—if mismatch, disable input ("View Only"). Stub "Duplicate
-      Conversation" button (copies history to new convId).
-- [ ] **Frontend**: Reload handling: Hydrate from URL (fetch convo, populate `useChat` for continuation if owner).
+**NEW URL Strategy (Following Grok Pattern):**
+
+- **Owner URLs**: `/chat/[convId]` - shows full ongoing conversation, URL stable across follow-ups
+- **Share URLs**: `/share/[docId]` - shows conversation up to specific point, view-only for non-owners
+- **Home page**: Starts at `/`, changes to `/chat/[convId]` after first answer
+- **Legacy redirect**: `/answers/[answerId]` → `/share/[answerId]`
+
+**Implementation Tasks:**
+
+- [x] **Backend**: Enhanced APIs with UUID respect and conversation loading (already implemented)
+- [ ] **Frontend**: Add URL detection logic to home page for `/chat/[convId]` and `/share/[docId]` patterns
+- [ ] **Frontend**: Update chat flow - first answer: `router.replace('/chat/[convId]')`, follow-ups: no URL change
+- [ ] **Frontend**: Implement owner vs non-owner loading logic (full conversation vs up-to-point)
+- [ ] **Frontend**: Add scroll-to-last-answer for owner full conversation loads
+- [ ] **Frontend**: Add view-only mode UI for non-owners (hide conversation beyond shared point)
+- [ ] **Frontend**: Create API endpoint to fetch single doc by ID for ownership/convId lookup
+- [ ] **Frontend**: Add conversation loading with timestamp filtering for 'up to point' behavior
+- [ ] **Frontend**: Update share link generation to use `/share/[docId]` format
+- [ ] **Frontend**: Add client-side redirect from `/pages/answers/[answerId].tsx` to `/share/[answerId]`
+- [ ] **Frontend**: Update existing chat history sidebar links to use new `/chat/[convId]` format
 - [ ] **Testing**: End-to-end tests for navigation/sharing/view-only/continuation. Run `npm run test:all`; manual QA on
       sites/devices.
 

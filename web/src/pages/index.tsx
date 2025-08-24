@@ -8,6 +8,7 @@
 
 // React and Next.js imports
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { useRouter } from "next/router";
 
 // Component imports
 import Layout from "@/components/layout";
@@ -47,13 +48,16 @@ import { RelatedQuestion } from "@/types/RelatedQuestion";
 import { SudoProvider, useSudo } from "@/contexts/SudoContext";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
-import { loadConversationByConvId } from "@/utils/client/conversationLoader";
+import { loadConversationByConvId, loadConversationByDocId } from "@/utils/client/conversationLoader";
 import { getGreeting } from "@/utils/client/siteConfig";
 
 // Main component for the chat interface
 export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) {
+  const router = useRouter();
+
   // State variables for various features and UI elements
   const [isMaintenanceMode] = useState<boolean>(false);
+  const [viewOnlyMode, setViewOnlyMode] = useState<boolean>(false);
   const [collection, setCollection] = useState(() => {
     const collections = getCollectionsConfig(siteConfig);
     return Object.keys(collections)[0] || "";
@@ -148,6 +152,124 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       setLoading(false);
     }
   };
+
+  // Function to handle URL-based conversation loading
+  const handleUrlBasedLoading = useCallback(async () => {
+    const path = router.asPath;
+
+    // Handle /chat/[convId] URLs
+    if (path.startsWith("/chat/")) {
+      const convId = path.split("/chat/")[1];
+      if (convId && convId !== router.query.convId) {
+        await handleLoadConversation(convId);
+        // URL is already correct, no need to update it
+      }
+      return;
+    }
+
+    // Handle /share/[docId] URLs
+    if (path.startsWith("/share/")) {
+      const docId = path.split("/share/")[1];
+      if (docId) {
+        try {
+          setLoading(true);
+          setError(null);
+
+          const loadedConversation = await loadConversationByDocId(docId);
+
+          // Update the message state with the loaded conversation
+          setMessageState({
+            messages: [
+              {
+                message: getGreeting(siteConfig),
+                type: "apiMessage",
+              },
+              ...loadedConversation.messages,
+            ],
+            history: loadedConversation.history,
+          });
+
+          // Set view-only mode for non-owners
+          setViewOnlyMode(loadedConversation.viewOnly);
+
+          // Set conversation ID if owner (for potential continuation)
+          if (loadedConversation.isOwner) {
+            // Get convId from the loaded conversation
+            const convId =
+              loadedConversation.history.length > 0
+                ? loadedConversation.messages.find((m) => m.type === "apiMessage")?.docId?.split("_")[0]
+                : null;
+            if (convId) {
+              setCurrentConvId(convId);
+            }
+          }
+
+          // Log analytics event
+          logEvent("shared_conversation_loaded", "Sharing", docId, loadedConversation.messages.length);
+
+          // If owner and full conversation, scroll to last message
+          if (loadedConversation.isOwner) {
+            setTimeout(() => {
+              if (lastMessageRef.current) {
+                lastMessageRef.current.scrollIntoView({ behavior: "smooth" });
+              }
+            }, 100);
+          }
+        } catch (error) {
+          console.error("Error loading shared conversation:", error);
+          setError(error instanceof Error ? error.message : "Failed to load shared conversation");
+        } finally {
+          setLoading(false);
+        }
+      }
+      return;
+    }
+  }, [router.asPath, router.query.convId, siteConfig]);
+
+  // URL detection effect
+  useEffect(() => {
+    if (router.isReady) {
+      handleUrlBasedLoading();
+    }
+  }, [router.isReady, handleUrlBasedLoading]);
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const currentPath = window.location.pathname;
+
+      // If user navigated back to home page (/), reset to fresh chat
+      if (currentPath === "/") {
+        // Reset all chat state to initial values
+        setMessageState({
+          messages: [
+            {
+              message: getGreeting(siteConfig),
+              type: "apiMessage",
+            },
+          ],
+          history: [],
+        });
+        setCurrentConvId(null);
+        setViewOnlyMode(false);
+        setQuery("");
+        setError(null);
+
+        // Clear any existing conversation data
+        setLoading(false);
+
+        // Log analytics event
+        logEvent("navigation_back_to_home", "Navigation", "fresh_chat_reset");
+      }
+    };
+
+    // Listen for browser back/forward button
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [siteConfig, setMessageState, setError, setLoading]);
 
   // Custom hook for displaying popup messages
   const { showPopup, closePopup, popupMessage } = usePopup(
@@ -514,6 +636,15 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         // Update current conversation ID if provided
         if (data.convId) {
           setCurrentConvId(data.convId);
+
+          // Update URL based on conversation state
+          // For first question in session, use window.history.pushState to create new history entry
+          // For follow-up questions, URL should already be correct since convId doesn't change
+          if (!currentConvId) {
+            // First question - create new history entry for /chat/[convId] so back button works
+            window.history.pushState(null, "", `/chat/${data.convId}`);
+          }
+          // Note: For follow-up questions, URL stays the same since convId is consistent
         }
 
         // Store the docId with the message immediately (buttons won't show until loading=false)
@@ -918,7 +1049,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
   // Function to handle copying answer links
   const handleCopyLink = (answerId: string) => {
-    const url = `${window.location.origin}/answers/${answerId}`;
+    const url = `${window.location.origin}/share/${answerId}`;
     navigator.clipboard.writeText(url).then(() => {
       setLinkCopied(answerId);
       setTimeout(() => setLinkCopied(null), 2000);
@@ -1172,6 +1303,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                 {isLoadingQueries ? null : (
                   <ChatInput
                     loading={loading}
+                    disabled={viewOnlyMode}
                     handleSubmit={handleSubmit}
                     handleEnter={handleEnter}
                     handleClick={handleClick}
