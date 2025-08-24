@@ -135,7 +135,7 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthErrorBoundary>
-        <SudoProvider>
+        <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
           <AudioProvider>
             <main className={inter.className}>
               {/* Only include Google Analytics in production */}
