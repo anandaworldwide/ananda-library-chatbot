@@ -81,6 +81,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     messages: ExtendedAIMessage[];
   };
 
+  // Track current conversation ID for follow-up messages
+  const [currentConvId, setCurrentConvId] = useState<string | null>(null);
+
   // UI state variables
   const [showLikePrompt] = useState<boolean>(false);
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
@@ -130,6 +133,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         history: loadedConversation.history,
       });
 
+      // Set the current conversation ID for follow-up messages
+      setCurrentConvId(convId);
+
       // Close sidebar after loading
       setSidebarOpen(false);
 
@@ -160,6 +166,29 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       Cookies.set("selectedCollection", newCollection, { expires: 365 });
       logEvent("change_collection", "UI", newCollection);
     }
+  };
+
+  // Function to start a new chat conversation
+  const handleNewChat = () => {
+    // Reset conversation ID to start fresh
+    setCurrentConvId(null);
+
+    // Reset message state to initial greeting
+    setMessageState({
+      messages: [
+        {
+          message: getGreeting(siteConfig),
+          type: "apiMessage",
+        },
+      ],
+      history: [],
+    });
+
+    // Clear any errors
+    setError(null);
+
+    // Log analytics event
+    logEvent("new_chat_started", "Chat", "header_button");
   };
 
   // State for managing collection queries
@@ -482,6 +511,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         // This ensures we have it even if the message object wasn't ready when it arrived
         setSavedDocId(data.docId);
 
+        // Update current conversation ID if provided
+        if (data.convId) {
+          setCurrentConvId(data.convId);
+        }
+
         // Store the docId with the message immediately (buttons won't show until loading=false)
         setMessageState((prevState) => {
           const updatedMessages = [...prevState.messages];
@@ -674,6 +708,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           mediaTypes,
           sourceCount: sourceCount,
           uuid: getOrCreateUUID(),
+          convId: currentConvId, // Pass current conversation ID for follow-ups
         }),
         signal: newAbortController.signal,
       });
@@ -1032,7 +1067,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Main component render
   return (
     <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
-      <Layout siteConfig={siteConfig} useWideLayout={siteConfig?.requireLogin}>
+      <Layout siteConfig={siteConfig} useWideLayout={siteConfig?.requireLogin} onNewChat={handleNewChat}>
         {showPopup && popupMessage && <Popup message={popupMessage} onClose={closePopup} siteConfig={siteConfig} />}
         <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />
         <div className="flex h-full">

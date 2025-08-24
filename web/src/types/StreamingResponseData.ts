@@ -6,6 +6,7 @@ export interface StreamingResponseData {
   done?: boolean;
   error?: string;
   docId?: string;
+  convId?: string; // Conversation ID for grouping related messages
   model?: string;
   siteId?: string;
   warning?: string;

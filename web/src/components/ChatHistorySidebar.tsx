@@ -88,9 +88,6 @@ export default function ChatHistorySidebar({ isOpen, onClose, onLoadConversation
                     <p className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">
                       {conversation.title}
                     </p>
-                    {conversation.messageCount > 1 && (
-                      <p className="text-xs text-gray-500 mt-1">{conversation.messageCount} messages</p>
-                    )}
                   </div>
                 </button>
               ))}

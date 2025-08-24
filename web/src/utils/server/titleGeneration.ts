@@ -12,9 +12,17 @@ import { db } from "@/services/firebase";
 
 /**
  * Generates a concise 4-word title for a question using AI
+ * Only generates titles for questions longer than 5 words
  */
 async function generateAITitle(question: string): Promise<string | null> {
   try {
+    const words = question.trim().split(/\s+/);
+
+    // If question is 5 words or less, don't generate AI title - use exact text
+    if (words.length <= 5) {
+      return null; // This will cause fallback to exact question text
+    }
+
     // Use fast model for title generation
     const model = new ChatOpenAI({
       modelName: "gpt-3.5-turbo",
@@ -61,8 +69,8 @@ Title:`;
 function createFallbackTitle(question: string): string {
   const words = question.trim().split(/\s+/);
 
-  // If question is 7 words or less, use the full question
-  if (words.length <= 7) {
+  // If question is 5 words or less, use the full question
+  if (words.length <= 5) {
     return question;
   }
 

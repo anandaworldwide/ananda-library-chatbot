@@ -5,9 +5,10 @@ import { getParentSiteUrl, getParentSiteName } from "@/utils/client/siteConfig";
 interface JairamHeaderProps {
   siteConfig: SiteConfig;
   constrainWidth?: boolean;
+  onNewChat?: () => void;
 }
 
-export default function JairamHeader({ siteConfig, constrainWidth }: JairamHeaderProps) {
+export default function JairamHeader({ siteConfig, constrainWidth, onNewChat }: JairamHeaderProps) {
   const parentSiteUrl = getParentSiteUrl(siteConfig);
   const parentSiteName = getParentSiteName(siteConfig);
 
@@ -18,6 +19,7 @@ export default function JairamHeader({ siteConfig, constrainWidth }: JairamHeade
       parentSiteName={parentSiteName}
       requireLogin={siteConfig.requireLogin}
       constrainWidth={constrainWidth}
+      onNewChat={onNewChat}
     />
   );
 }

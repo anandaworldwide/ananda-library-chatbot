@@ -5,9 +5,10 @@ import { getParentSiteUrl, getParentSiteName } from "@/utils/client/siteConfig";
 interface AnandaHeaderProps {
   siteConfig: SiteConfig;
   constrainWidth?: boolean;
+  onNewChat?: () => void;
 }
 
-export default function AnandaHeader({ siteConfig, constrainWidth }: AnandaHeaderProps) {
+export default function AnandaHeader({ siteConfig, constrainWidth, onNewChat }: AnandaHeaderProps) {
   const parentSiteUrl = getParentSiteUrl(siteConfig);
   const parentSiteName = getParentSiteName(siteConfig);
 
@@ -19,6 +20,7 @@ export default function AnandaHeader({ siteConfig, constrainWidth }: AnandaHeade
         parentSiteName={parentSiteName}
         requireLogin={siteConfig.requireLogin}
         constrainWidth={constrainWidth}
+        onNewChat={onNewChat}
       />
     </>
   );

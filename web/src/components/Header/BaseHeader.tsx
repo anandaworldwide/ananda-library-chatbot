@@ -15,6 +15,7 @@ interface BaseHeaderProps {
   logoComponent?: React.ReactNode;
   requireLogin: boolean;
   constrainWidth?: boolean;
+  onNewChat?: () => void;
 }
 
 export default function BaseHeader({
@@ -24,6 +25,7 @@ export default function BaseHeader({
   logoComponent,
   requireLogin,
   constrainWidth = false,
+  onNewChat,
 }: BaseHeaderProps) {
   const router = useRouter();
   // Fast initial state from non-HttpOnly cookie to avoid flicker; will be reconciled after init
@@ -105,21 +107,33 @@ export default function BaseHeader({
               </div>
             </nav>
           </div>
-          {requireLogin && authReady && (
-            <nav className="mr-4 pr-6 flex space-x-4">
-              {isLoggedIn ? (
-                <Link href="/settings" aria-label="User settings" className="text-gray-600 hover:text-slate-800">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
-                    <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 3.134-7 7h2a5 5 0 0 1 10 0h2c0-3.866-3.134-7-7-7z" />
-                  </svg>
-                </Link>
-              ) : (
-                <Link href="/login" className="text-sm text-gray-500 hover:text-slate-600 cursor-pointer">
-                  Login
-                </Link>
-              )}
-            </nav>
-          )}
+          <div className="flex items-center space-x-4">
+            {onNewChat && (
+              <button
+                onClick={onNewChat}
+                aria-label="New Chat"
+                className="text-gray-600 hover:text-slate-800 p-1 rounded-md hover:bg-gray-100 transition-colors"
+                title="Start New Chat"
+              >
+                <span className="material-icons text-xl">edit</span>
+              </button>
+            )}
+            {requireLogin && authReady && (
+              <nav className="mr-4 pr-6 flex space-x-4">
+                {isLoggedIn ? (
+                  <Link href="/settings" aria-label="User settings" className="text-gray-600 hover:text-slate-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
+                      <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 3.134-7 7h2a5 5 0 0 1 10 0h2c0-3.866-3.134-7-7-7z" />
+                    </svg>
+                  </Link>
+                ) : (
+                  <Link href="/login" className="text-sm text-gray-500 hover:text-slate-600 cursor-pointer">
+                    Login
+                  </Link>
+                )}
+              </nav>
+            )}
+          </div>
         </div>
       </div>
     </header>

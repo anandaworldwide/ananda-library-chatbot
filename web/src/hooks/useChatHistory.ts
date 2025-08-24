@@ -77,12 +77,20 @@ export function useChatHistory(limit: number = 20) {
 
           const lastMessage = sortedMessages[0];
 
-          // Use AI-generated title if available, otherwise generate fallback title
-          let title = lastMessage.title;
+          // Use title from the FIRST message (chronologically) to maintain conversation title consistency
+          // Sort messages by timestamp (oldest first) to find the first message
+          const firstMessage = messages.sort((a, b) => {
+            const timeA = a.timestamp?.seconds || a.timestamp?._seconds || 0;
+            const timeB = b.timestamp?.seconds || b.timestamp?._seconds || 0;
+            return timeA - timeB;
+          })[0];
+
+          // Use AI-generated title from first message if available, otherwise generate fallback title
+          let title = firstMessage.title;
           if (!title) {
-            // Fallback: use full question if < 7 words, otherwise truncate to 4 words
-            const questionWords = lastMessage.question.trim().split(/\s+/);
-            title = questionWords.length < 7 ? lastMessage.question : questionWords.slice(0, 4).join(" ") + "...";
+            // Fallback: use full question if < 5 words, otherwise truncate to 4 words (using first message)
+            const questionWords = firstMessage.question.trim().split(/\s+/);
+            title = questionWords.length <= 5 ? firstMessage.question : questionWords.slice(0, 4).join(" ") + "...";
           }
 
           return {

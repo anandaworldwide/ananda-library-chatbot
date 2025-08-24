@@ -95,8 +95,15 @@ export async function loadConversationByConvId(convId: string): Promise<LoadedCo
       history.push(...createChatMessages(chat.question, chat.answer));
     });
 
-    // Get title from the first chat (which should have the AI-generated title)
-    const title = sortedChats[0]?.title;
+    // Get title from the first chat chronologically (which should have the AI-generated title)
+    // Sort by timestamp (oldest first) to get the actual first message
+    const firstChat = sortedChats.sort((a, b) => {
+      const timeA = a.timestamp?.seconds || a.timestamp?._seconds || 0;
+      const timeB = b.timestamp?.seconds || b.timestamp?._seconds || 0;
+      return timeA - timeB;
+    })[0];
+
+    const title = firstChat?.title;
 
     return {
       messages,

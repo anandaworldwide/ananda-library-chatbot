@@ -116,6 +116,7 @@ interface ChatRequestBody {
   sourceCount?: number;
   siteId?: string;
   uuid: string; // required client UUID (persisted regardless of auth)
+  convId?: string; // conversation ID for follow-up messages
 }
 
 interface ComparisonRequestBody extends ChatRequestBody {
@@ -344,47 +345,6 @@ async function setupVectorStoreAndRetriever(
   return { vectorStore, retriever, documentPromise, resolveWithDocuments };
 }
 
-// Helper function to get convId from the last message in history
-async function getConvIdFromHistory(history: ChatMessage[], uuid?: string): Promise<string | null> {
-  if (!db || !history || history.length === 0 || !uuid) {
-    return null;
-  }
-
-  try {
-    // Get the most recent assistant message to find its docId
-    // Look for the last assistant message in history to find the conversation
-    const answerRef = db.collection(getAnswersCollectionName());
-
-    // Query for recent documents from this user to find the conversation
-    // We'll look for documents with matching history content
-    const recentDocsQuery = answerRef.where("uuid", "==", uuid).orderBy("timestamp", "desc").limit(10); // Check last 10 docs to find the conversation
-
-    const querySnapshot = await recentDocsQuery.get();
-
-    for (const doc of querySnapshot.docs) {
-      const data = doc.data();
-      if (data.convId) {
-        // Check if this doc's history matches our current history
-        // If we find a match, we're continuing this conversation
-        if (data.history && Array.isArray(data.history) && data.history.length > 0) {
-          // Simple check: if the last assistant message matches
-          const lastAssistantMsg = history.filter((msg) => msg.role === "assistant").pop();
-          const docLastAssistantMsg = data.history.filter((msg: ChatMessage) => msg.role === "assistant").pop();
-
-          if (lastAssistantMsg && docLastAssistantMsg && lastAssistantMsg.content === docLastAssistantMsg.content) {
-            return data.convId;
-          }
-        }
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error("Error getting convId from history:", error);
-    return null;
-  }
-}
-
 // Updated function to handle both creation (if docId is missing) and update
 async function saveOrUpdateDocument(
   docId: string | undefined | null, // Make docId optional
@@ -395,22 +355,15 @@ async function saveOrUpdateDocument(
   history: ChatMessage[],
   clientIP: string,
   restatedQuestion: string,
-  uuid?: string | undefined
+  uuid?: string | undefined,
+  convId?: string | undefined // Accept convId from frontend
 ): Promise<string | null> {
   if (!db) {
     return null;
   }
 
-  // Determine convId: generate new for first message, reuse for follow-ups
-  let convId: string;
-  if (history.length === 0) {
-    // New conversation - generate new convId
-    convId = uuidv4();
-  } else {
-    // Follow-up - try to get convId from history, fallback to new if not found
-    const existingConvId = await getConvIdFromHistory(history, uuid);
-    convId = existingConvId || uuidv4();
-  }
+  // Use provided convId or generate new one for first message
+  const finalConvId = convId || uuidv4();
 
   // Create data object to save
   const dataToSave = {
@@ -425,7 +378,7 @@ async function saveOrUpdateDocument(
     relatedQuestionsV2: [], // Reset or handle related questions as needed
     restatedQuestion: restatedQuestion,
     uuid: uuid || null, // legacy DB rows may be null; new writes always provide uuid
-    convId: convId, // Add conversation ID for grouping
+    convId: finalConvId, // Add conversation ID for grouping
   };
 
   try {
@@ -978,6 +931,9 @@ async function handleChatRequest(req: NextRequest) {
         // SAVE DOCUMENT AFTER RESPONSE IS READY
         if (!sanitizedInput.privateSession) {
           try {
+            // Determine convId for this conversation
+            const conversationId = sanitizedInput.convId || uuidv4();
+
             // Always create a new document; pass null as docId
             const savedDocId = await saveOrUpdateDocument(
               null, // Force creation path
@@ -988,14 +944,19 @@ async function handleChatRequest(req: NextRequest) {
               sanitizedInput.history || [],
               clientIP,
               restatedQuestion, // Pass the restated question
-              sanitizedInput.uuid // Persist client UUID when provided
+              sanitizedInput.uuid, // Persist client UUID when provided
+              conversationId // Pass convId from frontend or new UUID
             );
 
             if (savedDocId) {
-              sendData({ docId: savedDocId }); // Send the new docId to the client
+              sendData({
+                docId: savedDocId,
+                convId: conversationId, // Send convId back to frontend
+              });
 
               // Generate title asynchronously for new conversations only
-              if ((sanitizedInput.history || []).length === 0) {
+              // A conversation is new if no convId was provided (first message)
+              if (!sanitizedInput.convId) {
                 // Fire-and-forget title generation - don't await
                 generateAndUpdateTitle(savedDocId, originalQuestion).catch((error) =>
                   console.error("Async title generation failed:", error)

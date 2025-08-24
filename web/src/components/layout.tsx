@@ -15,9 +15,10 @@ interface LayoutProps {
   children?: React.ReactNode;
   siteConfig: SiteConfig | null;
   useWideLayout?: boolean;
+  onNewChat?: () => void;
 }
 
-export default function Layout({ children, siteConfig, useWideLayout = false }: LayoutProps) {
+export default function Layout({ children, siteConfig, useWideLayout = false, onNewChat }: LayoutProps) {
   const [isClient, setIsClient] = useState(false);
   const [, setVisitCount] = useLocalStorage("visitCount", 0);
   const { errorMessage } = useSudo();
@@ -43,6 +44,7 @@ export default function Layout({ children, siteConfig, useWideLayout = false }: 
     const headerProps = {
       siteConfig,
       constrainWidth: useWideLayout,
+      onNewChat,
     };
 
     switch (siteConfig.siteId) {

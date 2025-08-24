@@ -7,9 +7,10 @@ import { getParentSiteUrl } from "@/utils/client/siteConfig";
 interface CrystalHeaderProps {
   siteConfig: SiteConfig;
   constrainWidth?: boolean;
+  onNewChat?: () => void;
 }
 
-export default function CrystalHeader({ siteConfig, constrainWidth }: CrystalHeaderProps) {
+export default function CrystalHeader({ siteConfig, constrainWidth, onNewChat }: CrystalHeaderProps) {
   const parentSiteUrl = getParentSiteUrl(siteConfig);
 
   return (
@@ -30,9 +31,21 @@ export default function CrystalHeader({ siteConfig, constrainWidth }: CrystalHea
               />
             </Link>
           </div>
-          <Link href={parentSiteUrl} className="text-base hover:underline">
-            Back to Main Site &gt;
-          </Link>
+          <div className="flex items-center space-x-4">
+            {onNewChat && (
+              <button
+                onClick={onNewChat}
+                aria-label="New Chat"
+                className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors"
+                title="Start New Chat"
+              >
+                <span className="material-icons text-xl">edit</span>
+              </button>
+            )}
+            <Link href={parentSiteUrl} className="text-base hover:underline">
+              Back to Main Site &gt;
+            </Link>
+          </div>
         </div>
       </div>
     </header>
