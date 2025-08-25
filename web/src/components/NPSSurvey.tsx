@@ -18,7 +18,6 @@ interface NPSSurveyProps {
 const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }) => {
   // State variables for managing survey display and user input
   const [showSurvey, setShowSurvey] = useState(false);
-  const [showFeedbackIcon, setShowFeedbackIcon] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [feedback, setFeedback] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -29,7 +28,6 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
     // Logic to determine when to show the survey based on user interaction history
     if (forceSurvey) {
       setShowSurvey(true);
-      setShowFeedbackIcon(false);
       return;
     }
 
@@ -51,19 +49,15 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
         setTimeout(
           () => {
             setShowSurvey(true);
-            setShowFeedbackIcon(false);
             logEvent("Display", "NPS_Survey", "Automatic");
           },
           process.env.NODE_ENV === "production" ? 2 * 60 * 1000 : 15 * 1000
         );
-      } else if (lastDismissed && timeSinceDismissed < frequencyInMs) {
-        setShowSurvey(false);
-        setShowFeedbackIcon(true);
       }
     }
   }, [siteConfig.npsSurveyFrequencyDays, forceSurvey]);
 
-  // Function to handle survey dismissal
+  // Function to handle survey dismissal (close/click away)
   const dismissSurvey = () => {
     logEvent("Dismiss", "NPS_Survey", forceSurvey ? "Forced" : "Regular");
     if (forceSurvey) {
@@ -72,9 +66,22 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
     } else {
       setShowSurvey(false);
       setErrorMessage(null);
-      // Show feedback icon after a delay to allow for animation
-      setTimeout(() => setShowFeedbackIcon(true), 500);
       localStorage.setItem("npsSurveyDismissed", Date.now().toString());
+    }
+  };
+
+  // Function to handle "Remind Me Later" button
+  const remindMeLater = () => {
+    logEvent("Remind_Later", "NPS_Survey", forceSurvey ? "Forced" : "Regular");
+    if (forceSurvey) {
+      // Redirect to homepage if survey is forced
+      window.location.href = "/";
+    } else {
+      setShowSurvey(false);
+      setErrorMessage(null);
+      // Set reminder for 3 days from now
+      const threeDaysFromNow = Date.now() + 3 * 24 * 60 * 60 * 1000;
+      localStorage.setItem("npsSurveyDismissed", threeDaysFromNow.toString());
     }
   };
 
@@ -130,7 +137,6 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
         localStorage.removeItem("npsSurveyDismissed");
         setShowSurvey(false);
         setErrorMessage(null);
-        setShowFeedbackIcon(false);
         setToastMessage("Thank you for your feedback!");
 
         if (forceSurvey) {
@@ -148,14 +154,7 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
     }
   };
 
-  // Function to open the survey when feedback icon is clicked
-  const openSurvey = () => {
-    logEvent("Open", "NPS_Survey", "From Feedback Icon");
-    setShowSurvey(true);
-    setShowFeedbackIcon(false);
-  };
-
-  // Render the survey component, feedback icon, and toast message
+  // Render the survey component and toast message
   return (
     <>
       <AnimatePresence>
@@ -163,13 +162,7 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{
-              opacity: 0,
-              scale: 0.8,
-              x: window.innerWidth - 100,
-              y: window.innerHeight - 100,
-              transition: { duration: 0.5 },
-            }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
             onClick={forceSurvey ? undefined : dismissSurvey}
           >
@@ -233,10 +226,16 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
               />
               {/* Error message display */}
               {errorMessage && <div className="text-red-500 mb-4">{errorMessage}</div>}
-              {/* Submit button */}
-              <div className="flex justify-end">
+              {/* Action buttons */}
+              <div className="flex justify-between">
                 <button
-                  className={`px-4 py-2 rounded ${score !== null ? "bg-blue-500 text-white" : "bg-gray-300 text-gray-500 cursor-not-allowed"}`}
+                  className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  onClick={remindMeLater}
+                >
+                  Remind Me Later
+                </button>
+                <button
+                  className={`px-4 py-2 rounded ${score !== null ? "bg-blue-500 text-white hover:bg-blue-600" : "bg-gray-300 text-gray-500 cursor-not-allowed"} transition-colors`}
                   onClick={submitSurvey}
                   disabled={score === null}
                 >
@@ -249,26 +248,6 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
               </p>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Feedback icon */}
-      <AnimatePresence>
-        {showFeedbackIcon && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0 }}
-            transition={{ type: "spring", stiffness: 260, damping: 20 }}
-            onClick={openSurvey}
-            className="fixed bottom-4 right-4 bg-green-500 text-white rounded-full p-3 shadow-lg hover:bg-green-600 transition-colors duration-200 z-50 group"
-            aria-label="Open Feedback Survey"
-          >
-            <span className="material-icons">ballot</span>
-            <span className="absolute bottom-full right-0 mb-2 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              Take 1-minute survey
-            </span>
-          </motion.button>
         )}
       </AnimatePresence>
 
