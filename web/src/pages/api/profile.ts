@@ -7,6 +7,7 @@ import { db } from "@/services/firebase";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreGet } from "@/utils/server/firestoreRetryUtils";
 import { verifyToken } from "@/utils/server/jwtUtils";
+import { writeAuditLog } from "@/utils/server/auditLog";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Rate limit
@@ -80,16 +81,26 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
       // Check if this is the first profile completion after activation
       const userDoc = await firestoreGet(ref, "get user for profile update", email);
+      let isCompletingActivation = false;
       if (userDoc.exists) {
         const userData = userDoc.data() as any;
         if (userData?.inviteStatus === "activated_pending_profile") {
           // Mark as fully accepted when they complete their profile
           updates.inviteStatus = "accepted";
+          isCompletingActivation = true;
         }
       }
 
       updates.updatedAt = firebase.firestore.Timestamp.now();
       await db.collection(usersCol).doc(email).set(updates, { merge: true });
+
+      // Log activation completion for digest tracking
+      if (isCompletingActivation) {
+        await writeAuditLog(req, "user_activation_completed", email, {
+          outcome: "activation_completed",
+        });
+      }
+
       return res.status(200).json({ success: true });
     }
 

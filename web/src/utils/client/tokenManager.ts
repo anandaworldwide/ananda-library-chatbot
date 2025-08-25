@@ -103,8 +103,20 @@ async function fetchNewToken(): Promise<string> {
       }
 
       if (response.status === 401 && window.location.pathname !== "/login") {
-        // Save current full path (path + search) for redirect after login
-        const fullPath = window.location.pathname + (window.location.search || "");
+        const path = window.location.pathname;
+        // If this is a public page (e.g. /share/<docId> or /answers/<id>) don't redirect – just use placeholder token
+        if (path.startsWith("/share/") || path.startsWith("/answers/")) {
+          console.log("Public page 401 for web-token – using placeholder token");
+          const placeholderToken = "public-page-placeholder";
+          tokenData = {
+            token: placeholderToken,
+            expiresAt: Date.now() + 15 * 60 * 1000,
+          };
+          return placeholderToken;
+        }
+
+        // Otherwise redirect to login
+        const fullPath = path + (window.location.search || "");
         window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
         return ""; // Return empty token or placeholder
       }
@@ -189,12 +201,14 @@ export async function initializeTokenManager(): Promise<string> {
  * @returns True if the user has a valid authentication token
  */
 export function isAuthenticated(): boolean {
-  // First check if we have a token and it's valid
-  if (isTokenValid() && tokenData && tokenData.token !== "login-page-placeholder") {
+  if (tokenData && tokenData.token.includes("placeholder")) {
+    return false;
+  }
+
+  if (isTokenValid() && tokenData) {
     return true;
   }
 
-  // We have no token or an invalid one - user is not authenticated
   return false;
 }
 

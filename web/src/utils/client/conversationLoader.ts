@@ -15,17 +15,22 @@ export interface LoadedConversation {
   messages: Message[];
   history: ChatMessage[];
   title?: string;
+  convId?: string;
 }
 
 /**
  * Loads a full conversation by convId and transforms it for the chat interface
  */
-export async function loadConversationByConvId(convId: string, upToTimestamp?: any): Promise<LoadedConversation> {
+export async function loadConversationByConvId(
+  convId: string,
+  upToTimestamp?: any,
+  uuidOverride?: string
+): Promise<LoadedConversation> {
   try {
-    const uuid = getOrCreateUUID();
+    const uuid = uuidOverride || getOrCreateUUID();
 
     // Fetch all messages in the conversation
-    const response = await fetchWithAuth(`/api/chats?uuid=${uuid}&convId=${convId}&limit=200`, {
+    const response = await fetchWithAuth(`/api/chats?uuid=${encodeURIComponent(uuid)}&convId=${convId}&limit=200`, {
       method: "GET",
     });
 
@@ -118,6 +123,7 @@ export async function loadConversationByConvId(convId: string, upToTimestamp?: a
       messages,
       history,
       title,
+      convId,
     };
   } catch (error) {
     console.error("Error loading conversation:", error);
@@ -149,10 +155,15 @@ export async function loadConversationByDocId(
     const isOwner = currentUuid === docUuid;
 
     // Load conversation - full if owner, up to timestamp if not
-    const conversation = await loadConversationByConvId(convId, isOwner ? undefined : timestamp);
+    const conversation = await loadConversationByConvId(
+      convId,
+      isOwner ? undefined : timestamp,
+      isOwner ? undefined : docUuid
+    );
 
     return {
       ...conversation,
+      convId, // Include the convId from the document data
       isOwner,
       viewOnly: !isOwner,
     };

@@ -48,7 +48,7 @@ import { RelatedQuestion } from "@/types/RelatedQuestion";
 import { SudoProvider, useSudo } from "@/contexts/SudoContext";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
-import { loadConversationByConvId, loadConversationByDocId } from "@/utils/client/conversationLoader";
+import { loadConversationByConvId } from "@/utils/client/conversationLoader";
 import { getGreeting } from "@/utils/client/siteConfig";
 
 // Main component for the chat interface
@@ -221,64 +221,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       if (convId && convId !== currentConvId) {
         // Load conversation without updating URL (since URL is already correct)
         await loadConversationDirectly(convId);
-      }
-      return;
-    }
-
-    // Handle /share/[docId] URLs
-    if (path.startsWith("/share/")) {
-      const docId = path.split("/share/")[1];
-      if (docId) {
-        try {
-          setLoading(true);
-          setError(null);
-
-          const loadedConversation = await loadConversationByDocId(docId);
-
-          // Update the message state with the loaded conversation
-          setMessageState({
-            messages: [
-              {
-                message: getGreeting(siteConfig),
-                type: "apiMessage",
-              },
-              ...loadedConversation.messages,
-            ],
-            history: loadedConversation.history,
-          });
-
-          // Set view-only mode for non-owners
-          setViewOnlyMode(loadedConversation.viewOnly);
-
-          // Set conversation ID if owner (for potential continuation)
-          if (loadedConversation.isOwner) {
-            // Get convId from the loaded conversation
-            const convId =
-              loadedConversation.history.length > 0
-                ? loadedConversation.messages.find((m) => m.type === "apiMessage")?.docId?.split("_")[0]
-                : null;
-            if (convId) {
-              setCurrentConvId(convId);
-            }
-          }
-
-          // Log analytics event
-          logEvent("shared_conversation_loaded", "Sharing", docId, loadedConversation.messages.length);
-
-          // If owner and full conversation, scroll to last message
-          if (loadedConversation.isOwner) {
-            setTimeout(() => {
-              if (lastMessageRef.current) {
-                lastMessageRef.current.scrollIntoView({ behavior: "smooth" });
-              }
-            }, 100);
-          }
-        } catch (error) {
-          console.error("Error loading shared conversation:", error);
-          setError(error instanceof Error ? error.message : "Failed to load shared conversation");
-        } finally {
-          setLoading(false);
-        }
       }
       return;
     }
@@ -661,7 +603,8 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
             pathRef.current = `/chat/${data.convId}`;
 
             // Add new conversation to sidebar (only for first question in conversation)
-            if (sidebarFunctionsRef.current && currentQuestion) {
+            // Only attempt if sidebar is enabled (requireLogin sites) and functions are available
+            if (siteConfig?.requireLogin && sidebarFunctionsRef.current && currentQuestion) {
               // Create a temporary title from the question
               const questionWords = currentQuestion.trim().split(/\s+/);
               const tempTitle =

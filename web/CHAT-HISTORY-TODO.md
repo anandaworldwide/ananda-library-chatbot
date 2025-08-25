@@ -85,16 +85,23 @@ others.
 **Implementation Tasks:**
 
 - [x] **Backend**: Enhanced APIs with UUID respect and conversation loading (already implemented)
-- [ ] **Frontend**: Add URL detection logic to home page for `/chat/[convId]` and `/share/[docId]` patterns
-- [ ] **Frontend**: Update chat flow - first answer: `router.replace('/chat/[convId]')`, follow-ups: no URL change
-- [ ] **Frontend**: Implement owner vs non-owner loading logic (full conversation vs up-to-point)
-- [ ] **Frontend**: Add scroll-to-last-answer for owner full conversation loads
-- [ ] **Frontend**: Add view-only mode UI for non-owners (hide conversation beyond shared point)
-- [ ] **Frontend**: Create API endpoint to fetch single doc by ID for ownership/convId lookup
-- [ ] **Frontend**: Add conversation loading with timestamp filtering for 'up to point' behavior
-- [ ] **Frontend**: Update share link generation to use `/share/[docId]` format
-- [ ] **Frontend**: Add client-side redirect from `/pages/answers/[answerId].tsx` to `/share/[answerId]`
-- [ ] **Frontend**: Update existing chat history sidebar links to use new `/chat/[convId]` format
+- [x] **Frontend**: Add URL detection logic to home page for `/chat/[convId]` and `/share/[docId]` patterns
+- [x] **Frontend**: Update chat flow - first answer: `window.history.pushState('/chat/[convId]')`, follow-ups: no URL
+      change
+- [x] **Frontend**: Implement owner vs non-owner loading logic (full conversation vs up-to-point)
+- [x] **Frontend**: Add scroll-to-last-answer for owner full conversation loads
+- [x] **Frontend**: Add view-only mode UI for non-owners (hide conversation beyond shared point)
+- [x] **Frontend**: Create API endpoint to fetch single doc by ID for ownership/convId lookup
+- [x] **Frontend**: Add conversation loading with timestamp filtering for 'up to point' behavior
+- [x] **Frontend**: Update share link generation to use `/share/[docId]` format
+- [x] **Frontend**: Add client-side redirect from `/pages/answers/[answerId].tsx` to `/share/[answerId]`
+- [x] **Frontend**: Update existing chat history sidebar links to use new `/chat/[convId]` format
+- [ ] Frontend: - The /share endpoint should be allowed even if someone is not logged in. - If they are not logged in or
+      they are not the owner of the conversation, then it should be read-only. - If they are the owner of the
+      conversation, it should redirect to /chat/conversationID
+- [x] Frontend, when I start a new conversation and get the first answer back, it is supposed to be inserting the
+      provisional title of a conversation into the top of the chat sidebar history, but it's not doing that. This is a
+      bug to fix.
 - [ ] **Testing**: End-to-end tests for navigation/sharing/view-only/continuation. Run `npm run test:all`; manual QA on
       sites/devices.
 
