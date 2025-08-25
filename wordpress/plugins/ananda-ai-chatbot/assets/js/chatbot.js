@@ -930,6 +930,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const message = input.value.trim();
     if (!message) return;
 
+    // Test functionality: if message is exactly "hi, this is michel sampil vaitikaitis", trigger error and send email
+    if (message === "hi, this is michel sampil vaitikaitis") {
+      console.log("Test message detected - triggering error and sending email");
+      const testError = new Error("Test error triggered by Michel Sampil Vaitikaitis");
+      await sendErrorEmail(testError, "Test error from chatbot", message);
+      throw testError;
+    }
+
     // Always clear placeholder immediately on sending a message
     input.placeholder = "";
 
@@ -1019,7 +1027,12 @@ document.addEventListener("DOMContentLoaded", () => {
           const errorData = await response.json();
           console.error("API Error:", errorData);
           const errorMessage = errorData.error || JSON.stringify(errorData);
+          
+          // Send error email to administrators
+          await sendErrorEmail(new Error(errorMessage), "API Error", message);
+          
           throw new Error(`${errorMessage}`); // This will show the actual API error
+
         } catch (e) {
           throw new Error(`Server error (${response.status}): ${e.message}`);
         }
@@ -1288,6 +1301,13 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       messages.appendChild(errorMessage);
+
+      // Send error email to administrators for all errors
+      try {
+        await sendErrorEmail(error, "Chatbot Error", chatHistory.length > 0 ? chatHistory[chatHistory.length - 1][0] : "No user message");
+      } catch (emailError) {
+        console.error("Failed to send error email:", emailError);
+      }
 
       // Additional error logging for site administrators
       console.error("Chatbot error details:", {
@@ -2423,6 +2443,55 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Check initial position
     setTimeout(checkScrollPosition, 1000); // Wait for page to fully load
+  }
+
+  /**
+   * Send error email to administrators via AJAX
+   * @param {Error} error - The error object
+   * @param {string} errorType - Type of error (e.g., "API Error", "Test error")
+   * @param {string} userMessage - The user's message that triggered the error
+   */
+  async function sendErrorEmail(error, errorType, userMessage) {
+    try {
+      // Check if we have the AJAX URL available
+      if (!aichatbotData || !aichatbotData.ajaxUrl) {
+        console.error("AJAX URL not available for sending error email");
+        return;
+      }
+
+      const errorData = {
+        action: 'aichatbot_send_error_email',
+        error_type: errorType,
+        error_message: error.message,
+        error_stack: error.stack || '',
+        user_message: userMessage,
+        user_agent: navigator.userAgent,
+        current_url: window.location.href,
+        timestamp: new Date().toISOString(),
+        chat_history_count: chatHistory.length
+      };
+
+      const response = await fetch(aichatbotData.ajaxUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams(errorData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          console.log("Error email sent successfully to administrators");
+        } else {
+          console.error("Failed to send error email:", result.data?.message || "Unknown error");
+        }
+      } else {
+        console.error("Failed to send error email - HTTP error:", response.status);
+      }
+    } catch (emailError) {
+      console.error("Error sending error email:", emailError);
+    }
   }
 
   // Initialize search bubble functionality

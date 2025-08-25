@@ -16,7 +16,7 @@ define('AICHATBOT_DEFAULT_PRODUCTION_URL', 'https://vivek.ananda.org');
 define('AICHATBOT_DEFAULT_DEVELOPMENT_URL', 'http://localhost:3000');
 
 // Define plugin version at the top with other constants
-define('AICHATBOT_VERSION', '1.0.34');
+define('AICHATBOT_VERSION', '1.0.35');
 
 // Function to get the API URL - prioritizing user settings
 function aichatbot_get_api_url() {
@@ -701,6 +701,83 @@ function aichatbot_ajax_test_api() {
         wp_send_json_success(array(
             'token_type' => 'unknown',
             'message' => 'Received a token from the backend, but it\'s not in the expected JWT format'
+        ));
+    }
+}
+
+// Add AJAX handler for sending error emails
+add_action('wp_ajax_aichatbot_send_error_email', 'aichatbot_ajax_send_error_email');         // For logged-in users
+add_action('wp_ajax_nopriv_aichatbot_send_error_email', 'aichatbot_ajax_send_error_email');  // For non-logged-in users
+
+/**
+ * AJAX handler for sending error emails to administrators
+ * This handler sends error reports to mo@baac.net and vayu@ananda.org
+ */
+function aichatbot_ajax_send_error_email() {
+    // Get the error data from the request
+    $error_type = sanitize_text_field($_POST['error_type'] ?? 'Unknown Error');
+    $error_message = sanitize_text_field($_POST['error_message'] ?? 'No error message provided');
+    $error_stack = sanitize_textarea_field($_POST['error_stack'] ?? '');
+    $user_message = sanitize_text_field($_POST['user_message'] ?? 'No user message');
+    $user_agent = sanitize_text_field($_POST['user_agent'] ?? 'Unknown');
+    $current_url = esc_url_raw($_POST['current_url'] ?? 'Unknown');
+    $timestamp = sanitize_text_field($_POST['timestamp'] ?? 'Unknown');
+    $chat_history_count = intval($_POST['chat_history_count'] ?? 0);
+
+    // Prepare email content
+    $subject = "Ananda AI Chatbot Error Report: " . $error_type;
+    
+    $message_body = "An error has occurred in the Ananda AI Chatbot:\n\n";
+    $message_body .= "Error Type: " . $error_type . "\n";
+    $message_body .= "Error Message: " . $error_message . "\n";
+    $message_body .= "User Message: " . $user_message . "\n";
+    $message_body .= "Current URL: " . $current_url . "\n";
+    $message_body .= "Timestamp: " . $timestamp . "\n";
+    $message_body .= "Chat History Count: " . $chat_history_count . "\n";
+    $message_body .= "User Agent: " . $user_agent . "\n\n";
+    
+    if (!empty($error_stack)) {
+        $message_body .= "Error Stack Trace:\n" . $error_stack . "\n\n";
+    }
+    
+    $message_body .= "This is an automated error report from the Ananda AI Chatbot WordPress plugin.\n";
+    $message_body .= "Please investigate and resolve the issue as soon as possible.\n";
+
+    // Email headers
+    $headers = array(
+        'Content-Type: text/plain; charset=UTF-8',
+        'From: Ananda AI Chatbot <noreply@ananda.org>',
+        'Reply-To: noreply@' . parse_url(get_site_url(), PHP_URL_HOST)
+    );
+
+    // Send email to both administrators
+    $admin_emails = array('mo@baac.net', 'vayu@ananda.org');
+    $emails_sent = 0;
+    $email_errors = array();
+
+    foreach ($admin_emails as $admin_email) {
+        $result = wp_mail($admin_email, $subject, $message_body, $headers);
+        if ($result) {
+            $emails_sent++;
+        } else {
+            $email_errors[] = $admin_email;
+        }
+    }
+
+    // Log the error for debugging
+    error_log("Ananda AI Chatbot Error: " . $error_type . " - " . $error_message . " (User: " . $user_message . ")");
+
+    // Return response
+    if ($emails_sent > 0) {
+        wp_send_json_success(array(
+            'message' => "Error email sent to {$emails_sent} administrator(s)",
+            'emails_sent' => $emails_sent,
+            'failed_emails' => $email_errors
+        ));
+    } else {
+        wp_send_json_error(array(
+            'message' => 'Failed to send error emails to any administrators',
+            'failed_emails' => $admin_emails
         ));
     }
 }
