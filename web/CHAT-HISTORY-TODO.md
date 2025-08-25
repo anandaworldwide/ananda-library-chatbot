@@ -96,12 +96,17 @@ others.
 - [x] **Frontend**: Update share link generation to use `/share/[docId]` format
 - [x] **Frontend**: Add client-side redirect from `/pages/answers/[answerId].tsx` to `/share/[answerId]`
 - [x] **Frontend**: Update existing chat history sidebar links to use new `/chat/[convId]` format
-- [ ] Frontend: - The /share endpoint should be allowed even if someone is not logged in. - If they are not logged in or
+- [x] Frontend: - The /share endpoint should be allowed even if someone is not logged in. - If they are not logged in or
       they are not the owner of the conversation, then it should be read-only. - If they are the owner of the
       conversation, it should redirect to /chat/conversationID
 - [x] Frontend, when I start a new conversation and get the first answer back, it is supposed to be inserting the
       provisional title of a conversation into the top of the chat sidebar history, but it's not doing that. This is a
       bug to fix.
+- [ ] Frontend: When a new conversation is started from the home page, the URL is not getting set once the conversation
+      ID is available. This broke, it was working before.
+- [ ] Frontend: When a new conversation is established from a fresh start on the home page, it is supposed to insert the
+      provisional title at the top of the chat sidebar, but it's not doing that.
+- [ ] The audio files that are playing back in line might be wrong. They are not matching up with the transcriptions.
 - [ ] **Testing**: End-to-end tests for navigation/sharing/view-only/continuation. Run `npm run test:all`; manual QA on
       sites/devices.
 

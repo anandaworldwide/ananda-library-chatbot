@@ -42,6 +42,7 @@ interface SourcesListProps {
   collectionName?: string | null;
   siteConfig?: SiteConfig | null;
   isSudoAdmin?: boolean;
+  docId?: string;
 }
 
 // Function to transform YouTube URLs into embed URLs
@@ -65,6 +66,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
   collectionName = null,
   siteConfig,
   isSudoAdmin = false,
+  docId,
 }) => {
   // DEBUG: Add logging for sources display debugging
   React.useEffect(() => {
@@ -126,6 +128,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
             audioId={audioId}
             lazyLoad={true}
             isExpanded={isExpanded}
+            docId={docId}
           />
         </div>
       );
@@ -259,16 +262,27 @@ const SourcesList: React.FC<SourcesListProps> = ({
         // Call API to get signed URL
         const uuid = getOrCreateUUID();
         const token = await getToken();
-        if (!token) {
-          throw new Error("Authentication required");
+
+        // Prepare request body and headers
+        const requestBody: any = { pdfS3Key: doc.metadata.pdf_s3_key };
+        const headers: any = { "Content-Type": "application/json" };
+
+        if (token && !token.includes("placeholder")) {
+          // Authenticated user
+          requestBody.uuid = uuid;
+          headers.Authorization = `Bearer ${token}`;
+        } else {
+          // Anonymous user - require docId for share validation
+          if (!docId) {
+            throw new Error("Document ID required for PDF access");
+          }
+          requestBody.docId = docId;
         }
+
         const response = await fetch("/api/getPdfSignedUrl", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ pdfS3Key: doc.metadata.pdf_s3_key, uuid }),
+          headers,
+          body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
@@ -571,17 +585,27 @@ const SourcesList: React.FC<SourcesListProps> = ({
 
                           const uuid = getOrCreateUUID();
                           const token = await getToken();
-                          if (!token) {
-                            throw new Error("Authentication required");
+
+                          // Prepare request body and headers
+                          const requestBody: any = { pdfS3Key: currentSourceDoc.metadata.pdf_s3_key };
+                          const headers: any = { "Content-Type": "application/json" };
+
+                          if (token && !token.includes("placeholder")) {
+                            // Authenticated user
+                            requestBody.uuid = uuid;
+                            headers.Authorization = `Bearer ${token}`;
+                          } else {
+                            // Anonymous user - require docId for share validation
+                            if (!docId) {
+                              throw new Error("Document ID required for PDF access");
+                            }
+                            requestBody.docId = docId;
                           }
 
                           const response = await fetch("/api/getPdfSignedUrl", {
                             method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                              Authorization: `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({ pdfS3Key: currentSourceDoc.metadata.pdf_s3_key, uuid }),
+                            headers,
+                            body: JSON.stringify(requestBody),
                           });
 
                           if (!response.ok) {

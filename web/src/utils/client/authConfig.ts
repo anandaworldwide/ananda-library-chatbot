@@ -89,6 +89,10 @@ export const isPublicEndpoint = (url: string, method: string, siteConfig: SiteCo
     return true;
   }
 
+  if (url.includes("/api/getAudioSignedUrl") || url.includes("/api/getPdfSignedUrl")) {
+    return true;
+  }
+
   // By default, require authentication for all other endpoints
   return false;
 };
