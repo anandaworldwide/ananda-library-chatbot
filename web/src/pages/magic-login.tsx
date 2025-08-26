@@ -67,11 +67,13 @@ export default function MagicLoginPage() {
         {status === "error" ? (
           <div className="rounded border border-red-300 bg-red-50 p-3 text-sm mb-3">{message}</div>
         ) : null}
-        <div className="mt-4">
-          <a href="/" className="text-blue-600 underline">
-            Go to Home
-          </a>
-        </div>
+        {status === "success" ? (
+          <div className="mt-4">
+            <a href="/" className="text-blue-600 underline">
+              Go to Home
+            </a>
+          </div>
+        ) : null}
       </main>
     </>
   );
