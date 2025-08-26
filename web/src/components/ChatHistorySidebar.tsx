@@ -3,15 +3,19 @@ import { useChatHistory, ConversationGroup } from "@/hooks/useChatHistory";
 import { useRouter } from "next/router";
 import { logEvent } from "@/utils/client/analytics";
 
+export type SidebarRefetch = () => void;
+
+export interface SidebarFunctions {
+  addNewConversation: (convId: string, title: string, question: string) => void;
+  updateConversationTitle: (convId: string, newTitle: string) => void;
+}
+
 interface ChatHistorySidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onLoadConversation?: (convId: string) => void;
   currentConvId?: string | null;
-  onGetSidebarFunctions?: (functions: {
-    addNewConversation: (convId: string, title: string, question: string) => void;
-    updateConversationTitle: (convId: string, newTitle: string) => void;
-  }) => void;
+  onGetSidebarFunctions?: (functions: SidebarFunctions, refetch: () => void) => void;
 }
 
 export default function ChatHistorySidebar({
@@ -21,19 +25,22 @@ export default function ChatHistorySidebar({
   currentConvId,
   onGetSidebarFunctions,
 }: ChatHistorySidebarProps) {
-  const { loading, error, conversations, hasMore, loadMore, addNewConversation, updateConversationTitle } =
+  const { loading, error, conversations, hasMore, loadMore, addNewConversation, updateConversationTitle, refetch } =
     useChatHistory(20);
   const router = useRouter();
 
-  // Expose the internal functions to the parent component
+  // Expose functions to parent
   useEffect(() => {
     if (onGetSidebarFunctions) {
-      onGetSidebarFunctions({
-        addNewConversation,
-        updateConversationTitle,
-      });
+      onGetSidebarFunctions(
+        {
+          addNewConversation,
+          updateConversationTitle,
+        },
+        refetch
+      );
     }
-  }, [onGetSidebarFunctions, addNewConversation, updateConversationTitle]);
+  }, [onGetSidebarFunctions, addNewConversation, updateConversationTitle, refetch]);
 
   const handleConversationClick = (conversation: ConversationGroup) => {
     // Track conversation click event

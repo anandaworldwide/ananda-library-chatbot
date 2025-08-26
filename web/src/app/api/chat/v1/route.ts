@@ -934,6 +934,12 @@ async function handleChatRequest(req: NextRequest) {
             // Determine convId for this conversation
             const conversationId = sanitizedInput.convId || uuidv4();
 
+            // Send convId to frontend immediately, before saving document
+            // This allows the sidebar to be updated while document save happens in background
+            sendData({
+              convId: conversationId, // Send convId back to frontend immediately
+            });
+
             // Always create a new document; pass null as docId
             const savedDocId = await saveOrUpdateDocument(
               null, // Force creation path
@@ -951,16 +957,19 @@ async function handleChatRequest(req: NextRequest) {
             if (savedDocId) {
               sendData({
                 docId: savedDocId,
-                convId: conversationId, // Send convId back to frontend
               });
 
               // Generate title asynchronously for new conversations only
               // A conversation is new if no convId was provided (first message)
               if (!sanitizedInput.convId) {
-                // Fire-and-forget title generation - don't await
-                generateAndUpdateTitle(savedDocId, originalQuestion).catch((error) =>
-                  console.error("Async title generation failed:", error)
-                );
+                try {
+                  const title = await generateAndUpdateTitle(savedDocId, originalQuestion);
+                  if (title) {
+                    sendData({ convId: conversationId, title });
+                  }
+                } catch (err) {
+                  console.error("Title generation failed:", err);
+                }
               }
             }
           } catch (saveError) {

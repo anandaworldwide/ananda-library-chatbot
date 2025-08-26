@@ -50,6 +50,7 @@ import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
 import { loadConversationByConvId } from "@/utils/client/conversationLoader";
 import { getGreeting } from "@/utils/client/siteConfig";
+import { SidebarFunctions, SidebarRefetch } from "@/components/ChatHistorySidebar";
 
 // Main component for the chat interface
 export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) {
@@ -87,20 +88,42 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
   // Track current conversation ID for follow-up messages
   const [currentConvId, setCurrentConvId] = useState<string | null>(null);
+  const currentConvIdRef = useRef<string | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentConvIdRef.current = currentConvId;
+  }, [currentConvId]);
 
   // Local ref to track latest path since we sometimes manipulate history without
   // involving Next.js router (pushState). This prevents stale router.asPath
   // values from confusing handleUrlBasedLoading.
   const pathRef = useRef<string>(typeof window !== "undefined" ? window.location.pathname : "/");
 
+  // Track previous path to detect actual navigations to root ("/")
+  const previousPathRef = useRef<string>(pathRef.current);
+
   // Track the current question being processed (for adding to sidebar)
-  const [currentQuestion, setCurrentQuestion] = useState<string>("");
+  // We keep both a state variable (for potential future UI use) and a ref so we
+  // always have synchronous access to the latest question text when the convId
+  // arrives earlier than React state updates.
+  const [, _setCurrentQuestion] = useState<string>("");
+  const currentQuestionRef = useRef<string>("");
+
+  // Helper to update both ref + state
+  const setCurrentQuestion = (q: string) => {
+    currentQuestionRef.current = q;
+    _setCurrentQuestion(q);
+  };
 
   // References to sidebar functions for adding/updating conversations
-  const sidebarFunctionsRef = useRef<{
-    addNewConversation: (convId: string, title: string, question: string) => void;
-    updateConversationTitle: (convId: string, newTitle: string) => void;
-  } | null>(null);
+  const sidebarFunctionsRef = useRef<SidebarFunctions | null>(null);
+  const sidebarRefetchRef = useRef<SidebarRefetch>(() => {});
+
+  const handleSidebarFunctions = useCallback((functions: SidebarFunctions, refetch: SidebarRefetch) => {
+    sidebarFunctionsRef.current = functions;
+    sidebarRefetchRef.current = refetch;
+  }, []);
 
   // (Removed pushedConvIdRef – no longer needed now that we update URL via
   // window.history.replaceState without triggering navigation.)
@@ -192,11 +215,10 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       return;
     }
 
-    // Handle root path (/) – reset only when a conversation has already started.
-    // This avoids wiping in-progress streaming for the first message.
-    if (path === "/" && currentConvId !== null) {
-      // If we’re mid-conversation (more than greeting), keep it; otherwise reset.
-      if (messageState.messages.length <= 1) {
+    // Handle root path (/) – reset only when navigating FROM another path
+    if (path === "/") {
+      if (previousPathRef.current !== "/" && !loading && messageState.messages.length <= 1) {
+        currentConvIdRef.current = null;
         setCurrentConvId(null);
         setCurrentQuestion("");
         setMessageState({
@@ -210,6 +232,8 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         });
         setError(null);
         setViewOnlyMode(false);
+        // Reload sidebar to clear any stale state
+        sidebarRefetchRef.current();
       }
       return;
     }
@@ -218,7 +242,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     if (path.startsWith("/chat/")) {
       const convId = path.split("/chat/")[1];
       // Prevent infinite loop by checking if we've already loaded this conversation
-      if (convId && convId !== currentConvId) {
+      if (convId && convId !== currentConvIdRef.current) {
         // Load conversation without updating URL (since URL is already correct)
         await loadConversationDirectly(convId);
       }
@@ -243,6 +267,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       handleUrlBasedLoading();
     }
   }, [router.isReady, handleUrlBasedLoading]);
+
+  // Update previous path after each path change
+  useEffect(() => {
+    previousPathRef.current = pathRef.current;
+  }, [pathRef.current]);
 
   // Handle browser back/forward navigation
   useEffect(() => {
@@ -590,34 +619,52 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         // Save the docId in a separate state variable for later reference
         // This ensures we have it even if the message object wasn't ready when it arrived
         setSavedDocId(data.docId);
+      }
 
-        // Update current conversation ID if provided
-        if (data.convId) {
-          const isNewConversation = !currentConvId;
-          setCurrentConvId(data.convId);
+      // Handle convId separately from docId (convId comes earlier in the stream)
+      if (data.convId) {
+        const isNewConversation = !currentConvIdRef.current;
+        currentConvIdRef.current = data.convId;
+        setCurrentConvId(data.convId);
 
-          // For new conversations, update URL and sidebar
-          if (isNewConversation) {
-            // Use pushState so the browser back button will return to '/'.
-            window.history.pushState(null, "", `/chat/${data.convId}`);
-            pathRef.current = `/chat/${data.convId}`;
+        // For new conversations, update URL and sidebar
+        if (isNewConversation) {
+          // Use pushState so the browser back button will return to '/'.
+          window.history.pushState(null, "", `/chat/${data.convId}`);
+          pathRef.current = `/chat/${data.convId}`;
 
-            // Add new conversation to sidebar (only for first question in conversation)
-            // Only attempt if sidebar is enabled (requireLogin sites) and functions are available
-            if (siteConfig?.requireLogin && sidebarFunctionsRef.current && currentQuestion) {
-              // Create a temporary title from the question
-              const questionWords = currentQuestion.trim().split(/\s+/);
-              const tempTitle =
-                questionWords.length <= 5 ? currentQuestion : questionWords.slice(0, 4).join(" ") + "...";
+          // Add new conversation to sidebar (only for first question in conversation)
+          // Only attempt if sidebar is enabled (requireLogin sites) and functions are available
 
-              sidebarFunctionsRef.current.addNewConversation(data.convId, tempTitle, currentQuestion);
-
-              // Clear the current question now that we've used it
-              setCurrentQuestion("");
+          let questionForSidebar = currentQuestionRef.current;
+          // Fallback: if for some reason currentQuestionRef is empty (e.g. Fast Refresh in dev)
+          if (!questionForSidebar) {
+            const lastUserMsg = [...messages].reverse().find((m) => m.type === "userMessage") as
+              | ExtendedAIMessage
+              | undefined;
+            if (lastUserMsg?.message) {
+              questionForSidebar = lastUserMsg.message;
             }
           }
-          // Note: For follow-up questions, URL stays the same since convId is consistent
+
+          if (siteConfig?.requireLogin && sidebarFunctionsRef.current && questionForSidebar) {
+            // Create a temporary title from the question
+            const questionWords = questionForSidebar.trim().split(/\s+/);
+            const tempTitle =
+              questionWords.length <= 5 ? questionForSidebar : questionWords.slice(0, 4).join(" ") + "...";
+
+            sidebarFunctionsRef.current.addNewConversation(data.convId, tempTitle, questionForSidebar);
+
+            // Clear the current question now that we've used it
+            setCurrentQuestion("");
+          }
         }
+        // Note: For follow-up questions, URL stays the same since convId is consistent
+      }
+
+      // Handle AI-generated title updates
+      if (data.title && data.convId && sidebarFunctionsRef.current) {
+        sidebarFunctionsRef.current.updateConversationTitle(data.convId, data.title);
       }
 
       if (data.done) {
@@ -870,7 +917,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           mediaTypes,
           sourceCount: sourceCount,
           uuid: getOrCreateUUID(),
-          convId: currentConvId, // Pass current conversation ID for follow-ups
+          convId: currentConvIdRef.current, // Pass current conversation ID for follow-ups
         }),
         signal: newAbortController.signal,
       });
@@ -1244,7 +1291,14 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
               onLoadConversation={handleLoadConversation}
               currentConvId={currentConvId}
               onGetSidebarFunctions={(functions) => {
-                sidebarFunctionsRef.current = functions;
+                handleSidebarFunctions(functions, () => {
+                  // This refetch function is called when the sidebar needs to be reloaded
+                  // after a state change that might affect its data, e.g., clearing chat history
+                  // or changing collections.
+                  // For now, we'll just log the event, as the actual re-fetching logic
+                  // would involve fetching chat history from the backend.
+                  logEvent("chat_history_sidebar_refetch", "Chat History", "sidebar_refetch");
+                });
               }}
             />
           )}

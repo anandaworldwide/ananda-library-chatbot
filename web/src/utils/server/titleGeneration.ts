@@ -90,7 +90,7 @@ function createFallbackTitle(question: string): string {
  * Generates a title for a conversation and updates the document
  * This function is designed to be called asynchronously (fire-and-forget)
  */
-export async function generateAndUpdateTitle(docId: string, question: string): Promise<void> {
+export async function generateAndUpdateTitle(docId: string, question: string): Promise<string> {
   try {
     // Try AI generation first
     let title = await generateAITitle(question);
@@ -108,6 +108,7 @@ export async function generateAndUpdateTitle(docId: string, question: string): P
     await firestoreUpdate(docRef, { title }, "title generation update", `docId: ${docId}, title: ${title}`);
 
     console.log(`Generated title for ${docId}: "${title}"`);
+    return title;
   } catch (error) {
     console.error(`Title generation failed for ${docId}:`, error);
 
@@ -116,7 +117,7 @@ export async function generateAndUpdateTitle(docId: string, question: string): P
       const fallbackTitle = createFallbackTitle(question);
       if (!db) {
         console.error("Database not available for fallback title update");
-        return;
+        return "";
       }
       const docRef = db.collection(getAnswersCollectionName()).doc(docId);
       await firestoreUpdate(
@@ -126,8 +127,10 @@ export async function generateAndUpdateTitle(docId: string, question: string): P
         `docId: ${docId}, fallback title: ${fallbackTitle}`
       );
       console.log(`Used fallback title for ${docId}: "${fallbackTitle}"`);
+      return fallbackTitle;
     } catch (fallbackError) {
       console.error(`Even fallback title update failed for ${docId}:`, fallbackError);
+      return "";
     }
   }
 }

@@ -7,6 +7,7 @@ export interface StreamingResponseData {
   error?: string;
   docId?: string;
   convId?: string; // Conversation ID for grouping related messages
+  title?: string; // AI-generated conversation title
   model?: string;
   siteId?: string;
   warning?: string;

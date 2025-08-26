@@ -216,8 +216,8 @@ describe("titleGeneration", () => {
 
       mockFirestoreUpdate.mockRejectedValue(new Error("Firestore failed"));
 
-      // Should not throw
-      await expect(generateAndUpdateTitle("doc123", "How do I meditate properly?")).resolves.toBeUndefined();
+      // Should return empty string when both AI and Firestore fail
+      await expect(generateAndUpdateTitle("doc123", "How do I meditate properly?")).resolves.toBe("");
     });
 
     it("should attempt fallback title update when both AI and primary update fail", async () => {
