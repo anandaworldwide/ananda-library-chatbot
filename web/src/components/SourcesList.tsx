@@ -83,6 +83,11 @@ const SourcesList: React.FC<SourcesListProps> = ({
     }
   }, [sources]);
 
+  // Reset expanded sources state when sources change (e.g., new conversation loaded)
+  React.useEffect(() => {
+    setExpandedSources(new Set());
+  }, [sources]);
+
   // State hooks
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set());
   const [showSourcesPopover, setShowSourcesPopover] = useState<boolean>(false);
