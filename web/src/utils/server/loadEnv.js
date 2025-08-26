@@ -1,16 +1,15 @@
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs'; // Import fs for file system checks
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs"; // Import fs for file system checks
 
 export function loadEnv() {
   // Only load from .env files in development
-  if (process.env.NODE_ENV !== 'development') {
-    console.log('Skipping .env file loading in production environment');
+  if (process.env.NODE_ENV !== "development") {
     return;
   }
 
-  const site = process.env.SITE_ID || 'default';
+  const site = process.env.SITE_ID || "default";
   // Set SITE_ID early if not already set, needed for subsequent calls potentially
   if (!process.env.SITE_ID) {
     process.env.SITE_ID = site;
@@ -19,7 +18,7 @@ export function loadEnv() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   // Go up four levels: server -> utils -> src -> web -> project root
-  const rootDir = path.join(__dirname, '..', '..', '..', '..');
+  const rootDir = path.join(__dirname, "..", "..", "..", "..");
   const envFile = path.join(rootDir, `.env.${site}`);
 
   // Check if the file exists before attempting to load
