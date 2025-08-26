@@ -755,13 +755,11 @@ function aichatbot_ajax_send_error_email() {
     $emails_sent = 0;
     $email_errors = array();
 
-    foreach ($admin_emails as $admin_email) {
-        $result = wp_mail($admin_email, $subject, $message_body, $headers);
-        if ($result) {
-            $emails_sent++;
-        } else {
-            $email_errors[] = $admin_email;
-        }
+    $result = wp_mail($admin_emails, $subject, $message_body, $headers);
+    if ($result) {
+        $emails_sent = count($admin_emails);
+    } else {
+        $email_errors = $admin_emails;
     }
 
     // Log the error for debugging
