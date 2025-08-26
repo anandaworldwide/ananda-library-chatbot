@@ -85,7 +85,7 @@ describe("Document Retrieval Logic", () => {
       undefined, // sendData
       undefined, // resolveDocs
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       { siteId: "test-site", includedLibraries: ["library1", "library2", "library3"] } // siteConfig
@@ -162,7 +162,7 @@ describe("Document Retrieval Logic", () => {
       undefined, // sendData
       undefined, // resolveDocs
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       {
@@ -248,7 +248,7 @@ describe("Document Retrieval Logic", () => {
       undefined, // sendData
       undefined, // resolveDocs
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       { siteId: "test-site", includedLibraries: ["library1", "library2"] } // siteConfig

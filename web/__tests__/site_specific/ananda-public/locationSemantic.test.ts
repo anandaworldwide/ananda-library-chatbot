@@ -92,7 +92,7 @@ testRunner("Vivek Location Response Semantic Validation (ananda-public)", () => 
       question: query,
       collection: "whole_library",
       history: [],
-      privateSession: true, // Avoid Firestore writes during tests
+      temporarySession: true, // Avoid Firestore writes during tests
       mediaTypes: { text: true },
       sourceCount: 3,
       siteId: "ananda-public", // Use ananda-public for geo-awareness testing

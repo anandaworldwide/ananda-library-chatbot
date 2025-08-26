@@ -1,5 +1,6 @@
 import { Document } from "langchain/document";
 
+// Force TypeScript cache invalidation
 export interface StreamingResponseData {
   token?: string;
   sourceDocs?: Document[];
@@ -13,6 +14,8 @@ export interface StreamingResponseData {
   warning?: string;
   toolResponse?: boolean; // Flag to indicate this response came from tool execution
   isLocationQuery?: boolean; // Flag to indicate this is a location-based query using geo-awareness tools
+  type?: string; // Error type for specific error handling (e.g., "firestore_index_error")
+  isBuilding?: boolean; // Flag to indicate if Firestore indexes are currently building
   timing?: {
     ttfb?: number;
     total?: number;

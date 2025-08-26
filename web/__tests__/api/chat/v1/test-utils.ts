@@ -52,7 +52,7 @@ export const mockSiteConfig: SiteConfig = {
     links: [{ label: 'About', url: '/about' }],
   },
   requireLogin: false,
-  allowPrivateSessions: true,
+  allowTemporarySessions: true,
   allowAllAnswersPage: true,
   npsSurveyFrequencyDays: 30,
   queriesPerUserPerDay: 100,

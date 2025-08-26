@@ -378,7 +378,7 @@ export const makeChain = async (
     model: "gpt-3.5-turbo",
     temperature: 0.1,
   },
-  privateSession: boolean = false,
+  temporarySession: boolean = false,
   geoTools: any[] = [],
   request?: NextRequest,
   siteConfig?: AppSiteConfig | null,
@@ -851,8 +851,8 @@ Error details: ${errorString}`,
   const conversationalRetrievalQAChain = RunnableSequence.from([
     {
       question: async (input: AnswerChainInput) => {
-        // Debug: Log the original question only if not in private mode
-        if (!privateSession) {
+        // Debug: Log the original question only if not in temporary mode
+        if (!temporarySession) {
           const debugMsg = `🔍 ORIGINAL QUESTION: "${input.question}"`;
           console.log(debugMsg);
           if (sendData) sendData({ log: debugMsg });
@@ -877,8 +877,8 @@ Error details: ${errorString}`,
         // Get the reformulated standalone question
         const standaloneQuestion = await standaloneQuestionChain.invoke(input);
 
-        // Debug: Show the result of reformulation only if not in private mode
-        if (!privateSession) {
+        // Debug: Show the result of reformulation only if not in temporary mode
+        if (!temporarySession) {
           const debugMsg = `🔍 REFORMULATED TO: "${standaloneQuestion}"`;
           console.log(debugMsg);
           if (sendData) sendData({ log: debugMsg });
@@ -912,7 +912,7 @@ export const makeComparisonChains = async (
     model: "gpt-3.5-turbo",
     temperature: 0.1,
   },
-  privateSession: boolean = false,
+  temporarySession: boolean = false,
   siteConfig?: AppSiteConfig | null
 ) => {
   try {
@@ -925,7 +925,7 @@ export const makeComparisonChains = async (
         undefined,
         undefined,
         rephraseModelConfig,
-        privateSession,
+        temporarySession,
         [], // No geo tools for comparison chains
         undefined, // No request for comparison chains
         siteConfig,
@@ -939,7 +939,7 @@ export const makeComparisonChains = async (
         undefined,
         undefined,
         rephraseModelConfig,
-        privateSession,
+        temporarySession,
         [], // No geo tools for comparison chains
         undefined, // No request for comparison chains
         siteConfig,
@@ -965,7 +965,7 @@ export async function setupAndExecuteLanguageModelChain(
   filter?: Record<string, unknown>,
   siteConfig?: AppSiteConfig | null,
   startTime?: number,
-  privateSession: boolean = false,
+  temporarySession: boolean = false,
   request?: NextRequest
 ): Promise<{ fullResponse: string; finalDocs: Document[]; restatedQuestion: string }> {
   const TIMEOUT_MS = process.env.NODE_ENV === "test" ? 1000 : 30000;
@@ -1019,7 +1019,7 @@ export async function setupAndExecuteLanguageModelChain(
         sendData,
         undefined,
         { model: rephraseModelName, temperature: rephraseTemperature },
-        privateSession,
+        temporarySession,
         geoTools,
         request,
         siteConfig,

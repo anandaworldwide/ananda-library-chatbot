@@ -46,9 +46,9 @@ interface ChatInputProps {
   handleEnter: (e: React.KeyboardEvent<HTMLTextAreaElement>, query: string) => void;
   handleClick: (query: string) => void;
   handleCollectionChange: (newCollection: string) => void;
-  handlePrivateSessionChange: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  handleTemporarySessionChange: (event: React.MouseEvent<HTMLButtonElement>) => void;
   collection: string;
-  privateSession: boolean;
+  temporarySession: boolean;
   error: string | null;
   setError: (error: string | null) => void;
   randomQueries: string[];
@@ -64,7 +64,7 @@ interface ChatInputProps {
   isNearBottom: boolean;
   setIsNearBottom: React.Dispatch<React.SetStateAction<boolean>>;
   isLoadingQueries: boolean;
-  showPrivateSessionOptions?: boolean;
+  showTemporarySessionOptions?: boolean;
   sourceCount: number;
   setSourceCount: (count: number) => void;
 }
@@ -77,9 +77,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   handleEnter,
   handleClick,
   handleCollectionChange,
-  handlePrivateSessionChange,
+  handleTemporarySessionChange,
   collection,
-  privateSession,
+  temporarySession,
   error,
   setError,
   randomQueries,
@@ -93,7 +93,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   setQuery,
   setIsNearBottom,
   isLoadingQueries,
-  showPrivateSessionOptions = true,
+  showTemporarySessionOptions = true,
   sourceCount,
   setSourceCount,
 }) => {
@@ -284,6 +284,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     <div className={`${styles.center} w-full mt-4 px-2 md:px-0`}>
       <div className="w-full">
         <form onSubmit={onSubmit}>
+          {/* Temporary session indicator */}
+          {temporarySession && (
+            <div className="flex items-center justify-center mb-3 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
+              <span className="material-icons text-purple-600 text-lg mr-2">lock</span>
+              <span className="text-purple-800 text-sm font-medium">
+                Temporary Session Active (
+                <button onClick={handleTemporarySessionChange} className="underline hover:text-purple-900">
+                  end
+                </button>
+                )
+              </span>
+            </div>
+          )}
+
           {/* Input textarea and submit button */}
           <div className="flex items-center space-x-2 mb-4">
             <textarea
@@ -326,7 +340,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             (showMediaTypeSelection ||
               showAuthorSelection ||
               siteConfig?.showSourceCountSelector ||
-              (showPrivateSessionOptions && !privateSession && siteConfig?.allowPrivateSessions)) && (
+              (showTemporarySessionOptions && !temporarySession && siteConfig?.allowTemporarySessions)) && (
               <div className="mb-4">
                 <button
                   type="button"
@@ -400,20 +414,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   </label>
                 </div>
               )}
-              {showPrivateSessionOptions && !privateSession && siteConfig?.allowPrivateSessions && (
+              {showTemporarySessionOptions && !temporarySession && siteConfig?.allowTemporarySessions && (
                 <button
                   type="button"
-                  onClick={handlePrivateSessionChange}
-                  className="px-2 py-1 text-xs sm:text-sm rounded bg-purple-100 text-purple-800 whitespace-nowrap"
+                  onClick={handleTemporarySessionChange}
+                  className="px-3 py-2 text-xs sm:text-sm rounded-md bg-purple-100 text-purple-800 hover:bg-purple-200 active:bg-purple-300 transition-colors duration-200 whitespace-nowrap shadow-sm border border-purple-300 font-medium"
                 >
                   <span className="material-icons text-sm mr-1 align-middle">lock</span>
-                  <span className="align-middle">Start Private Session</span>
+                  <span className="align-middle">Start Temporary Session</span>
                 </button>
               )}
               {(showMediaTypeSelection ||
                 showAuthorSelection ||
                 siteConfig?.showSourceCountSelector ||
-                siteConfig?.allowPrivateSessions) && (
+                siteConfig?.allowTemporarySessions) && (
                 <button
                   type="button"
                   onClick={() => setShowControlsInfo(true)}
@@ -476,11 +490,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         </div>
                       )}
 
-                      {siteConfig?.allowPrivateSessions && (
+                      {siteConfig?.allowTemporarySessions && (
                         <div>
-                          <h4 className="font-medium mb-1">Private Session</h4>
+                          <h4 className="font-medium mb-1">Temporary Session</h4>
                           <p className="text-sm text-gray-600">
-                            Enable private mode to keep your queries confidential and unlisted.
+                            Enable temporary mode to keep your queries confidential and unlisted.
                           </p>
                         </div>
                       )}

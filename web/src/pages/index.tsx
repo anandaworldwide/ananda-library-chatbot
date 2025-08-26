@@ -66,7 +66,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   const [collectionChanged, setCollectionChanged] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
   const [likeStatuses, setLikeStatuses] = useState<Record<string, boolean>>({});
-  const [privateSession, setPrivateSession] = useState<boolean>(false);
+  const [temporarySession, setTemporarySession] = useState<boolean>(false);
   const [mediaTypes, setMediaTypes] = useState<{
     text: boolean;
     audio: boolean;
@@ -81,7 +81,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     setLoading,
     error: chatError,
     setError,
-  } = useChat(collection, privateSession, mediaTypes, siteConfig);
+  } = useChat(collection, temporarySession, mediaTypes, siteConfig);
   const { messages } = messageState as {
     messages: ExtendedAIMessage[];
   };
@@ -333,9 +333,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Custom hook for displaying popup messages
   const { showPopup, closePopup, popupMessage } = usePopup(
     "1.02",
-    siteConfig?.allowPrivateSessions
+    siteConfig?.allowTemporarySessions
       ? "Others can see questions you ask and answers given. " +
-          "Please click 'Start Private Session' below the text entry box if you would prefer we not log or publish your session."
+          "Please click 'Start Temporary Session' below the text entry box if you would prefer we not log or publish your session."
       : ""
   );
 
@@ -943,7 +943,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           question: submittedQuery,
           history: messageState.history,
           collection,
-          privateSession,
+          temporarySession,
           mediaTypes,
           sourceCount: sourceCount,
           uuid: getOrCreateUUID(),
@@ -1068,17 +1068,17 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     logEvent("like_answer", "Engagement", answerId);
   };
 
-  // Function to handle private session changes
-  const handlePrivateSessionChange = (event: React.MouseEvent<HTMLButtonElement>) => {
+  // Function to handle temporary session changes
+  const handleTemporarySessionChange = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    if (privateSession) {
-      // If already in a private session, reload the page
-      logEvent("end_private_session", "UI", "");
+    if (temporarySession) {
+      // If already in a temporary session, reload the page
+      logEvent("end_temporary_session", "UI", "");
       window.location.reload();
     } else {
-      // Start a private session
-      setPrivateSession(true);
-      logEvent("start_private_session", "UI", "");
+      // Start a temporary session
+      setTemporarySession(true);
+      logEvent("start_temporary_session", "UI", "");
     }
   };
 
@@ -1353,15 +1353,17 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                   <div className="w-10"></div> {/* Spacer for centering */}
                 </div>
               )}
-              {/* Private session banner */}
-              {privateSession && (
-                <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-                  <span className="material-icons text-2xl mr-2">lock</span>
-                  You are in a Private Session (
-                  <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
-                    end private session
-                  </button>
-                  )
+              {/* Temporary session banner */}
+              {temporarySession && (
+                <div className="flex items-center justify-center mb-3 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
+                  <span className="material-icons text-purple-600 text-lg mr-2">lock</span>
+                  <span className="text-purple-800 text-sm font-medium">
+                    Temporary Session Active (
+                    <button onClick={handleTemporarySessionChange} className="underline hover:text-purple-900">
+                      end
+                    </button>
+                    )
+                  </span>
                 </div>
               )}
               <div className="flex-grow overflow-hidden answers-container">
@@ -1376,7 +1378,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                       index={index}
                       isLastMessage={index === messages.length - 1}
                       loading={loading}
-                      privateSession={privateSession}
+                      temporarySession={temporarySession}
                       collectionChanged={collectionChanged}
                       hasMultipleCollections={hasMultipleCollections}
                       likeStatuses={likeStatuses}
@@ -1427,9 +1429,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                     handleEnter={handleEnter}
                     handleClick={handleClick}
                     handleCollectionChange={handleCollectionChange}
-                    handlePrivateSessionChange={handlePrivateSessionChange}
+                    handleTemporarySessionChange={handleTemporarySessionChange}
                     collection={collection}
-                    privateSession={privateSession}
+                    temporarySession={temporarySession}
                     error={chatError}
                     setError={setError}
                     randomQueries={randomQueries}
@@ -1451,17 +1453,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                   />
                 )}
               </div>
-              {/* Private session banner (bottom) */}
-              {privateSession && (
-                <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-                  <span className="material-icons text-2xl mr-2">lock</span>
-                  You are in a Private Session (
-                  <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
-                    end private session
-                  </button>
-                  )
-                </div>
-              )}
             </div>
           </div>
         </div>

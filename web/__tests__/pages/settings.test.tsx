@@ -29,7 +29,7 @@ describe("/settings - Server-Side Rendering", () => {
       mockLoadSiteConfig.mockResolvedValue({
         name: "Test Site",
         requireLogin: true,
-        allowPrivateSessions: true,
+        allowTemporarySessions: true,
       } as any);
 
       const result = await getServerSideProps(mockContext);
@@ -39,7 +39,7 @@ describe("/settings - Server-Side Rendering", () => {
           siteConfig: {
             name: "Test Site",
             requireLogin: true,
-            allowPrivateSessions: true,
+            allowTemporarySessions: true,
           },
         },
       });
@@ -52,7 +52,7 @@ describe("/settings - Server-Side Rendering", () => {
       mockLoadSiteConfig.mockResolvedValue({
         name: "Public Site",
         requireLogin: false,
-        allowPrivateSessions: false,
+        allowTemporarySessions: false,
       } as any);
 
       const result = await getServerSideProps(mockContext);

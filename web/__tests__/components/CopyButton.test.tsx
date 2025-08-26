@@ -80,7 +80,7 @@ describe("CopyButton", () => {
     header: { logo: "", navItems: [] },
     footer: { links: [] },
     requireLogin: true,
-    allowPrivateSessions: false,
+    allowTemporarySessions: false,
     allowAllAnswersPage: false,
     npsSurveyFrequencyDays: 30,
     queriesPerUserPerDay: 100,

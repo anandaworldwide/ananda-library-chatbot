@@ -10,7 +10,7 @@ import { getOrCreateUUID } from "@/utils/client/uuid";
 
 export function useChat(
   collection: string,
-  privateSession: boolean,
+  temporarySession: boolean,
   mediaTypes: { text: boolean; audio: boolean },
   siteConfig?: SiteConfig | null
 ) {
@@ -60,9 +60,9 @@ export function useChat(
     // Log event for all questions
     logEvent("ask_question", "Engagement", query);
 
-    // New: Log event specifically for private questions
-    if (privateSession) {
-      logEvent("submit_private_question", "Engagement", "");
+    // New: Log event specifically for temporary questions
+    if (temporarySession) {
+      logEvent("submit_temporary_question", "Engagement", "");
     }
 
     setLoading(true);
@@ -77,7 +77,7 @@ export function useChat(
           collection,
           question: query,
           history: messageState.history,
-          privateSession,
+          temporarySession,
           mediaTypes,
           siteConfig,
           uuid: getOrCreateUUID(),

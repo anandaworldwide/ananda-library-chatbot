@@ -134,7 +134,7 @@ export default function ShareConversation({ siteConfig }: ShareConversationProps
                 index={index}
                 isLastMessage={index === messages.length - 1}
                 loading={false}
-                privateSession={false}
+                temporarySession={false}
                 collectionChanged={false}
                 hasMultipleCollections={false}
                 likeStatuses={{}}

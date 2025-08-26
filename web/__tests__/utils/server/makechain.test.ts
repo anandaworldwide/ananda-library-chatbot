@@ -236,7 +236,7 @@ describe("makeChain", () => {
       links: [],
     },
     requireLogin: false,
-    allowPrivateSessions: true,
+    allowTemporarySessions: true,
     allowAllAnswersPage: true,
     npsSurveyFrequencyDays: 30,
     queriesPerUserPerDay: 100,
@@ -383,7 +383,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -427,7 +427,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -472,7 +472,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -500,7 +500,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -541,7 +541,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -561,12 +561,12 @@ describe("makeChain", () => {
     );
   });
 
-  test("should respect privacy mode and not log questions when privateSession is true", async () => {
-    // Test that the function accepts the privateSession parameter and executes correctly
+  test("should respect privacy mode and not log questions when temporarySession is true", async () => {
+    // Test that the function accepts the temporarySession parameter and executes correctly
     const sendData = jest.fn();
     const resolveDocs = jest.fn();
 
-    // Call makeChain with privateSession = true
+    // Call makeChain with temporarySession = true
     const chain = await makeChain(
       mockRetriever,
       { model: "gpt-4o-mini", temperature: 0.7 },
@@ -575,13 +575,13 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      true, // privateSession = true
+      true, // temporarySession = true
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
     );
 
-    // Verify that the chain was created successfully with the privateSession parameter
+    // Verify that the chain was created successfully with the temporarySession parameter
     expect(chain).toBeDefined();
     expect(typeof chain.invoke).toBe("function");
 
@@ -598,13 +598,13 @@ describe("makeChain", () => {
     // where the real console.log calls would be executed
   });
 
-  test("should log questions when privateSession is false (default behavior)", async () => {
+  test("should log questions when temporarySession is false (default behavior)", async () => {
     // Since our mocks don't execute the real logging code, we'll test the parameter passing
-    // and verify that the function accepts the privateSession parameter correctly
+    // and verify that the function accepts the temporarySession parameter correctly
     const sendData = jest.fn();
     const resolveDocs = jest.fn();
 
-    // Call makeChain with privateSession = false (default)
+    // Call makeChain with temporarySession = false (default)
     const chain = await makeChain(
       mockRetriever,
       { model: "gpt-4o-mini", temperature: 0.7 },
@@ -613,13 +613,13 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession = false
+      false, // temporarySession = false
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
     );
 
-    // Verify that the chain was created successfully with the privateSession parameter
+    // Verify that the chain was created successfully with the temporarySession parameter
     expect(chain).toBeDefined();
     expect(typeof chain.invoke).toBe("function");
 
@@ -704,7 +704,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -762,7 +762,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -814,7 +814,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -854,7 +854,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       customRephraseModelConfig,
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -898,7 +898,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -924,7 +924,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -977,7 +977,7 @@ describe("makeChain", () => {
         sendData,
         resolveDocs,
         undefined, // rephraseModelConfig
-        false, // privateSession
+        false, // temporarySession
         [], // geoTools
         undefined, // request
         mockSiteConfig // siteConfig
@@ -1020,7 +1020,7 @@ describe("makeChain", () => {
       sendData,
       resolveDocs,
       undefined, // rephraseModelConfig
-      false, // privateSession
+      false, // temporarySession
       [], // geoTools
       undefined, // request
       mockSiteConfig // siteConfig
@@ -1103,7 +1103,7 @@ describe("makeChain", () => {
         undefined, // filter
         siteConfig,
         Date.now(),
-        false // privateSession
+        false // temporarySession
       );
 
       // Verify that streaming occurred (tokens were sent)
@@ -1137,7 +1137,7 @@ describe("makeChain", () => {
   });
 
   test("setupAndExecuteLanguageModelChain should respect privacy mode", async () => {
-    // This test verifies that the high-level function accepts the privateSession parameter
+    // This test verifies that the high-level function accepts the temporarySession parameter
     const { setupAndExecuteLanguageModelChain } = await import("../../../src/utils/server/makechain");
 
     const streamedTokens: string[] = [];
@@ -1173,7 +1173,7 @@ describe("makeChain", () => {
     };
 
     try {
-      // Execute the function with privateSession = true
+      // Execute the function with temporarySession = true
       const result = await setupAndExecuteLanguageModelChain(
         mockRetriever,
         "What about that?", // Follow-up question
@@ -1183,7 +1183,7 @@ describe("makeChain", () => {
         undefined, // filter
         siteConfig,
         Date.now(),
-        true // privateSession = true
+        true // temporarySession = true
       );
 
       // Verify that the result structure is correct

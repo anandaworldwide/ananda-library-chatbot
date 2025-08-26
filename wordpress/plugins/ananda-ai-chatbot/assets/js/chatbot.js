@@ -158,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let isStreaming = false;
   let currentAbortController = null;
   let defaultCollection = "whole_library";
-  let privateSession = false;
+  let temporarySession = false;
   let mediaTypes = { text: true, audio: false, youtube: false };
   let sourceCount = 6;
   let intercomEnabled = false;
@@ -487,10 +487,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (sourceLink) {
       const linkText = sourceLink.textContent;
       const linkUrl = sourceLink.href;
-      
+
       // Track the source link click
       trackSourceLinkClick(linkText, linkUrl);
-      
+
       // The link will open in a new tab due to target="_blank"
       // No need to prevent default or handle navigation manually
     }
@@ -502,10 +502,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (askExpertsLink) {
       const linkText = askExpertsLink.textContent;
       const linkUrl = askExpertsLink.href;
-      
+
       // Track the ask the experts link click
       trackAskTheExpertsLinkClick(linkText, linkUrl, sessionQuestionCount);
-      
+
       // The link will open in a new tab due to target="_blank"
       // No need to prevent default or handle navigation manually
     }
@@ -805,7 +805,10 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
-                .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
+                .replace(
+                  /\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g,
+                  '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>'
+                )
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<li>${listContent}</li>`;
@@ -824,7 +827,10 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
-                .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
+                .replace(
+                  /\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g,
+                  '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>'
+                )
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<p>${paragraph}</p>`;
@@ -858,7 +864,10 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
-                .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
+                .replace(
+                  /\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g,
+                  '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>'
+                )
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<li>${listContent}</li>`;
@@ -877,7 +886,10 @@ document.addEventListener("DOMContentLoaded", () => {
                   /\[(.*?)\]\(GETHUMAN\)/g,
                   '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
                 )
-                .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
+                .replace(
+                  /\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g,
+                  '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>'
+                )
                 .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>');
 
               html += `<p>${paragraph}</p>`;
@@ -907,7 +919,10 @@ document.addEventListener("DOMContentLoaded", () => {
             /\[(.*?)\]\(GETHUMAN\)/g,
             '<span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">$1</span>'
           )
-          .replace(/\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g, '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>')
+          .replace(
+            /\[(.*?)\]\((https?:\/\/www\.ananda\.org\/ask\/?)\)/g,
+            '<a href="$2" target="_blank" class="aichatbot-ask-the-experts-link">$1</a>'
+          )
           .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="aichatbot-source-link">$1</a>')
           .replace(/\n/g, "<br />");
 
@@ -1014,7 +1029,7 @@ document.addEventListener("DOMContentLoaded", () => {
             ])
             .flat(),
           collection: defaultCollection,
-          privateSession: privateSession,
+          temporarySession: temporarySession,
           mediaTypes: mediaTypes,
           sourceCount: sourceCount,
           uuid: npsUserUuid, // Add UUID for backend validation
@@ -1027,12 +1042,11 @@ document.addEventListener("DOMContentLoaded", () => {
           const errorData = await response.json();
           console.error("API Error:", errorData);
           const errorMessage = errorData.error || JSON.stringify(errorData);
-          
+
           // Send error email to administrators
           await sendErrorEmail(new Error(errorMessage), "API Error", message);
-          
-          throw new Error(`${errorMessage}`); // This will show the actual API error
 
+          throw new Error(`${errorMessage}`); // This will show the actual API error
         } catch (e) {
           throw new Error(`Server error (${response.status}): ${e.message}`);
         }
@@ -1304,7 +1318,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Send error email to administrators for all errors
       try {
-        await sendErrorEmail(error, "Chatbot Error", chatHistory.length > 0 ? chatHistory[chatHistory.length - 1][0] : "No user message");
+        await sendErrorEmail(
+          error,
+          "Chatbot Error",
+          chatHistory.length > 0 ? chatHistory[chatHistory.length - 1][0] : "No user message"
+        );
       } catch (emailError) {
         console.error("Failed to send error email:", emailError);
       }
@@ -2460,23 +2478,23 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const errorData = {
-        action: 'aichatbot_send_error_email',
+        action: "aichatbot_send_error_email",
         error_type: errorType,
         error_message: error.message,
-        error_stack: error.stack || '',
+        error_stack: error.stack || "",
         user_message: userMessage,
         user_agent: navigator.userAgent,
         current_url: window.location.href,
         timestamp: new Date().toISOString(),
-        chat_history_count: chatHistory.length
+        chat_history_count: chatHistory.length,
       };
 
       const response = await fetch(aichatbotData.ajaxUrl, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: new URLSearchParams(errorData)
+        body: new URLSearchParams(errorData),
       });
 
       if (response.ok) {

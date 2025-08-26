@@ -112,7 +112,7 @@ interface ChatRequestBody {
   question: string;
   history?: ChatMessage[];
   collection?: string;
-  privateSession?: boolean;
+  temporarySession?: boolean;
   mediaTypes?: Partial<MediaTypes>;
   sourceCount?: number;
   siteId?: string;
@@ -598,7 +598,7 @@ async function handleComparisonRequest(req: NextRequest, requestBody: Comparison
           undefined,
           undefined,
           undefined,
-          requestBody.privateSession || false,
+          requestBody.temporarySession || false,
           [], // No geo tools for comparison mode
           undefined, // No request for comparison mode
           siteConfig
@@ -616,7 +616,7 @@ async function handleComparisonRequest(req: NextRequest, requestBody: Comparison
           undefined,
           undefined,
           undefined,
-          requestBody.privateSession || false,
+          requestBody.temporarySession || false,
           [], // No geo tools for comparison mode
           undefined, // No request for comparison mode
           siteConfig
@@ -923,7 +923,7 @@ async function handleChatRequest(req: NextRequest) {
         // Generate convId immediately and start title generation in parallel
         let conversationId: string | undefined;
 
-        if (!sanitizedInput.privateSession && !sanitizedInput.convId) {
+        if (!sanitizedInput.temporarySession && !sanitizedInput.convId) {
           // This is a new conversation - generate convId immediately
           conversationId = uuidv4();
 
@@ -981,13 +981,13 @@ async function handleChatRequest(req: NextRequest) {
           filter,
           siteConfig,
           timingMetrics.startTime,
-          sanitizedInput.privateSession || false,
+          sanitizedInput.temporarySession || false,
           req // Pass the request object for geo-awareness
         );
         // --- End of Encapsulated Call ---
 
         // SAVE DOCUMENT AFTER RESPONSE IS READY
-        if (!sanitizedInput.privateSession) {
+        if (!sanitizedInput.temporarySession) {
           try {
             // Use pre-generated conversationId for new conversations, or provided convId for follow-ups
             const finalConversationId = conversationId || sanitizedInput.convId || uuidv4();

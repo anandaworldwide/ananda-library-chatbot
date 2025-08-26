@@ -109,7 +109,7 @@ jest.mock("@/utils/server/loadSiteConfig", () => {
     header: { logo: "", navItems: [] },
     footer: { links: [] },
     requireLogin: false,
-    allowPrivateSessions: true,
+    allowTemporarySessions: true,
     allowAllAnswersPage: true,
     npsSurveyFrequencyDays: 30,
     queriesPerUserPerDay: 50,

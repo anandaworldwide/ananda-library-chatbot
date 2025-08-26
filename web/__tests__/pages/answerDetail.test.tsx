@@ -80,7 +80,7 @@ describe("SingleAnswer page", () => {
       links: [],
     },
     requireLogin: false,
-    allowPrivateSessions: true,
+    allowTemporarySessions: true,
     npsSurveyFrequencyDays: 30,
     queriesPerUserPerDay: 100,
     collectionConfig: {},
@@ -91,6 +91,15 @@ describe("SingleAnswer page", () => {
     welcome_popup_heading: "Welcome",
     other_visitors_reference: "Others",
     loginImage: null,
+    showSourceCountSelector: false,
+    temperature: 0.7,
+    modelName: "gpt-3.5-turbo",
+    enabledMediaTypes: ["text", "audio", "youtube"],
+    defaultNumSources: 6,
+    showRelatedQuestions: true,
+    showSourceContent: true,
+    showVoting: true,
+    chatPlaceholder: "",
   } as SiteConfig;
 
   beforeEach(() => {

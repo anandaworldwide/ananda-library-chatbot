@@ -452,7 +452,7 @@ describe('Chat API Route', () => {
           question: '<script>alert("XSS")</script>',
           collection: 'master_swami', // Valid collection from our mock data
           history: [],
-          privateSession: false,
+          temporarySession: false,
           mediaTypes: {
             text: true,
             // image: false,
@@ -488,7 +488,7 @@ describe('Chat API Route', () => {
           question: 'Test question',
           collection: 'master_swami',
           history: [],
-          privateSession: true,
+          temporarySession: true,
           mediaTypes: {
             text: true,
             audio: false,
@@ -823,7 +823,7 @@ describe('Chat API Route', () => {
         body: JSON.stringify({
           question: 'Test question',
           collection: 'master_swami', // Valid collection
-          privateSession: false,
+          temporarySession: false,
           mediaTypes: { text: true },
           modelA: 'gpt-4o',
           modelB: 'gpt-3.5-turbo',
@@ -852,7 +852,7 @@ describe('Chat API Route', () => {
         body: JSON.stringify({
           question: 'Test question',
           collection: 'master_swami', // Valid collection
-          privateSession: false,
+          temporarySession: false,
           mediaTypes: { text: true },
           modelA: 'gpt-4o',
           modelB: 'gpt-3.5-turbo',
@@ -925,7 +925,7 @@ describe('Chat API Route', () => {
           question: 'What is mindfulness?',
           collection: 'master_swami',
           history: [],
-          privateSession: false, // To trigger save and late docId
+          temporarySession: false, // To trigger save and late docId
           mediaTypes: { text: true },
           sourceCount: 3,
         }),
@@ -978,7 +978,7 @@ describe('Chat API Route', () => {
           question: 'Test question',
           collection: 'master_swami',
           history: [],
-          privateSession: false,
+          temporarySession: false,
           mediaTypes,
         }),
       });
@@ -1018,7 +1018,7 @@ describe('Chat API Route', () => {
           { role: 'user', content: 'Who was Yogananda?' },
           { role: 'assistant', content: 'Yogananda was a spiritual teacher.' }
         ],
-        privateSession: false,
+        temporarySession: false,
         mediaTypes: { text: true, audio: false },
         sourceCount: 4,
       };

@@ -56,7 +56,7 @@ describe("ChatInput", () => {
     header: { logo: "", navItems: [] },
     footer: { links: [] },
     requireLogin: true,
-    allowPrivateSessions: true,
+    allowTemporarySessions: true,
     allowAllAnswersPage: false,
     npsSurveyFrequencyDays: 30,
     queriesPerUserPerDay: 100,
@@ -72,9 +72,9 @@ describe("ChatInput", () => {
     handleEnter: jest.fn(),
     handleClick: jest.fn(),
     handleCollectionChange: jest.fn(),
-    handlePrivateSessionChange: jest.fn(),
+    handleTemporarySessionChange: jest.fn(),
     collection: "all",
-    privateSession: false,
+    temporarySession: false,
     error: null,
     setError: jest.fn(),
     randomQueries: ["How can I meditate?", "What is yoga?"],
@@ -186,14 +186,14 @@ describe("ChatInput", () => {
     expect(screen.getByTestId("shuffle-button")).toBeInTheDocument();
   });
 
-  it("toggles private session correctly", () => {
+  it("toggles temporary session correctly", () => {
     render(<ChatInput {...defaultProps} />);
 
-    // Find and click the private session button by its text content
-    const privateSessionToggle = screen.getByText("Start Private Session");
-    fireEvent.click(privateSessionToggle);
+    // Find and click the temporary session button by its text content
+    const temporarySessionToggle = screen.getByText("Start Temporary Session");
+    fireEvent.click(temporarySessionToggle);
 
-    expect(defaultProps.handlePrivateSessionChange).toHaveBeenCalled();
+    expect(defaultProps.handleTemporarySessionChange).toHaveBeenCalled();
   });
 
   it("toggles media types correctly", () => {

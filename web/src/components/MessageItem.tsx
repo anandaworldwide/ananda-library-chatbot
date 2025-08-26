@@ -24,7 +24,7 @@ interface MessageItemProps {
   index: number;
   isLastMessage: boolean;
   loading: boolean;
-  privateSession: boolean;
+  temporarySession: boolean;
   collectionChanged: boolean;
   hasMultipleCollections: boolean;
   likeStatuses: Record<string, boolean>;
@@ -48,7 +48,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
   index,
   isLastMessage,
   loading,
-  privateSession,
+  temporarySession,
   collectionChanged,
   hasMultipleCollections,
   likeStatuses,
@@ -231,7 +231,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   />
 
                   {/* Link, like, and downvote buttons - always visible after loading, but disabled until docId available */}
-                  {!privateSession && (
+                  {!temporarySession && (
                     <>
                       <button
                         onClick={() => message.docId && handleCopyLink(message.docId)}

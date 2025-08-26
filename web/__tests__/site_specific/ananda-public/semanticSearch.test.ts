@@ -60,7 +60,7 @@ testRunner("Vivek Response Semantic Validation (ananda-public)", () => {
       question: query,
       collection: "whole_library", // Default collection for broad testing
       history: [],
-      privateSession: true, // Avoid Firestore writes during tests
+      temporarySession: true, // Avoid Firestore writes during tests
       mediaTypes: { text: true }, // Assume text for basic tests
       sourceCount: 3, // Default source count
       siteId: "ananda-public", // Identify the target site.
@@ -199,7 +199,7 @@ testRunner("Vivek Response Semantic Validation (ananda-public)", () => {
           question: query,
           collection: "whole_library",
           history: history,
-          privateSession: true,
+          temporarySession: true,
           mediaTypes: { text: true },
           sourceCount: 3,
           siteId: "ananda-public",
@@ -704,7 +704,7 @@ testRunner("Vivek Response Semantic Validation (ananda-public)", () => {
           question: query,
           collection: "whole_library",
           history: history,
-          privateSession: true,
+          temporarySession: true,
           mediaTypes: { text: true },
           sourceCount: 3,
           siteId: "ananda-public",

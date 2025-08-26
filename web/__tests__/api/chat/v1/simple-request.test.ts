@@ -200,7 +200,7 @@ describe('Chat API Simple Request Validation', () => {
       question: '<script>alert("xss")</script>',
       collection: 'master_swami',
       history: [],
-      privateSession: false,
+      temporarySession: false,
       mediaTypes: { text: true },
       sourceCount: 4,
     });
@@ -229,7 +229,7 @@ describe('Chat API Simple Request Validation', () => {
         question: 'Test question',
         collection: 'master_swami',
         history: [],
-        privateSession: false,
+        temporarySession: false,
         mediaTypes,
       }),
     });
@@ -259,7 +259,7 @@ describe('Chat API Simple Request Validation', () => {
         question: 'Test question',
         collection: 'master_swami',
         history: [],
-        privateSession: false,
+        temporarySession: false,
         mediaTypes,
       }),
     });

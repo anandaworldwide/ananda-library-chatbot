@@ -578,9 +578,9 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
       handleSubmit(syntheticEvent, query);
     },
     handleCollectionChange,
-    handlePrivateSessionChange: () => {},
+    handleTemporarySessionChange: () => {},
     collection,
-    privateSession: false,
+    temporarySession: false,
     error,
     setError,
     randomQueries: [],
@@ -596,7 +596,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
     isNearBottom: true,
     setIsNearBottom: () => {},
     isLoadingQueries: false,
-    showPrivateSessionOptions: false,
+    showTemporarySessionOptions: false,
     sourceCount,
     setSourceCount,
     useExtraSources: false,
@@ -686,7 +686,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
                     lastMessageRef={null}
                     messageKey={`model${modelKey}-${index}`}
                     voteError={null}
-                    privateSession={false}
+                    temporarySession={false}
                     allowAllAnswersPage={false}
                     showSourcesBelow={false}
                     showRelatedQuestions={false}
