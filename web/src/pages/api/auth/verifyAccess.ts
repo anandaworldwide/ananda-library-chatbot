@@ -60,7 +60,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         { merge: true },
         "resend activation on verify access"
       );
-      await sendActivationEmail(email, token);
+      await sendActivationEmail(email, token, req);
       await writeAuditLog(req, "self_provision_attempt", email.toLowerCase(), {
         outcome: "resent_pending_activation",
       });
@@ -86,7 +86,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       undefined,
       "create user via verify access"
     );
-    await sendActivationEmail(email, token);
+    await sendActivationEmail(email, token, req);
     await writeAuditLog(req, "self_provision_attempt", email.toLowerCase(), {
       outcome: "created_pending_user",
     });

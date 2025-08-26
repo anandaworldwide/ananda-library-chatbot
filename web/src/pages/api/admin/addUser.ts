@@ -66,7 +66,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           { merge: true },
           "update pending user"
         );
-        await sendActivationEmail(email, token);
+        await sendActivationEmail(email, token, req);
         return res.status(200).json({ message: "resent" });
       }
       if (data?.inviteStatus === "accepted") {
@@ -94,7 +94,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       "create user"
     );
 
-    await sendActivationEmail(email, token);
+    await sendActivationEmail(email, token, req);
     await writeAuditLog(req, "admin_add_user", email.toLowerCase(), {
       status: "created",
       outcome: "success",

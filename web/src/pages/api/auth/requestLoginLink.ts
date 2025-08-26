@@ -50,7 +50,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           { merge: true },
           "store login token"
         );
-        await sendLoginEmail(email, token, redirect);
+        await sendLoginEmail(email, token, redirect, req);
         return res.status(200).json({ message: "login-link-sent" });
       }
       if (data?.inviteStatus === "pending") {
@@ -64,7 +64,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           { merge: true },
           "update pending user for resend"
         );
-        await sendActivationEmail(email, token);
+        await sendActivationEmail(email, token, req);
         return res.status(200).json({ message: "activation-resent" });
       }
     }

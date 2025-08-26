@@ -177,6 +177,10 @@ describe("/api/admin/resendActivation", () => {
       message: "resent",
     });
 
-    expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith("pending@example.com", "test-token");
+    expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith(
+      "pending@example.com",
+      "test-token",
+      expect.any(Object)
+    );
   });
 });

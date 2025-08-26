@@ -26,8 +26,21 @@ export function getInviteExpiryDate(days: number = 14): Date {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 }
 
-export async function sendActivationEmail(email: string, token: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://ananda.ai";
+export async function sendActivationEmail(email: string, token: string, req?: any) {
+  // Use request domain if available, otherwise fall back to configured domain
+  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_BASE_URL environment variable is required for email generation");
+  }
+
+  if (req && req.headers) {
+    const host = req.headers.host;
+    const protocol = req.headers["x-forwarded-proto"] || (host?.includes("localhost") ? "http" : "https");
+    if (host) {
+      baseUrl = `${protocol}://${host}`;
+    }
+  }
+
   const url = `${baseUrl}/verify?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
   const siteConfig = loadSiteConfigSync();
   const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
