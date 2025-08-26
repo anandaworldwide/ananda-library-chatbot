@@ -128,6 +128,7 @@ Deliver: Feature deployed to production across all sites with proper migration a
 - [ ] **Index Deployment**: Deploy indexes using separate config files: - Development:
       `firebase deploy --only firestore:indexes --config firebase.dev.json` - Production:
       `firebase deploy --only firestore:indexes --config firebase.prod.json`
+- [ ] Run title migration script. `cd web && npx tsx scripts/generate-titles.ts --site ananda --env prod --dry-run`
 - [ ] **Vercel Deployment**: Deploy to production via GitHub main branch; monitor build logs and function deployments.
 - [ ] **Site Testing**: Manual QA on all production sites (ananda, ananda-public, crystal, jairam) for chat history, URL
       navigation, sharing, mobile responsiveness.
