@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { db } from "@/services/firebase";
 import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreQueryGet } from "@/utils/server/firestoreRetryUtils";
+import { createIndexErrorResponse } from "@/utils/server/firestoreIndexErrorHandler";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -71,10 +72,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json(chats);
   } catch (error: any) {
-    if (error?.message?.includes("indexes")) {
-      // Firestore may require a composite index for where+orderBy; surface guidance
-      return res.status(500).json({ error: "Firestore index required for uuid+timestamp query" });
-    }
-    return res.status(500).json({ error: error?.message || "Failed to fetch chats" });
+    // Handle Firestore index errors with proper user messaging and ops notifications
+    const errorResponse = createIndexErrorResponse(error, {
+      endpoint: "/api/chats",
+      collection: getAnswersCollectionName(),
+      fields: convId ? ["uuid", "convId", "timestamp"] : ["uuid", "timestamp"],
+      query: convId ? `uuid=${uuid}, convId=${convId}, orderBy timestamp desc` : `uuid=${uuid}, orderBy timestamp desc`,
+    });
+
+    return res.status(500).json(errorResponse);
   }
 }

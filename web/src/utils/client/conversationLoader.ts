@@ -35,10 +35,29 @@ export async function loadConversationByConvId(
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // Try to get more detailed error information from the response
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch {
+        // If we can't parse the error response, use the default message
+      }
+      throw new Error(errorMessage);
     }
 
-    const chats: ChatHistoryItem[] = await response.json();
+    const responseData = await response.json();
+
+    // Check if the response contains an error (even with 200 status)
+    if (responseData.error) {
+      throw new Error(responseData.error);
+    }
+
+    const chats: ChatHistoryItem[] = Array.isArray(responseData) ? responseData : [];
 
     if (chats.length === 0) {
       throw new Error("Conversation not found");

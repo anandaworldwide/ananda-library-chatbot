@@ -185,7 +185,20 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         logEvent("chat_history_conversation_loaded", "Chat History", convId, loadedConversation.messages.length);
       } catch (error) {
         console.error("Error loading conversation:", error);
-        setError(error instanceof Error ? error.message : "Failed to load conversation");
+
+        // Set the conversation ID even on error to prevent infinite retry loops
+        setCurrentConvId(convId);
+
+        // Check if this is a Firestore index error and provide appropriate message
+        const errorMessage = error instanceof Error ? error.message : "Failed to load conversation";
+
+        if (errorMessage.includes("query requires an index") || errorMessage.includes("index is currently building")) {
+          setError(
+            "Database index required for conversation loading. The system administrator has been notified. Please try again later or contact support if this persists."
+          );
+        } else {
+          setError(errorMessage);
+        }
       } finally {
         setLoading(false);
       }
@@ -241,8 +254,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     // Handle /chat/[convId] URLs
     if (path.startsWith("/chat/")) {
       const convId = path.split("/chat/")[1];
-      // Prevent infinite loop by checking if we've already loaded this conversation
-      if (convId && convId !== currentConvIdRef.current) {
+      // Prevent infinite loop by checking if we've already loaded this conversation OR if there's an existing error
+      // If there's already an error for this conversation, don't retry to prevent infinite reload loops
+      if (convId && convId !== currentConvIdRef.current && !chatError) {
         // Load conversation without updating URL (since URL is already correct)
         await loadConversationDirectly(convId);
       }
@@ -252,6 +266,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     pathRef.current,
     currentConvId,
     loading,
+    chatError,
     siteConfig,
     loadConversationDirectly,
     setCurrentConvId,

@@ -13,6 +13,7 @@ import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { withJwtAuth } from "@/utils/server/jwtUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { firestoreQueryGet, firestoreDelete } from "@/utils/server/firestoreRetryUtils";
+import { createIndexErrorResponse } from "@/utils/server/firestoreIndexErrorHandler";
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
 import { requireAdminRole } from "@/utils/server/authz";
 import { writeAuditLog } from "@/utils/server/auditLog";
@@ -216,9 +217,17 @@ async function handleGetRequest(req: NextApiRequest, res: NextApiResponse) {
       } else if (error.message === "Database not available") {
         res.status(503).json({ message: "Database not available" });
       } else {
+        // Handle Firestore index errors with proper user messaging and ops notifications
+        const errorResponse = createIndexErrorResponse(error, {
+          endpoint: "/api/answers",
+          collection: getAnswersCollectionName(),
+          fields: ["likeCount", "timestamp"],
+          query: "Paginated answers with sorting",
+        });
+
         res.status(500).json({
           message: "Error fetching answers",
-          error: error.message,
+          ...errorResponse,
         });
       }
     } else {

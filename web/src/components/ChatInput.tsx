@@ -35,6 +35,7 @@ import {
 } from "@/utils/client/siteConfig";
 import { logEvent } from "@/utils/client/analytics";
 import { getOrCreateUUID } from "@/utils/client/uuid";
+import { FirestoreIndexError, useFirestoreIndexError } from "@/components/FirestoreIndexError";
 
 // Define the props interface for the ChatInput component
 interface ChatInputProps {
@@ -105,6 +106,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(false);
   const [showControlsInfo, setShowControlsInfo] = useState(false);
   //const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Analyze error to determine if it's a Firestore index error
+  const { isIndexError, isBuilding, errorMessage } = useFirestoreIndexError(error);
 
   // Effect to set initial suggestions expanded state based on saved preference
   useEffect(() => {
@@ -488,12 +492,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
 
           {/* Error display */}
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
-              <strong className="font-bold">An error occurred: </strong>
-              <span className="block sm:inline">{error}</span>
-            </div>
-          )}
+          {error &&
+            (isIndexError ? (
+              <FirestoreIndexError error={errorMessage} isBuilding={isBuilding} className="mb-4" />
+            ) : (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+                <strong className="font-bold">An error occurred: </strong>
+                <span className="block sm:inline">{error}</span>
+              </div>
+            ))}
         </form>
 
         {/* Suggested queries section */}

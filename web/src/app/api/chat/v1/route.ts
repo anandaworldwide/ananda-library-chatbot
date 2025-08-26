@@ -68,6 +68,7 @@ import * as corsMiddleware from "@/utils/server/corsMiddleware";
 import { determineActiveMediaTypes } from "@/utils/determineActiveMediaTypes";
 import { firestoreSet, firestoreAdd } from "@/utils/server/firestoreRetryUtils";
 import { sendOpsAlert } from "@/utils/server/emailOps";
+import { analyzeFirestoreError, notifyOpsOfIndexError } from "@/utils/server/firestoreIndexErrorHandler";
 import { v4 as uuidv4 } from "uuid";
 
 export const runtime = "nodejs";
@@ -499,7 +500,26 @@ Error details: ${error.message}`,
         console.error("Failed to send Pinecone ops alert:", emailError);
       });
     } else {
-      sendData({ error: error.message || "Something went wrong" });
+      // Check if this is a Firestore index error
+      const indexAnalysis = analyzeFirestoreError(error);
+      if (indexAnalysis.isIndexError) {
+        sendData({
+          error: indexAnalysis.userMessage,
+          type: "firestore_index_error",
+          isBuilding: indexAnalysis.isBuilding,
+        });
+
+        // Send ops notification if needed (async, don't wait)
+        if (indexAnalysis.shouldNotifyOps) {
+          notifyOpsOfIndexError(error, {
+            endpoint: "/api/chat/v1",
+            collection: "chatLogs",
+            query: "Chat conversation save/update",
+          }).catch(console.error);
+        }
+      } else {
+        sendData({ error: error.message || "Something went wrong" });
+      }
     }
   } else {
     sendData({ error: "An unknown error occurred" });
