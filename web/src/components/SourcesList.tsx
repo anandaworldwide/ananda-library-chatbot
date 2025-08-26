@@ -120,26 +120,32 @@ const SourcesList: React.FC<SourcesListProps> = ({
   }, []);
 
   // Callback hooks
-  const renderAudioPlayer = useCallback((doc: Document<DocMetadata>, index: number, isExpanded: boolean) => {
-    if (doc.metadata.type === "audio" && doc.metadata.filename) {
-      const audioId = `audio_${doc.metadata.file_hash}_${index}`;
-      return (
-        <div className="pt-1 pb-2">
-          <AudioPlayer
-            key={audioId}
-            src={doc.metadata.filename}
-            library={doc.metadata.library}
-            startTime={doc.metadata.start_time ?? 0}
-            audioId={audioId}
-            lazyLoad={true}
-            isExpanded={isExpanded}
-            docId={docId}
-          />
-        </div>
-      );
-    }
-    return null;
-  }, []);
+  const renderAudioPlayer = useCallback(
+    (doc: Document<DocMetadata>, index: number, isExpanded: boolean) => {
+      if (doc.metadata.type === "audio" && doc.metadata.filename) {
+        // Include docId in key to ensure fresh AudioPlayer instances per conversation
+        // This prevents state persistence (playback position, loading state, etc.) across conversations
+        const audioId = `audio_${doc.metadata.file_hash}_${index}`;
+        const uniqueKey = docId ? `${audioId}_${docId}` : audioId;
+        return (
+          <div className="pt-1 pb-2">
+            <AudioPlayer
+              key={uniqueKey}
+              src={doc.metadata.filename}
+              library={doc.metadata.library}
+              startTime={doc.metadata.start_time ?? 0}
+              audioId={audioId}
+              lazyLoad={true}
+              isExpanded={isExpanded}
+              docId={docId}
+            />
+          </div>
+        );
+      }
+      return null;
+    },
+    [docId]
+  );
 
   const renderYouTubePlayer = useCallback((doc: Document<DocMetadata>) => {
     if (doc.metadata.type === "youtube") {
