@@ -331,12 +331,17 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
   // Function to start a new chat conversation
   const handleNewChat = () => {
+    // Stop any ongoing streaming before resetting
+    if (loading) {
+      handleStop();
+    }
+
     // Push a new history entry for '/' without triggering a Next.js navigation.
     window.history.pushState(null, "", "/");
     pathRef.current = "/";
     // Immediately reset local chat state so UI clears without waiting for
     // handleUrlBasedLoading. This guarantees the New-Chat button and the
-    // “Ask” nav item always start from a blank conversation.
+    // "Ask" nav item always start from a blank conversation.
     setCurrentConvId(null);
     setCurrentQuestion("");
     setMessageState({
@@ -350,6 +355,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     });
     setError(null);
     setViewOnlyMode(false);
+
+    // Focus on the input field if not on mobile
+    if (window.innerWidth >= 768 && textAreaRef.current) {
+      textAreaRef.current.focus();
+    }
 
     // Log analytics event
     logEvent("new_chat_started", "Chat", "header_button");
