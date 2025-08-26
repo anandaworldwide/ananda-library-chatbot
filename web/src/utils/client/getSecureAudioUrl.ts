@@ -1,4 +1,5 @@
 import { getToken } from "./tokenManager";
+import { getOrCreateUUID } from "./uuid";
 
 interface AudioUrlResponse {
   signedUrl: string;
@@ -25,6 +26,21 @@ export async function getSecureAudioUrl(filename: string, library?: string, docI
   try {
     // Get JWT token for authentication
     const token = await getToken();
+    const uuid = getOrCreateUUID();
+
+    // Prepare request body based on authentication status
+    const requestBody: any = {
+      audioS3Key: filename,
+      library,
+    };
+
+    // For authenticated users, include UUID
+    if (token && !token.includes("placeholder")) {
+      requestBody.uuid = uuid;
+    } else if (docId) {
+      // For anonymous users, include docId for share validation
+      requestBody.docId = docId;
+    }
 
     // Make request to secure audio endpoint
     const response = await fetch("/api/getAudioSignedUrl", {
@@ -33,11 +49,7 @@ export async function getSecureAudioUrl(filename: string, library?: string, docI
         "Content-Type": "application/json",
         ...(token && !token.includes("placeholder") ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({
-        audioS3Key: filename,
-        library,
-        ...(token.includes("placeholder") && docId ? { docId } : {}),
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
