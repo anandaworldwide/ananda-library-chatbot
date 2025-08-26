@@ -1,6 +1,6 @@
 /**
- * Migration script to generate AI titles for existing conversations
- * Finds conversations without titles and generates AI titles for them
+ * Migration script to generate AI titles for recent conversations
+ * Finds conversations from the last 60 days without titles and generates AI titles for them
  *
  * Usage: npx tsx scripts/generate-titles.ts --site <site-name> --env <environment> [--batch-size <size>] [--dry-run]
  * Example: npx tsx scripts/generate-titles.ts --site ananda --env dev --batch-size 50
@@ -179,8 +179,10 @@ async function generateTitle(question: string): Promise<string> {
   return aiTitle || createFallbackTitle(question);
 }
 
-async function generateTitlesForConversations() {
-  console.log(`Starting title generation for site: ${site}, environment: ${environment}`);
+async function generateTitlesForRecentConversations() {
+  console.log(
+    `Starting title generation for recent conversations (last 60 days) for site: ${site}, environment: ${environment}`
+  );
   console.log(`Batch size: ${batchSize}, Dry run: ${isDryRun}`);
 
   // Check if db is available
@@ -195,11 +197,16 @@ async function generateTitlesForConversations() {
     const answersRef = db.collection(collectionName);
     console.log(`Using collection: ${collectionName}`);
 
-    // Get all documents that don't have a title field or have null/empty title
-    // We need to get all documents and filter client-side since Firestore
-    // doesn't have a "field does not exist" or "field is null" query that works reliably
-    console.log("Fetching documents without titles...");
-    const snapshot = await answersRef.get();
+    // Calculate date 60 days ago
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    // Get documents from the last 60 days that don't have a title field or have null/empty title
+    // We filter by timestamp first to reduce the dataset, then filter client-side for missing titles
+    console.log("Fetching documents from the last 60 days without titles...");
+    console.log(`Looking for documents created after: ${sixtyDaysAgo.toISOString()}`);
+
+    const snapshot = await answersRef.where("timestamp", ">=", sixtyDaysAgo).get();
 
     const docsWithoutTitle = snapshot.docs.filter((doc) => {
       const data = doc.data();
@@ -207,7 +214,7 @@ async function generateTitlesForConversations() {
     });
 
     console.log(
-      `Found ${docsWithoutTitle.length} documents without titles out of ${snapshot.docs.length} total documents`
+      `Found ${docsWithoutTitle.length} documents without titles out of ${snapshot.docs.length} total documents from the last 60 days`
     );
 
     if (docsWithoutTitle.length === 0) {
@@ -331,7 +338,7 @@ async function generateTitlesForConversations() {
 }
 
 // Run the title generation
-generateTitlesForConversations()
+generateTitlesForRecentConversations()
   .then(() => {
     console.log("Title generation script completed");
     process.exit(0);
