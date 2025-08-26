@@ -114,6 +114,8 @@ describe("SourcesList", () => {
     allowAllAnswersPage: false,
     npsSurveyFrequencyDays: 30,
     queriesPerUserPerDay: 100,
+    showSourceContent: true,
+    showVoting: true,
   };
 
   beforeEach(() => {
@@ -238,8 +240,9 @@ describe("SourcesList", () => {
     expect(analyticsModule.logEvent).not.toHaveBeenCalledWith("click_source", "UI", expect.any(String));
   });
 
-  it("shows Go to source button for text sources when expanded", () => {
-    render(<SourcesList sources={[textSource]} />);
+  it("shows Go to source button for text sources when expanded (Ananda site)", () => {
+    const anandaSiteConfig = { ...mockSiteConfig, siteId: "ananda" };
+    render(<SourcesList sources={[textSource]} siteConfig={anandaSiteConfig} />);
 
     // First expand the text source
     const expandButton = screen.getByText("Test Document").closest("summary")!;
@@ -256,18 +259,88 @@ describe("SourcesList", () => {
     // Should show the access interstitial popup
     expect(screen.getByText("Access to Source")).toBeInTheDocument();
     expect(
-      screen.getByText("This content comes from the Ananda Library. Choose the option that applies to you:")
+      screen.getByText("This content comes from Ananda Library. Choose the option that applies to you:")
     ).toBeInTheDocument();
 
     // Should show both access options
-    expect(screen.getByText("I have access to the Ananda Library")).toBeInTheDocument();
-    expect(screen.getByText("I don't have access to the Ananda Library")).toBeInTheDocument();
+    expect(screen.getByText("I have access to Ananda Library")).toBeInTheDocument();
+    expect(screen.getByText("I don't have access to Ananda Library")).toBeInTheDocument();
 
     // Click the "I have access" button should open the source link
-    const hasAccessButton = screen.getByText("I have access to the Ananda Library").closest("button")!;
+    const hasAccessButton = screen.getByText("I have access to Ananda Library").closest("button")!;
     fireEvent.click(hasAccessButton);
 
     // Should open the source link
+    expect(mockOpen).toHaveBeenCalledWith("https://test.com/document", "_blank", "noopener,noreferrer");
+    expect(analyticsModule.logEvent).toHaveBeenCalledWith("click_source", "UI", "https://test.com/document");
+  });
+
+  it("does not show interstitial for ananda-public site (direct link like Crystal)", () => {
+    const anandaPublicSiteConfig = { ...mockSiteConfig, siteId: "ananda-public" };
+    render(<SourcesList sources={[textSource]} siteConfig={anandaPublicSiteConfig} />);
+
+    // First expand the text source
+    const expandButton = screen.getByText("Test Document").closest("summary")!;
+    fireEvent.click(expandButton);
+
+    // Should show the Go to source button
+    const goToSourceButton = screen.getByText("Go to source");
+    expect(goToSourceButton).toBeInTheDocument();
+
+    // Click the button should directly open the source without showing interstitial
+    fireEvent.click(goToSourceButton);
+
+    // Should NOT show the access interstitial popup
+    expect(screen.queryByText("Access to Source")).not.toBeInTheDocument();
+    expect(screen.queryByText(/This content comes from/)).not.toBeInTheDocument();
+
+    // Should directly open the source link
+    expect(mockOpen).toHaveBeenCalledWith("https://test.com/document", "_blank", "noopener,noreferrer");
+    expect(analyticsModule.logEvent).toHaveBeenCalledWith("click_source", "UI", "https://test.com/document");
+  });
+
+  it("does not show interstitial for non-Ananda sites (Crystal)", () => {
+    const crystalSiteConfig = { ...mockSiteConfig, siteId: "crystal" };
+    render(<SourcesList sources={[textSource]} siteConfig={crystalSiteConfig} />);
+
+    // First expand the text source
+    const expandButton = screen.getByText("Test Document").closest("summary")!;
+    fireEvent.click(expandButton);
+
+    // Should show the Go to source button
+    const goToSourceButton = screen.getByText("Go to source");
+    expect(goToSourceButton).toBeInTheDocument();
+
+    // Click the button should directly open the source without showing interstitial
+    fireEvent.click(goToSourceButton);
+
+    // Should NOT show the access interstitial popup
+    expect(screen.queryByText("Access to Source")).not.toBeInTheDocument();
+    expect(screen.queryByText(/This content comes from/)).not.toBeInTheDocument();
+
+    // Should directly open the source link
+    expect(mockOpen).toHaveBeenCalledWith("https://test.com/document", "_blank", "noopener,noreferrer");
+    expect(analyticsModule.logEvent).toHaveBeenCalledWith("click_source", "UI", "https://test.com/document");
+  });
+
+  it("does not show interstitial for sites with no siteConfig", () => {
+    render(<SourcesList sources={[textSource]} />);
+
+    // First expand the text source
+    const expandButton = screen.getByText("Test Document").closest("summary")!;
+    fireEvent.click(expandButton);
+
+    // Should show the Go to source button
+    const goToSourceButton = screen.getByText("Go to source");
+    expect(goToSourceButton).toBeInTheDocument();
+
+    // Click the button should directly open the source without showing interstitial
+    fireEvent.click(goToSourceButton);
+
+    // Should NOT show the access interstitial popup
+    expect(screen.queryByText("Access to Source")).not.toBeInTheDocument();
+
+    // Should directly open the source link
     expect(mockOpen).toHaveBeenCalledWith("https://test.com/document", "_blank", "noopener,noreferrer");
     expect(analyticsModule.logEvent).toHaveBeenCalledWith("click_source", "UI", "https://test.com/document");
   });
@@ -285,7 +358,8 @@ describe("SourcesList", () => {
       writable: true,
     });
 
-    render(<SourcesList sources={[textSource]} />);
+    const anandaSiteConfig = { ...mockSiteConfig, siteId: "ananda" };
+    render(<SourcesList sources={[textSource]} siteConfig={anandaSiteConfig} />);
 
     // First expand the text source
     const expandButton = screen.getByText("Test Document").closest("summary")!;

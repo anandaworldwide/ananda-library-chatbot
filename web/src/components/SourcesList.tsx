@@ -119,6 +119,12 @@ const SourcesList: React.FC<SourcesListProps> = ({
     }
   }, []);
 
+  // Helper function to get library name for interstitial (only used for Ananda site)
+  const getInterstitialLibraryName = useCallback(() => {
+    // Only the main Ananda site shows the interstitial
+    return "Ananda Library";
+  }, []);
+
   // Callback hooks
   const renderAudioPlayer = useCallback(
     (doc: Document<DocMetadata>, index: number, isExpanded: boolean) => {
@@ -341,8 +347,11 @@ const SourcesList: React.FC<SourcesListProps> = ({
     const handleGoToSource = (e: React.MouseEvent) => {
       e.preventDefault();
 
-      // Check if user wants to skip the interstitial
-      if (!shouldShowAccessInterstitial()) {
+      // Only show interstitial for the main Ananda site (not ananda-public)
+      const shouldShowInterstitial = siteConfig?.siteId === "ananda";
+
+      // Check if user wants to skip the interstitial or if this site shouldn't show interstitial
+      if (!shouldShowAccessInterstitial() || !shouldShowInterstitial) {
         handleSourceClick(e as any, linkUrl);
         return;
       }
@@ -567,7 +576,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
 
             <div className="mb-6">
               <p className="text-gray-600 mb-4">
-                This content comes from the Ananda Library. Choose the option that applies to you:
+                This content comes from {getInterstitialLibraryName()}. Choose the option that applies to you:
               </p>
 
               <div className="space-y-3">
@@ -580,8 +589,8 @@ const SourcesList: React.FC<SourcesListProps> = ({
                 >
                   <span className="material-icons">library_books</span>
                   <div>
-                    <div className="font-medium">I have access to the Ananda Library</div>
-                    <div className="text-sm text-blue-600">Go to source on Ananda Library</div>
+                    <div className="font-medium">I have access to {getInterstitialLibraryName()}</div>
+                    <div className="text-sm text-blue-600">Go to source on {getInterstitialLibraryName()}</div>
                   </div>
                 </button>
 
@@ -644,7 +653,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
                   >
                     <span className="material-icons">download</span>
                     <div>
-                      <div className="font-medium">I don't have access to the Ananda Library</div>
+                      <div className="font-medium">I don't have access to {getInterstitialLibraryName()}</div>
                       <div className="text-sm text-green-600">
                         {currentSourceDoc?.metadata.pdf_s3_key
                           ? "Download PDF instead"
