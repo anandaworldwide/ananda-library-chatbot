@@ -48,7 +48,7 @@ import { OpenAIEmbeddings } from "@langchain/openai";
 import { PineconeStore } from "@langchain/pinecone";
 import { makeChain, setupAndExecuteLanguageModelChain } from "@/utils/server/makechain";
 import { getCachedPineconeIndex } from "@/utils/server/pinecone-client";
-import { generateAndUpdateTitle } from "@/utils/server/titleGeneration";
+
 import { getPineconeIndexName } from "@/utils/server/pinecone-config";
 import * as fbadmin from "firebase-admin";
 import { db } from "@/services/firebase";
@@ -799,6 +799,7 @@ async function handleChatRequest(req: NextRequest) {
       let tokensStreamed = 0;
       let firstTokenSent = false;
       let performanceLogged = false;
+      let titleGenerationPromise: Promise<void> | undefined;
 
       const sendData = (data: StreamingResponseData) => {
         if (!isControllerClosed) {
@@ -898,6 +899,35 @@ async function handleChatRequest(req: NextRequest) {
         // Send site ID first
         sendData({ siteId: siteConfig.siteId });
 
+        // FRONT-LOAD CONVERSATION SETUP FOR NEW CONVERSATIONS
+        // Generate convId immediately and start title generation in parallel
+        let conversationId: string | undefined;
+
+        if (!sanitizedInput.privateSession && !sanitizedInput.convId) {
+          // This is a new conversation - generate convId immediately
+          conversationId = uuidv4();
+
+          // Send convId to frontend immediately so sidebar can be updated
+          sendData({
+            convId: conversationId,
+          });
+
+          // Start title generation in parallel (non-blocking)
+          // This runs concurrently with LLM chain execution for better performance
+          titleGenerationPromise = (async () => {
+            try {
+              const { generateTitle } = await import("@/utils/server/titleGeneration");
+              const title = await generateTitle(originalQuestion);
+              if (title) {
+                sendData({ convId: conversationId, title });
+              }
+            } catch (err) {
+              console.error("Parallel title generation failed:", err);
+              // Continue without title - it's not critical for functionality
+            }
+          })();
+        }
+
         const { index, filter } = await setupPineconeAndFilter(
           sanitizedInput.collection || "whole_library",
           sanitizedInput.mediaTypes,
@@ -931,14 +961,15 @@ async function handleChatRequest(req: NextRequest) {
         // SAVE DOCUMENT AFTER RESPONSE IS READY
         if (!sanitizedInput.privateSession) {
           try {
-            // Determine convId for this conversation
-            const conversationId = sanitizedInput.convId || uuidv4();
+            // Use pre-generated conversationId for new conversations, or provided convId for follow-ups
+            const finalConversationId = conversationId || sanitizedInput.convId || uuidv4();
 
-            // Send convId to frontend immediately, before saving document
-            // This allows the sidebar to be updated while document save happens in background
-            sendData({
-              convId: conversationId, // Send convId back to frontend immediately
-            });
+            // For follow-up messages, send convId to frontend if not already sent
+            if (sanitizedInput.convId && !conversationId) {
+              sendData({
+                convId: finalConversationId,
+              });
+            }
 
             // Always create a new document; pass null as docId
             const savedDocId = await saveOrUpdateDocument(
@@ -951,7 +982,7 @@ async function handleChatRequest(req: NextRequest) {
               clientIP,
               restatedQuestion, // Pass the restated question
               sanitizedInput.uuid, // Persist client UUID when provided
-              conversationId // Pass convId from frontend or new UUID
+              finalConversationId // Use the final conversation ID
             );
 
             if (savedDocId) {
@@ -959,18 +990,9 @@ async function handleChatRequest(req: NextRequest) {
                 docId: savedDocId,
               });
 
-              // Generate title asynchronously for new conversations only
-              // A conversation is new if no convId was provided (first message)
-              if (!sanitizedInput.convId) {
-                try {
-                  const title = await generateAndUpdateTitle(savedDocId, originalQuestion);
-                  if (title) {
-                    sendData({ convId: conversationId, title });
-                  }
-                } catch (err) {
-                  console.error("Title generation failed:", err);
-                }
-              }
+              // For new conversations, title was already generated and sent early
+              // For follow-up messages, no title generation needed
+              // This eliminates the duplicate title generation that happened before
             }
           } catch (saveError) {
             // Silently handle save errors to avoid breaking the chat flow
@@ -979,6 +1001,15 @@ async function handleChatRequest(req: NextRequest) {
       } catch (error: unknown) {
         handleError(error, sendData);
       } finally {
+        // Ensure title generation completes or is properly cleaned up
+        if (titleGenerationPromise) {
+          try {
+            await titleGenerationPromise;
+          } catch (titleError) {
+            // Title generation errors are already logged, just ensure cleanup
+          }
+        }
+
         if (!isControllerClosed) {
           controller.close();
           isControllerClosed = true;

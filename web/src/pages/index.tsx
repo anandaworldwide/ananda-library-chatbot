@@ -280,6 +280,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       pathRef.current = currentPath; // keep ref in sync
 
       if (currentPath === "/") {
+        // Stop any ongoing streaming before resetting
+        if (loading) {
+          handleStop();
+        }
+
         // Back to home: reset chat
         setMessageState({
           messages: [
