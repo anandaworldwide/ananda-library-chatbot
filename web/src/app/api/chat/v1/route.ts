@@ -912,20 +912,24 @@ async function handleChatRequest(req: NextRequest) {
             convId: conversationId,
           });
 
-          // Start title generation in parallel (non-blocking)
-          // This runs concurrently with LLM chain execution for better performance
-          titleGenerationPromise = (async () => {
-            try {
-              const { generateTitle } = await import("@/utils/server/titleGeneration");
-              const title = await generateTitle(originalQuestion);
-              if (title) {
-                sendData({ convId: conversationId, title });
+          // Only generate titles for sites that require login (have conversation sidebar)
+          // Sites without login don't have conversation history, so title generation is unnecessary
+          if (siteConfig.requireLogin) {
+            // Start title generation in parallel (non-blocking)
+            // This runs concurrently with LLM chain execution for better performance
+            titleGenerationPromise = (async () => {
+              try {
+                const { generateTitle } = await import("@/utils/server/titleGeneration");
+                const title = await generateTitle(originalQuestion);
+                if (title) {
+                  sendData({ convId: conversationId, title });
+                }
+              } catch (err) {
+                console.error("Parallel title generation failed:", err);
+                // Continue without title - it's not critical for functionality
               }
-            } catch (err) {
-              console.error("Parallel title generation failed:", err);
-              // Continue without title - it's not critical for functionality
-            }
-          })();
+            })();
+          }
         }
 
         const { index, filter } = await setupPineconeAndFilter(

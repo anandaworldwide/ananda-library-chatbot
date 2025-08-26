@@ -102,11 +102,17 @@ others.
 - [x] Frontend, when I start a new conversation and get the first answer back, it is supposed to be inserting the
       provisional title of a conversation into the top of the chat sidebar history, but it's not doing that. This is a
       bug to fix.
-- [ ] Frontend: When a new conversation is started from the home page, the URL is not getting set once the conversation
+- [x] Frontend: When a new conversation is started from the home page, the URL is not getting set once the conversation
       ID is available. This broke, it was working before.
-- [ ] Frontend: When a new conversation is established from a fresh start on the home page, it is supposed to insert the
+- [x] Frontend: When a new conversation is established from a fresh start on the home page, it is supposed to insert the
       provisional title at the top of the chat sidebar, but it's not doing that.
-- [ ] The audio files that are playing back in line might be wrong. They are not matching up with the transcriptions.
+- [x] The audio files that are playing back in line might be wrong. They are not matching up with the transcriptions.
+- [x] **FIXED**: AudioPlayer state persistence across conversations - AudioPlayer components in SourcesList use keys
+      based on `audio_${doc.metadata.file_hash}_${index}`. If the same audio file appears in different conversations at
+      the same index position, React reuses the component instance, preserving state like playback position, loading
+      state, secure URLs, and errors. Fix: Include conversation identifier in AudioPlayer key generation to ensure fresh
+      instances per conversation.
+- [x] Don't do title generation in @route.ts if the site doesn't require login / doesn't have a conversation sidebar.
 - [ ] **Testing**: End-to-end tests for navigation/sharing/view-only/continuation. Run `npm run test:all`; manual QA on
       sites/devices.
 
@@ -115,7 +121,8 @@ others.
 Deliver: Feature deployed to production across all sites with proper migration and monitoring.
 
 - [ ] **Migration**: Run `migrate-conv-ids.ts` script on production Firestore (all sites: ananda, ananda-public,
-      crystal, jairam) to backfill `convId` for existing documents.
+      crystal, jairam) to backfill `convId` for existing documents. E.g.,
+      `npx tsx scripts/migrate-conv-ids.ts --site ananda --env prod`
 - [x] **Database Indexes**: Create `firestore.indexes.dev.json` and `firestore.indexes.prod.json` files with composite
       indexes for new queries (uuid + convId, uuid + timestamp + convId, convId + uuid + timestamp + **name**).
 - [ ] **Index Deployment**: Deploy indexes using separate config files: - Development:
@@ -126,7 +133,6 @@ Deliver: Feature deployed to production across all sites with proper migration a
       navigation, sharing, mobile responsiveness.
 - [ ] **Performance Monitoring**: Check response times for new APIs (/api/chats with convId, title generation); monitor
       Firestore read/write usage.
-- [ ] **Rollback Plan**: Document rollback steps (revert deployment, disable migration script effects if needed).
 - [ ] **User Communication**: Update any relevant documentation; consider announcement if significant UX change.
 - [ ] **Post-Deploy Monitoring**: Monitor error logs, user feedback, and feature usage for first 48 hours; address any
       issues promptly.
