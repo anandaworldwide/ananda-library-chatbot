@@ -24,6 +24,11 @@ export default function MagicLoginPage() {
         if (!res.ok) throw new Error(data?.error || "Sign-in failed");
         setStatus("success");
         setMessage("You're signed in. Redirecting…");
+
+        // Force token manager to refresh and recognize the new authentication state
+        const { initializeTokenManager } = await import("@/utils/client/tokenManager");
+        await initializeTokenManager();
+
         // Redirect to intended page or home after a short delay
         let target = "/";
         if (typeof redirect === "string") {
