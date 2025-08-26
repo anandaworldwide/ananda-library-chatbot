@@ -83,7 +83,7 @@ describe("requestLoginLink API", () => {
       expect.any(Object),
       "store login token"
     );
-    expect(sendLoginEmail).toHaveBeenCalledWith("user@example.com", "login-token", "/dashboard");
+    expect(sendLoginEmail).toHaveBeenCalledWith("user@example.com", "login-token", "/dashboard", expect.any(Object));
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({ message: "login-link-sent" });
   });
@@ -109,7 +109,7 @@ describe("requestLoginLink API", () => {
       expect.any(Object),
       "update pending user for resend"
     );
-    expect(sendActivationEmail).toHaveBeenCalledWith("user2@example.com", "invite-token");
+    expect(sendActivationEmail).toHaveBeenCalledWith("user2@example.com", "invite-token", expect.any(Object));
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({ message: "activation-resent" });
   });

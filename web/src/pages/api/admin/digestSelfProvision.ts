@@ -46,14 +46,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const siteId = process.env.SITE_ID || "default";
     const collection = process.env.NODE_ENV === "production" ? "prod_admin_audit" : "dev_admin_audit";
 
-    // Fetch last 24h self_provision_attempt entries
-    let snap;
+    // Fetch last 24h self_provision_attempt and user_activation_completed entries
+    let selfProvisionSnap, activationSnap;
     try {
-      snap = await db
-        .collection(collection)
-        .where("action", "==", "self_provision_attempt")
-        .where("createdAt", ">=", since)
-        .get();
+      [selfProvisionSnap, activationSnap] = await Promise.all([
+        db.collection(collection).where("action", "==", "self_provision_attempt").where("createdAt", ">=", since).get(),
+        db
+          .collection(collection)
+          .where("action", "==", "user_activation_completed")
+          .where("createdAt", ">=", since)
+          .get(),
+      ]);
     } catch (firestoreError: any) {
       // Handle missing Firestore index error
       if (
@@ -76,11 +79,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(500).json({
           error: "Database configuration error",
           message: isBuilding
-            ? "Firestore index is currently building for self-provision audit queries"
-            : "Missing required Firestore index for self-provision audit queries",
+            ? "Firestore index is currently building for digest audit queries"
+            : "Missing required Firestore index for digest audit queries",
           action: isBuilding
             ? "Wait for index to finish building (usually takes a few minutes)"
-            : "Create composite index: collection=admin_audit, fields=[action,createdAt,__name__]",
+            : "Create composite indexes: collection=admin_audit, fields=[action,createdAt,__name__] for both self_provision_attempt and user_activation_completed",
           indexUrl: indexUrl || "Check Firebase Console > Firestore > Indexes",
           details: isBuilding
             ? "Index creation is in progress - the cron job will work once building completes"
@@ -92,8 +95,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       throw firestoreError;
     }
 
-    let created = 0;
-    let resent = 0;
+    let activationEmailsSent = 0;
+    let activationsCompleted = 0;
     let errors = 0;
     const samples: Array<{
       target?: string;
@@ -102,27 +105,35 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       lastName?: string;
     }> = [];
 
-    // First pass: count outcomes and collect email addresses
+    // First pass: count self-provision outcomes (for activation emails sent)
     const emailsToLookup: string[] = [];
-    snap.forEach((doc) => {
+    selfProvisionSnap.forEach((doc) => {
+      const data = doc.data() as any;
+      const outcome = data?.details?.outcome as string | undefined;
+
+      if (outcome === "created_pending_user") activationEmailsSent++;
+      else if (outcome === "server_error") errors++;
+      // Skip resent_pending_activation and invalid_password entries entirely
+    });
+
+    // Second pass: count activation completions and collect samples
+    activationSnap.forEach((doc) => {
       const data = doc.data() as any;
       const outcome = data?.details?.outcome as string | undefined;
       const email = data?.target as string | undefined;
 
-      if (outcome === "created_pending_user") created++;
-      else if (outcome === "resent_pending_activation") resent++;
-      else if (outcome === "server_error") errors++;
-      // Skip invalid_password entries entirely
-
-      if (samples.length < 10 && outcome !== "invalid_password") {
-        samples.push({ target: email, outcome });
-        if (email && outcome !== "server_error") {
-          emailsToLookup.push(email);
+      if (outcome === "activation_completed") {
+        activationsCompleted++;
+        if (samples.length < 10) {
+          samples.push({ target: email, outcome });
+          if (email) {
+            emailsToLookup.push(email);
+          }
         }
       }
     });
 
-    // Second pass: fetch actual user data for names only (not status)
+    // Third pass: fetch actual user data for names only (not status)
     const userDataMap = new Map<string, { firstName?: string; lastName?: string }>();
     if (emailsToLookup.length > 0) {
       try {
@@ -183,8 +194,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           // Always use audit entry outcome, not current user status
           const statusText =
             {
-              created_pending_user: "Created (pending activation)",
-              resent_pending_activation: "Activation link resent",
+              activation_completed: "Account activated",
               server_error: "Server error occurred",
             }[outcome] || outcome;
 
@@ -197,8 +207,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       `Self-provision digest for site ${siteId} (last 24h)`,
       ``,
       `SUMMARY:`,
-      `• Created: ${created}`,
-      `• Resent: ${resent}`,
+      `• Activations completed: ${activationsCompleted}`,
+      `• Activation emails sent: ${activationEmailsSent}`,
       `• Server errors: ${errors}`,
       ``,
       `ACTIVITY DETAILS:`,
@@ -209,10 +219,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const subjectParts = [];
     if (errors > 0) subjectParts.push(`${errors} error${errors > 1 ? "s" : ""}`);
 
-    const subject = `New user digest: ${created} created, ${errors} errors`;
+    const subject = `User activation digest: ${activationsCompleted} activated, ${errors} errors`;
 
     await sendOpsAlert(subject, body);
-    return res.status(200).json({ ok: true, counts: { created, resent, errors }, samples });
+    return res.status(200).json({ ok: true, counts: { activationsCompleted, activationEmailsSent, errors }, samples });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Failed to build digest" });
   }

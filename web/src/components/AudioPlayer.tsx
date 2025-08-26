@@ -14,6 +14,7 @@ interface AudioPlayerProps {
   lazyLoad?: boolean;
   isExpanded?: boolean;
   library?: string; // Add library property for path resolution
+  docId?: string;
 }
 
 // Loading spinner component for visual feedback during audio loading
@@ -29,7 +30,8 @@ export function AudioPlayer({
   audioId,
   lazyLoad = false,
   isExpanded = false,
-  library, // Destructure the library prop
+  library,
+  docId,
 }: AudioPlayerProps) {
   const [isLoaded, setIsLoaded] = useState(!lazyLoad);
   const [secureAudioUrl, setSecureAudioUrl] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export function AudioPlayer({
     setUrlError(null);
 
     try {
-      const url = await getCachedSecureAudioUrl(src, library);
+      const url = await getCachedSecureAudioUrl(src, library, docId);
       setSecureAudioUrl(url);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to load audio";
@@ -81,7 +83,7 @@ export function AudioPlayer({
       fetchSecureAudioUrl();
       setIsLoaded(true);
     }
-  }, [lazyLoad, isExpanded, isLoaded, secureAudioUrl, isLoadingUrl, src, library]);
+  }, [lazyLoad, isExpanded, isLoaded, secureAudioUrl, isLoadingUrl, src, library, docId]);
 
   // Pause this audio if another audio starts playing
   useEffect(() => {

@@ -1,0 +1,91 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "dev_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "dev_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "dev_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "dev_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "convId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "dev_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

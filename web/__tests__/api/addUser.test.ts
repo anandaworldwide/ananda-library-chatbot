@@ -131,7 +131,11 @@ describe("/api/admin/addUser", () => {
       "create user"
     );
 
-    expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith("test@example.com", "test-token");
+    expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith(
+      "test@example.com",
+      "test-token",
+      expect.any(Object)
+    );
   });
 
   it("should resend activation for existing pending user", async () => {
@@ -169,6 +173,10 @@ describe("/api/admin/addUser", () => {
       message: "resent",
     });
 
-    expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith("test@example.com", "test-token");
+    expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith(
+      "test@example.com",
+      "test-token",
+      expect.any(Object)
+    );
   });
 });

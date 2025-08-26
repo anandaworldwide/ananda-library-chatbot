@@ -39,6 +39,9 @@ export const isPublicPage = (path: string, siteConfig: SiteConfig | null): boole
   // Individual answer pages (with ID) are public
   if (path.startsWith("/answers/") && path.length > 9) return true;
 
+  // Shared conversation pages are public (/share/<docId>)
+  if (path.startsWith("/share/") && path.length > 7) return true;
+
   // If no site config is available, default to requiring authentication
   if (!siteConfig) return false;
 
@@ -79,6 +82,15 @@ export const isPublicEndpoint = (url: string, method: string, siteConfig: SiteCo
   // Like-related endpoints depend on site config
   if (url.includes("/api/like")) {
     return isLikesPublic(siteConfig);
+  }
+
+  // Document endpoints are public
+  if (url.includes("/api/document")) {
+    return true;
+  }
+
+  if (url.includes("/api/getAudioSignedUrl") || url.includes("/api/getPdfSignedUrl")) {
+    return true;
   }
 
   // By default, require authentication for all other endpoints

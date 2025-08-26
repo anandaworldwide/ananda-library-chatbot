@@ -24,6 +24,11 @@ export default function MagicLoginPage() {
         if (!res.ok) throw new Error(data?.error || "Sign-in failed");
         setStatus("success");
         setMessage("You're signed in. Redirecting…");
+
+        // Force token manager to refresh and recognize the new authentication state
+        const { initializeTokenManager } = await import("@/utils/client/tokenManager");
+        await initializeTokenManager();
+
         // Redirect to intended page or home after a short delay
         let target = "/";
         if (typeof redirect === "string") {
@@ -62,11 +67,13 @@ export default function MagicLoginPage() {
         {status === "error" ? (
           <div className="rounded border border-red-300 bg-red-50 p-3 text-sm mb-3">{message}</div>
         ) : null}
-        <div className="mt-4">
-          <a href="/" className="text-blue-600 underline">
-            Go to Home
-          </a>
-        </div>
+        {status === "success" ? (
+          <div className="mt-4">
+            <a href="/" className="text-blue-600 underline">
+              Go to Home
+            </a>
+          </div>
+        ) : null}
       </main>
     </>
   );

@@ -1,4 +1,4 @@
-// API: Consumes login magic token and issues JWT session cookie for accepted users.
+// API: Validates login magic token and issues JWT session cookie for accepted users. Token remains valid until 1-hour expiry.
 import type { NextApiRequest, NextApiResponse } from "next";
 import firebase from "firebase-admin";
 import Cookies from "cookies";
@@ -61,10 +61,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           const existingAccountUuid =
             typeof current?.uuid === "string" && current.uuid.length === 36 ? (current.uuid as string) : undefined;
 
-          // Always clear login token inside the transaction
-          const clearFields = {
-            loginTokenHash: firebase.firestore.FieldValue.delete(),
-            loginTokenExpiresAt: firebase.firestore.FieldValue.delete(),
+          // Update login timestamp but keep token valid until expiry
+          const updateFields = {
             lastLoginAt: nowTs,
             updatedAt: nowTs,
           } as any;
@@ -76,7 +74,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             if (!indexSnap.exists) {
               tx.set(indexRef, { email: emailLower, siteId: process.env.SITE_ID || "default", createdAt: nowTs });
             }
-            tx.set(userDocRef, clearFields, { merge: true });
+            tx.set(userDocRef, updateFields, { merge: true });
             finalUuid = existingAccountUuid;
           } else {
             // Reserve candidate or fail if taken by different user
@@ -86,7 +84,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
               throw new Error("uuid-taken");
             }
             tx.set(indexRef, { email: emailLower, siteId: process.env.SITE_ID || "default", createdAt: nowTs });
-            tx.set(userDocRef, { ...clearFields, uuid: candidate }, { merge: true });
+            tx.set(userDocRef, { ...updateFields, uuid: candidate }, { merge: true });
             finalUuid = candidate;
           }
         });

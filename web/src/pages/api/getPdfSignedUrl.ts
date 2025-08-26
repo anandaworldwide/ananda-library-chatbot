@@ -1,11 +1,43 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { getS3PdfSignedUrl } from "@/utils/server/getS3PdfSignedUrl";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
-import { withJwtOnlyAuth } from "@/utils/server/apiMiddleware";
+import { verifyToken } from "@/utils/server/jwtUtils";
 import { db } from "@/services/firebase";
 import firebase from "firebase-admin";
 import { s3Client } from "@/utils/server/awsConfig";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
+
+async function validateShareAccess(docId: string, pdfS3Key: string): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = db.collection(getAnswersCollectionName()).doc(docId);
+    const snap = await docRef.get();
+    if (!snap.exists) return false;
+    const data = snap.data() as any;
+    if (!data?.sources) return false;
+    const sources = Array.isArray(data.sources) ? data.sources : JSON.parse(data.sources || "[]");
+
+    // Extract the filename part from the pdfS3Key (remove public/pdf/ prefix if present)
+    const requestedFilename = pdfS3Key.replace(/^public\/pdf\//, "");
+
+    const found = sources.some((src: any) => {
+      // Check both s3Key and metadata.pdf_s3_key fields
+      const srcS3Key = src.s3Key;
+      const srcPdfKey = src.metadata?.pdf_s3_key;
+
+      return (
+        srcS3Key === pdfS3Key ||
+        srcS3Key === requestedFilename ||
+        srcPdfKey === requestedFilename ||
+        srcPdfKey === pdfS3Key
+      );
+    });
+    return found;
+  } catch (error) {
+    return false;
+  }
+}
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only allow POST requests
@@ -35,16 +67,45 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return; // Rate limit response already sent
     }
 
-    // Extract PDF S3 key and frontend UUID from request body
-    const { pdfS3Key, uuid } = req.body;
+    // Extract PDF S3 key, frontend UUID, and optional docId from request body
+    const { pdfS3Key, uuid, docId } = req.body;
 
     if (!pdfS3Key || typeof pdfS3Key !== "string") {
       return res.status(400).json({ message: "Invalid PDF S3 key" });
     }
 
-    // Require a valid UUID from the frontend (cookie/localStorage propagated to request)
-    if (!uuid || typeof uuid !== "string" || uuid.length !== 36) {
+    // Check for JWT authentication
+    const authHeader = req.headers.authorization;
+    let isAuthenticated = false;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      try {
+        const decoded = verifyToken(token);
+        if (decoded && !token.includes("placeholder")) {
+          isAuthenticated = true;
+        }
+      } catch (error) {
+        // Token invalid, continue as anonymous
+      }
+    }
+
+    // For authenticated users, require UUID
+    if (isAuthenticated && (!uuid || typeof uuid !== "string" || uuid.length !== 36)) {
       return res.status(400).json({ message: "Invalid or missing UUID" });
+    }
+
+    // For anonymous users, require docId for share validation
+    if (!isAuthenticated && (!docId || typeof docId !== "string")) {
+      return res.status(400).json({ message: "Access denied: document ID required" });
+    }
+
+    // For anonymous users, validate share access
+    if (!isAuthenticated) {
+      const hasAccess = await validateShareAccess(docId, pdfS3Key);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied: PDF not found in shared document" });
+      }
     }
 
     // Security validation: Ensure the key appears to be a PDF file
@@ -100,9 +161,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       if (db) {
         const envPrefix = process.env.NODE_ENV === "development" ? "dev" : "prod";
         await db.collection(`${envPrefix}_pdf_downloads`).add({
-          uuid,
+          uuid: uuid || "anonymous",
           pdfKey: pdfS3Key,
           timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          isAuthenticated,
+          docId: docId || null,
           // If we later include user id/claims in JWT, we can store it here
           // userId: decodedToken.userId,
           ip: req.socket.remoteAddress || null,
@@ -119,4 +182,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(500).json({ message: "Internal server error" });
   }
 }
-export default withJwtOnlyAuth(handler);
+export default handler;

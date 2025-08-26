@@ -41,6 +41,16 @@ jest.mock("@aws-sdk/client-s3", () => ({
   HeadObjectCommand: jest.fn().mockImplementation((params) => ({ input: params })),
 }));
 
+// Mock JWT verification
+jest.mock("@/utils/server/jwtUtils", () => ({
+  verifyToken: jest.fn((token) => {
+    if (token === "valid-jwt-token") {
+      return { userId: "test-user", email: "test@example.com" };
+    }
+    throw new Error("Invalid token");
+  }),
+}));
+
 const mockGenericRateLimiter = genericRateLimiter as jest.MockedFunction<typeof genericRateLimiter>;
 const mockGetS3PdfSignedUrl = getS3PdfSignedUrl as jest.MockedFunction<typeof getS3PdfSignedUrl>;
 const mockS3Client = s3Client as any;
@@ -79,6 +89,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should accept POST requests", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "test.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -92,6 +105,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should apply rate limiting with correct parameters", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "test.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -114,6 +130,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "test.pdf" },
       });
 
@@ -143,6 +162,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should require pdfS3Key to be a string", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: 123 },
       });
 
@@ -157,6 +179,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should reject empty pdfS3Key", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "" },
       });
 
@@ -173,6 +198,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should accept .pdf files", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -184,6 +212,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should accept .PDF files (case insensitive)", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "document.PDF", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -195,6 +226,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should reject non-PDF file extensions", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "document.txt", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -209,6 +243,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should reject files without extensions", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "document", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -225,6 +262,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should verify file exists in S3", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "test-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -247,6 +287,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "nonexistent.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -265,6 +308,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "restricted.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -283,6 +329,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "test.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -303,6 +352,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "valid-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -318,6 +370,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "legacy-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -336,6 +391,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "old-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -354,6 +412,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "fake-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -373,6 +434,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "no-content-type.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -387,6 +451,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should generate signed URL for valid PDF", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "valid-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -404,6 +471,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "test-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -420,6 +490,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should validate file extension before S3 verification", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "malicious.exe", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -436,6 +509,9 @@ describe("/api/getPdfSignedUrl", () => {
     it("should perform S3 verification before generating signed URL", async () => {
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "secure-document.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 
@@ -456,6 +532,9 @@ describe("/api/getPdfSignedUrl", () => {
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
+        headers: {
+          authorization: "Bearer valid-jwt-token",
+        },
         body: { pdfS3Key: "test.pdf", uuid: "123e4567-e89b-12d3-a456-426614174000" },
       });
 

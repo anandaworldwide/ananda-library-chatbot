@@ -148,7 +148,16 @@ describe("userEmailChangeUtils", () => {
       process.env = originalEnv;
     });
 
+    it("should throw error when NEXT_PUBLIC_BASE_URL is not configured", async () => {
+      delete process.env.NEXT_PUBLIC_BASE_URL;
+
+      await expect(sendEmailChangeConfirmationEmails("old@example.com", "new@example.com")).rejects.toThrow(
+        "NEXT_PUBLIC_BASE_URL environment variable is required for email generation"
+      );
+    });
+
     it("should throw error when CONTACT_EMAIL is not configured", async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = "https://test.com";
       delete process.env.CONTACT_EMAIL;
 
       await expect(sendEmailChangeConfirmationEmails("old@example.com", "new@example.com")).rejects.toThrow(
@@ -156,7 +165,8 @@ describe("userEmailChangeUtils", () => {
       );
     });
 
-    it("should send confirmation emails successfully when CONTACT_EMAIL is configured", async () => {
+    it("should send confirmation emails successfully when both env vars are configured", async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = "https://test.com";
       process.env.CONTACT_EMAIL = "noreply@example.com";
 
       await expect(sendEmailChangeConfirmationEmails("old@example.com", "new@example.com")).resolves.not.toThrow();

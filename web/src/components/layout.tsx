@@ -14,9 +14,11 @@ import Link from "next/link";
 interface LayoutProps {
   children?: React.ReactNode;
   siteConfig: SiteConfig | null;
+  useWideLayout?: boolean;
+  onNewChat?: () => void;
 }
 
-export default function Layout({ children, siteConfig }: LayoutProps) {
+export default function Layout({ children, siteConfig, useWideLayout = false, onNewChat }: LayoutProps) {
   const [isClient, setIsClient] = useState(false);
   const [, setVisitCount] = useLocalStorage("visitCount", 0);
   const { errorMessage } = useSudo();
@@ -39,15 +41,21 @@ export default function Layout({ children, siteConfig }: LayoutProps) {
   const renderHeader = () => {
     if (!siteConfig) return null;
 
+    const headerProps = {
+      siteConfig,
+      constrainWidth: useWideLayout,
+      onNewChat,
+    };
+
     switch (siteConfig.siteId) {
       case "ananda":
-        return <AnandaHeader siteConfig={siteConfig} />;
+        return <AnandaHeader {...headerProps} />;
       case "ananda-public":
-        return <AnandaPublicHeader siteConfig={siteConfig} />;
+        return <AnandaPublicHeader {...headerProps} />;
       case "jairam":
-        return <JairamHeader siteConfig={siteConfig} />;
+        return <JairamHeader {...headerProps} />;
       case "crystal":
-        return <CrystalHeader siteConfig={siteConfig} />;
+        return <CrystalHeader {...headerProps} />;
       default:
         return null;
     }
@@ -57,8 +65,10 @@ export default function Layout({ children, siteConfig }: LayoutProps) {
   if (!isClient) return null;
 
   return (
-    <div className="h-screen flex flex-col app-container-wrap">
-      <div className="flex-grow mx-auto flex flex-col max-w-[800px] app-container">
+    <div className={`h-screen flex flex-col ${useWideLayout ? "w-full" : "app-container-wrap"}`}>
+      <div
+        className={`flex-grow flex flex-col ${useWideLayout ? "max-w-none w-full" : "max-w-[800px] mx-auto"} app-container`}
+      >
         {renderHeader()}
         <div className="flex-grow overflow-auto main-content-wrap">
           <main className="flex flex-col h-full">{children}</main>

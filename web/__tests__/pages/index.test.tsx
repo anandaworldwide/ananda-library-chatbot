@@ -1,12 +1,12 @@
-import React from 'react';
-import { render, act, screen } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SiteConfig } from '@/types/siteConfig';
-import Home from '@/pages/index';
+import React from "react";
+import { render, act, screen } from "@testing-library/react";
+import "@testing-library/jest-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SiteConfig } from "@/types/siteConfig";
+import Home from "@/pages/index";
 
 // Mock next/image to prevent Base URL error
-jest.mock('next/image', () => ({
+jest.mock("next/image", () => ({
   __esModule: true,
   default: (props: any) => (
     <div
@@ -21,21 +21,25 @@ jest.mock('next/image', () => ({
 }));
 
 // Mock the next/router
-jest.mock('next/router', () => ({
+jest.mock("next/router", () => ({
   useRouter: () => ({
     push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+    query: {}, // Empty query object by default
+    asPath: "/",
   }),
 }));
 
 // Mock react-markdown
-jest.mock('react-markdown', () => {
+jest.mock("react-markdown", () => {
   const ReactMarkdownMock = ({ children }: { children: string }) => {
     // Process the content to convert markdown links
     const content = children.toString();
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
     const processedContent = content.replace(linkRegex, (_, text, url) => {
       // GETHUMAN links are handled differently based on siteConfig in the actual component
-      if (url === 'GETHUMAN') {
+      if (url === "GETHUMAN") {
         // Use data attributes to help with test assertions
         return `<a href="${url}" data-testid="gethuman-link">${text}</a>`;
       }
@@ -43,24 +47,19 @@ jest.mock('react-markdown', () => {
       return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     });
 
-    return (
-      <div
-        data-testid="react-markdown"
-        dangerouslySetInnerHTML={{ __html: processedContent }}
-      />
-    );
+    return <div data-testid="react-markdown" dangerouslySetInnerHTML={{ __html: processedContent }} />;
   };
-  ReactMarkdownMock.displayName = 'ReactMarkdown';
+  ReactMarkdownMock.displayName = "ReactMarkdown";
   return ReactMarkdownMock;
 });
 
 // Mock remark-gfm
-jest.mock('remark-gfm', () => {
+jest.mock("remark-gfm", () => {
   return jest.fn();
 });
 
 // Mock the hooks
-jest.mock('@/hooks/usePopup', () => ({
+jest.mock("@/hooks/usePopup", () => ({
   __esModule: true,
   default: () => ({
     isOpen: false,
@@ -69,7 +68,7 @@ jest.mock('@/hooks/usePopup', () => ({
   }),
 }));
 
-jest.mock('@/hooks/useRandomQueries', () => ({
+jest.mock("@/hooks/useRandomQueries", () => ({
   __esModule: true,
   useRandomQueries: () => ({
     randomQueries: [],
@@ -78,25 +77,25 @@ jest.mock('@/hooks/useRandomQueries', () => ({
 }));
 
 // Mock getCollectionQueries
-jest.mock('@/utils/client/collectionQueries', () => ({
+jest.mock("@/utils/client/collectionQueries", () => ({
   getCollectionQueries: jest.fn().mockResolvedValue([]),
 }));
 
 // Mock ChatInput component since we're testing it separately
-jest.mock('@/components/ChatInput', () => ({
+jest.mock("@/components/ChatInput", () => ({
   __esModule: true,
   ChatInput: () => <textarea data-testid="chat-input" />,
 }));
 
 // Mock useChat hook
-jest.mock('@/hooks/useChat', () => ({
+jest.mock("@/hooks/useChat", () => ({
   __esModule: true,
   useChat: () => ({
     messageState: {
       messages: [
         {
-          type: 'apiMessage',
-          message: 'Welcome! How can I help you today?',
+          type: "apiMessage",
+          message: "Welcome! How can I help you today?",
         },
       ],
       history: [],
@@ -110,7 +109,7 @@ jest.mock('@/hooks/useChat', () => ({
   }),
 }));
 
-jest.mock('@/hooks/useMultipleCollections', () => ({
+jest.mock("@/hooks/useMultipleCollections", () => ({
   __esModule: true,
   useMultipleCollections: () => ({
     collections: [],
@@ -119,16 +118,43 @@ jest.mock('@/hooks/useMultipleCollections', () => ({
   }),
 }));
 
-// Mock the SudoContext
-jest.mock('@/contexts/SudoContext', () => ({
+// Mock useChatHistory hook
+jest.mock("@/hooks/useChatHistory", () => ({
+  useChatHistory: jest.fn(() => ({
+    loading: false,
+    error: null,
+    conversations: [],
+    hasMore: false,
+    fetchConversations: jest.fn(),
+    refetch: jest.fn(),
+    loadMore: jest.fn(),
+  })),
+}));
+
+// Mock ChatHistorySidebar
+jest.mock("@/components/ChatHistorySidebar", () => ({
   __esModule: true,
-  SudoProvider: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  useSudo: () => ({
-    isSudoUser: false,
-    isSudoAdmin: false,
-  }),
+  default: function ChatHistorySidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+    return (
+      <div data-testid="chat-history-sidebar" data-is-open={isOpen}>
+        <button onClick={onClose}>Close</button>
+      </div>
+    );
+  },
+}));
+
+// Mock the SudoContext
+jest.mock("@/contexts/SudoContext", () => ({
+  __esModule: true,
+  SudoProvider: function SudoProvider({ children }: { children: React.ReactNode }) {
+    return <>{children}</>;
+  },
+  useSudo: function useSudo() {
+    return {
+      isSudoUser: false,
+      isSudoAdmin: false,
+    };
+  },
 }));
 
 const queryClient = new QueryClient({
@@ -140,24 +166,24 @@ const queryClient = new QueryClient({
 });
 
 const minimalSiteConfig: SiteConfig = {
-  siteId: 'test-site',
-  shortname: 'test',
-  name: 'Test Site',
-  tagline: 'Test Tagline',
-  greeting: 'Welcome to Ananda!',
-  parent_site_url: 'https://www.ananda.org',
-  parent_site_name: 'Ananda',
-  help_url: 'https://www.ananda.org/help',
-  help_text: 'Need help?',
+  siteId: "test-site",
+  shortname: "test",
+  name: "Test Site",
+  tagline: "Test Tagline",
+  greeting: "Welcome to Ananda!",
+  parent_site_url: "https://www.ananda.org",
+  parent_site_name: "Ananda",
+  help_url: "https://www.ananda.org/help",
+  help_text: "Need help?",
   collectionConfig: {},
   libraryMappings: {},
   enableSuggestedQueries: true,
   enableMediaTypeSelection: false,
   enableAuthorSelection: false,
-  welcome_popup_heading: 'Welcome',
-  other_visitors_reference: 'others',
+  welcome_popup_heading: "Welcome",
+  other_visitors_reference: "others",
   loginImage: null,
-  header: { logo: '', navItems: [] },
+  header: { logo: "", navItems: [] },
   footer: { links: [] },
   requireLogin: false,
   allowPrivateSessions: true,
@@ -166,7 +192,7 @@ const minimalSiteConfig: SiteConfig = {
   queriesPerUserPerDay: 100,
 };
 
-describe('Home Page', () => {
+describe("Home Page", () => {
   // Set up mock for window.location
   let originalLocation: Location;
 
@@ -177,12 +203,12 @@ describe('Home Page', () => {
     // Create a new Location object
     const mockLocation = {
       ...originalLocation,
-      href: '',
+      href: "",
       // Add any other properties being used in tests
     };
 
     // Use Object.defineProperty to avoid TypeScript errors
-    Object.defineProperty(window, 'location', {
+    Object.defineProperty(window, "location", {
       value: mockLocation,
       writable: true,
     });
@@ -190,26 +216,24 @@ describe('Home Page', () => {
 
   afterEach(() => {
     // Use Object.defineProperty to restore original window.location
-    Object.defineProperty(window, 'location', {
+    Object.defineProperty(window, "location", {
       value: originalLocation,
       writable: true,
     });
   });
 
-  it('renders the home page correctly', async () => {
+  it("renders the home page correctly", async () => {
     render(
       <QueryClientProvider client={queryClient}>
         <Home siteConfig={minimalSiteConfig} />
-      </QueryClientProvider>,
+      </QueryClientProvider>
     );
 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(
-      await screen.findByText('Welcome! How can I help you today?'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Welcome! How can I help you today?")).toBeInTheDocument();
   });
 
   // it('handles GETHUMAN links correctly', async () => {
@@ -224,12 +248,12 @@ describe('Home Page', () => {
   //   expect(await findByTestId('gethuman-link')).toBeInTheDocument();
   // });
 
-  describe('Props Validation', () => {
-    it('handles null siteConfig gracefully', async () => {
+  describe("Props Validation", () => {
+    it("handles null siteConfig gracefully", async () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Home siteConfig={null} />
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
 
       await act(async () => {
@@ -237,32 +261,32 @@ describe('Home Page', () => {
       });
 
       // Should still render without crashing and *not* show chat input
-      expect(screen.queryByTestId('chat-input')).not.toBeInTheDocument();
+      expect(screen.queryByTestId("chat-input")).not.toBeInTheDocument();
     });
 
-    it('uses default values when optional siteConfig properties are missing', async () => {
+    it("uses default values when optional siteConfig properties are missing", async () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Home
             siteConfig={{
-              siteId: 'test',
-              shortname: 'test',
-              name: 'Test Site',
-              tagline: 'Test Tagline',
-              greeting: 'Test Greeting',
-              parent_site_url: 'https://test.com',
-              parent_site_name: 'Test Parent',
-              help_url: 'https://test.com/help',
-              help_text: 'Help',
+              siteId: "test",
+              shortname: "test",
+              name: "Test Site",
+              tagline: "Test Tagline",
+              greeting: "Test Greeting",
+              parent_site_url: "https://test.com",
+              parent_site_name: "Test Parent",
+              help_url: "https://test.com/help",
+              help_text: "Help",
               collectionConfig: {},
               libraryMappings: {},
-              header: { logo: '', navItems: [] },
+              header: { logo: "", navItems: [] },
               footer: { links: [] },
               enableSuggestedQueries: false,
               enableMediaTypeSelection: false,
               enableAuthorSelection: false,
-              welcome_popup_heading: 'Welcome',
-              other_visitors_reference: 'others',
+              welcome_popup_heading: "Welcome",
+              other_visitors_reference: "others",
               loginImage: null,
               requireLogin: false,
               allowPrivateSessions: false,
@@ -271,7 +295,7 @@ describe('Home Page', () => {
               queriesPerUserPerDay: 100,
             }}
           />
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
 
       await act(async () => {
@@ -279,31 +303,31 @@ describe('Home Page', () => {
       });
 
       // Should render chat input with minimal config
-      expect(screen.getByTestId('chat-input')).toBeInTheDocument();
+      expect(screen.getByTestId("chat-input")).toBeInTheDocument();
     });
   });
 
-  describe('Initial State', () => {
-    it('starts with an empty chat input', async () => {
+  describe("Initial State", () => {
+    it("starts with an empty chat input", async () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Home siteConfig={minimalSiteConfig} />
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
 
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
-      const input = await screen.findByTestId('chat-input');
-      expect(input).toHaveValue('');
+      const input = await screen.findByTestId("chat-input");
+      expect(input).toHaveValue("");
     });
 
-    it('starts with default media type settings', async () => {
+    it("starts with default media type settings", async () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Home siteConfig={minimalSiteConfig} />
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
 
       await act(async () => {
@@ -311,16 +335,14 @@ describe('Home Page', () => {
       });
 
       // Add assertions for media type settings
-      expect(
-        screen.getByText('Welcome! How can I help you today?'),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Welcome! How can I help you today?")).toBeInTheDocument();
     });
 
-    it('starts with private session disabled', async () => {
+    it("starts with private session disabled", async () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Home siteConfig={minimalSiteConfig} />
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
 
       await act(async () => {
@@ -328,16 +350,14 @@ describe('Home Page', () => {
       });
 
       // Add assertions for private session state
-      expect(
-        screen.getByText('Welcome! How can I help you today?'),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Welcome! How can I help you today?")).toBeInTheDocument();
     });
 
-    it('starts with maintenance mode disabled', async () => {
+    it("starts with maintenance mode disabled", async () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Home siteConfig={minimalSiteConfig} />
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
 
       await act(async () => {
@@ -345,16 +365,14 @@ describe('Home Page', () => {
       });
 
       // Add assertions for maintenance mode state
-      expect(
-        screen.getByText('Welcome! How can I help you today?'),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Welcome! How can I help you today?")).toBeInTheDocument();
     });
 
-    it('initializes with the first available collection', async () => {
+    it("initializes with the first available collection", async () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Home siteConfig={minimalSiteConfig} />
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
 
       await act(async () => {

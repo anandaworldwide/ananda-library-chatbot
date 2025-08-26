@@ -18,6 +18,7 @@ export const SudoProvider: React.FC<{ children: React.ReactNode; disableChecks?:
 
   const checkSudoStatus = async () => {
     try {
+      // Early return: Skip sudo checks entirely if disabled (role-based auth sites)
       if (disableChecks) {
         setIsSudoUser(false);
         setErrorMessage(null);
@@ -33,7 +34,8 @@ export const SudoProvider: React.FC<{ children: React.ReactNode; disableChecks?:
         setErrorMessage(null);
         return;
       }
-      // In public/anonymous mode, this will fail with 401 and that's expected
+
+      // Only make API call for sites without role-based authentication
       const response = await fetchWithAuth("/api/sudoCookie", {
         method: "GET",
         credentials: "include",

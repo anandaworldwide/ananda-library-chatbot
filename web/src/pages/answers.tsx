@@ -345,7 +345,7 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
 
   // Handle copying answer link
   const handleCopyLink = (answerId: string) => {
-    const url = `${window.location.origin}/answers/${answerId}`;
+    const url = `${window.location.origin}/share/${answerId}`;
     navigator.clipboard.writeText(url).then(() => {
       setLinkCopied(answerId);
       setTimeout(() => setLinkCopied(null), 2000);

@@ -21,7 +21,7 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
   const [firstName, setFirstName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
   const [likedAnswers, setLikedAnswers] = useState<LikedAnswer[]>([]);
-  const [chats, setChats] = useState<Array<{ id: string; question: string; timestamp: any }>>([]);
+
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [role, setRole] = useState<string>("user");
@@ -89,18 +89,6 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
         } else {
           setLikedAnswers([]);
         }
-
-        // Fetch recent chats for this UUID (reverse chronological order)
-        try {
-          const chatsRes = await fetchWithAuth(`/api/chats?uuid=${encodeURIComponent(uuidCookie)}&limit=50`);
-          const chatsData = (await chatsRes.json().catch(() => [])) as any[];
-          const mappedChats = (Array.isArray(chatsData) ? chatsData : []).map((c) => ({
-            id: c.id,
-            question: c.question,
-            timestamp: c.timestamp,
-          }));
-          setChats(mappedChats);
-        } catch {}
       } catch (e: any) {
         setMessage(e?.message || "Failed to load settings");
       } finally {
@@ -239,11 +227,6 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
                     {savingProfile ? "Saving…" : "Save Profile"}
                   </button>
                 </form>
-              </section>
-
-              <section className="mb-6">
-                <h2 className="text-lg font-semibold mb-2">Recent Chats</h2>
-                <ChatList chats={chats} showTimestamps={false} showLikeCounts={false} emptyMessage="No chats yet" />
               </section>
 
               <section className="mb-6">

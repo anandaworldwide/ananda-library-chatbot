@@ -69,6 +69,10 @@ export async function sendEmailChangeConfirmationEmails(oldEmail: string, newEma
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const contactEmail = process.env.CONTACT_EMAIL;
 
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_BASE_URL environment variable is required for email generation");
+  }
+
   if (!contactEmail) {
     console.error("CONTACT_EMAIL environment variable is required for sending emails");
     throw new Error("Contact email not configured");

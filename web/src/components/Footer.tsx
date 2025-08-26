@@ -6,6 +6,7 @@ import { getFooterConfig } from "@/utils/client/siteConfig";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useSudo } from "@/contexts/SudoContext";
+import { isAuthenticated } from "@/utils/client/tokenManager";
 
 interface FooterProps {
   siteConfig: SiteConfig | null;
@@ -15,28 +16,81 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
   const [isAdminRole, setIsAdminRole] = useState(false);
   const { isSudoUser } = useSudo();
   const router = useRouter();
+
   useEffect(() => {
     let mounted = true;
+
     async function checkRole() {
+      // Early return: Skip API call if site doesn't require login
+      if (!siteConfig?.requireLogin) {
+        if (mounted) setIsAdminRole(false);
+        return;
+      }
+
+      // Early return: Skip API call if user is not authenticated
+      if (!isAuthenticated()) {
+        if (mounted) setIsAdminRole(false);
+        // Clear cache when user is not authenticated
+        try {
+          sessionStorage.removeItem("userRole");
+        } catch {
+          // sessionStorage not available, continue
+        }
+        return;
+      }
+
+      // Check sessionStorage cache first (5-minute TTL)
+      try {
+        const cached = sessionStorage.getItem("userRole");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const isExpired = Date.now() - parsed.timestamp > 5 * 60 * 1000; // 5 minutes
+          if (!isExpired && parsed.role) {
+            const isAdmin = parsed.role === "admin" || parsed.role === "superuser";
+            if (mounted) setIsAdminRole(isAdmin);
+            return; // Use cached result
+          }
+        }
+      } catch {
+        // Invalid cache, continue to API call
+      }
+
+      // Make API call only when necessary
       try {
         const res = await fetch("/api/profile", { credentials: "include" });
         if (!res.ok) {
           if (mounted) setIsAdminRole(false);
           return;
         }
+
         const data = await res.json();
         const role = (data?.role as string) || "user";
         const isAdmin = role === "admin" || role === "superuser";
+
+        // Cache the result
+        try {
+          sessionStorage.setItem(
+            "userRole",
+            JSON.stringify({
+              role,
+              timestamp: Date.now(),
+            })
+          );
+        } catch {
+          // sessionStorage failed, continue without caching
+        }
+
         if (mounted) setIsAdminRole(isAdmin);
       } catch {
         if (mounted) setIsAdminRole(false);
       }
     }
+
     checkRole();
     return () => {
       mounted = false;
     };
-  }, [router.asPath]);
+  }, [router.asPath, siteConfig?.requireLogin]);
   const footerConfig = getFooterConfig(siteConfig);
 
   const showAdminSection = siteConfig?.requireLogin ? isAdminRole : isSudoUser;

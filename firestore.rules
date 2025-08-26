@@ -35,7 +35,13 @@ service cloud.firestore {
         }
 
         // Match the admin audit collections (dev_admin_audit, prod_admin_audit)
-        match /{envName}_admin_audit/{docId} {
+        match /dev_admin_audit/{docId} {
+            allow create: if isServerRequest(); // Only server can write audit logs
+            allow read: if request.auth != null && 
+                       request.auth.token.role in ["admin", "superuser"]; // Only admins can read
+        }
+        
+        match /prod_admin_audit/{docId} {
             allow create: if isServerRequest(); // Only server can write audit logs
             allow read: if request.auth != null && 
                        request.auth.token.role in ["admin", "superuser"]; // Only admins can read

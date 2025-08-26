@@ -26,8 +26,21 @@ export function getLoginExpiryDateHours(hours: number = 1): Date {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
-export async function sendLoginEmail(email: string, token: string, redirect?: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://ananda.ai";
+export async function sendLoginEmail(email: string, token: string, redirect?: string, req?: any) {
+  // Use request domain if available, otherwise fall back to configured domain
+  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_BASE_URL environment variable is required for email generation");
+  }
+
+  if (req && req.headers) {
+    const host = req.headers.host;
+    const protocol = req.headers["x-forwarded-proto"] || (host?.includes("localhost") ? "http" : "https");
+    if (host) {
+      baseUrl = `${protocol}://${host}`;
+    }
+  }
+
   const redirectPart = redirect ? `&redirect=${encodeURIComponent(redirect)}` : "";
   const url = `${baseUrl}/magic-login?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}${redirectPart}`;
   const siteConfig = loadSiteConfigSync();

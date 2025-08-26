@@ -58,7 +58,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       { merge: true },
       "resend activation"
     );
-    await sendActivationEmail(email, token);
+    await sendActivationEmail(email, token, req);
     await writeAuditLog(req, "admin_resend_activation", email.toLowerCase(), { outcome: "success" });
     return res.status(200).json({ message: "resent" });
   } catch (err) {

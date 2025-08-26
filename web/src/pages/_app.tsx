@@ -42,8 +42,13 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
   // Initialize token manager for background features (like error handling)
   // The main authentication check is now handled by AuthGuard
   useEffect(() => {
-    // Only initialize token manager for background features, not for page access control
     if (typeof window !== "undefined" && siteConfig !== null) {
+      // Skip token initialization for publicly accessible pages (e.g. /share/<docId>, /answers/...) to
+      // avoid unnecessary /api/web-token requests that trigger 401 redirects for anonymous users.
+      const currentPathNoQuery = window.location.pathname;
+      if (isPublicPage(currentPathNoQuery, siteConfig)) {
+        return;
+      }
       initializeTokenManager()
         .then(() => {
           setAuthInitialized(true);
@@ -135,7 +140,7 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthErrorBoundary>
-        <SudoProvider>
+        <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
           <AudioProvider>
             <main className={inter.className}>
               {/* Only include Google Analytics in production */}

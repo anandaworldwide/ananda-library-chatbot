@@ -7,7 +7,8 @@
 //   are automatically converted to links to the Ananda contact page (https://www.ananda.org/contact-us/)
 
 // React and Next.js imports
-import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { useRouter } from "next/router";
 
 // Component imports
 import Layout from "@/components/layout";
@@ -16,6 +17,7 @@ import LikePrompt from "@/components/LikePrompt";
 import { ChatInput } from "@/components/ChatInput";
 import MessageItem from "@/components/MessageItem";
 import FeedbackModal from "@/components/FeedbackModal";
+import ChatHistorySidebar from "@/components/ChatHistorySidebar";
 
 // Hook imports
 import usePopup from "@/hooks/usePopup";
@@ -46,11 +48,17 @@ import { RelatedQuestion } from "@/types/RelatedQuestion";
 import { SudoProvider, useSudo } from "@/contexts/SudoContext";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
+import { loadConversationByConvId } from "@/utils/client/conversationLoader";
+import { getGreeting } from "@/utils/client/siteConfig";
+import { SidebarFunctions, SidebarRefetch } from "@/components/ChatHistorySidebar";
 
 // Main component for the chat interface
 export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) {
+  const router = useRouter();
+
   // State variables for various features and UI elements
   const [isMaintenanceMode] = useState<boolean>(false);
+  const [viewOnlyMode, setViewOnlyMode] = useState<boolean>(false);
   const [collection, setCollection] = useState(() => {
     const collections = getCollectionsConfig(siteConfig);
     return Object.keys(collections)[0] || "";
@@ -78,9 +86,52 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     messages: ExtendedAIMessage[];
   };
 
+  // Track current conversation ID for follow-up messages
+  const [currentConvId, setCurrentConvId] = useState<string | null>(null);
+  const currentConvIdRef = useRef<string | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentConvIdRef.current = currentConvId;
+  }, [currentConvId]);
+
+  // Local ref to track latest path since we sometimes manipulate history without
+  // involving Next.js router (pushState). This prevents stale router.asPath
+  // values from confusing handleUrlBasedLoading.
+  const pathRef = useRef<string>(typeof window !== "undefined" ? window.location.pathname : "/");
+
+  // Track previous path to detect actual navigations to root ("/")
+  const previousPathRef = useRef<string>(pathRef.current);
+
+  // Track the current question being processed (for adding to sidebar)
+  // We keep both a state variable (for potential future UI use) and a ref so we
+  // always have synchronous access to the latest question text when the convId
+  // arrives earlier than React state updates.
+  const [, _setCurrentQuestion] = useState<string>("");
+  const currentQuestionRef = useRef<string>("");
+
+  // Helper to update both ref + state
+  const setCurrentQuestion = (q: string) => {
+    currentQuestionRef.current = q;
+    _setCurrentQuestion(q);
+  };
+
+  // References to sidebar functions for adding/updating conversations
+  const sidebarFunctionsRef = useRef<SidebarFunctions | null>(null);
+  const sidebarRefetchRef = useRef<SidebarRefetch>(() => {});
+
+  const handleSidebarFunctions = useCallback((functions: SidebarFunctions, refetch: SidebarRefetch) => {
+    sidebarFunctionsRef.current = functions;
+    sidebarRefetchRef.current = refetch;
+  }, []);
+
+  // (Removed pushedConvIdRef – no longer needed now that we update URL via
+  // window.history.replaceState without triggering navigation.)
+
   // UI state variables
   const [showLikePrompt] = useState<boolean>(false);
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   // Refs for DOM elements and scroll management
   const lastMessageRef = useRef<HTMLDivElement>(null);
@@ -106,6 +157,164 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     }
   };
 
+  // Helper function to load conversation content without URL updates
+  const loadConversationDirectly = useCallback(
+    async (convId: string) => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const loadedConversation = await loadConversationByConvId(convId);
+
+        // Update the message state with the loaded conversation
+        setMessageState({
+          messages: [
+            {
+              message: getGreeting(siteConfig),
+              type: "apiMessage",
+            },
+            ...loadedConversation.messages,
+          ],
+          history: loadedConversation.history,
+        });
+
+        // Set the current conversation ID for follow-up messages
+        setCurrentConvId(convId);
+
+        // Log analytics event
+        logEvent("chat_history_conversation_loaded", "Chat History", convId, loadedConversation.messages.length);
+      } catch (error) {
+        console.error("Error loading conversation:", error);
+        setError(error instanceof Error ? error.message : "Failed to load conversation");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [siteConfig, setLoading, setError, setMessageState, setCurrentConvId]
+  );
+
+  // Function to load a conversation from chat history
+  const handleLoadConversation = async (convId: string) => {
+    // Load the conversation content
+    await loadConversationDirectly(convId);
+
+    // Update URL without triggering a full Next.js navigation to prevent flash.
+    window.history.pushState(null, "", `/chat/${convId}`);
+    pathRef.current = `/chat/${convId}`;
+
+    // Close sidebar after loading
+    setSidebarOpen(false);
+  };
+
+  // Function to handle URL-based conversation loading
+  const handleUrlBasedLoading = useCallback(async () => {
+    const path = pathRef.current;
+
+    // Don't interfere with ongoing streaming/loading operations
+    if (loading) {
+      return;
+    }
+
+    // Handle root path (/) – reset only when navigating FROM another path
+    if (path === "/") {
+      if (previousPathRef.current !== "/" && !loading && messageState.messages.length <= 1) {
+        currentConvIdRef.current = null;
+        setCurrentConvId(null);
+        setCurrentQuestion("");
+        setMessageState({
+          messages: [
+            {
+              message: getGreeting(siteConfig),
+              type: "apiMessage",
+            },
+          ],
+          history: [],
+        });
+        setError(null);
+        setViewOnlyMode(false);
+        // Reload sidebar to clear any stale state
+        sidebarRefetchRef.current();
+      }
+      return;
+    }
+
+    // Handle /chat/[convId] URLs
+    if (path.startsWith("/chat/")) {
+      const convId = path.split("/chat/")[1];
+      // Prevent infinite loop by checking if we've already loaded this conversation
+      if (convId && convId !== currentConvIdRef.current) {
+        // Load conversation without updating URL (since URL is already correct)
+        await loadConversationDirectly(convId);
+      }
+      return;
+    }
+  }, [
+    pathRef.current,
+    currentConvId,
+    loading,
+    siteConfig,
+    loadConversationDirectly,
+    setCurrentConvId,
+    setMessageState,
+    setError,
+    setViewOnlyMode,
+    messageState.messages.length,
+  ]);
+
+  // URL detection effect
+  useEffect(() => {
+    if (router.isReady) {
+      handleUrlBasedLoading();
+    }
+  }, [router.isReady, handleUrlBasedLoading]);
+
+  // Update previous path after each path change
+  useEffect(() => {
+    previousPathRef.current = pathRef.current;
+  }, [pathRef.current]);
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const currentPath = window.location.pathname;
+      pathRef.current = currentPath; // keep ref in sync
+
+      if (currentPath === "/") {
+        // Stop any ongoing streaming before resetting
+        if (loading) {
+          handleStop();
+        }
+
+        // Back to home: reset chat
+        setMessageState({
+          messages: [
+            {
+              message: getGreeting(siteConfig),
+              type: "apiMessage",
+            },
+          ],
+          history: [],
+        });
+        setCurrentConvId(null);
+        setViewOnlyMode(false);
+        setQuery("");
+        setError(null);
+        setLoading(false);
+        logEvent("navigation_back_to_home", "Navigation", "fresh_chat_reset");
+      } else if (currentPath.startsWith("/chat/")) {
+        // Navigate to a specific conversation via browser history
+        handleUrlBasedLoading();
+      }
+    };
+
+    // Listen for browser back/forward button
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [siteConfig, setMessageState, setError, setLoading, handleUrlBasedLoading]);
+
   // Custom hook for displaying popup messages
   const { showPopup, closePopup, popupMessage } = usePopup(
     "1.02",
@@ -123,6 +332,42 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       Cookies.set("selectedCollection", newCollection, { expires: 365 });
       logEvent("change_collection", "UI", newCollection);
     }
+  };
+
+  // Function to start a new chat conversation
+  const handleNewChat = () => {
+    // Stop any ongoing streaming before resetting
+    if (loading) {
+      handleStop();
+    }
+
+    // Push a new history entry for '/' without triggering a Next.js navigation.
+    window.history.pushState(null, "", "/");
+    pathRef.current = "/";
+    // Immediately reset local chat state so UI clears without waiting for
+    // handleUrlBasedLoading. This guarantees the New-Chat button and the
+    // "Ask" nav item always start from a blank conversation.
+    setCurrentConvId(null);
+    setCurrentQuestion("");
+    setMessageState({
+      messages: [
+        {
+          message: getGreeting(siteConfig),
+          type: "apiMessage",
+        },
+      ],
+      history: [],
+    });
+    setError(null);
+    setViewOnlyMode(false);
+
+    // Focus on the input field if not on mobile
+    if (window.innerWidth >= 768 && textAreaRef.current) {
+      textAreaRef.current.focus();
+    }
+
+    // Log analytics event
+    logEvent("new_chat_started", "Chat", "header_button");
   };
 
   // State for managing collection queries
@@ -352,6 +597,91 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         }
       }
 
+      if (data.docId) {
+        // Save the docId with the message immediately (buttons won't show until loading=false)
+        setMessageState((prevState) => {
+          const updatedMessages = [...prevState.messages];
+          // Make sure we're getting the API message (it should be the last one)
+          const lastMessage = updatedMessages[updatedMessages.length - 1];
+
+          if (lastMessage.type === "apiMessage") {
+            // Update the API message with the docId
+            updatedMessages[updatedMessages.length - 1] = {
+              ...lastMessage,
+              docId: data.docId,
+            };
+          } else if (prevState.messages.length >= 2) {
+            // If the last message isn't an API message, find the most recent API message
+            for (let i = updatedMessages.length - 1; i >= 0; i--) {
+              if (updatedMessages[i].type === "apiMessage") {
+                updatedMessages[i] = {
+                  ...updatedMessages[i],
+                  docId: data.docId,
+                };
+                break;
+              }
+            }
+          } else {
+            console.warn(`No API message found to attach docId to`);
+          }
+
+          return {
+            ...prevState,
+            messages: updatedMessages,
+          };
+        });
+
+        // Save the docId in a separate state variable for later reference
+        // This ensures we have it even if the message object wasn't ready when it arrived
+        setSavedDocId(data.docId);
+      }
+
+      // Handle convId separately from docId (convId comes earlier in the stream)
+      if (data.convId) {
+        const isNewConversation = !currentConvIdRef.current;
+        currentConvIdRef.current = data.convId;
+        setCurrentConvId(data.convId);
+
+        // For new conversations, update URL and sidebar
+        if (isNewConversation) {
+          // Use pushState so the browser back button will return to '/'.
+          window.history.pushState(null, "", `/chat/${data.convId}`);
+          pathRef.current = `/chat/${data.convId}`;
+
+          // Add new conversation to sidebar (only for first question in conversation)
+          // Only attempt if sidebar is enabled (requireLogin sites) and functions are available
+
+          let questionForSidebar = currentQuestionRef.current;
+          // Fallback: if for some reason currentQuestionRef is empty (e.g. Fast Refresh in dev)
+          if (!questionForSidebar) {
+            const lastUserMsg = [...messages].reverse().find((m) => m.type === "userMessage") as
+              | ExtendedAIMessage
+              | undefined;
+            if (lastUserMsg?.message) {
+              questionForSidebar = lastUserMsg.message;
+            }
+          }
+
+          if (siteConfig?.requireLogin && sidebarFunctionsRef.current && questionForSidebar) {
+            // Create a temporary title from the question
+            const questionWords = questionForSidebar.trim().split(/\s+/);
+            const tempTitle =
+              questionWords.length <= 5 ? questionForSidebar : questionWords.slice(0, 4).join(" ") + "...";
+
+            sidebarFunctionsRef.current.addNewConversation(data.convId, tempTitle, questionForSidebar);
+
+            // Clear the current question now that we've used it
+            setCurrentQuestion("");
+          }
+        }
+        // Note: For follow-up questions, URL stays the same since convId is consistent
+      }
+
+      // Handle AI-generated title updates
+      if (data.title && data.convId && sidebarFunctionsRef.current) {
+        sidebarFunctionsRef.current.updateConversationTitle(data.convId, data.title);
+      }
+
       if (data.done) {
         // Check for docId one more time right when done is received.
         // Immediately set loading to false so the buttons appear right away
@@ -433,66 +763,28 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
           return { ...prevState };
         });
+
+        // Start fetching related questions in the background
+        if (savedDocId) {
+          fetchRelatedQuestions(savedDocId).then((relatedQuestions) => {
+            const completionTimestamp = new Date().toISOString().substr(11, 12);
+            console.log(`[${completionTimestamp}] Completed fetching related questions for docId: ${savedDocId}`);
+            if (relatedQuestions) {
+              setMessageState((prevState) => ({
+                ...prevState,
+                messages: prevState.messages.map((msg) =>
+                  msg.docId === savedDocId ? { ...msg, relatedQuestions } : msg
+                ),
+              }));
+              setLastRelatedQuestionsUpdate(savedDocId ?? null);
+            }
+          });
+        }
       }
 
       if (data.error) {
         console.error(`Stream ERROR:`, data.error);
         setError(data.error);
-      }
-
-      if (data.docId) {
-        // Save the docId in a separate state variable for later reference
-        // This ensures we have it even if the message object wasn't ready when it arrived
-        setSavedDocId(data.docId);
-
-        // Store the docId with the message immediately (buttons won't show until loading=false)
-        setMessageState((prevState) => {
-          const updatedMessages = [...prevState.messages];
-          // Make sure we're getting the API message (it should be the last one)
-          const lastMessage = updatedMessages[updatedMessages.length - 1];
-
-          if (lastMessage.type === "apiMessage") {
-            // Update the API message with the docId
-            updatedMessages[updatedMessages.length - 1] = {
-              ...lastMessage,
-              docId: data.docId,
-            };
-          } else if (prevState.messages.length >= 2) {
-            // If the last message isn't an API message, find the most recent API message
-            for (let i = updatedMessages.length - 1; i >= 0; i--) {
-              if (updatedMessages[i].type === "apiMessage") {
-                updatedMessages[i] = {
-                  ...updatedMessages[i],
-                  docId: data.docId,
-                };
-                break;
-              }
-            }
-          } else {
-            console.warn(`No API message found to attach docId to`);
-          }
-
-          return {
-            ...prevState,
-            messages: updatedMessages,
-          };
-        });
-
-        // Start fetching related questions in the background
-
-        fetchRelatedQuestions(data.docId).then((relatedQuestions) => {
-          const completionTimestamp = new Date().toISOString().substr(11, 12);
-          console.log(`[${completionTimestamp}] Completed fetching related questions for docId: ${data.docId}`);
-          if (relatedQuestions) {
-            setMessageState((prevState) => ({
-              ...prevState,
-              messages: prevState.messages.map((msg) =>
-                msg.docId === data.docId ? { ...msg, relatedQuestions } : msg
-              ),
-            }));
-            setLastRelatedQuestionsUpdate(data.docId ?? null);
-          }
-        });
       }
     },
     [
@@ -576,6 +868,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     e.preventDefault();
     if (submittedQuery.trim() === "") return;
 
+    // Store the current question for sidebar updates
+    setCurrentQuestion(submittedQuery);
+
     // Reset timing metrics when starting a new query
     setTimingMetrics(null);
 
@@ -637,6 +932,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           mediaTypes,
           sourceCount: sourceCount,
           uuid: getOrCreateUUID(),
+          convId: currentConvIdRef.current, // Pass current conversation ID for follow-ups
         }),
         signal: newAbortController.signal,
       });
@@ -846,7 +1142,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
   // Function to handle copying answer links
   const handleCopyLink = (answerId: string) => {
-    const url = `${window.location.origin}/answers/${answerId}`;
+    const url = `${window.location.origin}/share/${answerId}`;
     navigator.clipboard.writeText(url).then(() => {
       setLinkCopied(answerId);
       setTimeout(() => setLinkCopied(null), 2000);
@@ -995,118 +1291,164 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Main component render
   return (
     <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
-      <Layout siteConfig={siteConfig}>
+      <Layout siteConfig={siteConfig} useWideLayout={siteConfig?.requireLogin} onNewChat={handleNewChat}>
         {showPopup && popupMessage && <Popup message={popupMessage} onClose={closePopup} siteConfig={siteConfig} />}
         <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />
-        <div className="flex flex-col h-full">
-          {/* Private session banner */}
-          {privateSession && (
-            <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-              <span className="material-icons text-2xl mr-2">lock</span>
-              You are in a Private Session (
-              <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
-                end private session
-              </button>
-              )
-            </div>
+        <div className="flex h-full">
+          {/* Chat History Sidebar - Only show on sites that require login */}
+          {siteConfig?.requireLogin && (
+            <ChatHistorySidebar
+              isOpen={sidebarOpen}
+              onClose={() => {
+                logEvent("chat_history_sidebar_close", "Chat History", "close_button");
+                setSidebarOpen(false);
+              }}
+              onLoadConversation={handleLoadConversation}
+              currentConvId={currentConvId}
+              onGetSidebarFunctions={(functions) => {
+                handleSidebarFunctions(functions, () => {
+                  // This refetch function is called when the sidebar needs to be reloaded
+                  // after a state change that might affect its data, e.g., clearing chat history
+                  // or changing collections.
+                  // For now, we'll just log the event, as the actual re-fetching logic
+                  // would involve fetching chat history from the backend.
+                  logEvent("chat_history_sidebar_refetch", "Chat History", "sidebar_refetch");
+                });
+              }}
+            />
           )}
-          <div className="flex-grow overflow-hidden answers-container">
-            <div ref={messageListRef} className="h-full overflow-y-auto">
-              {/* Render chat messages */}
-              {messages.map((message, index) => (
-                <MessageItem
-                  key={`chatMessage-${index}`}
-                  messageKey={`chatMessage-${index}`}
-                  message={message}
-                  previousMessage={index > 0 ? messages[index - 1] : undefined}
-                  index={index}
-                  isLastMessage={index === messages.length - 1}
-                  loading={loading}
-                  privateSession={privateSession}
-                  collectionChanged={collectionChanged}
-                  hasMultipleCollections={hasMultipleCollections}
-                  likeStatuses={likeStatuses}
-                  linkCopied={linkCopied}
-                  votes={votes}
-                  siteConfig={siteConfig}
-                  handleLikeCountChange={handleLikeCountChange}
-                  handleCopyLink={handleCopyLink}
-                  handleVote={handleVote}
-                  lastMessageRef={lastMessageRef}
-                  voteError={voteError}
-                  allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
-                  showRelatedQuestions={showRelatedQuestions}
-                />
-              ))}
-              {/* Display timing metrics for sudo users */}
-              {isSudoUser && timingMetrics && !loading && messages.length > 0 && (
-                <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded m-2">{formatTimingMetrics()}</div>
-              )}
-              <div ref={bottomOfListRef} style={{ height: "1px" }} />
-            </div>
 
-            {/* Container to anchor the scroll button at the right edge of the content */}
-            <div ref={scrollButtonContainerRef} className="relative w-full">
-              {/* Animated Scroll Down Button */}
-              <div
-                className={`fixed z-50 right-5 bottom-5 transition-all duration-300 ease-out transform 
+          {/* Main Content Area */}
+          <div className="flex flex-col flex-1 min-w-0 lg:ml-0">
+            <div className="mx-auto w-full max-w-4xl px-4">
+              {/* Hamburger Menu Button - Only show on sites that require login */}
+              {siteConfig?.requireLogin && (
+                <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+                  <button
+                    onClick={() => {
+                      logEvent("chat_history_sidebar_open", "Chat History", "hamburger_menu");
+                      setSidebarOpen(true);
+                    }}
+                    className="p-2 rounded-md hover:bg-gray-100"
+                    aria-label="Open chat history"
+                  >
+                    <span className="material-icons text-gray-600">menu</span>
+                  </button>
+                  <h1 className="text-lg font-semibold text-gray-900">Chat</h1>
+                  <div className="w-10"></div> {/* Spacer for centering */}
+                </div>
+              )}
+              {/* Private session banner */}
+              {privateSession && (
+                <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
+                  <span className="material-icons text-2xl mr-2">lock</span>
+                  You are in a Private Session (
+                  <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
+                    end private session
+                  </button>
+                  )
+                </div>
+              )}
+              <div className="flex-grow overflow-hidden answers-container">
+                <div ref={messageListRef} className="h-full overflow-y-auto">
+                  {/* Render chat messages */}
+                  {messages.map((message, index) => (
+                    <MessageItem
+                      key={`chatMessage-${index}`}
+                      messageKey={`chatMessage-${index}`}
+                      message={message}
+                      previousMessage={index > 0 ? messages[index - 1] : undefined}
+                      index={index}
+                      isLastMessage={index === messages.length - 1}
+                      loading={loading}
+                      privateSession={privateSession}
+                      collectionChanged={collectionChanged}
+                      hasMultipleCollections={hasMultipleCollections}
+                      likeStatuses={likeStatuses}
+                      linkCopied={linkCopied}
+                      votes={votes}
+                      siteConfig={siteConfig}
+                      handleLikeCountChange={handleLikeCountChange}
+                      handleCopyLink={handleCopyLink}
+                      handleVote={handleVote}
+                      lastMessageRef={lastMessageRef}
+                      voteError={voteError}
+                      allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
+                      showRelatedQuestions={showRelatedQuestions}
+                    />
+                  ))}
+                  {/* Display timing metrics for sudo users */}
+                  {isSudoUser && timingMetrics && !loading && messages.length > 0 && (
+                    <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded m-2">{formatTimingMetrics()}</div>
+                  )}
+                  <div ref={bottomOfListRef} style={{ height: "1px" }} />
+                </div>
+
+                {/* Container to anchor the scroll button at the right edge of the content */}
+                <div ref={scrollButtonContainerRef} className="relative w-full">
+                  {/* Animated Scroll Down Button */}
+                  <div
+                    className={`fixed z-50 right-5 bottom-5 transition-all duration-300 ease-out transform 
                   ${showScrollDownButton ? "translate-y-0 opacity-100 pointer-events-auto" : "translate-y-8 opacity-0 pointer-events-none"}`}
-                style={{ willChange: "transform, opacity" }}
-              >
-                <button
-                  onClick={handleScrollDownClick}
-                  aria-label="Scroll to bottom"
-                  className="bg-white text-gray-600 rounded-full shadow-sm hover:shadow-md p-2 border border-gray-200 focus:outline-none"
-                >
-                  <span className="material-icons text-xl">expand_more</span>
-                </button>
+                    style={{ willChange: "transform, opacity" }}
+                  >
+                    <button
+                      onClick={handleScrollDownClick}
+                      aria-label="Scroll to bottom"
+                      className="bg-white text-gray-600 rounded-full shadow-sm hover:shadow-md p-2 border border-gray-200 focus:outline-none"
+                    >
+                      <span className="material-icons text-xl">expand_more</span>
+                    </button>
+                  </div>
+                </div>
               </div>
+              <div className="mt-4 px-2 md:px-0">
+                {/* Render chat input component */}
+                {isLoadingQueries ? null : (
+                  <ChatInput
+                    loading={loading}
+                    disabled={viewOnlyMode}
+                    handleSubmit={handleSubmit}
+                    handleEnter={handleEnter}
+                    handleClick={handleClick}
+                    handleCollectionChange={handleCollectionChange}
+                    handlePrivateSessionChange={handlePrivateSessionChange}
+                    collection={collection}
+                    privateSession={privateSession}
+                    error={chatError}
+                    setError={setError}
+                    randomQueries={randomQueries}
+                    shuffleQueries={shuffleQueries}
+                    textAreaRef={textAreaRef}
+                    mediaTypes={mediaTypes}
+                    handleMediaTypeChange={handleMediaTypeChange}
+                    siteConfig={siteConfig}
+                    input={query}
+                    handleInputChange={handleInputChange}
+                    setQuery={setQuery}
+                    setShouldAutoScroll={setIsNearBottom}
+                    handleStop={handleStop}
+                    isNearBottom={isNearBottom}
+                    setIsNearBottom={setIsNearBottom}
+                    isLoadingQueries={isLoadingQueries}
+                    sourceCount={sourceCount}
+                    setSourceCount={setSourceCount}
+                  />
+                )}
+              </div>
+              {/* Private session banner (bottom) */}
+              {privateSession && (
+                <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
+                  <span className="material-icons text-2xl mr-2">lock</span>
+                  You are in a Private Session (
+                  <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
+                    end private session
+                  </button>
+                  )
+                </div>
+              )}
             </div>
           </div>
-          <div className="mt-4 px-2 md:px-0">
-            {/* Render chat input component */}
-            {isLoadingQueries ? null : (
-              <ChatInput
-                loading={loading}
-                handleSubmit={handleSubmit}
-                handleEnter={handleEnter}
-                handleClick={handleClick}
-                handleCollectionChange={handleCollectionChange}
-                handlePrivateSessionChange={handlePrivateSessionChange}
-                collection={collection}
-                privateSession={privateSession}
-                error={chatError}
-                setError={setError}
-                randomQueries={randomQueries}
-                shuffleQueries={shuffleQueries}
-                textAreaRef={textAreaRef}
-                mediaTypes={mediaTypes}
-                handleMediaTypeChange={handleMediaTypeChange}
-                siteConfig={siteConfig}
-                input={query}
-                handleInputChange={handleInputChange}
-                setQuery={setQuery}
-                setShouldAutoScroll={setIsNearBottom}
-                handleStop={handleStop}
-                isNearBottom={isNearBottom}
-                setIsNearBottom={setIsNearBottom}
-                isLoadingQueries={isLoadingQueries}
-                sourceCount={sourceCount}
-                setSourceCount={setSourceCount}
-              />
-            )}
-          </div>
-          {/* Private session banner (bottom) */}
-          {privateSession && (
-            <div className="bg-purple-100 text-purple-800 text-center py-2 flex items-center justify-center">
-              <span className="material-icons text-2xl mr-2">lock</span>
-              You are in a Private Session (
-              <button onClick={handlePrivateSessionChange} className="underline hover:text-purple-900">
-                end private session
-              </button>
-              )
-            </div>
-          )}
         </div>
 
         {/* Render the Feedback Modal */}

@@ -36,6 +36,8 @@ const customJestConfig = {
   testPathIgnorePatterns: [
     "<rootDir>/node_modules/",
     "<rootDir>/.next/",
+    // Exclude server tests from client test runner
+    "<rootDir>/__tests__/utils/server/",
     // Update paths relative to <rootDir> (web/)
     "<rootDir>/__tests__/api/chat/v1/test-utils.ts",
     "<rootDir>/__tests__/api/chat/v1/utils/",

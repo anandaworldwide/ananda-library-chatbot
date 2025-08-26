@@ -3,7 +3,9 @@ import { s3Client } from "@/utils/server/awsConfig";
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
-import { withJwtOnlyAuth } from "@/utils/server/apiMiddleware";
+import { verifyToken } from "@/utils/server/jwtUtils";
+import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
+import { db } from "@/services/firebase";
 
 // Valid audio file extensions and MIME types
 const VALID_AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"];
@@ -47,6 +49,37 @@ async function getS3AudioSignedUrl(audioS3Key: string): Promise<string> {
   }
 }
 
+async function validateShareAccess(docId: string, s3Key: string): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = db.collection(getAnswersCollectionName()).doc(docId);
+    const snap = await docRef.get();
+    if (!snap.exists) return false;
+    const data = snap.data() as any;
+    if (!data?.sources) return false;
+    const sources = Array.isArray(data.sources) ? data.sources : JSON.parse(data.sources || "[]");
+
+    // Extract the filename part from the s3Key (remove public/audio/ prefix if present)
+    const requestedFilename = s3Key.replace(/^public\/audio\//, "");
+
+    const found = sources.some((src: any) => {
+      // Check both s3Key and metadata.filename fields
+      const srcS3Key = src.s3Key;
+      const srcFilename = src.metadata?.filename;
+
+      return (
+        srcS3Key === s3Key ||
+        srcS3Key === requestedFilename ||
+        srcFilename === requestedFilename ||
+        srcFilename === s3Key
+      );
+    });
+    return found;
+  } catch (error) {
+    return false;
+  }
+}
+
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only allow POST requests
   if (req.method !== "POST") {
@@ -65,11 +98,37 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return; // Rate limit response already sent
     }
 
-    // Extract audio S3 key and optional library from request body
-    const { audioS3Key, library } = req.body;
+    // Extract audio S3 key, library, uuid, and optional docId (for share access)
+    const { audioS3Key, library, uuid, docId } = req.body;
 
     if (!audioS3Key || typeof audioS3Key !== "string") {
       return res.status(400).json({ message: "Invalid audio S3 key" });
+    }
+
+    // Check for JWT authentication
+    const authHeader = req.headers.authorization;
+    let isAuthenticated = false;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      try {
+        const decoded = verifyToken(token);
+        if (decoded && !token.includes("placeholder")) {
+          isAuthenticated = true;
+        }
+      } catch (error) {
+        // Token invalid, continue as anonymous
+      }
+    }
+
+    // For authenticated users, require UUID
+    if (isAuthenticated && (!uuid || typeof uuid !== "string" || uuid.length !== 36)) {
+      return res.status(400).json({ message: "Invalid or missing UUID" });
+    }
+
+    // For anonymous users, require docId for share validation
+    if (!isAuthenticated && (!docId || typeof docId !== "string")) {
+      return res.status(401).json({ message: "Authentication required for audio access" });
     }
 
     // Construct the full S3 key with library path if provided
@@ -132,6 +191,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
     }
 
+    // For anonymous users, validate share access
+    if (!isAuthenticated) {
+      const allowed = await validateShareAccess(docId, fullS3Key);
+      if (!allowed) {
+        return res.status(403).json({ message: "Access denied to audio file" });
+      }
+    }
+
     // Generate signed URL only after all security checks pass
     const signedUrl = await getS3AudioSignedUrl(fullS3Key);
 
@@ -148,4 +215,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
 // Use JWT-only auth since audio should be accessible to authenticated users
 // but doesn't require the siteAuth cookie
-export default withJwtOnlyAuth(handler);
+export default handler;

@@ -21,7 +21,10 @@ export function generateEmailContent(options: EmailTemplateOptions): {
   text: string;
 } {
   const siteConfig = loadSiteConfigSync(options.siteId);
-  const baseUrl = options.baseUrl || process.env.NEXT_PUBLIC_BASE_URL || "https://ananda.ai";
+  const baseUrl = options.baseUrl || process.env.NEXT_PUBLIC_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_BASE_URL environment variable is required for email generation");
+  }
 
   // Get site-specific values
   const emailGreeting = options.greeting || siteConfig?.emailGreeting || "Hi there,";

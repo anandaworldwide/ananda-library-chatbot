@@ -1,0 +1,73 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "prod_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "prod_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "prod_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "prod_chatLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "convId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "uuid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

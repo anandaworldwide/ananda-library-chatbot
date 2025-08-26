@@ -1,4 +1,5 @@
 import { getToken } from "./tokenManager";
+import { getOrCreateUUID } from "./uuid";
 
 interface AudioUrlResponse {
   signedUrl: string;
@@ -21,13 +22,24 @@ interface AudioUrlError {
  * @returns Promise<string> - The secure signed URL for the audio file
  * @throws Error if the audio file cannot be accessed or is invalid
  */
-export async function getSecureAudioUrl(filename: string, library?: string): Promise<string> {
+export async function getSecureAudioUrl(filename: string, library?: string, docId?: string): Promise<string> {
   try {
     // Get JWT token for authentication
     const token = await getToken();
+    const uuid = getOrCreateUUID();
 
-    if (!token) {
-      throw new Error("Authentication required for audio access");
+    // Prepare request body based on authentication status
+    const requestBody: any = {
+      audioS3Key: filename,
+      library,
+    };
+
+    // For authenticated users, include UUID
+    if (token && !token.includes("placeholder")) {
+      requestBody.uuid = uuid;
+    } else if (docId) {
+      // For anonymous users, include docId for share validation
+      requestBody.docId = docId;
     }
 
     // Make request to secure audio endpoint
@@ -35,12 +47,9 @@ export async function getSecureAudioUrl(filename: string, library?: string): Pro
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        ...(token && !token.includes("placeholder") ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({
-        audioS3Key: filename,
-        library: library,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -95,7 +104,7 @@ const audioUrlCache = new Map<string, CachedAudioUrl>();
  * @param library - Optional library name
  * @returns Promise<string> - The secure signed URL
  */
-export async function getCachedSecureAudioUrl(filename: string, library?: string): Promise<string> {
+export async function getCachedSecureAudioUrl(filename: string, library?: string, docId?: string): Promise<string> {
   const cacheKey = `${library || "default"}:${filename}`;
   const cached = audioUrlCache.get(cacheKey);
 
@@ -105,7 +114,7 @@ export async function getCachedSecureAudioUrl(filename: string, library?: string
   }
 
   // Fetch new URL and cache it
-  const url = await getSecureAudioUrl(filename, library);
+  const url = await getSecureAudioUrl(filename, library, docId);
 
   // Cache for 3.5 hours (30 minutes before the 4-hour expiration)
   audioUrlCache.set(cacheKey, {
