@@ -799,7 +799,7 @@ async function handleChatRequest(req: NextRequest) {
       let tokensStreamed = 0;
       let firstTokenSent = false;
       let performanceLogged = false;
-      let titleGenerationPromise: Promise<void> | undefined;
+      let titleGenerationPromise: Promise<string | null> | undefined;
 
       const sendData = (data: StreamingResponseData) => {
         if (!isControllerClosed) {
@@ -923,10 +923,14 @@ async function handleChatRequest(req: NextRequest) {
                 const title = await generateTitle(originalQuestion);
                 if (title) {
                   sendData({ convId: conversationId, title });
+                  // Store the generated title for later database update
+                  return title;
                 }
+                return null;
               } catch (err) {
                 console.error("Parallel title generation failed:", err);
                 // Continue without title - it's not critical for functionality
+                return null;
               }
             })();
           }
@@ -994,9 +998,26 @@ async function handleChatRequest(req: NextRequest) {
                 docId: savedDocId,
               });
 
-              // For new conversations, title was already generated and sent early
+              // For new conversations, update the document with the generated title
+              if (conversationId && titleGenerationPromise) {
+                // Wait for title generation to complete and update the document
+                titleGenerationPromise
+                  .then(async (generatedTitle) => {
+                    if (generatedTitle && savedDocId) {
+                      try {
+                        const { generateAndUpdateTitle } = await import("@/utils/server/titleGeneration");
+                        await generateAndUpdateTitle(savedDocId, originalQuestion);
+                      } catch (titleUpdateError) {
+                        console.error("Failed to update document with generated title:", titleUpdateError);
+                        // Continue without title update - it's not critical for functionality
+                      }
+                    }
+                  })
+                  .catch((titleError) => {
+                    console.error("Title generation promise failed:", titleError);
+                  });
+              }
               // For follow-up messages, no title generation needed
-              // This eliminates the duplicate title generation that happened before
             }
           } catch (saveError) {
             // Silently handle save errors to avoid breaking the chat flow
