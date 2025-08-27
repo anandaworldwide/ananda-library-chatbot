@@ -7,6 +7,7 @@ import type { GetServerSideProps, NextApiRequest } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { ResendInvitationModal } from "@/components/ResendInvitationModal";
 
 interface PendingUser {
   email: string;
@@ -24,6 +25,9 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
   const [jwt, setJwt] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"info" | "error">("info");
+  const [isResendModalOpen, setIsResendModalOpen] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState<string>("");
+  const [resending, setResending] = useState(false);
 
   // Shared function to handle token refresh and retry logic
   async function fetchWithTokenRefresh<T>(
@@ -94,7 +98,13 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
     }
   }
 
-  async function onResend(targetEmail: string) {
+  function handleResendClick(targetEmail: string) {
+    setSelectedEmail(targetEmail);
+    setIsResendModalOpen(true);
+  }
+
+  async function onResend(targetEmail: string, customMessage?: string) {
+    setResending(true);
     setMessage(null);
     setMessageType("info");
     try {
@@ -104,16 +114,18 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
           "Content-Type": "application/json",
           ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
         },
-        body: JSON.stringify({ email: targetEmail }),
+        body: JSON.stringify({ email: targetEmail, customMessage }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to resend");
-      setMessage(`Resent to ${targetEmail}`);
+      setMessage(`Resent invitation to ${targetEmail}`);
       setMessageType("info");
       await fetchPending();
     } catch (e: any) {
       setMessage(e?.message || "Failed to resend");
       setMessageType("error");
+    } finally {
+      setResending(false);
     }
   }
 
@@ -236,7 +248,7 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
                       <td className="py-3 px-4">
                         <button
                           className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-                          onClick={() => onResend(u.email)}
+                          onClick={() => handleResendClick(u.email)}
                         >
                           Resend
                         </button>
@@ -260,6 +272,14 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
             Back to Users
           </a>
         </div>
+
+        <ResendInvitationModal
+          isOpen={isResendModalOpen}
+          onClose={() => setIsResendModalOpen(false)}
+          onResend={onResend}
+          email={selectedEmail}
+          isSubmitting={resending}
+        />
       </div>
     </Layout>
   );

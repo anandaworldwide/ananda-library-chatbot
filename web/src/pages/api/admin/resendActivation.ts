@@ -35,10 +35,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
-  const { email } = req.body as { email?: string };
+  const { email, customMessage } = req.body as { email?: string; customMessage?: string };
   if (!email || typeof email !== "string") {
     return res.status(400).json({ error: "Invalid email" });
   }
+
+  // Validate customMessage if provided
+  const validCustomMessage =
+    typeof customMessage === "string" && customMessage.trim() ? customMessage.trim() : undefined;
 
   const usersCol = getUsersCollectionName();
   const userDocRef = db.collection(usersCol).doc(email.toLowerCase());
@@ -58,7 +62,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       { merge: true },
       "resend activation"
     );
-    await sendActivationEmail(email, token, req);
+    await sendActivationEmail(email, token, req, validCustomMessage);
     await writeAuditLog(req, "admin_resend_activation", email.toLowerCase(), { outcome: "success" });
     return res.status(200).json({ message: "resent" });
   } catch (err) {

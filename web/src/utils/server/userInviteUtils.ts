@@ -26,7 +26,7 @@ export function getInviteExpiryDate(days: number = 14): Date {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 }
 
-export async function sendActivationEmail(email: string, token: string, req?: any) {
+export async function sendActivationEmail(email: string, token: string, req?: any, customMessage?: string) {
   // Use request domain if available, otherwise fall back to configured domain
   let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   if (!baseUrl) {
@@ -45,11 +45,24 @@ export async function sendActivationEmail(email: string, token: string, req?: an
   const siteConfig = loadSiteConfigSync();
   const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
 
-  const message = `Click here to activate your account.
+  // Build the message with custom message at the top if provided
+  let message = "";
+
+  if (customMessage) {
+    message = `${customMessage}
+
+Click here to activate your account.
 
 (Or click ${url})
 
 This link expires in 14 days.`;
+  } else {
+    message = `Click here to activate your account.
+
+(Or click ${url})
+
+This link expires in 14 days.`;
+  }
 
   const params = createEmailParams(
     process.env.CONTACT_EMAIL || "noreply@ananda.org",

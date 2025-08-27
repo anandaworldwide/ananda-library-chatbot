@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { AddUsersModal } from "@/components/AddUsersModal";
 
+// Mock fetch for profile API
+global.fetch = jest.fn();
+
 describe("AddUsersModal", () => {
   const defaultProps = {
     isOpen: true,
@@ -13,6 +16,12 @@ describe("AddUsersModal", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Mock profile API response with admin first name
+    (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ firstName: "Michael" }),
+    } as Response);
   });
 
   it("renders when open", () => {
@@ -77,7 +86,10 @@ describe("AddUsersModal", () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(mockOnAddUsers).toHaveBeenCalledWith(["user1@example.com", "user2@example.com"]);
+      expect(mockOnAddUsers).toHaveBeenCalledWith(
+        ["user1@example.com", "user2@example.com"],
+        expect.stringContaining("Please join us in using Luca")
+      );
     });
 
     expect(defaultProps.onClose).toHaveBeenCalled();
@@ -94,7 +106,10 @@ describe("AddUsersModal", () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(mockOnAddUsers).toHaveBeenCalledWith(["john@example.com", "jane@example.com"]);
+      expect(mockOnAddUsers).toHaveBeenCalledWith(
+        ["john@example.com", "jane@example.com"],
+        expect.stringContaining("Please join us in using Luca")
+      );
     });
   });
 
@@ -186,5 +201,27 @@ describe("AddUsersModal", () => {
 
     // Modal should not close on error
     expect(defaultProps.onClose).not.toHaveBeenCalled();
+  });
+
+  it("uses admin first name in default custom message", async () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    // Wait for the profile fetch and message update
+    await waitFor(() => {
+      const textarea = screen.getByLabelText("Custom Message (Optional)");
+      expect(textarea.value).toContain("Aums,\nMichael");
+    });
+  });
+
+  it("handles profile fetch failure gracefully", async () => {
+    (global.fetch as jest.MockedFunction<typeof fetch>).mockRejectedValue(new Error("Network error"));
+
+    render(<AddUsersModal {...defaultProps} />);
+
+    // Should still show default message with "Admin" fallback
+    await waitFor(() => {
+      const textarea = screen.getByLabelText("Custom Message (Optional)");
+      expect(textarea.value).toContain("Aums,\nAdmin");
+    });
   });
 });

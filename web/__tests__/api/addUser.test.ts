@@ -134,7 +134,8 @@ describe("/api/admin/addUser", () => {
     expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith(
       "test@example.com",
       "test-token",
-      expect.any(Object)
+      expect.any(Object),
+      undefined
     );
   });
 
@@ -176,7 +177,8 @@ describe("/api/admin/addUser", () => {
     expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith(
       "test@example.com",
       "test-token",
-      expect.any(Object)
+      expect.any(Object),
+      undefined
     );
   });
 });

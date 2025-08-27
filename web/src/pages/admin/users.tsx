@@ -290,7 +290,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
     setCurrentPage(1); // Reset to first page when searching
   };
 
-  async function handleAddUsers(emails: string[]) {
+  async function handleAddUsers(emails: string[], customMessage?: string) {
     setSubmitting(true);
     setMessage(null);
     setMessageType("info");
@@ -311,7 +311,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
               ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
             },
             credentials: "include",
-            body: JSON.stringify({ email }),
+            body: JSON.stringify({ email, customMessage }),
           });
           const data = await res.json();
 

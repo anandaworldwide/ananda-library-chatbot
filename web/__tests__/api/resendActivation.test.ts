@@ -180,7 +180,8 @@ describe("/api/admin/resendActivation", () => {
     expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith(
       "pending@example.com",
       "test-token",
-      expect.any(Object)
+      expect.any(Object),
+      undefined
     );
   });
 });

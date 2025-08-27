@@ -1,19 +1,26 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { validateEmailInput } from "@/utils/client/emailParser";
 
-interface AddUsersModalProps {
+interface ResendInvitationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddUsers: (emails: string[], customMessage?: string) => Promise<void>;
+  onResend: (email: string, customMessage?: string) => Promise<void>;
+  email: string;
   isSubmitting?: boolean;
 }
 
-export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = false }: AddUsersModalProps) {
-  const [emailInput, setEmailInput] = useState("");
+export function ResendInvitationModal({
+  isOpen,
+  onClose,
+  onResend,
+  email,
+  isSubmitting = false,
+}: ResendInvitationModalProps) {
   const [customMessage, setCustomMessage] = useState("");
-  const [validationError, setValidationError] = useState<string | null>(null);
   const [adminFirstName, setAdminFirstName] = useState<string>("Admin");
+  // Tracks whether the admin has typed in the textarea. If true we stop
+  // overwriting their input when the admin name loads or the modal re-opens.
+  const [messageModified, setMessageModified] = useState(false);
 
   // Fetch admin's profile to get first name
   useEffect(() => {
@@ -40,43 +47,29 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
 
   // Set default message when admin name is available or modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !messageModified) {
       const defaultMessage = `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`;
       setCustomMessage(defaultMessage);
     }
-  }, [adminFirstName, isOpen]);
+  }, [adminFirstName, isOpen, messageModified]);
+
+  // Reset modified flag when modal is closed so next open re-initialises textarea
+  useEffect(() => {
+    if (!isOpen) {
+      setMessageModified(false);
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!emailInput.trim()) {
-      setValidationError("Please enter at least one email address");
-      return;
-    }
-
-    const validation = validateEmailInput(emailInput);
-
-    if (validation.validCount === 0) {
-      setValidationError("No valid email addresses found");
-      return;
-    }
-
-    if (validation.invalidEntries.length > 0) {
-      setValidationError(
-        `Invalid email format${validation.invalidEntries.length > 1 ? "s" : ""}: ${validation.invalidEntries.join(", ")}`
-      );
-      return;
-    }
-
-    setValidationError(null);
-
     try {
-      await onAddUsers(validation.validEmails, customMessage.trim() || undefined);
+      await onResend(email, customMessage.trim() || undefined);
       // Clear the form and close modal on success
-      setEmailInput("");
       setCustomMessage(
         `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`
       );
+      setMessageModified(false);
       onClose();
     } catch (error) {
       // Error handling is done by the parent component
@@ -85,36 +78,20 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
 
   const handleClose = () => {
     if (!isSubmitting) {
-      setEmailInput("");
       setCustomMessage(
         `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`
       );
-      setValidationError(null);
+      setMessageModified(false);
       onClose();
     }
   };
 
-  const validation = validateEmailInput(emailInput);
-  const hasContent = emailInput.trim().length > 0;
-
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Add Users" className="max-w-4xl">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Resend Invitation" className="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email-input" className="block text-sm font-medium text-gray-700 mb-2">
-            Email Addresses
-          </label>
-          <textarea
-            id="email-input"
-            value={emailInput}
-            onChange={(e) => setEmailInput(e.target.value)}
-            disabled={isSubmitting}
-            className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            placeholder="John Doe <john@example.com>, user@example.com"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Separate multiple email addresses with commas or new lines. You can use either bare email addresses or names
-            with angle brackets.
+          <p className="text-sm text-gray-600 mb-4">
+            Resending invitation to: <strong>{email}</strong>
           </p>
         </div>
 
@@ -125,7 +102,10 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
           <textarea
             id="custom-message"
             value={customMessage}
-            onChange={(e) => setCustomMessage(e.target.value)}
+            onChange={(e) => {
+              setMessageModified(true);
+              setCustomMessage(e.target.value);
+            }}
             disabled={isSubmitting}
             className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="Enter a personal message to include in the invitation email..."
@@ -135,28 +115,6 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
             clear it to use the standard invitation.
           </p>
         </div>
-
-        {hasContent && (
-          <div className="text-sm text-gray-600">
-            {validation.totalEntries > 0 && (
-              <div>
-                Found {validation.totalEntries} entr{validation.totalEntries === 1 ? "y" : "ies"}
-                {validation.validCount > 0 && (
-                  <span className="text-green-600">
-                    , {validation.validCount} valid email{validation.validCount === 1 ? "" : "s"}
-                  </span>
-                )}
-                {validation.invalidEntries.length > 0 && (
-                  <span className="text-red-600">, {validation.invalidEntries.length} invalid</span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {validationError && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">{validationError}</div>
-        )}
 
         <div className="flex justify-end space-x-3 pt-4">
           <button
@@ -169,10 +127,10 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
           </button>
           <button
             type="submit"
-            disabled={isSubmitting || validation.validCount === 0}
+            disabled={isSubmitting}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? "Adding..." : `Add ${validation.validCount} User${validation.validCount === 1 ? "" : "s"}`}
+            {isSubmitting ? "Resending..." : "Resend Invitation"}
           </button>
         </div>
       </form>
