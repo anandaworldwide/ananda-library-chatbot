@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface ConversationMenuProps {
   onRename: () => void;
@@ -6,8 +7,15 @@ interface ConversationMenuProps {
   isVisible: boolean;
 }
 
+interface MenuPosition {
+  top: number;
+  left: number;
+  right?: number;
+}
+
 export default function ConversationMenu({ onRename, onDelete, isVisible }: ConversationMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition>({ top: 0, left: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -37,9 +45,74 @@ export default function ConversationMenu({ onRename, onDelete, isVisible }: Conv
     }
   }, [isVisible]);
 
+  // Handle window resize and scroll to reposition menu
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleReposition = () => {
+      const position = calculateMenuPosition();
+      setMenuPosition(position);
+    };
+
+    const handleScroll = () => {
+      // Close menu on scroll to avoid confusion
+      setIsOpen(false);
+    };
+
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleScroll, true); // Use capture to catch all scroll events
+
+    return () => {
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [isOpen]);
+
+  const calculateMenuPosition = (): MenuPosition => {
+    if (!buttonRef.current) return { top: 0, left: 0 };
+
+    const buttonRect = buttonRef.current.getBoundingClientRect();
+    const menuWidth = 128; // w-32 = 128px
+    const menuHeight = 80; // Approximate height for 2 menu items
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Use fixed positioning relative to viewport, not absolute with scroll offset
+    let top = buttonRect.bottom + 4; // 4px gap below button
+    let left = buttonRect.right - menuWidth; // Align right edge with button
+
+    // Adjust if menu would go off the right edge
+    if (left < 8) {
+      left = 8; // 8px margin from left edge
+    }
+
+    // Adjust if menu would go off the left edge
+    if (left + menuWidth > viewportWidth - 8) {
+      left = viewportWidth - menuWidth - 8; // 8px margin from right edge
+    }
+
+    // Adjust if menu would go off the bottom edge
+    if (top + menuHeight > viewportHeight - 8) {
+      top = buttonRect.top - menuHeight - 4; // Position above button
+    }
+
+    // Ensure menu doesn't go above viewport
+    if (top < 8) {
+      top = 8; // 8px margin from top
+    }
+
+    return { top, left };
+  };
+
   const handleMenuClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!isOpen) {
+      const position = calculateMenuPosition();
+      setMenuPosition(position);
+    }
+
     setIsOpen(!isOpen);
   };
 
@@ -85,28 +158,35 @@ export default function ConversationMenu({ onRename, onDelete, isVisible }: Conv
         </svg>
       </button>
 
-      {/* Dropdown menu */}
-      {isOpen && (
-        <div
-          ref={menuRef}
-          className="absolute right-0 top-8 w-32 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50"
-        >
-          <button
-            onClick={handleRename}
-            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+      {/* Dropdown menu - rendered as portal to avoid clipping */}
+      {isOpen &&
+        typeof window !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="fixed w-32 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50"
+            style={{
+              top: `${menuPosition.top}px`,
+              left: `${menuPosition.left}px`,
+            }}
           >
-            <span className="material-icons text-sm mr-2">edit</span>
-            Rename
-          </button>
-          <button
-            onClick={handleDelete}
-            className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center"
-          >
-            <span className="material-icons text-sm mr-2">delete</span>
-            Delete
-          </button>
-        </div>
-      )}
+            <button
+              onClick={handleRename}
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+            >
+              <span className="material-icons text-sm mr-2">edit</span>
+              Rename
+            </button>
+            <button
+              onClick={handleDelete}
+              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center"
+            >
+              <span className="material-icons text-sm mr-2">delete</span>
+              Delete
+            </button>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

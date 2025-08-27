@@ -163,4 +163,49 @@ describe("ConversationMenu", () => {
     expect(mockParentClick).not.toHaveBeenCalled();
     expect(mockOnRename).toHaveBeenCalledTimes(1);
   });
+
+  it("should render menu with portal when opened", () => {
+    // Mock getBoundingClientRect for positioning calculations
+    const mockGetBoundingClientRect = jest.fn(() => ({
+      bottom: 100,
+      right: 200,
+      top: 80,
+      left: 180,
+      width: 20,
+      height: 20,
+    }));
+
+    render(<ConversationMenu isVisible={true} onRename={mockOnRename} onDelete={mockOnDelete} />);
+
+    const menuButton = screen.getByRole("button", { name: /conversation options/i });
+
+    // Mock the button ref
+    Object.defineProperty(menuButton, "getBoundingClientRect", {
+      value: mockGetBoundingClientRect,
+    });
+
+    fireEvent.click(menuButton);
+
+    // Menu should be rendered in portal (document.body)
+    const menuItems = screen.getAllByRole("button");
+    expect(menuItems.length).toBeGreaterThan(1); // Menu button + menu items
+    expect(screen.getByText("Rename")).toBeInTheDocument();
+    expect(screen.getByText("Delete")).toBeInTheDocument();
+  });
+
+  it("should close menu on scroll event", async () => {
+    render(<ConversationMenu isVisible={true} onRename={mockOnRename} onDelete={mockOnDelete} />);
+
+    const menuButton = screen.getByRole("button", { name: /conversation options/i });
+    fireEvent.click(menuButton);
+
+    expect(screen.getByText("Rename")).toBeInTheDocument();
+
+    // Simulate scroll event
+    fireEvent.scroll(window);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Rename")).not.toBeInTheDocument();
+    });
+  });
 });
