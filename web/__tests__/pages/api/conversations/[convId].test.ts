@@ -224,6 +224,59 @@ describe("/api/conversations/[convId]", () => {
       });
     });
 
+    it("should clean up likes when deleting conversation", async () => {
+      const { req, res } = createMocks({
+        method: "DELETE",
+        query: { convId: "test-conv-id" },
+        headers: { authorization: "Bearer valid-token" },
+      });
+
+      mockVerifyToken.mockReturnValue({
+        email: "test@example.com",
+        role: "user",
+        uuid: "test-uuid",
+      } as any);
+
+      const mockDocs = [
+        { ref: { delete: jest.fn() }, id: "doc1" },
+        { ref: { delete: jest.fn() }, id: "doc2" },
+      ];
+
+      // Mock conversation documents query
+      mockFirestoreQueryGet
+        .mockResolvedValueOnce({
+          empty: false,
+          docs: mockDocs,
+        } as any)
+        // Mock related questions cleanup query
+        .mockResolvedValueOnce({
+          empty: true,
+          docs: [],
+        } as any)
+        // Mock likes cleanup query
+        .mockResolvedValueOnce({
+          empty: false,
+          docs: [{ ref: { delete: jest.fn() } }, { ref: { delete: jest.fn() } }],
+        } as any);
+
+      await handler(req as any, res as any);
+
+      expect(res._getStatusCode()).toBe(200);
+      expect(JSON.parse(res._getData())).toEqual({
+        message: "Conversation deleted successfully",
+        deletedDocuments: 2,
+      });
+
+      // Verify that likes cleanup query was called
+      expect(mockFirestoreQueryGet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.any(Function),
+        }),
+        "likes cleanup query",
+        "deletedAnswerIds batch: doc1, doc2"
+      );
+    });
+
     it("should return 404 for non-existent conversation", async () => {
       const { req, res } = createMocks({
         method: "DELETE",

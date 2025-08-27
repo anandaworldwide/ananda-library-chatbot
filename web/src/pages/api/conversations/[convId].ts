@@ -7,6 +7,9 @@ import { verifyToken } from "@/utils/server/jwtUtils";
 import { getSecureUUID } from "@/utils/server/uuidUtils";
 import firebase from "firebase-admin";
 
+// Get environment name for collection naming
+const envName = process.env.NODE_ENV === "production" ? "prod" : "dev";
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Rate limiting
   const allowed = await genericRateLimiter(req, res, {
@@ -155,7 +158,10 @@ async function handleDeleteConversation(
     // Step 1: Clean up related questions references
     await cleanupRelatedQuestionsReferences(deletedDocIds, collectionName);
 
-    // Step 2: Delete all documents in the conversation
+    // Step 2: Clean up likes for deleted documents
+    await cleanupLikesForDeletedDocuments(deletedDocIds);
+
+    // Step 3: Delete all documents in the conversation
     const batch = db.batch();
 
     conversationDocs.docs.forEach((doc: firebase.firestore.QueryDocumentSnapshot) => {
@@ -232,6 +238,50 @@ async function cleanupRelatedQuestionsReferences(deletedDocIds: string[], collec
     console.log(`Cleaned up related questions references for ${deletedDocIds.length} deleted documents`);
   } catch (error) {
     console.error("Error cleaning up related questions references:", error);
+    // Don't throw - we want the main deletion to proceed even if cleanup fails
+  }
+}
+
+/**
+ * Removes like documents that reference deleted answer document IDs
+ */
+async function cleanupLikesForDeletedDocuments(deletedDocIds: string[]) {
+  try {
+    const likesCollection = db!.collection(`${envName}_likes`);
+    const batchSize = 10; // Firestore limit for array-contains-any
+    const cleanupPromises: Promise<void>[] = [];
+
+    for (let i = 0; i < deletedDocIds.length; i += batchSize) {
+      const batch = deletedDocIds.slice(i, i + batchSize);
+
+      // Query for like documents that reference any of these deleted answer IDs
+      const query = likesCollection.where("answerId", "in", batch);
+
+      const querySnapshot = await firestoreQueryGet(
+        query,
+        "likes cleanup query",
+        `deletedAnswerIds batch: ${batch.join(", ")}`
+      );
+
+      if (!querySnapshot.empty) {
+        const deleteBatch = db!.batch();
+        let hasDeletes = false;
+
+        querySnapshot.docs.forEach((doc: firebase.firestore.QueryDocumentSnapshot) => {
+          deleteBatch.delete(doc.ref);
+          hasDeletes = true;
+        });
+
+        if (hasDeletes) {
+          cleanupPromises.push(deleteBatch.commit().then(() => {}));
+        }
+      }
+    }
+
+    await Promise.all(cleanupPromises);
+    console.log(`Cleaned up likes for ${deletedDocIds.length} deleted documents`);
+  } catch (error) {
+    console.error("Error cleaning up likes for deleted documents:", error);
     // Don't throw - we want the main deletion to proceed even if cleanup fails
   }
 }
