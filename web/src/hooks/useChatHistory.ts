@@ -193,6 +193,47 @@ export function useChatHistory(limit: number = 20) {
     setConversations((prev) => prev.map((conv) => (conv.convId === convId ? { ...conv, title: newTitle } : conv)));
   }, []);
 
+  // Function to rename a conversation
+  const renameConversation = useCallback(
+    async (convId: string, newTitle: string) => {
+      const response = await fetchWithAuth(`/api/conversations/${convId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title: newTitle }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to rename conversation");
+      }
+
+      // Update local state
+      updateConversationTitle(convId, newTitle);
+
+      return await response.json();
+    },
+    [updateConversationTitle]
+  );
+
+  // Function to delete a conversation
+  const deleteConversation = useCallback(async (convId: string) => {
+    const response = await fetchWithAuth(`/api/conversations/${convId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to delete conversation");
+    }
+
+    // Remove from local state
+    setConversations((prev) => prev.filter((conv) => conv.convId !== convId));
+
+    return await response.json();
+  }, []);
+
   const refetch = useCallback(() => fetchConversations(false), [fetchConversations]);
   const loadMore = useCallback(() => fetchConversations(true), [fetchConversations]);
 
@@ -206,5 +247,7 @@ export function useChatHistory(limit: number = 20) {
     loadMore,
     addNewConversation,
     updateConversationTitle,
+    renameConversation,
+    deleteConversation,
   };
 }

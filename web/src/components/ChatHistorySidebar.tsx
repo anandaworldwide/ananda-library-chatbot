@@ -1,7 +1,10 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useChatHistory, ConversationGroup } from "@/hooks/useChatHistory";
 import { useRouter } from "next/router";
 import { logEvent } from "@/utils/client/analytics";
+import ConversationMenu from "./ConversationMenu";
+import RenameConversationModal from "./RenameConversationModal";
+import DeleteConversationModal from "./DeleteConversationModal";
 
 export type SidebarRefetch = () => void;
 
@@ -25,9 +28,42 @@ export default function ChatHistorySidebar({
   currentConvId,
   onGetSidebarFunctions,
 }: ChatHistorySidebarProps) {
-  const { loading, error, conversations, hasMore, loadMore, addNewConversation, updateConversationTitle, refetch } =
-    useChatHistory(20);
+  const {
+    loading,
+    error,
+    conversations,
+    hasMore,
+    loadMore,
+    addNewConversation,
+    updateConversationTitle,
+    refetch,
+    renameConversation,
+    deleteConversation,
+  } = useChatHistory(20);
   const router = useRouter();
+
+  // Modal states
+  const [renameModal, setRenameModal] = useState<{
+    isOpen: boolean;
+    convId: string;
+    currentTitle: string;
+  }>({
+    isOpen: false,
+    convId: "",
+    currentTitle: "",
+  });
+
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    convId: string;
+    title: string;
+  }>({
+    isOpen: false,
+    convId: "",
+    title: "",
+  });
+
+  const [operationLoading, setOperationLoading] = useState(false);
 
   // Expose functions to parent
   useEffect(() => {
@@ -62,6 +98,66 @@ export default function ChatHistorySidebar({
       logEvent("chat_history_load_more", "Chat History", "load_more_conversations", conversations.length);
 
       loadMore();
+    }
+  };
+
+  // Handle rename conversation
+  const handleRename = (conversation: ConversationGroup) => {
+    setRenameModal({
+      isOpen: true,
+      convId: conversation.convId,
+      currentTitle: conversation.title,
+    });
+  };
+
+  const handleRenameSubmit = async (newTitle: string) => {
+    setOperationLoading(true);
+    try {
+      await renameConversation(renameModal.convId, newTitle);
+
+      // Track rename event
+      logEvent("chat_history_conversation_rename", "Chat History", renameModal.convId, newTitle.length);
+    } catch (error) {
+      console.error("Failed to rename conversation:", error);
+      throw error; // Re-throw to let modal handle the error display
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  const handleRenameClose = () => {
+    if (!operationLoading) {
+      setRenameModal({ isOpen: false, convId: "", currentTitle: "" });
+    }
+  };
+
+  // Handle delete conversation
+  const handleDelete = (conversation: ConversationGroup) => {
+    setDeleteModal({
+      isOpen: true,
+      convId: conversation.convId,
+      title: conversation.title,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    setOperationLoading(true);
+    try {
+      await deleteConversation(deleteModal.convId);
+
+      // Track delete event
+      logEvent("chat_history_conversation_delete", "Chat History", deleteModal.convId, 1);
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
+      throw error; // Re-throw to let modal handle the error display
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  const handleDeleteClose = () => {
+    if (!operationLoading) {
+      setDeleteModal({ isOpen: false, convId: "", title: "" });
     }
   };
 
@@ -110,23 +206,36 @@ export default function ChatHistorySidebar({
               {conversations.map((conversation) => {
                 const isCurrentConversation = currentConvId === conversation.convId;
                 return (
-                  <button
+                  <div
                     key={conversation.convId}
-                    onClick={() => handleConversationClick(conversation)}
-                    className={`w-full text-left p-2 rounded-lg transition-colors duration-150 mb-1 group ${
+                    className={`relative rounded-lg transition-colors duration-150 mb-1 group ${
                       isCurrentConversation ? "bg-white bg-opacity-80 shadow-sm" : "hover:bg-white hover:bg-opacity-60"
                     }`}
                   >
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className={`text-sm font-medium truncate ${
-                          isCurrentConversation ? "text-blue-700" : "text-gray-900 group-hover:text-blue-600"
-                        }`}
-                      >
-                        {conversation.title}
-                      </p>
+                    <button
+                      onClick={() => handleConversationClick(conversation)}
+                      className="w-full text-left p-2 pr-8 rounded-lg"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`text-sm font-medium truncate ${
+                            isCurrentConversation ? "text-blue-700" : "text-gray-900 group-hover:text-blue-600"
+                          }`}
+                        >
+                          {conversation.title}
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* Three-dot menu */}
+                    <div className="absolute right-2 top-2">
+                      <ConversationMenu
+                        isVisible={true}
+                        onRename={() => handleRename(conversation)}
+                        onDelete={() => handleDelete(conversation)}
+                      />
                     </div>
-                  </button>
+                  </div>
                 );
               })}
 
@@ -151,6 +260,24 @@ export default function ChatHistorySidebar({
           )}
         </div>
       </div>
+
+      {/* Rename Modal */}
+      <RenameConversationModal
+        isOpen={renameModal.isOpen}
+        onClose={handleRenameClose}
+        onSave={handleRenameSubmit}
+        currentTitle={renameModal.currentTitle}
+        isLoading={operationLoading}
+      />
+
+      {/* Delete Modal */}
+      <DeleteConversationModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleDeleteClose}
+        onConfirm={handleDeleteConfirm}
+        conversationTitle={deleteModal.title}
+        isLoading={operationLoading}
+      />
     </>
   );
 }
