@@ -4,6 +4,7 @@ import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreQueryGet } from "@/utils/server/firestoreRetryUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { verifyToken } from "@/utils/server/jwtUtils";
+import { getSecureUUID } from "@/utils/server/uuidUtils";
 import firebase from "firebase-admin";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -37,11 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
-  // Get UUID from cookies (like other endpoints do)
-  const uuid = req.cookies?.["uuid"];
-  if (!uuid) {
-    return res.status(400).json({ error: "UUID not found in cookies" });
+  // Get UUID securely based on site configuration
+  const uuidResult = getSecureUUID(req, userPayload);
+  if (!uuidResult.success) {
+    return res.status(uuidResult.statusCode).json({ error: uuidResult.error });
   }
+  const uuid = uuidResult.uuid;
 
   if (req.method === "PATCH") {
     return handleRenameConversation(req, res, convId, uuid, userPayload);

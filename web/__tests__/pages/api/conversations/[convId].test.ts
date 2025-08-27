@@ -2,18 +2,21 @@ import { createMocks } from "node-mocks-http";
 import { verifyToken } from "@/utils/server/jwtUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { firestoreQueryGet } from "@/utils/server/firestoreRetryUtils";
+import { getSecureUUID } from "@/utils/server/uuidUtils";
 import { db } from "@/services/firebase";
 
 // Mock dependencies
 jest.mock("@/utils/server/jwtUtils");
 jest.mock("@/utils/server/genericRateLimiter");
 jest.mock("@/utils/server/firestoreRetryUtils");
+jest.mock("@/utils/server/uuidUtils");
 jest.mock("@/services/firebase");
 jest.mock("@/utils/server/firestoreUtils");
 
 const mockVerifyToken = verifyToken as jest.MockedFunction<typeof verifyToken>;
 const mockGenericRateLimiter = genericRateLimiter as jest.MockedFunction<typeof genericRateLimiter>;
 const mockFirestoreQueryGet = firestoreQueryGet as jest.MockedFunction<typeof firestoreQueryGet>;
+const mockGetSecureUUID = getSecureUUID as jest.MockedFunction<typeof getSecureUUID>;
 const mockDb = db as any;
 
 // Mock getAnswersCollectionName
@@ -55,6 +58,12 @@ describe("/api/conversations/[convId]", () => {
     // Default mocks
     mockGenericRateLimiter.mockResolvedValue(true);
 
+    // Mock successful UUID retrieval
+    mockGetSecureUUID.mockReturnValue({
+      success: true,
+      uuid: "test-uuid",
+    });
+
     // Mock database operations
     const mockCollection = {
       where: jest.fn().mockReturnThis(),
@@ -75,12 +84,12 @@ describe("/api/conversations/[convId]", () => {
         method: "PATCH",
         query: { convId: "test-conv-id" },
         headers: { authorization: "Bearer valid-token" },
-        cookies: { uuid: "test-uuid" },
         body: { title: "New Conversation Title" },
       });
 
       mockVerifyToken.mockReturnValue({
         email: "test@example.com",
+        role: "user",
         uuid: "test-uuid",
       } as any);
 
@@ -112,12 +121,13 @@ describe("/api/conversations/[convId]", () => {
         method: "PATCH",
         query: { convId: "test-conv-id" },
         headers: { authorization: "Bearer valid-token" },
-        cookies: { uuid: "test-uuid" },
+
         body: { title: "" },
       });
 
       mockVerifyToken.mockReturnValue({
         email: "test@example.com",
+        role: "user",
         uuid: "test-uuid",
       } as any);
 
@@ -134,12 +144,13 @@ describe("/api/conversations/[convId]", () => {
         method: "PATCH",
         query: { convId: "test-conv-id" },
         headers: { authorization: "Bearer valid-token" },
-        cookies: { uuid: "test-uuid" },
+
         body: { title: "a".repeat(101) },
       });
 
       mockVerifyToken.mockReturnValue({
         email: "test@example.com",
+        role: "user",
         uuid: "test-uuid",
       } as any);
 
@@ -156,12 +167,13 @@ describe("/api/conversations/[convId]", () => {
         method: "PATCH",
         query: { convId: "non-existent-conv-id" },
         headers: { authorization: "Bearer valid-token" },
-        cookies: { uuid: "test-uuid" },
+
         body: { title: "New Title" },
       });
 
       mockVerifyToken.mockReturnValue({
         email: "test@example.com",
+        role: "user",
         uuid: "test-uuid",
       } as any);
 
@@ -185,11 +197,11 @@ describe("/api/conversations/[convId]", () => {
         method: "DELETE",
         query: { convId: "test-conv-id" },
         headers: { authorization: "Bearer valid-token" },
-        cookies: { uuid: "test-uuid" },
       });
 
       mockVerifyToken.mockReturnValue({
         email: "test@example.com",
+        role: "user",
         uuid: "test-uuid",
       } as any);
 
@@ -217,11 +229,11 @@ describe("/api/conversations/[convId]", () => {
         method: "DELETE",
         query: { convId: "non-existent-conv-id" },
         headers: { authorization: "Bearer valid-token" },
-        cookies: { uuid: "test-uuid" },
       });
 
       mockVerifyToken.mockReturnValue({
         email: "test@example.com",
+        role: "user",
         uuid: "test-uuid",
       } as any);
 
@@ -282,7 +294,7 @@ describe("/api/conversations/[convId]", () => {
         method: "PATCH",
         query: { convId: "test-conv-id" },
         headers: { authorization: "Bearer valid-token" },
-        cookies: { uuid: "test-uuid" },
+
         body: { title: "New Title" },
       });
 
@@ -305,11 +317,11 @@ describe("/api/conversations/[convId]", () => {
         method: "GET",
         query: { convId: "test-conv-id" },
         headers: { authorization: "Bearer valid-token" },
-        cookies: { uuid: "test-uuid" },
       });
 
       mockVerifyToken.mockReturnValue({
         email: "test@example.com",
+        role: "user",
         uuid: "test-uuid",
       } as any);
 
@@ -337,6 +349,28 @@ describe("/api/conversations/[convId]", () => {
       expect(res._getStatusCode()).toBe(400);
       expect(JSON.parse(res._getData())).toEqual({
         error: "convId parameter is required",
+      });
+    });
+
+    it("should return 400 when UUID retrieval fails", async () => {
+      mockGetSecureUUID.mockReturnValue({
+        success: false,
+        error: "UUID not found in authentication token",
+        statusCode: 400,
+      });
+
+      const { req, res } = createMocks({
+        method: "PATCH",
+        query: { convId: "test-conv-id" },
+        headers: { authorization: "Bearer valid-token" },
+        body: { title: "New Title" },
+      });
+
+      await handler(req as any, res as any);
+
+      expect(res._getStatusCode()).toBe(400);
+      expect(JSON.parse(res._getData())).toEqual({
+        error: "UUID not found in authentication token",
       });
     });
   });

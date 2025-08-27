@@ -23,6 +23,9 @@ import jwt from "jsonwebtoken";
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { verifyToken } from "@/utils/server/jwtUtils";
+import { db } from "@/services/firebase";
+import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
+import { firestoreGet } from "@/utils/server/firestoreRetryUtils";
 
 /**
  * API handler for the web token endpoint
@@ -111,9 +114,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (authCookie) {
       try {
         const userPayload = verifyToken(authCookie) as any;
-        if (userPayload?.email) {
-          payload.email = userPayload.email;
-          payload.role = userPayload.role || "user";
+        if (userPayload?.email && db) {
+          // Get user's UUID from their profile
+          const userDoc = await firestoreGet(
+            db.collection(getUsersCollectionName()).doc(userPayload.email),
+            "get user UUID for JWT",
+            userPayload.email
+          );
+
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            payload.email = userPayload.email;
+            payload.role = userPayload.role || userData?.role || "user";
+            payload.uuid = userData?.uuid; // Include UUID in JWT payload
+          }
         }
       } catch (error) {
         // If auth cookie is invalid, continue with anonymous token
