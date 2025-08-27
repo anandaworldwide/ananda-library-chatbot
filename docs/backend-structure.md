@@ -163,6 +163,25 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
   - **Purpose:** Retrieves specific answers or question details.
   - **Auth:** Requires JWT authentication.
   - **Logic:** Fetches data from Firestore (`answersUtils.ts`).
+
+**Conversation History & Management:**
+
+- **`GET /api/chats`** (`pages/api/chats.ts`)
+  - **Purpose:** Retrieves user's conversation history with AI-generated titles.
+  - **Auth:** Requires JWT authentication.
+  - **Logic:** Fetches conversations grouped by `convId` from Firestore, returns last 20 conversations with lazy-loading
+    support.
+  - **Response:** Array of conversations with `convId`, `title`, `lastMessage`, `timestamp`, and `messageCount`.
+- **`GET /api/conversation/[convId]`** (`pages/api/conversation/[convId].ts`)
+  - **Purpose:** Retrieves full conversation history for a specific conversation ID.
+  - **Auth:** Requires JWT authentication (owner verification).
+  - **Logic:** Fetches all messages in a conversation grouped by `convId`, supports timestamp filtering for sharing.
+  - **Response:** Complete conversation thread with all messages and metadata.
+- **`GET /api/document/[docId]`** (`pages/api/document/[docId].ts`)
+  - **Purpose:** Retrieves single document for ownership verification and conversation lookup.
+  - **Auth:** Optional JWT authentication (supports anonymous sharing).
+  - **Logic:** Fetches document metadata including `convId` and ownership information.
+  - **Response:** Document metadata with `convId`, `uuid`, and basic conversation info.
 - **`POST /api/relatedQuestions`** (`pages/api/relatedQuestions.ts`)
   - **Purpose:** Generates and returns related questions based on the current query context.
   - **Auth:** Requires JWT authentication.
@@ -214,6 +233,11 @@ Data is stored across multiple services:
     - `likeCount`: Number of likes.
     - `messageId`: Unique ID for the message pair.
     - `namespace`: The Pinecone namespace used.
+    - **`convId`**: UUID v4 string that groups messages into conversations. New conversations generate new IDs;
+      follow-ups reuse existing IDs.
+    - **`title`**: AI-generated conversation title (~4-5 words) stored only on the first message of each conversation.
+      Follow-up messages reference the initial title.
+    - **`uuid`**: User identifier for cross-device conversation sync and ownership verification.
     - (Other potential fields: feedback, model used, etc.)
   - **`answers` (Collection):** Possibly stores standalone answers or references chat logs for voting/retrieval. Schema
     likely overlaps significantly with `chatLogs`.
@@ -346,7 +370,60 @@ material) from search results based on site configuration.
 
 ---
 
-## 4. Authentication Flows
+## 4. URL Navigation & Conversation Sharing
+
+The system implements a sophisticated URL navigation pattern that separates conversation ownership from sharing
+capabilities:
+
+### URL Patterns
+
+**Owner URLs (Full Conversation Access):**
+
+- **`/chat/[convId]`** - Shows complete ongoing conversation for the owner
+- **Behavior**: URL remains stable across follow-up messages within the same conversation
+- **Access**: Requires authentication and UUID ownership verification
+- **Features**: Full conversation history, ability to continue conversation, edit/delete capabilities
+
+**Share URLs (Point-in-Time Sharing):**
+
+- **`/share/[docId]`** - Shows conversation up to a specific message point
+- **Behavior**: View-only access showing conversation history up to the shared message timestamp
+- **Access**: No authentication required, works for anonymous users
+- **Features**: Read-only conversation view, no continuation capability, social sharing optimized
+
+**Legacy Redirects:**
+
+- **`/answers/[answerId]`** - Automatically redirects to `/share/[answerId]` for backward compatibility
+
+### Navigation Flow
+
+1. **New Conversation**: User starts at `/` (home page)
+2. **First Answer**: URL changes to `/chat/[convId]` via `window.history.pushState`
+3. **Follow-up Messages**: URL remains stable at `/chat/[convId]`
+4. **Sharing**: User can generate `/share/[docId]` links for any specific message point
+5. **Cross-Device**: Conversation URLs work across devices for authenticated users
+
+### Security & Access Control
+
+**Owner Verification:**
+
+- Server validates JWT token and UUID ownership before serving full conversations
+- Non-owners are redirected to share view or denied access based on sharing settings
+
+**Anonymous Sharing:**
+
+- Share URLs work without authentication
+- Server-side filtering ensures only content up to shared timestamp is visible
+- No URL parameters to prevent tampering with conversation scope
+
+**Privacy Controls:**
+
+- Users can choose conversation privacy levels: public, private (saved), or temporary (not saved)
+- Share links respect privacy settings and user permissions
+
+---
+
+## 5. Authentication Flows
 
 - **Standard User Login:**
   1. User submits username/password to `POST /api/login`.

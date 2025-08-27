@@ -121,6 +121,78 @@ If the site is configured to require user login:
 3. **Interact with Widget:** The user interacts with the chatbot within the widget, following the Basic Question &
    Answer Flow described above. API calls are made from the WordPress frontend to the Next.js backend API.
 
+#### D. Conversation History & Sharing Flow
+
+```text
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│    User     │    │  Frontend   │    │   Backend   │    │   Database  │
+│             │    │   (Next.js) │    │    APIs     │    │ (Firestore) │
+└──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+       │                  │                  │                  │
+       │ 1. Start New Chat│                  │                  │
+       ├─────────────────→│                  │                  │
+       │                  │ 2. Generate convId│                 │
+       │                  ├─────────────────→│                  │
+       │                  │ 3. AI Title Gen  │                  │
+       │                  ├─────────────────→│ 4. Store w/convId│
+       │                  │                  ├─────────────────→│
+       │ 5. URL: /chat/[convId]              │                  │
+       │←─────────────────┤                  │                  │
+       │                  │                  │                  │
+       │ 6. View History  │                  │                  │
+       ├─────────────────→│ 7. Fetch Convos │                  │
+       │                  ├─────────────────→│ 8. Query by UUID │
+       │                  │                  ├─────────────────→│
+       │                  │                  │ 9. Grouped Convos│
+       │                  │                  │←─────────────────┤
+       │ 10. Display List │                  │                  │
+       │←─────────────────┤                  │                  │
+       │                  │                  │                  │
+       │ 11. Share Link   │                  │                  │
+       ├─────────────────→│ 12. Generate     │                  │
+       │                  │ /share/[docId]   │                  │
+       │ 13. Share URL    │                  │                  │
+       │←─────────────────┤                  │                  │
+```
+
+**Conversation History Workflow:**
+
+1. **New Conversation Creation:**
+
+   - User starts a new chat from home page (`/`)
+   - System generates unique `convId` (UUID v4) for the conversation
+   - AI generates 4-5 word title for the conversation
+   - URL updates to `/chat/[convId]` after first answer
+   - Conversation appears in sidebar history with AI-generated title
+
+2. **Conversation History Access:**
+
+   - Authenticated users see conversation history in left sidebar (hamburger menu on mobile)
+   - Last 20 conversations displayed with lazy-loading for more
+   - Conversations grouped by `convId` with AI-generated titles
+   - Cross-device sync via UUID for logged-in users
+
+3. **Conversation Continuation:**
+
+   - User clicks on conversation in history sidebar
+   - System loads full conversation via `/api/conversation/[convId]`
+   - User can continue conversation from where they left off
+   - Follow-up messages maintain same `convId` and URL
+
+4. **Conversation Sharing:**
+
+   - User clicks share button on any message in conversation
+   - System generates `/share/[docId]` URL for that specific message point
+   - Share link shows conversation up to that timestamp only
+   - Recipients see view-only conversation without continuation ability
+   - No authentication required for share links
+
+5. **Privacy Controls:**
+   - Users choose between two conversation types (with third option planned):
+     - **Public**: Saved and shared on answers page for community browsing
+     - **Temporary**: Not saved or stored (renamed from "Private Session")
+     - **Private**: Saved in user account but not shared publicly (coming soon)
+
 ### 2. Screen Transitions / States
 
 - **Initial Load:** Chat interface is displayed, possibly with introductory text or suggested questions.
@@ -133,6 +205,16 @@ If the site is configured to require user login:
 - **Feedback State:** Buttons for liking/disliking might change appearance after being clicked.
 - **(Authenticated) Login Screen:** A separate view/modal for entering credentials.
 - **(Authenticated) Logged-in State:** UI might show user status or provide access to logout/admin features.
+- **(Conversation History) Sidebar Open:** Left sidebar displays conversation history with AI-generated titles
+  (hamburger menu on mobile).
+- **(Conversation History) Loading State:** Conversation history loads asynchronously after main chat interface.
+- **(Conversation History) Conversation Selected:** Clicking a conversation loads full history and updates URL to
+  `/chat/[convId]`.
+- **(Sharing) Share Modal:** Modal displays shareable link for specific conversation point with copy-to-clipboard
+  functionality.
+- **(Sharing) View-Only Mode:** Recipients of share links see read-only conversation view without input capabilities.
+- **(Privacy Selection) Session Type:** User selects between Public or Temporary conversation modes before starting
+  (Private mode coming soon).
 
 ### 3. Key Interactions
 
@@ -145,6 +227,17 @@ If the site is configured to require user login:
 - **Viewing Related Questions:** Clicking on suggested follow-up questions.
 - **(Authenticated) Logging In/Out:** Using forms/buttons to manage authentication state.
 - **(WordPress) Opening/Closing Chat Widget:** Interacting with the embedded chat element on the page.
+- **(Conversation History) Opening Sidebar:** Clicking hamburger menu (mobile) or sidebar toggle to view conversation
+  history.
+- **(Conversation History) Selecting Conversation:** Clicking on conversation title in sidebar to load and continue
+  conversation.
+- **(Conversation History) New Conversation:** Clicking "New Conversation" button to start fresh chat and reset URL.
+- **(Sharing) Generating Share Link:** Clicking share button on any message to generate `/share/[docId]` URL.
+- **(Sharing) Copying Share Link:** Using copy-to-clipboard functionality in share modal.
+- **(Privacy) Selecting Session Type:** Choosing between Public or Temporary conversation modes via UI controls (Private
+  mode coming soon).
+- **(Navigation) URL-based Loading:** Direct navigation to `/chat/[convId]` or `/share/[docId]` URLs loads appropriate
+  conversation state.
 
 ### 4. Integration Points
 

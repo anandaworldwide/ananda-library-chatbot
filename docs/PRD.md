@@ -106,6 +106,7 @@ authentication, and integration options, including a WordPress plugin.
 ### 4. Functional Requirements
 
 - **FR1: Chat Interface & Interaction**
+
   - **FR1.1:** Provide a web-based chat interface where users can input questions.
   - **FR1.2:** Display responses from the chatbot, including citations/references to source documents
     (`calculateSources`).
@@ -115,6 +116,21 @@ authentication, and integration options, including a WordPress plugin.
   - **FR1.6:** Offer mechanisms for user feedback (e.g., thumbs up/down) on individual answers (`useVote`, `/api/vote`).
   - **FR1.7:** Display related questions based on the current query (`/api/relatedQuestions`).
   - **FR1.8:** (Optional/Configurable) Support audio playback for answers or source material (`useAudioPlayer`).
+
+- **FR1B: Persistent Conversation History & Management**
+  - **FR1B.1:** Group related messages into conversations using unique conversation IDs (`convId`).
+  - **FR1B.2:** Generate AI-powered conversation titles (4-5 words) for easy identification and navigation.
+  - **FR1B.3:** Provide persistent conversation history accessible via sidebar interface (responsive design with
+    hamburger menu on mobile).
+  - **FR1B.4:** Enable users to resume any previous conversation and continue from where they left off.
+  - **FR1B.5:** Support cross-device conversation synchronization for authenticated users via UUID.
+  - **FR1B.6:** Display last 20 conversations with lazy-loading capability for additional history.
+  - **FR1B.7:** Implement stable URL navigation (`/chat/[convId]`) that persists across follow-up messages.
+  - **FR1B.8:** Support conversation sharing via point-in-time URLs (`/share/[docId]`) showing conversation up to
+    specific message.
+  - **FR1B.9:** Provide view-only mode for shared conversations with no authentication required.
+  - **FR1B.10:** Offer conversation privacy levels: Public (shared on answers page) and Temporary (not saved). Private
+    conversations (saved but not shared) planned for future release.
 - **FR2: Question Answering (RAG Core)**
   - **FR2.1:** Accept user queries via the designated API endpoint (`/api/chat/v1/route.ts`).
   - **FR2.2:** Process user queries using Langchain (`makechain.ts`).

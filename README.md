@@ -30,8 +30,10 @@ accurate, contextual answers with complete source attribution.
 - **Semantic Search** - Vector embeddings with Pinecone for precise content matching
 - **Geo-Awareness** - Location-based responses for finding centers and services
 - **Context Preservation** - Multi-turn conversations with intelligent question reformulation
+- **Conversation History** - AI-generated titles and persistent chat history across devices
 - **Streaming Responses** - Real-time answer generation with source attribution
 - **Related Questions** - AI-generated follow-up suggestions for deeper exploration
+- **Smart Sharing** - Share specific conversation points with view-only access for recipients
 
 ### 🔧 **Developer-Friendly Architecture**
 
@@ -82,6 +84,18 @@ data ingestion to production deployment.
 
 ## ⚡ **Feature Showcase**
 
+### 💬 **Intelligent Conversation Management**
+
+Transform every interaction into a persistent, shareable knowledge session:
+
+- **AI-Generated Titles** - Automatic 4-5 word conversation summaries for easy identification
+- **Cross-Device Sync** - Conversation history syncs seamlessly across all your devices
+- **Smart Sharing** - Share specific conversation points with view-only access up to that moment
+- **Flexible Privacy** - Choose between public (shared with community) or temporary (not saved) conversations, with
+  private (saved but not shared) coming soon
+- **Seamless Continuation** - Resume any conversation exactly where you left off
+- **Mobile-First Design** - Responsive sidebar with hamburger menu for mobile devices
+
 ### 🎨 **Multi-Site Configuration Made Simple**
 
 Configure unlimited sites with unique personalities and data sources:
@@ -92,13 +106,15 @@ Configure unlimited sites with unique personalities and data sources:
     "name": "The Ananda.org Chatbot",
     "greeting": "Hi, I'm Vivek. How can I help you?",
     "enableGeoAwareness": true,
-    "modelName": "gpt-4o-mini"
+    "modelName": "gpt-4o-mini",
+    "requireLogin": false
   },
   "crystal": {
     "name": "Crystal Clarity Library Magic",
     "greeting": "What can Library Magic answer for you?",
     "includedLibraries": ["Crystal Clarity"],
-    "temperature": 0.2
+    "temperature": 0.2,
+    "requireLogin": true
   }
 }
 ```
