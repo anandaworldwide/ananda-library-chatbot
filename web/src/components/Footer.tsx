@@ -122,8 +122,8 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
                     href="/admin/users"
                     className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
                   >
-                    Add User
-                    <span className="material-icons text-sm ml-1">person_add</span>
+                    User Management
+                    <span className="material-icons text-sm ml-1">people</span>
                   </Link>
                 )}
                 <Link href="/bless" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">

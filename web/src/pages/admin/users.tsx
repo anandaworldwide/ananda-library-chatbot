@@ -9,12 +9,6 @@ import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { AddUsersModal } from "@/components/AddUsersModal";
 
-interface PendingUser {
-  email: string;
-  invitedAt: string | null;
-  expiresAt: string | null;
-}
-
 interface ActiveUser {
   email: string;
   firstName?: string | null;
@@ -30,6 +24,17 @@ interface AdminUsersPageProps {
   siteConfig: SiteConfig | null;
   isSudoAdmin: boolean;
 }
+
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+type SortOption = "name-asc" | "login-desc";
 
 // Helper component for date display (date only, no time)
 function DateDisplay({ dateString }: { dateString: string | null }) {
@@ -58,45 +63,122 @@ function getDisplayName(user: ActiveUser): string {
   }
 }
 
+// Helper function to truncate email for display
+function truncateEmail(email: string, maxLength: number = 15): string {
+  if (email.length <= maxLength) {
+    return email;
+  }
+  return email.substring(0, maxLength) + "...";
+}
+
 export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"info" | "error">("info");
-  const [pending, setPending] = useState<PendingUser[]>([]);
+  const [pendingCount, setPendingCount] = useState<number>(0);
   const [active, setActive] = useState<ActiveUser[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [activeLoading, setActiveLoading] = useState(false);
+  const [showLoading, setShowLoading] = useState(false);
   const [jwt, setJwt] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("login-desc");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
 
-  async function fetchPending() {
-    setLoading(true);
+  // Shared function to handle token refresh and retry logic
+  async function fetchWithTokenRefresh<T>(
+    url: string,
+    options: RequestInit = {}
+  ): Promise<{ data: T; refreshedToken?: string }> {
+    const res = await fetch(url, {
+      ...options,
+      headers: jwt ? { Authorization: `Bearer ${jwt}`, ...options.headers } : options.headers,
+    });
+    const data = await res.json();
+
+    if (res.status === 401) {
+      // Token expired - try to refresh
+      const tokenRes = await fetch("/api/web-token");
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        const newToken = tokenData.token;
+
+        // Retry the original request with new token
+        const retryRes = await fetch(url, {
+          ...options,
+          headers: { Authorization: `Bearer ${newToken}`, ...options.headers },
+        });
+        const retryData = await retryRes.json();
+
+        if (!retryRes.ok) {
+          throw new Error(retryData?.error || "Request failed after token refresh");
+        }
+
+        return { data: retryData, refreshedToken: newToken };
+      } else {
+        // Refresh failed - redirect to login
+        const fullPath = window.location.pathname + (window.location.search || "");
+        window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
+        throw new Error("Authentication failed");
+      }
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.error || "Request failed");
+    }
+
+    return { data };
+  }
+
+  async function fetchPendingCount() {
     try {
-      const res = await fetch("/api/admin/listPendingUsers", {
-        headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load");
-      const items: PendingUser[] = (data.items || []).map((it: any) => ({
-        email: it.email,
-        invitedAt: it.invitedAt ? new Date(it.invitedAt).toLocaleString() : null,
-        expiresAt: it.expiresAt ? new Date(it.expiresAt).toLocaleString() : null,
-      }));
-      setPending(items);
+      const { data, refreshedToken } = await fetchWithTokenRefresh<{ items: any[] }>("/api/admin/listPendingUsers");
+
+      // Update JWT if it was refreshed
+      if (refreshedToken) {
+        setJwt(refreshedToken);
+      }
+
+      setPendingCount(data.items?.length || 0);
     } catch (e: any) {
-      setMessage(e?.message || "Failed to load pending users");
+      setMessage(e?.message || "Failed to load pending users count");
       setMessageType("error");
-    } finally {
-      setLoading(false);
     }
   }
 
-  async function fetchActive() {
+  async function fetchActive(page: number = 1) {
+    setActiveLoading(true);
+
+    // Show loading message only after 3 seconds
+    const loadingTimer = setTimeout(() => {
+      setShowLoading(true);
+    }, 3000);
+
     try {
-      const res = await fetch("/api/admin/listActiveUsers", {
-        headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
+      // Build query parameters
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: "20",
+        sortBy: sortBy,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load active users");
+
+      // Add search parameter if there's a debounced search query
+      if (debouncedSearchQuery.trim()) {
+        params.append("search", debouncedSearchQuery.trim());
+      }
+
+      const { data, refreshedToken } = await fetchWithTokenRefresh<{
+        items: any[];
+        pagination: PaginationInfo;
+      }>(`/api/admin/listActiveUsers?${params.toString()}`);
+
+      // Update JWT if it was refreshed
+      if (refreshedToken) {
+        setJwt(refreshedToken);
+      }
+
       const items: ActiveUser[] = (data.items || []).map((it: any) => ({
         email: it.email,
         firstName: it.firstName ?? null,
@@ -108,27 +190,19 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
         entitlements: it.entitlements || {},
       }));
 
-      // Sort users by last login descending (most recent first)
-      items.sort((a, b) => {
-        // Handle null values - users with no login go to the bottom
-        if (!a.lastLoginAt && !b.lastLoginAt) return 0;
-        if (!a.lastLoginAt) return 1;
-        if (!b.lastLoginAt) return -1;
-
-        // Compare dates (both are locale strings, need to convert back to Date for comparison)
-        const dateA = new Date(a.lastLoginAt);
-        const dateB = new Date(b.lastLoginAt);
-        return dateB.getTime() - dateA.getTime(); // Descending order
-      });
-
       setActive(items);
+      setPagination(data.pagination);
     } catch (e: any) {
       setMessage(e?.message || "Failed to load active users");
       setMessageType("error");
+    } finally {
+      clearTimeout(loadingTimer);
+      setActiveLoading(false);
+      setShowLoading(false);
     }
   }
 
-  // Acquire a short-lived JWT on mount
+  // Acquire a short-lived JWT on mount and handle token refresh
   useEffect(() => {
     async function getToken() {
       try {
@@ -136,23 +210,85 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
         const data = await res.json();
         if (res.ok && data?.token) {
           setJwt(data.token);
+          setMessage(null); // Clear any previous error messages
+        } else if (res.status === 401) {
+          // Token expired or authentication issue - redirect to login
+          const fullPath = window.location.pathname + (window.location.search || "");
+          window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
         } else {
           setMessage(data?.error || "Failed to obtain auth token");
+          setMessageType("error");
         }
       } catch (e: any) {
         setMessage(e?.message || "Failed to obtain auth token");
+        setMessageType("error");
       }
     }
     getToken();
   }, []);
 
-  // Fetch pending and active users once JWT is available
+  // Add window focus listener to refresh token when user returns to page
+  useEffect(() => {
+    async function handleWindowFocus() {
+      // Only refresh if we don't have a valid JWT or if it's been a while
+      if (!jwt) {
+        try {
+          const res = await fetch("/api/web-token");
+          const data = await res.json();
+          if (res.ok && data?.token) {
+            setJwt(data.token);
+            setMessage(null);
+            // Refresh data with new token
+            fetchPendingCount();
+            fetchActive(currentPage);
+          } else if (res.status === 401) {
+            const fullPath = window.location.pathname + (window.location.search || "");
+            window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
+          }
+        } catch (e) {
+          console.error("Failed to refresh token on focus:", e);
+        }
+      }
+    }
+
+    window.addEventListener("focus", handleWindowFocus);
+    return () => window.removeEventListener("focus", handleWindowFocus);
+  }, [jwt, currentPage]);
+
+  // Fetch pending count and active users once JWT is available
   useEffect(() => {
     if (!jwt) return;
-    fetchPending();
-    fetchActive();
+    fetchPendingCount();
+    fetchActive(currentPage);
     // Intentionally only depends on jwt to refetch if token is refreshed
   }, [jwt]);
+
+  // Debounce search query to prevent excessive API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300); // 300ms debounce delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fetch active users when page, sort, or debounced search changes
+  useEffect(() => {
+    if (!jwt) return;
+    fetchActive(currentPage);
+  }, [currentPage, jwt, sortBy, debouncedSearchQuery]);
+
+  // Handle sort change
+  const handleSortChange = (newSort: SortOption) => {
+    setSortBy(newSort);
+    setCurrentPage(1); // Reset to first page when sorting changes
+  };
+
+  // Handle search change with debouncing
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    setCurrentPage(1); // Reset to first page when searching
+  };
 
   async function handleAddUsers(emails: string[]) {
     setSubmitting(true);
@@ -228,37 +364,13 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       }
 
       // Refresh the lists
-      await fetchPending();
-      await fetchActive();
+      await fetchPendingCount();
+      await fetchActive(currentPage);
     } catch (e: any) {
       setMessage(e?.message || "Failed to add users");
       setMessageType("error");
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function onResend(targetEmail: string) {
-    setMessage(null);
-    setMessageType("info");
-    try {
-      const res = await fetch("/api/admin/resendActivation", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-        },
-        body: JSON.stringify({ email: targetEmail }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to resend");
-      setMessage(`Resent to ${targetEmail}`);
-      setMessageType("info");
-      await fetchPending();
-      await fetchActive();
-    } catch (e: any) {
-      setMessage(e?.message || "Failed to resend");
-      setMessageType("error");
     }
   }
 
@@ -297,84 +409,184 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
           </div>
         )}
 
-        <div>
-          <h2 className="text-xl font-semibold mb-2">Pending Users</h2>
-          {loading ? (
-            <div>Loading…</div>
-          ) : pending.length === 0 ? (
-            <div className="text-sm text-gray-600">No pending users</div>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="py-2">Email</th>
-                  <th className="py-2">Invited</th>
-                  <th className="py-2">Expires</th>
-                  <th className="py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map((u) => (
-                  <tr key={u.email} className="border-b">
-                    <td className="py-2">{u.email}</td>
-                    <td className="py-2">{u.invitedAt || "–"}</td>
-                    <td className="py-2">{u.expiresAt || "–"}</td>
-                    <td className="py-2">
-                      <button className="rounded bg-gray-700 px-3 py-1 text-white" onClick={() => onResend(u.email)}>
-                        Resend
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        {/* Pending Users Count */}
+        <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Pending User Invitations</h3>
+              <p className="text-sm text-gray-600">
+                {pendingCount === 0 ? (
+                  "No pending invitations"
+                ) : (
+                  <a href="/admin/users/pending" className="text-blue-600 hover:text-blue-800 underline">
+                    {pendingCount} user{pendingCount === 1 ? "" : "s"} waiting for activation
+                  </a>
+                )}
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-2">Active Users</h2>
-          {loading ? (
-            <div>Loading…</div>
-          ) : active.length === 0 ? (
-            <div className="text-sm text-gray-600">No active users</div>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Active Users</h2>
+            <div className="text-sm text-gray-600 min-w-0 flex-shrink-0">
+              {pagination && pagination.totalCount > 0 ? (
+                <>
+                  Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+                  {Math.min(pagination.page * pagination.limit, pagination.totalCount)} of {pagination.totalCount} users
+                  {debouncedSearchQuery && <span className="ml-2 text-gray-500">(filtered)</span>}
+                </>
+              ) : (
+                <span className="opacity-0">Showing 1 to 20 of 100 users</span>
+              )}
+            </div>
+          </div>
+
+          {/* Search Box */}
+          <div className="mb-4">
+            <div className="relative max-w-md">
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => handleSearchChange("")}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label="Clear search"
+                >
+                  <span className="material-icons text-sm">close</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {showLoading && activeLoading ? (
+            <div className="text-center py-8">
+              <div className="text-gray-600">Loading users...</div>
+            </div>
           ) : (
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="py-2 pr-6">Name</th>
-                  <th className="py-2 pr-6">Email</th>
-                  <th className="py-2 pr-6">Role</th>
-                  <th className="py-2 pr-6">Last Login</th>
-                  <th className="py-2">Entitlements</th>
-                </tr>
-              </thead>
-              <tbody>
-                {active.map((u) => (
-                  <tr key={u.email} className="border-b">
-                    <td className="py-2 pr-6">
-                      <a
-                        className="text-blue-600 underline hover:text-blue-800"
-                        href={`/admin/users/${encodeURIComponent(u.email)}`}
+            <>
+              <table className="w-full text-left text-sm table-fixed">
+                <colgroup>
+                  <col className="w-1/4" />
+                  <col className="w-1/4" />
+                  <col className="w-16" />
+                  <col className="w-24" />
+                  <col className="w-auto" />
+                </colgroup>
+                <thead>
+                  <tr className="border-b">
+                    <th className="py-2 pr-6">
+                      <button
+                        onClick={() => handleSortChange("name-asc")}
+                        className={`flex items-center gap-1 hover:text-blue-600 ${
+                          sortBy === "name-asc" ? "text-blue-600 font-semibold" : ""
+                        }`}
                       >
-                        {getDisplayName(u)}
-                      </a>
-                    </td>
-                    <td className="py-2 pr-6">{u.email}</td>
-                    <td className="py-2 pr-6">{u.role || "–"}</td>
-                    <td className="py-2 pr-6">
-                      <DateDisplay dateString={u.lastLoginAt} />
-                    </td>
-                    <td className="py-2">
-                      {Object.keys(u.entitlements).length > 0
-                        ? Object.keys(u.entitlements)
-                            .filter((key) => u.entitlements[key])
-                            .join(", ")
-                        : "–"}
-                    </td>
+                        Name
+                        {sortBy === "name-asc" && <span className="text-xs">↑</span>}
+                      </button>
+                    </th>
+                    <th className="py-2 pr-6">Email</th>
+                    <th className="py-2 pr-6">Role</th>
+                    <th className="py-2 pr-6">
+                      <button
+                        onClick={() => handleSortChange("login-desc")}
+                        className={`flex items-center gap-1 hover:text-blue-600 ${
+                          sortBy === "login-desc" ? "text-blue-600 font-semibold" : ""
+                        }`}
+                      >
+                        Last Login
+                        {sortBy === "login-desc" && <span className="text-xs">↓</span>}
+                      </button>
+                    </th>
+                    <th className="py-2">Entitlements</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {active.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-sm text-gray-600">
+                        {debouncedSearchQuery ? `No users found matching "${debouncedSearchQuery}"` : "No active users"}
+                      </td>
+                    </tr>
+                  ) : (
+                    active.map((u) => (
+                      <tr key={u.email} className="border-b">
+                        <td className="py-2 pr-6">
+                          <a
+                            className="text-blue-600 underline hover:text-blue-800"
+                            href={`/admin/users/${encodeURIComponent(u.email)}`}
+                          >
+                            {getDisplayName(u)}
+                          </a>
+                        </td>
+                        <td className="py-2 pr-6">
+                          <span title={u.email} className="cursor-help">
+                            {truncateEmail(u.email)}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-6">{u.role || "–"}</td>
+                        <td className="py-2 pr-6">
+                          <DateDisplay dateString={u.lastLoginAt} />
+                        </td>
+                        <td className="py-2">
+                          {Object.keys(u.entitlements).length > 0
+                            ? Object.keys(u.entitlements)
+                                .filter((key) => u.entitlements[key])
+                                .join(", ")
+                            : "–"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination Controls */}
+              {pagination && pagination.totalPages > 1 && (
+                <div className="flex justify-center items-center gap-2 mt-6">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={!pagination.hasPrev}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    First
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={!pagination.hasPrev}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Previous
+                  </button>
+
+                  <span className="px-3 py-1 text-sm">
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={!pagination.hasNext}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(pagination.totalPages)}
+                    disabled={!pagination.hasNext}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Last
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

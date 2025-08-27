@@ -59,7 +59,7 @@ describe("AdminUsersPage", () => {
   it("sorts active users by last login descending", async () => {
     // Mock the API responses in the correct sequence:
     // 1. /api/web-token for JWT
-    // 2. /api/admin/listPendingUsers for pending users table
+    // 2. /api/admin/listPendingUsers for pending users count
     // 3. /api/admin/listActiveUsers for active users table
     (fetch as jest.Mock).mockImplementation((url) => {
       if (url === "/api/web-token") {
@@ -70,14 +70,22 @@ describe("AdminUsersPage", () => {
       } else if (url === "/api/admin/listPendingUsers") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }), // No pending users
+          json: () => Promise.resolve({ items: [] }), // No pending users for count
         });
-      } else if (url === "/api/admin/listActiveUsers") {
+      } else if (url.startsWith("/api/admin/listActiveUsers")) {
         return Promise.resolve({
           ok: true,
           json: () =>
             Promise.resolve({
               items: [
+                {
+                  email: "recent-user@test.com",
+                  firstName: "Recent",
+                  lastName: "User",
+                  lastLoginAt: "2024-01-01T12:00:00.000Z", // More recent login
+                  role: "admin",
+                  entitlements: {},
+                },
                 {
                   email: "old-user@test.com",
                   firstName: "Old",
@@ -94,15 +102,15 @@ describe("AdminUsersPage", () => {
                   role: "user",
                   entitlements: {},
                 },
-                {
-                  email: "recent-user@test.com",
-                  firstName: "Recent",
-                  lastName: "User",
-                  lastLoginAt: "2024-01-01T12:00:00.000Z", // More recent login
-                  role: "admin",
-                  entitlements: {},
-                },
               ],
+              pagination: {
+                page: 1,
+                limit: 20,
+                totalCount: 3,
+                totalPages: 1,
+                hasNext: false,
+                hasPrev: false,
+              },
             }),
         });
       }
@@ -127,8 +135,8 @@ describe("AdminUsersPage", () => {
       .filter((link) => link.getAttribute("href")?.startsWith("/admin/users/"));
     const userNames = userLinks.map((link) => link.textContent);
 
-    // Verify the order: Recent User (most recent login) should be first,
-    // Old User (older login) second, Never LoggedIn (no login) last
+    // Verify the order: Backend now handles sorting, so the order should match the API response
+    // Recent User (most recent login) should be first, Old User (older login) second, Never LoggedIn (no login) last
     expect(userNames).toEqual(["Recent User", "Old User", "Never LoggedIn"]);
   });
 
@@ -143,9 +151,9 @@ describe("AdminUsersPage", () => {
       } else if (url === "/api/admin/listPendingUsers") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }), // No pending users
+          json: () => Promise.resolve({ items: [] }), // No pending users for count
         });
-      } else if (url === "/api/admin/listActiveUsers") {
+      } else if (url.startsWith("/api/admin/listActiveUsers")) {
         return Promise.resolve({
           ok: true,
           json: () =>
@@ -168,6 +176,14 @@ describe("AdminUsersPage", () => {
                   entitlements: {},
                 },
               ],
+              pagination: {
+                page: 1,
+                limit: 20,
+                totalCount: 2,
+                totalPages: 1,
+                hasNext: false,
+                hasPrev: false,
+              },
             }),
         });
       }
@@ -203,10 +219,21 @@ describe("AdminUsersPage", () => {
           ok: true,
           json: () => Promise.resolve({ items: [] }),
         });
-      } else if (url === "/api/admin/listActiveUsers") {
+      } else if (url.startsWith("/api/admin/listActiveUsers")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }),
+          json: () =>
+            Promise.resolve({
+              items: [],
+              pagination: {
+                page: 1,
+                limit: 20,
+                totalCount: 0,
+                totalPages: 0,
+                hasNext: false,
+                hasPrev: false,
+              },
+            }),
         });
       }
       return Promise.reject(new Error(`Unexpected URL: ${url}`));
@@ -233,5 +260,261 @@ describe("AdminUsersPage", () => {
     // Modal should appear
     expect(screen.getByLabelText("Email Addresses")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it("allows sorting by name ascending and last login descending", async () => {
+    const mockUsersLoginDesc = [
+      {
+        email: "alice@test.com",
+        firstName: "Alice",
+        lastName: "Smith",
+        role: "admin",
+        lastLoginAt: "2024-01-20T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+      {
+        email: "charlie@test.com",
+        firstName: "Charlie",
+        lastName: "Brown",
+        role: "user",
+        lastLoginAt: "2024-01-15T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+      {
+        email: "bob@test.com",
+        firstName: "Bob",
+        lastName: "Johnson",
+        role: "user",
+        lastLoginAt: "2024-01-10T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+    ];
+
+    const mockUsersNameAsc = [
+      {
+        email: "alice@test.com",
+        firstName: "Alice",
+        lastName: "Smith",
+        role: "admin",
+        lastLoginAt: "2024-01-20T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+      {
+        email: "bob@test.com",
+        firstName: "Bob",
+        lastName: "Johnson",
+        role: "user",
+        lastLoginAt: "2024-01-10T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+      {
+        email: "charlie@test.com",
+        firstName: "Charlie",
+        lastName: "Brown",
+        role: "user",
+        lastLoginAt: "2024-01-15T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+    ];
+
+    // Mock the API responses to return different data based on sortBy parameter
+    (fetch as jest.Mock).mockImplementation((url) => {
+      if (url === "/api/web-token") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ token: "mock-jwt" }),
+        });
+      } else if (url === "/api/admin/listPendingUsers") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [] }),
+        });
+      } else if (url.startsWith("/api/admin/listActiveUsers")) {
+        // Check if the URL contains sortBy=name-asc
+        const isNameSort = url.includes("sortBy=name-asc");
+        const users = isNameSort ? mockUsersNameAsc : mockUsersLoginDesc;
+
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              items: users,
+              pagination: {
+                page: 1,
+                limit: 20,
+                totalCount: 3,
+                totalPages: 1,
+                hasNext: false,
+                hasPrev: false,
+              },
+            }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+
+    render(
+      <SudoProvider>
+        <AdminUsersPage siteConfig={mockSiteConfig} isSudoAdmin={true} />
+      </SudoProvider>
+    );
+
+    // Wait for users to load (default sort is last login descending)
+    await waitFor(() => {
+      expect(screen.getByText("Alice Smith")).toBeInTheDocument();
+    });
+
+    // Check default sort order (last login descending: Alice, Charlie, Bob)
+    const rows = screen.getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("Alice Smith"); // Most recent login
+    expect(rows[2]).toHaveTextContent("Charlie Brown");
+    expect(rows[3]).toHaveTextContent("Bob Johnson"); // Oldest login
+
+    // Click on Name header to sort by name ascending
+    const nameHeader = screen.getByRole("button", { name: /name/i });
+    fireEvent.click(nameHeader);
+
+    // Wait for API call and re-render with name-sorted data (Alice, Bob, Charlie)
+    await waitFor(() => {
+      const sortedRows = screen.getAllByRole("row");
+      expect(sortedRows[1]).toHaveTextContent("Alice Smith");
+      expect(sortedRows[2]).toHaveTextContent("Bob Johnson");
+      expect(sortedRows[3]).toHaveTextContent("Charlie Brown");
+    });
+
+    // Verify the name header shows active sort indicator
+    expect(nameHeader).toHaveClass("text-blue-600", "font-semibold");
+    expect(nameHeader).toHaveTextContent("↑");
+
+    // Click on Last Login header to sort by last login descending
+    const loginHeader = screen.getByRole("button", { name: /last login/i });
+    fireEvent.click(loginHeader);
+
+    // Wait for API call and re-render with login-sorted data (Alice, Charlie, Bob)
+    await waitFor(() => {
+      const sortedRows = screen.getAllByRole("row");
+      expect(sortedRows[1]).toHaveTextContent("Alice Smith"); // Most recent
+      expect(sortedRows[2]).toHaveTextContent("Charlie Brown");
+      expect(sortedRows[3]).toHaveTextContent("Bob Johnson"); // Oldest
+    });
+
+    // Verify the last login header shows active sort indicator
+    expect(loginHeader).toHaveClass("text-blue-600", "font-semibold");
+    expect(loginHeader).toHaveTextContent("↓");
+  });
+
+  it("allows searching users by name and email", async () => {
+    const mockUsers = [
+      {
+        email: "alice.smith@test.com",
+        firstName: "Alice",
+        lastName: "Smith",
+        role: "admin",
+        lastLoginAt: "2024-01-20T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+      {
+        email: "bob.jones@example.com",
+        firstName: "Bob",
+        lastName: "Jones",
+        role: "user",
+        lastLoginAt: "2024-01-15T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+    ];
+
+    const mockSearchResults = [
+      {
+        email: "alice.smith@test.com",
+        firstName: "Alice",
+        lastName: "Smith",
+        role: "admin",
+        lastLoginAt: "2024-01-20T10:00:00Z",
+        verifiedAt: "2024-01-01T10:00:00Z",
+        entitlements: {},
+      },
+    ];
+
+    // Mock the API responses to return different data based on search parameter
+    (fetch as jest.Mock).mockImplementation((url) => {
+      if (url === "/api/web-token") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ token: "mock-jwt" }),
+        });
+      } else if (url === "/api/admin/listPendingUsers") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [] }),
+        });
+      } else if (url.startsWith("/api/admin/listActiveUsers")) {
+        // Check if the URL contains a search parameter
+        const hasSearch = url.includes("search=alice");
+        const users = hasSearch ? mockSearchResults : mockUsers;
+
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              items: users,
+              pagination: {
+                page: 1,
+                limit: 20,
+                totalCount: users.length,
+                totalPages: 1,
+                hasNext: false,
+                hasPrev: false,
+              },
+            }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+
+    render(
+      <SudoProvider>
+        <AdminUsersPage siteConfig={mockSiteConfig} isSudoAdmin={true} />
+      </SudoProvider>
+    );
+
+    // Wait for users to load
+    await waitFor(() => {
+      expect(screen.getByText("Alice Smith")).toBeInTheDocument();
+      expect(screen.getByText("Bob Jones")).toBeInTheDocument();
+    });
+
+    // Find the search input
+    const searchInput = screen.getByPlaceholderText("Search by name or email...");
+    expect(searchInput).toBeInTheDocument();
+
+    // Type in search query
+    fireEvent.change(searchInput, { target: { value: "alice" } });
+
+    // Wait for debounced search and API call (300ms debounce + API response time)
+    await waitFor(
+      () => {
+        expect(screen.getByText("Alice Smith")).toBeInTheDocument();
+        expect(screen.queryByText("Bob Jones")).not.toBeInTheDocument();
+      },
+      { timeout: 1000 }
+    );
+
+    // Clear search
+    const clearButton = screen.getByLabelText("Clear search");
+    fireEvent.click(clearButton);
+
+    // Wait for search to clear and show all users again
+    await waitFor(() => {
+      expect(screen.getByText("Alice Smith")).toBeInTheDocument();
+      expect(screen.getByText("Bob Jones")).toBeInTheDocument();
+    });
   });
 });
