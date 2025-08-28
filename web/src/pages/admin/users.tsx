@@ -297,8 +297,8 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
 
     try {
       let successCount = 0;
-      let alreadyActiveCount = 0;
       let resentCount = 0;
+      const alreadyActiveEmails: string[] = [];
       const errors: string[] = [];
 
       // Process emails one by one to get detailed feedback
@@ -320,7 +320,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
           } else {
             // Interpret backend messages
             if (data?.message === "already active") {
-              alreadyActiveCount++;
+              alreadyActiveEmails.push(email);
             } else if (data?.message === "resent") {
               resentCount++;
             } else if (data?.message === "created") {
@@ -342,12 +342,15 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       if (resentCount > 0) {
         parts.push(`${resentCount} invitation${resentCount === 1 ? "" : "s"} resent`);
       }
-      if (alreadyActiveCount > 0) {
-        parts.push(`${alreadyActiveCount} user${alreadyActiveCount === 1 ? " was" : "s were"} already active`);
+      if (alreadyActiveEmails.length > 0) {
+        const emailBullets = alreadyActiveEmails.map((email) => `• ${email}`).join("\n");
+        parts.push(
+          `${alreadyActiveEmails.length} user${alreadyActiveEmails.length === 1 ? " was" : "s were"} already active:\n${emailBullets}`
+        );
       }
 
       if (parts.length > 0) {
-        setMessage(parts.join(", "));
+        setMessage(parts.join(". "));
         setMessageType("info");
       }
 
@@ -358,7 +361,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
           setMessageType("error");
         } else {
           // Some succeeded, some failed
-          setMessage(`${parts.join(", ")}. Errors: ${errors.join("; ")}`);
+          setMessage(`${parts.join(". ")}. Errors: ${errors.join("; ")}`);
           setMessageType("info");
         }
       }
@@ -401,7 +404,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
 
         {message && (
           <div
-            className={`mb-4 rounded border p-3 text-sm ${
+            className={`mb-4 rounded border p-3 text-sm whitespace-pre-line ${
               messageType === "error" ? "border-red-300 bg-red-50 text-red-800" : "border-yellow-300 bg-yellow-50"
             }`}
           >
