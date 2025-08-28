@@ -290,6 +290,7 @@ document.addEventListener("DOMContentLoaded", () => {
     sendGoogleAnalyticsEvent("chatbot_vivek_popup_close", {
       event_category: "chatbot_interaction",
       method: method,
+      session_questions_total: sessionQuestionCount, // ← add this
     });
   }
 
@@ -324,6 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
     sendGoogleAnalyticsEvent("chatbot_vivek_contact_human", {
       event_category: "chatbot_support",
       method: "intercom_trigger",
+      session_questions_total: sessionQuestionCount, // ← add this
     });
   }
 
