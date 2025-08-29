@@ -673,7 +673,7 @@ class TestAudioProcessing(unittest.TestCase):
         mock_transcribe.return_value = None
         mock_from_mp3.return_value = MagicMock()
 
-        transcription = transcribe_media("/mock/empty_audio.mp3")
+        transcription = transcribe_media("/mock/empty_audio.mp3", site="test")
         self.assertIsNone(transcription, "Expected None for empty audio file")
 
         logger.debug("Transcription with empty audio test completed")
@@ -763,9 +763,10 @@ class TestAudioProcessing(unittest.TestCase):
             dryrun=False,
             default_author=self.author,
             library_name=self.library,
-            site_config={"domain": "test.com"},  # Add missing site_config
+            site_config={"domain": "test.com"},  # site_config
             is_youtube_video=False,
             youtube_data=None,
+            site="test",  # Add site parameter
         )
 
         self.assertEqual(report["errors"], 1)

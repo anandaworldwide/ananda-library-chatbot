@@ -115,6 +115,7 @@ def verify_and_update_transcription_metadata(
     library_name,
     is_youtube_video,
     youtube_data=None,
+    site=None,
 ):
     """
     Verifies and updates metadata in transcription JSON file.
@@ -150,8 +151,8 @@ def verify_and_update_transcription_metadata(
         # Load existing YouTube data from storage if not provided
         if not youtube_data:
             youtube_id = transcription_data.get("youtube_id")
-            if youtube_id:
-                youtube_data_map = load_youtube_data_map()
+            if youtube_id and site:
+                youtube_data_map = load_youtube_data_map(site)
                 youtube_data = youtube_data_map.get(youtube_id)
 
         if youtube_data and "media_metadata" in youtube_data:
@@ -172,7 +173,10 @@ def verify_and_update_transcription_metadata(
 
             # Save the updated transcription file
             save_transcription(
-                file_path, transcription_data, youtube_id=youtube_data["youtube_id"]
+                file_path,
+                transcription_data,
+                youtube_id=youtube_data["youtube_id"],
+                site=site,
             )
     else:
         # Only try to get file metadata for local audio files that exist
@@ -202,7 +206,7 @@ def verify_and_update_transcription_metadata(
                 logger.warning(f"Could not get file stats: {str(e)}")
 
             # Save transcription file
-            save_transcription(file_path, transcription_data)
+            save_transcription(file_path, transcription_data, site=site)
 
     return transcription_data
 
@@ -362,6 +366,7 @@ def _handle_transcription(
                 library_name,
                 is_youtube_video,
                 youtube_data,
+                site,
             )
             local_report["skipped"] += 1
             logger.debug(

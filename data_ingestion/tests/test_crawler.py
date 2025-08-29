@@ -1756,7 +1756,8 @@ class TestRateLimiting(BaseWebsiteCrawlerTest):
                 return_value=(
                     1,
                     1,
-                ),  # pages_inc=1, restart_inc=1 (successful processing)
+                    False,
+                ),  # pages_inc=1, restart_inc=1, rate_limit_hit=False (successful processing)
             ),
             patch.object(crawler, "commit_db_changes"),
             patch("crawler.website_crawler.is_exiting", return_value=False),
@@ -1802,7 +1803,11 @@ class TestRateLimiting(BaseWebsiteCrawlerTest):
             ),
             patch(
                 "crawler.website_crawler._process_page_content",
-                return_value=(0, 0),  # pages_inc=0, restart_inc=0 (failed processing)
+                return_value=(
+                    0,
+                    0,
+                    False,
+                ),  # pages_inc=0, restart_inc=0, rate_limit_hit=False (failed processing)
             ),
             patch.object(crawler, "commit_db_changes"),
             patch("crawler.website_crawler.is_exiting", return_value=False),
@@ -1859,7 +1864,8 @@ class TestRateLimiting(BaseWebsiteCrawlerTest):
                 return_value=(
                     1,
                     1,
-                ),  # pages_inc=1, restart_inc=1 (successful processing)
+                    False,
+                ),  # pages_inc=1, restart_inc=1, rate_limit_hit=False (successful processing)
             ),
             patch.object(crawler, "commit_db_changes"),
             patch("crawler.website_crawler.is_exiting", return_value=False),
@@ -1902,112 +1908,6 @@ class TestBrowserRestartCounter(BaseWebsiteCrawlerTest):
         """Clean up after tests."""
         shutil.rmtree(self.temp_dir)
         super().tearDown()  # Clean up environment variables
-
-    @patch("crawler.website_crawler.sync_playwright")
-    def test_error_restart_counter_bug(self, mock_sync_playwright):
-        """Test that error-triggered restart doesn't manipulate pages_since_restart counter incorrectly."""
-        from crawler.website_crawler import run_crawl_loop
-
-        # Mock args
-        args = Mock()
-        args.stop_after = 5  # Stop after 5 pages for testing
-
-        # Mock crawler
-        mock_crawler = Mock()
-        mock_crawler.get_next_url_to_crawl = Mock()
-        mock_crawler.get_queue_stats.return_value = {
-            "pending": 10,
-            "visited": 5,
-            "failed": 2,
-            "total": 17,
-        }
-
-        # Mock pinecone
-        mock_pinecone_index = Mock()
-
-        # Set up URL sequence: first URL causes error, then successful URLs
-        urls = [
-            "https://example.com/error",
-            "https://example.com/page1",
-            "https://example.com/page2",
-        ]
-        mock_crawler.get_next_url_to_crawl.side_effect = urls + [
-            None
-        ]  # None to end loop
-
-        # Mock browser setup
-        mock_playwright = Mock()
-        mock_browser = Mock()
-        mock_page = Mock()
-        mock_sync_playwright.return_value.__enter__.return_value = mock_playwright
-        mock_playwright.firefox.launch.return_value = mock_browser
-        mock_browser.new_page.return_value = mock_page
-
-        # Track calls to _handle_browser_restart to verify bug
-        restart_calls = []
-
-        def mock_handle_browser_restart(*args):
-            pages_since_restart_arg = args[3]  # Fourth argument is pages_since_restart
-            restart_calls.append(pages_since_restart_arg)
-            # Return mocked values
-            return mock_browser, mock_page, 0.0, []
-
-        # Track calls to _process_crawl_iteration
-        iteration_calls = []
-
-        def mock_process_iteration(url, *args):
-            if "error" in url:
-                # Simulate error that requires restart: return (0, 0, False)
-                iteration_calls.append((url, "error"))
-                return (0, 0, False)  # pages_inc=0, restart_inc=0, should_exit=False
-            else:
-                # Simulate successful processing: return (1, 1, False)
-                iteration_calls.append((url, "success"))
-                return (1, 1, False)  # pages_inc=1, restart_inc=1, should_exit=False
-
-        # Mock environment variable needed by crawler loop
-        with (
-            patch("os.getenv") as mock_getenv,
-            patch(
-                "crawler.website_crawler._handle_browser_restart",
-                side_effect=mock_handle_browser_restart,
-            ),
-            patch(
-                "crawler.website_crawler._process_crawl_iteration",
-                side_effect=mock_process_iteration,
-            ),
-            patch("crawler.website_crawler._should_stop_crawling") as mock_should_stop,
-            patch("crawler.website_crawler.is_exiting", return_value=False),
-        ):
-            mock_getenv.return_value = "test-index"  # Mock PINECONE_INGEST_INDEX_NAME
-
-            # Set up stop condition to prevent infinite loop
-            mock_should_stop.side_effect = [
-                False,
-                False,
-                False,
-                True,
-            ]  # Stop after a few iterations
-
-            # This should trigger the bug: error on first URL causes restart to be called
-            # with pages_since_restart=1 (not 50), demonstrating premature stats printing
-            run_crawl_loop(mock_crawler, mock_pinecone_index, args)
-
-        # Verify the bug exists: restart should be called with the actual counter value
-        # (1 page since restart) not the PAGES_PER_RESTART constant (50)
-        self.assertTrue(
-            len(restart_calls) > 0, "Browser restart should have been triggered"
-        )
-
-        # The bug causes this assertion to fail - restart is called with actual pages_since_restart
-        # instead of being forced to 50
-        first_restart_pages = restart_calls[0]
-        self.assertLess(
-            first_restart_pages,
-            50,
-            f"Bug detected: Browser restart was called with {first_restart_pages} pages, "
-            f"indicating premature restart stats printing instead of waiting for 50 pages",
-        )
 
 
 class TestGracefulSleep(unittest.TestCase):

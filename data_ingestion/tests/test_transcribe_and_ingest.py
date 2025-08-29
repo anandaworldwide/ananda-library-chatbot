@@ -57,7 +57,7 @@ def test_verify_metadata_basic_audio():
     library = "Test Library"
 
     result = verify_and_update_transcription_metadata(
-        transcription, file_path, author, library, False
+        transcription, file_path, author, library, False, site="test"
     )
 
     assert isinstance(result, dict)
@@ -71,8 +71,14 @@ def test_verify_metadata_basic_audio():
     assert "updated_at" in result
 
 
-def test_verify_metadata_youtube(sample_transcription_data, sample_youtube_data):
+@patch("data_ingestion.audio_video.transcribe_and_ingest_media.save_transcription")
+def test_verify_metadata_youtube(
+    mock_save_transcription, sample_transcription_data, sample_youtube_data
+):
     """Test metadata verification for YouTube content"""
+    # Mock the save_transcription function to avoid database operations
+    mock_save_transcription.return_value = None
+
     result = verify_and_update_transcription_metadata(
         sample_transcription_data,
         None,
@@ -80,6 +86,7 @@ def test_verify_metadata_youtube(sample_transcription_data, sample_youtube_data)
         "Test Library",
         True,
         sample_youtube_data,
+        site="test",
     )
 
     assert result["title"] == sample_youtube_data["media_metadata"]["title"]
@@ -153,11 +160,15 @@ def test_merge_reports():
     assert merged["private_videos"] == 1
 
 
-def test_verify_metadata_legacy_format():
+@patch("data_ingestion.audio_video.transcribe_and_ingest_media.save_transcription")
+def test_verify_metadata_legacy_format(mock_save_transcription):
     """Test handling of legacy format transcription data"""
+    # Mock the save_transcription function to avoid database operations
+    mock_save_transcription.return_value = None
+
     legacy_text = "This is legacy text only format"
     result = verify_and_update_transcription_metadata(
-        legacy_text, "test.mp3", "Test Author", "Test Library", False
+        legacy_text, "test.mp3", "Test Author", "Test Library", False, site="test"
     )
 
     assert isinstance(result, dict)
@@ -167,6 +178,7 @@ def test_verify_metadata_legacy_format():
     assert result["type"] == "audio_file"
 
 
+@patch("data_ingestion.audio_video.transcribe_and_ingest_media.save_transcription")
 @patch("os.path.exists")
 @patch("data_ingestion.audio_video.media_utils.get_media_metadata")
 @patch("os.stat")
@@ -174,9 +186,18 @@ def test_verify_metadata_legacy_format():
 @patch("os.makedirs")
 @patch("builtins.open", new_callable=mock_open, read_data=b"mock binary data")
 def test_verify_metadata_with_file_stats(
-    mock_file, mock_makedirs, mock_mp3, mock_stat, mock_get_metadata, mock_exists
+    mock_file,
+    mock_makedirs,
+    mock_mp3,
+    mock_stat,
+    mock_get_metadata,
+    mock_exists,
+    mock_save_transcription,
 ):
     """Test metadata verification with file statistics"""
+    # Mock the save_transcription function to avoid database operations
+    mock_save_transcription.return_value = None
+
     mock_exists.return_value = True
     mock_get_metadata.return_value = (
         "Test Title",
@@ -215,7 +236,7 @@ def test_verify_metadata_with_file_stats(
     }
 
     result = verify_and_update_transcription_metadata(
-        transcription_data, "test.mp3", None, "Test Library", False
+        transcription_data, "test.mp3", None, "Test Library", False, site="test"
     )
 
     assert isinstance(result, dict)
@@ -234,7 +255,7 @@ def test_preprocess_youtube_private():
     ) as mock_download:
         mock_download.return_value = None
         result, youtube_id = preprocess_youtube_video(
-            "https://youtube.com/watch?v=private123", Mock()
+            "https://youtube.com/watch?v=private123", Mock(), "test"
         )
         assert result is None
         assert youtube_id is None

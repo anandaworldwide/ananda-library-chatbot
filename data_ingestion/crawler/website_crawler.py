@@ -2890,7 +2890,7 @@ def _handle_browser_restart_check(
     batch_start_time: float,
     crawler: WebsiteCrawler,
     pages_processed: int,
-) -> tuple[int, int, bool, bool, tuple]:
+) -> tuple[int, int, bool, bool, tuple, bool]:
     """Handle browser restart if needed."""
     if pages_since_restart >= PAGES_PER_RESTART:
         browser, page, batch_start_time, batch_results = _handle_browser_restart(
@@ -2908,6 +2908,7 @@ def _handle_browser_restart_check(
             False,
             True,
             (browser, page, batch_start_time, batch_results),
+            False,  # Not a rate limit exit
         )
     return None  # No restart needed
 
