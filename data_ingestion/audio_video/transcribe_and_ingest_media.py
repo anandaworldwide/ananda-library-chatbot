@@ -20,13 +20,23 @@ Key Features:
 - Support for parallel instances via separate queues
 
 Command Line Options:
-  -s, --site SITE              Site ID for environment variables (required)
+
+Required:
+  -s, --site SITE              Site ID for environment variables
+
+Processing Control:
   -f, --force                  Force re-transcription and re-indexing
   -c, --clear-vectors          Clear existing vectors before processing
-  -D, --dryrun                 Perform a dry run without sending data to Pinecone or S3
   -o, --override-conflicts     Continue processing even if filename conflicts are found
-  -d, --debug                  Enable debug logging
+
+Queue Management:
   -q, --queue NAME             Specify an alternative queue name for parallel processing
+
+Testing & Development:
+  -D, --dryrun                 Perform a dry run without sending data to Pinecone or S3
+
+Debug & Logging:
+  -d, --debug                  Enable debug logging
 
 Usage Examples:
   python transcribe_and_ingest_media.py -s ananda
@@ -637,7 +647,41 @@ def worker(task_queue, result_queue, args, stop_event):
     configure_logging(args.debug)
     logger = logging.getLogger(__name__)
     client = OpenAI()
-    index = load_pinecone()
+
+    try:
+        index = load_pinecone()
+    except Exception as e:
+        error_msg = str(e)
+        # Check for Pinecone plan/region errors
+        if (
+            "free plan does not support indexes" in error_msg
+            or "upgrade your plan" in error_msg
+            or "INVALID_ARGUMENT" in error_msg
+            or "Bad request" in error_msg
+        ):
+            logger.error("Pinecone Configuration Error in worker process:")
+            logger.error(
+                "Your current Pinecone plan does not support the configured region."
+            )
+            logger.error(
+                "Please upgrade your Pinecone plan or change the region configuration."
+            )
+            # Put error in result queue and exit worker
+            result_queue.put(
+                (
+                    None,
+                    {
+                        "errors": 1,
+                        "error_details": [
+                            "Pinecone configuration error: Plan does not support configured region"
+                        ],
+                    },
+                )
+            )
+            return
+        else:
+            # Re-raise other exceptions
+            raise
 
     # Load site configuration once per worker
     site_config = load_site_config(args.site)
@@ -939,45 +983,62 @@ def merge_reports(reports):
 def _parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Audio and video transcription and indexing script"
+        description="Audio and video transcription and indexing script",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
+
+    # Required arguments
+    required = parser.add_argument_group("Required Arguments")
+    required.add_argument(
+        "-s", "--site", required=True, help="Site ID for environment variables"
+    )
+
+    # Processing control options
+    processing = parser.add_argument_group("Processing Control")
+    processing.add_argument(
         "-f",
         "--force",
         action="store_true",
         help="Force re-transcription and re-indexing",
     )
-    parser.add_argument(
+    processing.add_argument(
         "-c",
         "--clear-vectors",
         action="store_true",
         help="Clear existing vectors before processing",
     )
-    parser.add_argument(
-        "-D",
-        "--dryrun",
-        action="store_true",
-        help="Perform a dry run without sending data to Pinecone or S3",
-    )
-    parser.add_argument(
+    processing.add_argument(
         "-o",
         "--override-conflicts",
         action="store_true",
         help="Continue processing even if filename conflicts are found",
     )
-    parser.add_argument(
-        "-d", "--debug", action="store_true", help="Enable debug logging"
-    )
-    parser.add_argument(
-        "-s", "--site", required=True, help="Site ID for environment variables"
-    )
-    parser.add_argument(
+
+    # Queue management options
+    queue = parser.add_argument_group("Queue Management")
+    queue.add_argument(
         "-q",
         "--queue",
         metavar="NAME",
         default=None,
         help="Specify an alternative queue name for parallel processing",
     )
+
+    # Testing and development options
+    testing = parser.add_argument_group("Testing & Development")
+    testing.add_argument(
+        "-D",
+        "--dryrun",
+        action="store_true",
+        help="Perform a dry run without sending data to Pinecone or S3",
+    )
+
+    # Debug and logging options
+    debug = parser.add_argument_group("Debug & Logging")
+    debug.add_argument(
+        "-d", "--debug", action="store_true", help="Enable debug logging"
+    )
+
     return parser.parse_args()
 
 
@@ -1165,7 +1226,28 @@ def main():
         logger.info("Operation aborted by the user.")
         sys.exit(0)
 
-    _setup_vector_clearing(args, ingest_queue)
+    try:
+        _setup_vector_clearing(args, ingest_queue)
+    except Exception as e:
+        error_msg = str(e)
+        # Check for Pinecone plan/region errors
+        if (
+            "free plan does not support indexes" in error_msg
+            or "upgrade your plan" in error_msg
+            or "INVALID_ARGUMENT" in error_msg
+            or "Bad request" in error_msg
+        ):
+            logger.error("Pinecone Configuration Error:")
+            logger.error(
+                "Your current Pinecone plan does not support the configured region."
+            )
+            logger.error(
+                "Please upgrade your Pinecone plan or change the region configuration."
+            )
+            sys.exit(1)
+        else:
+            # Re-raise other exceptions
+            raise
 
     overall_report = {
         "processed": 0,
@@ -1177,7 +1259,28 @@ def main():
         "chunk_lengths": [],
     }
 
-    overall_report = _run_worker_pool_processing(args, overall_report)
+    try:
+        overall_report = _run_worker_pool_processing(args, overall_report)
+    except Exception as e:
+        error_msg = str(e)
+        # Check for Pinecone plan/region errors
+        if (
+            "free plan does not support indexes" in error_msg
+            or "upgrade your plan" in error_msg
+            or "INVALID_ARGUMENT" in error_msg
+            or "Bad request" in error_msg
+        ):
+            logger.error("Pinecone Configuration Error:")
+            logger.error(
+                "Your current Pinecone plan does not support the configured region."
+            )
+            logger.error(
+                "Please upgrade your Pinecone plan or change the region configuration."
+            )
+            sys.exit(1)
+        else:
+            # Re-raise other exceptions
+            raise
 
     print("\nOverall Processing Report:")
     print_report(overall_report)

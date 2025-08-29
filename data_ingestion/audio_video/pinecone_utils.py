@@ -141,11 +141,15 @@ def load_pinecone(index_name=None):
             raise ValueError(
                 "OPENAI_INGEST_EMBEDDINGS_DIMENSION environment variable not set"
             )
+        # Get cloud and region from environment variables
+        cloud = os.getenv("PINECONE_CLOUD", "aws")
+        region = os.getenv("PINECONE_REGION", "us-west-2")
+
         pc.create_index(
             index_name,
             dimension=int(dimension_str),
             metric="cosine",
-            spec=ServerlessSpec(cloud="aws", region="us-west-2"),
+            spec=ServerlessSpec(cloud=cloud, region=region),
         )
     except PineconeException as e:
         if e.status == 409:

@@ -33,33 +33,40 @@ manage:
   - Process status (--status)
 
 Command Line Options:
-  Content Addition:
-    -v, --video URL              YouTube video URL
-    -p, --playlist URL           YouTube playlist URL
-    -a, --audio PATH             Path to audio file
-    -D, --directory PATH         Path to directory containing audio files
-    -u, --urls-file PATH         Path to text file containing YouTube URLs (one per line)
-    -P, --playlists-file PATH    Path to XLSX file containing playlist information
 
-  Queue Management:
-    -l, --list                   List all items in the processing queue
-    -c, --clear                  Clear all items from the queue
-    -f, --reprocess-failed       Reprocess items in error or interrupted state
-    -C, --remove-completed       Remove all completed items from the queue
-    -r, --reprocess ID           Reprocess a specific item by ID
-    -R, --reprocess-all          Reset all items in the queue for reprocessing
-    -I, --reprocess-processing-items  Reprocess items in processing state
-    -x, --remove ID              Remove a specific item from the queue by ID
+Required:
+  -s, --site SITE              Site ID for environment variables
 
-  Status & Configuration:
-    -S, --status                 Print the queue status
-    -s, --site SITE              Site ID for environment variables (required)
-    -q, --queue NAME             Specify an alternative queue name
-    -d, --debug                  Enable debug logging
+Content Addition:
+  -v, --video URL              YouTube video URL
+  -p, --playlist URL           YouTube playlist URL
+  -a, --audio PATH             Path to audio file
+  -D, --directory PATH         Path to directory containing audio files
+  -u, --urls-file PATH         Path to text file containing YouTube URLs (one per line)
+  -P, --playlists-file PATH    Path to XLSX file containing playlist information
 
-  Required for Adding Content:
-    -A, --default-author NAME    Default author of the media
-    -L, --library NAME           Name of the library
+Required for Adding Content:
+  -A, --default-author NAME    Default author of the media
+  -L, --library NAME           Name of the library
+
+Queue Management:
+  -l, --list                   List all items in the processing queue
+  -c, --clear                  Clear all items from the queue
+  -f, --reprocess-failed       Reprocess items in error or interrupted state
+  -C, --remove-completed       Remove all completed items from the queue
+  -r, --reprocess ID           Reprocess a specific item by ID
+  -R, --reprocess-all          Reset all items in the queue for reprocessing
+  -I, --reprocess-processing-items  Reprocess items in processing state
+  -x, --remove ID              Remove a specific item from the queue by ID
+
+Status & Monitoring:
+  -S, --status                 Print the queue status
+
+Queue Configuration:
+  -q, --queue NAME             Specify an alternative queue name
+
+Debug & Logging:
+  -d, --debug                  Enable debug logging
 
 Configuration:
   Required:
@@ -431,6 +438,98 @@ def remove_item(queue, item_id):
         logger.error(f"Failed to remove item {item_id} from the queue")
 
 
+def _validate_playlist_row(row, row_num):
+    """
+    Validate a playlist row and extract values.
+
+    Args:
+        row: Row data from Excel sheet
+        row_num: Row number for error reporting
+
+    Returns:
+        tuple: (title, default_author, library, playlist_url)
+
+    Raises:
+        ValueError: If row validation fails
+    """
+    # Check if row has the expected number of columns
+    row_values = [cell for cell in row if cell is not None]
+    if len(row_values) < 4:
+        logger.error(
+            f"Error in row {row_num}: Expected 4 columns but found {len(row_values)}"
+        )
+        logger.error("Expected format: Title | Default Author | Library | Playlist URL")
+        logger.error(f"Actual row content: {row_values}")
+        logger.error(
+            "Please check your Excel file format and ensure all required columns are present."
+        )
+        logger.error("Example of expected format:")
+        logger.error(
+            "  Row 1 (header): Title | Default Author | Library | Playlist URL"
+        )
+        logger.error(
+            "  Row 2+: 'My Playlist' | 'Author Name' | 'Library Name' | 'https://youtube.com/playlist?list=...'"
+        )
+        raise ValueError(
+            f"Invalid Excel file format in row {row_num}. Expected 4 columns, found {len(row_values)}."
+        )
+
+    try:
+        title, default_author, library, playlist_url = row
+    except ValueError as e:
+        logger.error(f"Error unpacking row {row_num}: {str(e)}")
+        logger.error(f"Row content: {list(row)}")
+        logger.error("Expected format: Title | Default Author | Library | Playlist URL")
+        raise ValueError(
+            f"Failed to parse row {row_num} in playlists file. {str(e)}"
+        ) from e
+
+    # Validate required fields
+    if not playlist_url:
+        logger.error(f"Error in row {row_num}: Playlist URL is required but missing")
+        raise ValueError(f"Playlist URL is required in row {row_num}")
+
+    return title, default_author, library, playlist_url
+
+
+def _process_playlist_videos(playlist_url, title, all_videos, video_sources):
+    """
+    Process videos from a playlist and track sources.
+
+    Args:
+        playlist_url: URL of the playlist
+        title: Title of the playlist
+        all_videos: List to append videos to
+        video_sources: Dict to track video sources
+
+    Returns:
+        int: Number of videos processed
+    """
+    videos = get_playlist_videos(playlist_url)
+
+    # Track video sources for duplicate reporting
+    for video in videos:
+        all_videos.append(video)
+        video_sources[video["url"]].append(title)
+
+    return len(videos)
+
+
+def _report_duplicates(video_sources, duplicates_removed):
+    """
+    Report duplicate videos found across playlists.
+
+    Args:
+        video_sources: Dict mapping video URLs to source playlists
+        duplicates_removed: Number of duplicates removed
+    """
+    if duplicates_removed > 0:
+        logger.info(f"{duplicates_removed} duplicate videos (not added to queue):")
+        for url, sources in video_sources.items():
+            if len(sources) > 1:
+                logger.info(f"{url} (Found in: {', '.join(sources)})")
+
+
 def process_playlists_file(args, queue):
     """
     Processes an Excel file containing playlist information for bulk imports.
@@ -451,15 +550,21 @@ def process_playlists_file(args, queue):
     processed_playlists = 0
 
     # Skip header row and process each playlist
-    for row in sheet.iter_rows(min_row=2, values_only=True):
-        title, default_author, library, playlist_url = row
-        videos = get_playlist_videos(playlist_url)
-        processed_playlists += 1
+    for row_num, row in enumerate(
+        sheet.iter_rows(min_row=2, values_only=True), start=2
+    ):
+        # Skip empty rows
+        if not any(cell for cell in row if cell is not None):
+            continue
 
-        # Track video sources for duplicate reporting
-        for video in videos:
-            all_videos.append(video)
-            video_sources[video["url"]].append(title)
+        # Validate and extract row data
+        title, default_author, library, playlist_url = _validate_playlist_row(
+            row, row_num
+        )
+
+        # Process videos from playlist
+        _process_playlist_videos(playlist_url, title, all_videos, video_sources)
+        processed_playlists += 1
 
     # Deduplicate videos while preserving first occurrence
     unique_videos = {v["url"]: v for v in all_videos}.values()
@@ -477,11 +582,7 @@ def process_playlists_file(args, queue):
     logger.info(f"Total videos found: {len(all_videos)}")
     logger.info(f"Unique videos added to queue: {len(unique_videos)}")
 
-    if duplicates_removed > 0:
-        logger.info(f"{duplicates_removed} duplicate videos (not added to queue):")
-        for url, sources in video_sources.items():
-            if len(sources) > 1:
-                logger.info(f"{url} (Found in: {', '.join(sources)})")
+    _report_duplicates(video_sources, duplicates_removed)
 
 
 def print_queue_status(queue, items=None):
@@ -572,119 +673,142 @@ def process_urls_file(args, queue):
     logger.info(f"Skipped {skipped} already processed videos")
 
 
-def main():
+def _setup_argument_parser():
     """
-    Main CLI entry point with comprehensive argument parsing and operation routing.
+    Set up and configure the argument parser with all CLI options.
 
-    Operation Groups:
-    1. Queue Management (clear, reset, remove)
-    2. Content Addition (video, audio, playlists)
-    3. Status/Monitoring (list, status)
-
-    Environment Setup:
-    - Requires site parameter for AWS credential configuration
-    - Optional debug mode for enhanced logging
-    - Supports parallel queues via --queue parameter
+    Returns:
+        argparse.ArgumentParser: Configured argument parser
     """
-    parser = argparse.ArgumentParser(description="Manage the ingest queue")
+    parser = argparse.ArgumentParser(
+        description="Manage the ingest queue",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
-    # Add operation arguments
-    parser.add_argument("--video", "-v", metavar="URL", help="YouTube video URL")
-    parser.add_argument("--playlist", "-p", metavar="URL", help="YouTube playlist URL")
-    parser.add_argument("--audio", "-a", metavar="PATH", help="Path to audio file")
-    parser.add_argument(
-        "--directory",
-        "-D",
-        metavar="PATH",
-        help="Path to directory containing audio files",
-    )
-    parser.add_argument(
-        "--default-author", "-A", metavar="NAME", help="Default author of the media"
-    )
-    parser.add_argument("--library", "-L", metavar="NAME", help="Name of the library")
-    parser.add_argument(
-        "--list",
-        "-l",
-        action="store_true",
-        help="List all items in the processing queue",
-    )
-    parser.add_argument(
-        "--clear", "-c", action="store_true", help="Clear all items from the queue"
-    )
-    parser.add_argument(
-        "--reprocess-failed",
-        "-f",
-        action="store_true",
-        help="Reprocess items in error or interrupted state",
-    )
-    parser.add_argument(
-        "--remove-completed",
-        "-C",
-        action="store_true",
-        help="Remove all completed items from the queue",
-    )
-    parser.add_argument(
-        "--debug", "-d", action="store_true", help="Enable debug logging"
-    )
-    parser.add_argument(
-        "--reprocess", "-r", metavar="ITEM_ID", help="Reprocess a specific item by ID"
-    )
-    parser.add_argument(
-        "--reprocess-all",
-        "-R",
-        action="store_true",
-        help="Reset all items in the queue for reprocessing",
-    )
-    parser.add_argument(
-        "--playlists-file",
-        "-P",
-        metavar="PATH",
-        help="Path to XLSX file containing playlist information",
-    )
-    parser.add_argument(
-        "--queue",
-        "-q",
-        metavar="NAME",
-        default=None,
-        help="Specify an alternative queue name",
-    )
-    parser.add_argument(
-        "--reprocess-processing-items",
-        "-I",
-        action="store_true",
-        help="Reprocess items in processing state",
-    )
-    parser.add_argument(
-        "--remove",
-        "-x",
-        metavar="ITEM_ID",
-        help="Remove a specific item from the queue by ID",
-    )
-    parser.add_argument(
-        "--status", "-S", action="store_true", help="Print the queue status"
-    )
-    parser.add_argument(
+    # Required arguments
+    required = parser.add_argument_group("Required Arguments")
+    required.add_argument(
         "--site",
         "-s",
         metavar="SITE",
         required=True,
         help="Site ID for environment variables",
     )
-    parser.add_argument(
+
+    # Content addition arguments
+    content = parser.add_argument_group("Content Addition")
+    content.add_argument("--video", "-v", metavar="URL", help="YouTube video URL")
+    content.add_argument("--playlist", "-p", metavar="URL", help="YouTube playlist URL")
+    content.add_argument("--audio", "-a", metavar="PATH", help="Path to audio file")
+    content.add_argument(
+        "--directory",
+        "-D",
+        metavar="PATH",
+        help="Path to directory containing audio files",
+    )
+    content.add_argument(
         "--urls-file",
         "-u",
         metavar="PATH",
         help="Path to text file containing YouTube URLs (one per line)",
     )
-    args = parser.parse_args()
+    content.add_argument(
+        "--playlists-file",
+        "-P",
+        metavar="PATH",
+        help="Path to XLSX file containing playlist information",
+    )
 
-    # Initialize environment and create queue instance
-    initialize_environment(args)
-    queue = IngestQueue(queue_dir=args.queue) if args.queue else IngestQueue()
+    # Required for adding content
+    content_required = parser.add_argument_group("Required for Adding Content")
+    content_required.add_argument(
+        "--default-author", "-A", metavar="NAME", help="Default author of the media"
+    )
+    content_required.add_argument(
+        "--library", "-L", metavar="NAME", help="Name of the library"
+    )
 
-    if args.queue:
-        logger.info(f"Using queue: {args.queue}")
+    # Queue management arguments
+    queue_mgmt = parser.add_argument_group("Queue Management")
+    queue_mgmt.add_argument(
+        "--list",
+        "-l",
+        action="store_true",
+        help="List all items in the processing queue",
+    )
+    queue_mgmt.add_argument(
+        "--clear", "-c", action="store_true", help="Clear all items from the queue"
+    )
+    queue_mgmt.add_argument(
+        "--reprocess-failed",
+        "-f",
+        action="store_true",
+        help="Reprocess items in error or interrupted state",
+    )
+    queue_mgmt.add_argument(
+        "--remove-completed",
+        "-C",
+        action="store_true",
+        help="Remove all completed items from the queue",
+    )
+    queue_mgmt.add_argument(
+        "--reprocess", "-r", metavar="ITEM_ID", help="Reprocess a specific item by ID"
+    )
+    queue_mgmt.add_argument(
+        "--reprocess-all",
+        "-R",
+        action="store_true",
+        help="Reset all items in the queue for reprocessing",
+    )
+    queue_mgmt.add_argument(
+        "--reprocess-processing-items",
+        "-I",
+        action="store_true",
+        help="Reprocess items in processing state",
+    )
+    queue_mgmt.add_argument(
+        "--remove",
+        "-x",
+        metavar="ITEM_ID",
+        help="Remove a specific item from the queue by ID",
+    )
 
+    # Status and monitoring
+    status = parser.add_argument_group("Status & Monitoring")
+    status.add_argument(
+        "--status", "-S", action="store_true", help="Print the queue status"
+    )
+
+    # Queue configuration
+    queue_config = parser.add_argument_group("Queue Configuration")
+    queue_config.add_argument(
+        "--queue",
+        "-q",
+        metavar="NAME",
+        default=None,
+        help="Specify an alternative queue name",
+    )
+
+    # Debug and logging
+    debug = parser.add_argument_group("Debug & Logging")
+    debug.add_argument(
+        "--debug", "-d", action="store_true", help="Enable debug logging"
+    )
+
+    return parser
+
+
+def _validate_arguments(args, parser):
+    """
+    Validate command line arguments for conflicts and required combinations.
+
+    Args:
+        args: Parsed command line arguments
+        parser: Argument parser for help display
+
+    Returns:
+        bool: True if validation passes, False otherwise
+    """
     # Check for conflicting arguments
     management_args = sum(
         [
@@ -711,54 +835,188 @@ def main():
             "Error: Multiple operations specified. Please use only one command at a time."
         )
         parser.print_help()
+        return False
+
+    return True
+
+
+def _handle_content_validation(args, parser):
+    """
+    Handle validation for content-related operations.
+
+    Args:
+        args: Parsed command line arguments
+        parser: Argument parser for help display
+
+    Returns:
+        bool: True if validation passes, False otherwise
+    """
+    # Content operations require default_author and library
+    content_operations = [
+        args.urls_file,
+        any([args.video, args.playlist, args.audio, args.directory]),
+    ]
+
+    if any(content_operations) and (not args.default_author or not args.library):
+        logger.error(
+            "For adding items, you must specify both --default-author and --library"
+        )
+        parser.print_help()
+        return False
+
+    return True
+
+
+def _handle_status_operations(args, queue):
+    """Handle status and listing operations."""
+    if args.status:
+        print_queue_status(queue)
+    else:
+        list_queue_items(queue)
+
+
+def _handle_single_item_operations(args, queue):
+    """Handle single item operations (remove, reprocess)."""
+    if args.remove:
+        remove_item(queue, args.remove)
+    else:
+        reprocess_item(queue, args.reprocess)
+
+
+def _handle_file_operations(args, queue):
+    """Handle file-based operations (playlists, urls)."""
+    if args.playlists_file:
+        process_playlists_file(args, queue)
+    else:
+        if not args.default_author or not args.library:
+            logger.error(
+                "For adding items, you must specify both --default-author and --library"
+            )
+            return False
+        process_urls_file(args, queue)
+    return True
+
+
+def _handle_queue_management_operations(args, queue):
+    """Handle queue management operations (clear, reprocess_all)."""
+    if args.clear:
+        clear_queue(queue)
+    else:
+        reprocess_all_items(queue)
+
+
+def _handle_reset_operations(args, queue):
+    """Handle reset operations (reprocess_failed, reprocess_processing_items, remove_completed)."""
+    if args.reprocess_failed:
+        reset_stuck_items(queue)
+    elif args.reprocess_processing_items:
+        reset_processing_items(queue)
+    else:
+        remove_completed_items(queue)
+
+
+def _handle_content_addition_operations(args, queue):
+    """Handle content addition operations (video, playlist, audio, directory)."""
+    if not args.default_author or not args.library:
+        logger.error(
+            "For adding items, you must specify both --default-author and --library"
+        )
+        return False
+    add_to_queue(args, queue)
+    return True
+
+
+def _route_operation(args, queue):
+    """
+    Route to the appropriate operation handler based on arguments.
+
+    Args:
+        args: Parsed command line arguments
+        queue: Queue instance to operate on
+    """
+    # Status operations
+    if args.status or args.list:
+        _handle_status_operations(args, queue)
+        return
+
+    # Single item operations
+    if args.remove or args.reprocess:
+        _handle_single_item_operations(args, queue)
+        return
+
+    # File-based operations
+    if args.playlists_file or args.urls_file:
+        _handle_file_operations(args, queue)
+        return
+
+    # Queue management operations
+    if args.clear or args.reprocess_all:
+        _handle_queue_management_operations(args, queue)
+        return
+
+    # Reset operations
+    if (
+        args.reprocess_failed
+        or args.reprocess_processing_items
+        or args.remove_completed
+    ):
+        _handle_reset_operations(args, queue)
+        return
+
+    # Content addition operations
+    if any([args.video, args.playlist, args.audio, args.directory]):
+        _handle_content_addition_operations(args, queue)
+        return
+
+    # No valid operation specified
+    logger.error("No valid operation specified.")
+
+
+def main():
+    """
+    Main CLI entry point with comprehensive argument parsing and operation routing.
+
+    Operation Groups:
+    1. Queue Management (clear, reset, remove)
+    2. Content Addition (video, audio, playlists)
+    3. Status/Monitoring (list, status)
+
+    Environment Setup:
+    - Requires site parameter for AWS credential configuration
+    - Optional debug mode for enhanced logging
+    - Supports parallel queues via --queue parameter
+    """
+    parser = _setup_argument_parser()
+    args = parser.parse_args()
+
+    # Initialize environment and create queue instance
+    initialize_environment(args)
+    queue = IngestQueue(queue_dir=args.queue) if args.queue else IngestQueue()
+
+    if args.queue:
+        logger.info(f"Using queue: {args.queue}")
+
+    # Validate arguments
+    if not _validate_arguments(args, parser):
+        return
+
+    if not _handle_content_validation(args, parser):
         return
 
     # Route to appropriate operation handler
     try:
-        if args.status:
-            print_queue_status(queue)
-        elif args.remove:
-            remove_item(queue, args.remove)
-        elif args.playlists_file:
-            process_playlists_file(args, queue)
-        elif args.reprocess_all:
-            reprocess_all_items(queue)
-        elif args.reprocess:
-            reprocess_item(queue, args.reprocess)
-        elif args.list:
-            list_queue_items(queue)
-        elif args.clear:
-            clear_queue(queue)
-        elif args.reprocess_failed:
-            reset_stuck_items(queue)
-        elif args.reprocess_processing_items:
-            reset_processing_items(queue)
-        elif args.remove_completed:
-            remove_completed_items(queue)
-        elif args.urls_file:
-            if not args.default_author or not args.library:
-                logger.error(
-                    "For adding items, you must specify both --default-author and --library"
-                )
-                parser.print_help()
-                return
-            process_urls_file(args, queue)
-        elif any([args.video, args.playlist, args.audio, args.directory]):
-            if not args.default_author or not args.library:
-                logger.error(
-                    "For adding items, you must specify both --default-author and --library"
-                )
-                parser.print_help()
-                return
-            add_to_queue(args, queue)
-        else:
-            logger.error("No valid operation specified.")
-            parser.print_help()
-            return
+        _route_operation(args, queue)
     except ValueError as e:
-        # Don't print traceback for configuration validation errors -
-        # the error message has already been logged
-        if "library_config.json" in str(e) or "Library" in str(e):
+        # Don't print traceback for validation errors - the error message has already been logged
+        error_msg = str(e)
+        if (
+            "library_config.json" in error_msg
+            or "Library" in error_msg
+            or "Excel file format" in error_msg
+            or "Expected 4 columns" in error_msg
+            or "Playlist URL is required" in error_msg
+            or "playlists file" in error_msg
+        ):
             return
         else:
             # Re-raise other ValueError exceptions that may need full tracebacks

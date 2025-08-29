@@ -571,7 +571,7 @@ yarl==1.20.1
     # via
     #   -r requirements.in
     #   aiohttp
-yt-dlp==2025.6.9
+yt-dlp==2025.8.27
     # via -r requirements.in
 zstandard==0.23.0
     # via langsmith

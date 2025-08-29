@@ -77,5 +77,5 @@ typing_extensions==4.14.0
 urllib3==2.4.0
 websockets==15.0.1
 yarl==1.20.1
-yt-dlp==2025.6.9
+yt-dlp==2025.8.27
 psutil

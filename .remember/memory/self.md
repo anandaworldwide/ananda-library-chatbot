@@ -471,3 +471,36 @@ headings), MD031 (blanks around fences), MD040 (fenced code language), MD050 (st
 6. **Strong style (MD050)**: Use `**text**` instead of `__text__` for bold formatting
 
 **Pattern**: Fix markdownlint errors systematically by category rather than line-by-line for efficiency.
+
+### 20. Excel File Format Error Handling for Playlists
+
+**Wrong**: Generic ValueError "not enough values to unpack (expected 4, got 1)" when Excel file has wrong format.
+
+**Correct**: Comprehensive error handling with:
+
+- Row number identification for errors
+- Clear expected format specification
+- Actual row content display
+- Step-by-step format examples
+- Validation function for pre-checking files
+- Skip empty rows gracefully
+- Proper exception chaining
+
+**Implementation Pattern**:
+
+```python
+def validate_playlists_file_format(file_path):
+    """Validates Excel format before processing."""
+    # Check headers, data rows, and provide specific error messages
+
+def process_playlists_file(args, queue):
+    """Enhanced with detailed error reporting."""
+    # Check row count, validate columns, provide actionable error messages
+    # Skip empty rows, validate required fields
+```
+
+**Benefits**: Users get actionable error messages instead of cryptic unpacking errors, can validate files before
+processing, get specific guidance on fixing format issues.
+
+**Files Modified**: `manage_queue.py` with `validate_playlists_file_format()` function and enhanced
+`process_playlists_file()` error handling.
