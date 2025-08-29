@@ -10,6 +10,8 @@ describe("/api/npsAvailable", () => {
     // Clear environment variables
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.NPS_SURVEY_GOOGLE_SHEET_ID;
+    // Set SITE_ID to default to avoid site config loading errors
+    process.env.SITE_ID = "default";
   });
 
   afterEach(() => {
@@ -18,6 +20,8 @@ describe("/api/npsAvailable", () => {
 
   afterAll(() => {
     mockConsoleError.mockRestore();
+    // Clean up environment variable
+    delete process.env.SITE_ID;
   });
 
   it("should return available: true when both environment variables are set", async () => {
@@ -29,7 +33,7 @@ describe("/api/npsAvailable", () => {
       method: "GET",
     });
 
-    await handler(req, res);
+    await handler(req as any, res as any);
 
     expect(res._getStatusCode()).toBe(200);
     const data = JSON.parse(res._getData());
@@ -50,7 +54,7 @@ describe("/api/npsAvailable", () => {
       method: "GET",
     });
 
-    await handler(req, res);
+    await handler(req as any, res as any);
 
     expect(res._getStatusCode()).toBe(200);
     const data = JSON.parse(res._getData());
@@ -78,7 +82,7 @@ describe("/api/npsAvailable", () => {
       method: "GET",
     });
 
-    await handler(req, res);
+    await handler(req as any, res as any);
 
     expect(res._getStatusCode()).toBe(200);
     const data = JSON.parse(res._getData());
@@ -105,7 +109,7 @@ describe("/api/npsAvailable", () => {
       method: "GET",
     });
 
-    await handler(req, res);
+    await handler(req as any, res as any);
 
     expect(res._getStatusCode()).toBe(200);
     const data = JSON.parse(res._getData());
@@ -134,7 +138,7 @@ describe("/api/npsAvailable", () => {
       method: "GET",
     });
 
-    await handler(req, res);
+    await handler(req as any, res as any);
 
     expect(res._getStatusCode()).toBe(200);
     const data = JSON.parse(res._getData());
@@ -159,7 +163,7 @@ describe("/api/npsAvailable", () => {
       method: "POST",
     });
 
-    await handler(req, res);
+    await handler(req as any, res as any);
 
     expect(res._getStatusCode()).toBe(405);
     const data = JSON.parse(res._getData());
