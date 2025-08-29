@@ -517,4 +517,85 @@ describe("AdminUsersPage", () => {
       expect(screen.getByText("Bob Jones")).toBeInTheDocument();
     });
   });
+
+  it("shows blank page initially, then spinner after 3 seconds, then content", async () => {
+    // Mock slow API response that takes more than 3 seconds
+    (fetch as jest.Mock).mockImplementation((url) => {
+      if (url === "/api/web-token") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ token: "mock-jwt" }),
+        });
+      } else if (url === "/api/admin/listPendingUsers") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [] }),
+        });
+      } else if (url.startsWith("/api/admin/listActiveUsers")) {
+        // Delay the response to simulate slow loading
+        return new Promise(
+          (resolve) =>
+            setTimeout(() => {
+              resolve({
+                ok: true,
+                json: () =>
+                  Promise.resolve({
+                    items: [
+                      {
+                        email: "test@example.com",
+                        firstName: "Test",
+                        lastName: "User",
+                        lastLoginAt: "2024-01-01T12:00:00.000Z",
+                        role: "user",
+                        entitlements: {},
+                      },
+                    ],
+                    pagination: {
+                      page: 1,
+                      limit: 20,
+                      totalCount: 1,
+                      totalPages: 1,
+                      hasNext: false,
+                      hasPrev: false,
+                    },
+                  }),
+              });
+            }, 3500) // 3.5 seconds delay
+        );
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+
+    render(
+      <SudoProvider>
+        <AdminUsersPage siteConfig={mockSiteConfig} isSudoAdmin={true} />
+      </SudoProvider>
+    );
+
+    // Initially should not show content (may show "No active users" briefly before loading starts)
+    expect(screen.queryByText("Loading users...")).not.toBeInTheDocument();
+    expect(screen.queryByText("Test User")).not.toBeInTheDocument();
+
+    // After 3 seconds, should show spinner in the table body (the component will have started loading)
+    await waitFor(
+      () => {
+        expect(screen.getByText("Loading users...")).toBeInTheDocument();
+      },
+      { timeout: 4000 }
+    );
+
+    // Verify spinner appears in the table context (not as a separate div)
+    const loadingText = screen.getByText("Loading users...");
+    expect(loadingText.closest("tbody")).toBeInTheDocument();
+
+    // After API response (3.5 seconds total), should show content
+    await waitFor(
+      () => {
+        expect(screen.getByText("Test User")).toBeInTheDocument();
+        expect(screen.queryByText("Loading users...")).not.toBeInTheDocument();
+        expect(screen.queryByText("No active users")).not.toBeInTheDocument();
+      },
+      { timeout: 1000 }
+    );
+  });
 });

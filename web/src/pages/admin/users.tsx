@@ -80,6 +80,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
   const [active, setActive] = useState<ActiveUser[]>([]);
   const [activeLoading, setActiveLoading] = useState(false);
   const [showLoading, setShowLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [jwt, setJwt] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
@@ -150,6 +151,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
 
   async function fetchActive(page: number = 1) {
     setActiveLoading(true);
+    setDataLoaded(false);
 
     // Show loading message only after 3 seconds
     const loadingTimer = setTimeout(() => {
@@ -192,6 +194,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
 
       setActive(items);
       setPagination(data.pagination);
+      setDataLoaded(true);
     } catch (e: any) {
       setMessage(e?.message || "Failed to load active users");
       setMessageType("error");
@@ -199,6 +202,10 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       clearTimeout(loadingTimer);
       setActiveLoading(false);
       setShowLoading(false);
+      // Only set dataLoaded if we didn't have an error
+      if (!dataLoaded) {
+        setDataLoaded(true);
+      }
     }
   }
 
@@ -468,128 +475,141 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
             </div>
           </div>
 
-          {showLoading && activeLoading ? (
-            <div className="text-center py-8">
-              <div className="text-gray-600">Loading users...</div>
-            </div>
-          ) : (
-            <>
-              <table className="w-full text-left text-sm table-fixed">
-                <colgroup>
-                  <col className="w-1/4" />
-                  <col className="w-1/4" />
-                  <col className="w-16" />
-                  <col className="w-24" />
-                  <col className="w-auto" />
-                </colgroup>
-                <thead>
-                  <tr className="border-b">
-                    <th className="py-2 pr-6">
-                      <button
-                        onClick={() => handleSortChange("name-asc")}
-                        className={`flex items-center gap-1 hover:text-blue-600 ${
-                          sortBy === "name-asc" ? "text-blue-600 font-semibold" : ""
-                        }`}
+          {/* Always show the table structure */}
+          <table className="w-full text-left text-sm table-fixed">
+            <colgroup>
+              <col className="w-1/4" />
+              <col className="w-1/4" />
+              <col className="w-16" />
+              <col className="w-24" />
+              <col className="w-auto" />
+            </colgroup>
+            <thead>
+              <tr className="border-b">
+                <th className="py-2 pr-6">
+                  <button
+                    onClick={() => handleSortChange("name-asc")}
+                    className={`flex items-center gap-1 hover:text-blue-600 ${
+                      sortBy === "name-asc" ? "text-blue-600 font-semibold" : ""
+                    }`}
+                  >
+                    Name
+                    {sortBy === "name-asc" && <span className="text-xs">↑</span>}
+                  </button>
+                </th>
+                <th className="py-2 pr-6">Email</th>
+                <th className="py-2 pr-6">Role</th>
+                <th className="py-2 pr-6">
+                  <button
+                    onClick={() => handleSortChange("login-desc")}
+                    className={`flex items-center gap-1 hover:text-blue-600 ${
+                      sortBy === "login-desc" ? "text-blue-600 font-semibold" : ""
+                    }`}
+                  >
+                    Last Login
+                    {sortBy === "login-desc" && <span className="text-xs">↓</span>}
+                  </button>
+                </th>
+                <th className="py-2">Entitlements</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeLoading ? (
+                // Show loading state in the table body
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-sm text-gray-600">
+                    {showLoading ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                        <span>Loading users...</span>
+                      </div>
+                    ) : (
+                      // Empty state - just show the headers, no message
+                      <div className="py-4"></div>
+                    )}
+                  </td>
+                </tr>
+              ) : dataLoaded && active.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-sm text-gray-600">
+                    {debouncedSearchQuery ? `No users found matching "${debouncedSearchQuery}"` : "No active users"}
+                  </td>
+                </tr>
+              ) : dataLoaded && active.length > 0 ? (
+                active.map((u) => (
+                  <tr key={u.email} className="border-b">
+                    <td className="py-2 pr-6">
+                      <a
+                        className="text-blue-600 underline hover:text-blue-800"
+                        href={`/admin/users/${encodeURIComponent(u.email)}`}
                       >
-                        Name
-                        {sortBy === "name-asc" && <span className="text-xs">↑</span>}
-                      </button>
-                    </th>
-                    <th className="py-2 pr-6">Email</th>
-                    <th className="py-2 pr-6">Role</th>
-                    <th className="py-2 pr-6">
-                      <button
-                        onClick={() => handleSortChange("login-desc")}
-                        className={`flex items-center gap-1 hover:text-blue-600 ${
-                          sortBy === "login-desc" ? "text-blue-600 font-semibold" : ""
-                        }`}
-                      >
-                        Last Login
-                        {sortBy === "login-desc" && <span className="text-xs">↓</span>}
-                      </button>
-                    </th>
-                    <th className="py-2">Entitlements</th>
+                        {getDisplayName(u)}
+                      </a>
+                    </td>
+                    <td className="py-2 pr-6">
+                      <span title={u.email} className="cursor-help">
+                        {truncateEmail(u.email)}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-6">{u.role || "–"}</td>
+                    <td className="py-2 pr-6">
+                      <DateDisplay dateString={u.lastLoginAt} />
+                    </td>
+                    <td className="py-2">
+                      {Object.keys(u.entitlements).length > 0
+                        ? Object.keys(u.entitlements)
+                            .filter((key) => u.entitlements[key])
+                            .join(", ")
+                        : "–"}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {active.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-sm text-gray-600">
-                        {debouncedSearchQuery ? `No users found matching "${debouncedSearchQuery}"` : "No active users"}
-                      </td>
-                    </tr>
-                  ) : (
-                    active.map((u) => (
-                      <tr key={u.email} className="border-b">
-                        <td className="py-2 pr-6">
-                          <a
-                            className="text-blue-600 underline hover:text-blue-800"
-                            href={`/admin/users/${encodeURIComponent(u.email)}`}
-                          >
-                            {getDisplayName(u)}
-                          </a>
-                        </td>
-                        <td className="py-2 pr-6">
-                          <span title={u.email} className="cursor-help">
-                            {truncateEmail(u.email)}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-6">{u.role || "–"}</td>
-                        <td className="py-2 pr-6">
-                          <DateDisplay dateString={u.lastLoginAt} />
-                        </td>
-                        <td className="py-2">
-                          {Object.keys(u.entitlements).length > 0
-                            ? Object.keys(u.entitlements)
-                                .filter((key) => u.entitlements[key])
-                                .join(", ")
-                            : "–"}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-
-              {/* Pagination Controls */}
-              {pagination && pagination.totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-6">
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={!pagination.hasPrev}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    First
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={!pagination.hasPrev}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    Previous
-                  </button>
-
-                  <span className="px-3 py-1 text-sm">
-                    Page {pagination.page} of {pagination.totalPages}
-                  </span>
-
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={!pagination.hasNext}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    Next
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(pagination.totalPages)}
-                    disabled={!pagination.hasNext}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    Last
-                  </button>
-                </div>
+                ))
+              ) : (
+                // Data not loaded yet - show empty table body
+                <tr>
+                  <td colSpan={5} className="py-4"></td>
+                </tr>
               )}
-            </>
+            </tbody>
+          </table>
+
+          {/* Pagination Controls - only show when not loading and have data */}
+          {!activeLoading && pagination && pagination.totalPages > 1 && (
+            <div className="flex justify-center items-center gap-2 mt-6">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={!pagination.hasPrev}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                First
+              </button>
+              <button
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={!pagination.hasPrev}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Previous
+              </button>
+
+              <span className="px-3 py-1 text-sm">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+
+              <button
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={!pagination.hasNext}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Next
+              </button>
+              <button
+                onClick={() => setCurrentPage(pagination.totalPages)}
+                disabled={!pagination.hasNext}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Last
+              </button>
+            </div>
           )}
         </div>
       </div>
