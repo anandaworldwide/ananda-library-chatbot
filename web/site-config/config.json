@@ -281,5 +281,55 @@
     "showSourceCountSelector": false,
     "temperature": 0.2,
     "modelName": "gpt-4o-mini"
+  },
+  "photo": {
+    "name": "PhotoWise, The Photography Assistant",
+    "shortname": "PhotoWise",
+    "tagline": "Capture, Create, Inspire – Master the art of photography.",
+    "greeting": "Hi there! I'm PhotoWise. How can I help you with your photography today?",
+    "emailGreeting": "Hi photographer!",
+    "welcome_popup_heading": "Welcome, fellow photographer!",
+    "other_visitors_reference": "other photographers",
+    "chatPlaceholder": "How can I improve my portrait lighting?",
+    "allowedFrontEndDomains": ["**-ananda-web-services-projects.vercel.app", "localhost:3000", "127.0.0.1:3000"],
+    "help_url": "",
+    "help_text": "Help",
+    "collectionConfig": {
+      "whole_library": "All photography topics"
+    },
+    "enableSuggestedQueries": true,
+    "enableMediaTypeSelection": true,
+    "enableAuthorSelection": false,
+    "requireLogin": true,
+    "allowTemporarySessions": true,
+    "allowAllAnswersPage": true,
+    "header": {
+      "logo": "photo-logo.png",
+      "navItems": [
+        { "label": "Ask", "path": "/" },
+        { "label": "All&nbsp;Answers", "path": "/answers" }
+      ]
+    },
+    "footer": {
+      "links": [
+        {
+          "label": "Contact",
+          "url": "/contact",
+          "icon": "mail_outline"
+        },
+        {
+          "label": "Open Source",
+          "url": "https://github.com/anandaworldwide/ananda-library-chatbot",
+          "icon": "code"
+        }
+      ]
+    },
+    "npsSurveyFrequencyDays": 90,
+    "queriesPerUserPerDay": 150,
+    "enableModelComparison": true,
+    "showSourceCountSelector": true,
+    "temperature": 0.4,
+    "modelName": "gpt-4o",
+    "enableGeoAwareness": false
   }
 }

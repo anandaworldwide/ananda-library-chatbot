@@ -31,6 +31,7 @@ import logging
 import os
 import random
 import re
+import signal
 import sqlite3
 import sys
 import tempfile
@@ -49,6 +50,13 @@ from dotenv import load_dotenv
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 from readability import Document
+
+# OpenAI imports for rate limit handling (used for fallback checks)
+try:
+    import openai
+except ImportError:
+    # Fallback for when openai is not available
+    openai = None
 
 # Import shared utility
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -2347,17 +2355,52 @@ def _graceful_sleep(total_seconds: int, check_interval: int = 10) -> bool:
         bool: True if exit was requested during sleep, False if completed normally
     """
     elapsed = 0
-    while elapsed < total_seconds:
-        if is_exiting():
-            logging.info(
-                f"Exit requested during sleep (slept {elapsed}/{total_seconds} seconds)"
-            )
-            return True
+    sleep_interrupted = False
 
-        # Sleep for the shorter of remaining time or check interval
-        sleep_time = min(check_interval, total_seconds - elapsed)
-        time.sleep(sleep_time)
-        elapsed += sleep_time
+    def signal_handler(signum, frame):
+        nonlocal sleep_interrupted
+        sleep_interrupted = True
+        logging.info(f"Signal {signum} received during sleep, will exit soon")
+
+    # Set up a local signal handler for this sleep session
+    original_handler = signal.signal(signal.SIGINT, signal_handler)
+
+    try:
+        while elapsed < total_seconds and not sleep_interrupted:
+            if is_exiting():
+                logging.info(
+                    f"Exit requested during sleep (slept {elapsed}/{total_seconds} seconds)"
+                )
+                return True
+
+            # Sleep for the shorter of remaining time or check interval
+            sleep_time = min(check_interval, total_seconds - elapsed)
+
+            # Use a more interruptible sleep approach
+            try:
+                time.sleep(sleep_time)
+            except KeyboardInterrupt:
+                logging.info("Sleep interrupted by keyboard interrupt")
+                return True
+
+            elapsed += sleep_time
+
+            # Additional timeout protection - if we've been sleeping much longer than expected,
+            # something is wrong (e.g., system sleep/wake issues)
+            if elapsed > total_seconds * 2:
+                logging.warning(
+                    f"Sleep duration exceeded 2x expected time ({elapsed}s vs {total_seconds}s), exiting"
+                )
+                return False
+
+    finally:
+        # Restore original signal handler
+        signal.signal(signal.SIGINT, original_handler)
+
+    # If we were interrupted by our local signal handler, treat it as exit requested
+    if sleep_interrupted:
+        logging.info("Sleep interrupted by signal, treating as exit request")
+        return True
 
     return False
 
@@ -2437,12 +2480,12 @@ def _process_page_content(
     crawler: WebsiteCrawler,
     pinecone_index,
     index_name: str,
-) -> tuple[int, int]:
+) -> tuple[int, int, bool]:
     """Process page content and return (pages_processed_increment, pages_since_restart_increment)."""
     if not content:
         error_msg = f"No content extracted from {url}"
         crawler.mark_url_status(url, "failed", error_msg)
-        return 0, 0
+        return 0, 0, False
 
     try:
         chunks = create_chunks_from_page(content, crawler.text_splitter)
@@ -2475,15 +2518,43 @@ def _process_page_content(
             ):
                 crawler.add_url_to_queue(link)
 
-        return 1, 1  # Increment both counters for successful processing
+        return (
+            1,
+            1,
+            False,
+        )  # Increment both counters for successful processing, no rate limit hit
 
     except Exception as e:
+        # Log exception type for debugging
+        logging.debug(f"Exception type: {type(e).__name__}")
+
+        # Check for rate limit errors by message content (more reliable than exception type)
+        error_message = str(e).lower()
+        is_rate_limit = (
+            "rate limit" in error_message
+            or "rate_limit_exceeded" in error_message
+            or "requests per day" in error_message
+            or "429" in error_message
+        )
+
+        if is_rate_limit:
+            logging.warning(f"OpenAI rate limit reached for {url}: {e}")
+            logging.warning(
+                "Stopping current crawl round and sleeping for 1 hour due to rate limit"
+            )
+            crawler.mark_url_status(
+                url, "pending", f"Rate limit hit - will retry after sleep: {str(e)}"
+            )
+            # Set flag on crawler to indicate rate limit exit
+            crawler._rate_limit_exit = True
+            return 0, 0, True  # Return rate_limit_hit flag
+
         logging.error(f"Failed to process page content {url}: {e}")
         logging.error(traceback.format_exc())
         crawler.mark_url_status(
             url, "failed", f"Failed during content processing: {str(e)}"
         )
-        return 0, 0
+        return 0, 0, False
 
 
 def _cleanup_browser(page, browser) -> None:
@@ -2563,9 +2634,14 @@ def _process_crawl_iteration(
         )
         return 0, 0, True  # Signal exit
 
-    pages_inc, restart_inc = _process_page_content(
+    pages_inc, restart_inc, rate_limit_hit = _process_page_content(
         content, new_links, url, crawler, pinecone_index, index_name
     )
+
+    # Handle rate limit - don't exit, just return with rate limit flag
+    if rate_limit_hit:
+        # Don't signal exit - we want to sleep and continue, not exit the script
+        return 0, 0, False  # Continue normally, rate limit will be handled in main loop
 
     crawler.commit_db_changes()
 
@@ -2733,7 +2809,7 @@ def _handle_no_url_processing(
     batch_start_time: float,
     batch_results: list,
     pinecone_index=None,
-) -> tuple[int, int, bool, bool, tuple]:
+) -> tuple[int, int, bool, bool, tuple, bool]:
     """Handle the case when no URL is available for processing."""
     # Check if we should mark initial crawl as completed
     _handle_initial_crawl_completion(crawler)
@@ -2752,6 +2828,7 @@ def _handle_no_url_processing(
             False,
             False,
             (browser, page, batch_start_time, batch_results),
+            False,  # Not a rate limit exit
         )
 
     # Only sleep if we still don't have a URL to process
@@ -2765,6 +2842,7 @@ def _handle_no_url_processing(
             True,
             False,
             (browser, page, batch_start_time, batch_results),
+            False,  # Not a rate limit exit
         )
 
     logging.info("Sleep completed - continuing loop...")
@@ -2798,6 +2876,7 @@ def _handle_no_url_processing(
         False,
         False,
         (browser, page, batch_start_time, batch_results),
+        False,  # Not a rate limit exit
     )
 
 
@@ -2846,11 +2925,11 @@ def _handle_crawl_loop_iteration(
     batch_results: list,
     batch_start_time: float,
     p,
-) -> tuple[int, int, bool, bool, tuple]:
+) -> tuple[int, int, bool, bool, tuple, bool]:
     """Handle a single iteration of the crawl loop.
 
     Returns:
-        tuple: (pages_processed, pages_since_restart, should_exit, should_restart, (browser, page, batch_start_time, batch_results))
+        tuple: (pages_processed, pages_since_restart, should_exit, should_restart, (browser, page, batch_start_time, batch_results), rate_limit_hit)
     """
     if _should_stop_crawling(stop_after, pages_processed):
         return (
@@ -2859,6 +2938,7 @@ def _handle_crawl_loop_iteration(
             True,
             False,
             (browser, page, batch_start_time, batch_results),
+            False,  # Not a rate limit exit
         )
 
     url = crawler.get_next_url_to_crawl()
@@ -2893,6 +2973,20 @@ def _handle_crawl_loop_iteration(
         url, crawler, browser, page, pinecone_index, index_name
     )
 
+    # Check if rate limit was hit (separate from should_exit)
+    rate_limit_exit = getattr(crawler, "_rate_limit_exit", False)
+    if rate_limit_exit:
+        # Reset the flag for next iteration
+        crawler._rate_limit_exit = False
+        return (
+            pages_processed,
+            pages_since_restart,
+            False,  # Don't exit the script
+            False,
+            (browser, page, batch_start_time, batch_results),
+            True,  # Rate limit flag
+        )
+
     if should_exit:
         return (
             pages_processed,
@@ -2900,6 +2994,7 @@ def _handle_crawl_loop_iteration(
             True,
             False,
             (browser, page, batch_start_time, batch_results),
+            False,  # Not a rate limit exit
         )
 
     if restart_inc == 0 and pages_inc == 0:  # Restart needed
@@ -2918,6 +3013,7 @@ def _handle_crawl_loop_iteration(
             False,
             True,
             (browser, page, batch_start_time, batch_results),
+            False,  # Not a rate limit exit
         )
 
     pages_processed += pages_inc
@@ -2930,7 +3026,30 @@ def _handle_crawl_loop_iteration(
         False,
         False,
         (browser, page, batch_start_time, batch_results),
+        False,  # Not a rate limit exit
     )
+
+
+def _handle_rate_limit_sleep() -> bool:
+    """Handle rate limit sleep and return True if exit was requested."""
+    logging.warning("Rate limit detected - sleeping for 1 hour before continuing...")
+    exit_requested = _graceful_sleep(60 * 60)  # 1 hour
+    if exit_requested:
+        logging.info("Exit was requested during rate limit sleep")
+        return True
+    logging.info("Rate limit sleep completed - resuming crawl...")
+    return False
+
+
+def _handle_crawl_loop_exception(e: Exception) -> None:
+    """Handle exceptions in the main crawl loop."""
+    if is_exiting():
+        logging.info(
+            "Exit signal received during operation, shutting down without detailed error reporting."
+        )
+    else:
+        logging.error(f"Browser or main loop error: {e}")
+        logging.error(traceback.format_exc())
 
 
 def run_crawl_loop(
@@ -2962,6 +3081,7 @@ def run_crawl_loop(
                     should_exit,
                     should_restart,
                     (browser, page, batch_start_time, batch_results),
+                    rate_limit_hit_flag,
                 ) = _handle_crawl_loop_iteration(
                     crawler,
                     browser,
@@ -2983,18 +3103,18 @@ def run_crawl_loop(
                 if should_restart:
                     continue
 
+                # Handle rate limit - sleep for 1 hour and continue
+                if rate_limit_hit_flag:
+                    if _handle_rate_limit_sleep():
+                        break
+                    continue
+
             crawler.current_processing_url = None
 
         except SystemExit:
             logging.info("Received exit signal, shutting down crawler loop.")
         except Exception as e:
-            if is_exiting():
-                logging.info(
-                    "Exit signal received during operation, shutting down without detailed error reporting."
-                )
-            else:
-                logging.error(f"Browser or main loop error: {e}")
-                logging.error(traceback.format_exc())
+            _handle_crawl_loop_exception(e)
         finally:
             _cleanup_browser(page, browser)
 

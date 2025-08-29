@@ -222,7 +222,14 @@ const SourcesList: React.FC<SourcesListProps> = ({
   const handleSourceClick = (e: React.MouseEvent<HTMLAnchorElement> | any, source: string) => {
     e.preventDefault && e.preventDefault(); // Prevent default link behavior if preventDefault exists
     logEvent("click_source", "UI", source);
-    window.open(source, "_blank", "noopener,noreferrer"); // Open link manually
+
+    // Ensure the URL has a protocol to prevent relative path issues
+    let fullUrl = source;
+    if (source && !source.startsWith("http://") && !source.startsWith("https://")) {
+      fullUrl = `https://${source}`;
+    }
+
+    window.open(fullUrl, "_blank", "noopener,noreferrer"); // Open link manually
   };
 
   // Handle clicking on a library link

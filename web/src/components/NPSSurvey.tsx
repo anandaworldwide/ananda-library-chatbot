@@ -23,8 +23,42 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [additionalComments, setAdditionalComments] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [surveyAvailable, setSurveyAvailable] = useState<boolean | null>(null);
+
+  // Check if NPS survey is available (has required environment configuration)
+  useEffect(() => {
+    const checkSurveyAvailability = async () => {
+      try {
+        const response = await fetch("/api/npsAvailable");
+
+        if (!response.ok) {
+          console.error(`NPS availability check failed with status ${response.status}`);
+          setSurveyAvailable(false);
+          return;
+        }
+
+        const data = await response.json();
+        setSurveyAvailable(data.available);
+      } catch (error) {
+        console.error("Error checking NPS survey availability:", error);
+        setSurveyAvailable(false);
+      }
+    };
+
+    checkSurveyAvailability();
+  }, []);
 
   useEffect(() => {
+    // Don't show survey if it's not available (missing configuration)
+    if (surveyAvailable === false) {
+      return;
+    }
+
+    // Don't proceed if we haven't checked availability yet
+    if (surveyAvailable === null) {
+      return;
+    }
+
     // Logic to determine when to show the survey based on user interaction history
     if (forceSurvey) {
       setShowSurvey(true);
@@ -55,7 +89,7 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
         );
       }
     }
-  }, [siteConfig.npsSurveyFrequencyDays, forceSurvey]);
+  }, [siteConfig.npsSurveyFrequencyDays, forceSurvey, surveyAvailable]);
 
   // Function to handle survey dismissal (close/click away)
   const dismissSurvey = () => {
@@ -186,7 +220,7 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
               </button>
               {/* Survey questions and input fields */}
               <h2 className="text-xl font-bold mb-4">
-                How likely are you to recommend the Ananda Chatbot to a gurubhai?
+                How likely are you to recommend {siteConfig.shortname} to {siteConfig.other_visitors_reference}?
               </h2>
               {/* Score buttons */}
               <div className="flex flex-col mb-4">

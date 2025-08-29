@@ -1,0 +1,8 @@
+{
+  "variables": {},
+  "templates": {
+    "baseTemplate": {
+      "file": "photo-base.txt"
+    }
+  }
+}
