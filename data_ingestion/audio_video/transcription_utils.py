@@ -32,12 +32,26 @@ from data_ingestion.utils.text_splitter_utils import SpacyTextSplitter
 
 logger = logging.getLogger(__name__)
 
-TRANSCRIPTIONS_DB_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "media", "transcriptions.db")
-)
-TRANSCRIPTIONS_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "media", "transcriptions")
-)
+
+def get_transcriptions_db_path(site: str) -> str:
+    """Get site-specific transcriptions database path."""
+    if not site:
+        raise ValueError("Site parameter is required")
+    return os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__), "..", "media", f"{site}-transcriptions.db"
+        )
+    )
+
+
+def get_transcriptions_dir(site: str) -> str:
+    """Get site-specific transcriptions directory path."""
+    if not site:
+        raise ValueError("Site parameter is required")
+    return os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "media", "transcriptions", site)
+    )
+
 
 # Global list to store chunk lengths
 chunk_lengths = []
@@ -137,10 +151,11 @@ def transcribe_chunk(
         raise
 
 
-def init_db():
+def init_db(site: str):
     """Initialize SQLite database for transcription indexing."""
-    os.makedirs(os.path.dirname(TRANSCRIPTIONS_DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(TRANSCRIPTIONS_DB_PATH)
+    db_path = get_transcriptions_db_path(site)
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
 
     # Check if the table already exists
@@ -152,15 +167,21 @@ def init_db():
             """CREATE TABLE IF NOT EXISTS transcriptions
                      (file_hash TEXT PRIMARY KEY, file_path TEXT, timestamp REAL, json_file TEXT)"""
         )
-        logger.info("Created 'transcriptions' table in the database.")
+        logger.info(
+            f"Created 'transcriptions' table in the database for site '{site}'."
+        )
     else:
-        logger.info("'transcriptions' table already exists in the database.")
+        logger.info(
+            f"'transcriptions' table already exists in the database for site '{site}'."
+        )
 
     conn.commit()
     conn.close()
 
 
-def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
+def get_saved_transcription(
+    file_path, is_youtube_video=False, youtube_id=None, site=None
+):
     """
     Retrieve transcription for a given file or YouTube video.
 
@@ -169,11 +190,13 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
 
     For Youtube videos, file_path is None
     """
+    if not site:
+        raise ValueError("Site parameter is required")
 
     if is_youtube_video:
         if not youtube_id:
             raise ValueError("YouTube ID is required for YouTube videos")
-        youtube_data_map = load_youtube_data_map()
+        youtube_data_map = load_youtube_data_map(site)
         youtube_data = youtube_data_map.get(youtube_id)
 
         if youtube_data:
@@ -185,8 +208,11 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
     else:
         file_hash = get_file_hash(file_path)
 
+    db_path = get_transcriptions_db_path(site)
+    transcriptions_dir = get_transcriptions_dir(site)
+
     try:
-        conn = sqlite3.connect(TRANSCRIPTIONS_DB_PATH)
+        conn = sqlite3.connect(db_path)
         c = conn.cursor()
         c.execute(
             "SELECT json_file FROM transcriptions WHERE file_hash = ?", (file_hash,)
@@ -195,9 +221,9 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
         conn.close()
     except sqlite3.OperationalError:
         logger.warning(
-            f"Database file not found or inaccessible. Initializing new database at {TRANSCRIPTIONS_DB_PATH}"
+            f"Database file not found or inaccessible. Initializing new database at {db_path}"
         )
-        init_db()
+        init_db(site)
         return None
 
     if result:
@@ -207,7 +233,7 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
         )
 
         # Ensure we're using the full path to the JSON file
-        full_json_path = os.path.join(TRANSCRIPTIONS_DIR, json_file)
+        full_json_path = os.path.join(transcriptions_dir, json_file)
         if os.path.exists(full_json_path):
             try:
                 with gzip.open(full_json_path, "rt", encoding="utf-8") as f:
@@ -227,7 +253,7 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
                 try:
                     os.remove(full_json_path)
                     # Also remove from database
-                    conn = sqlite3.connect(TRANSCRIPTIONS_DB_PATH)
+                    conn = sqlite3.connect(db_path)
                     c = conn.cursor()
                     c.execute(
                         "DELETE FROM transcriptions WHERE file_hash = ?", (file_hash,)
@@ -247,7 +273,7 @@ def get_saved_transcription(file_path, is_youtube_video=False, youtube_id=None):
     return None
 
 
-def save_transcription(file_path, transcripts, youtube_id=None):
+def save_transcription(file_path, transcripts, youtube_id=None, site=None):
     """
     Save transcription to gzipped JSON file and update database.
 
@@ -255,10 +281,14 @@ def save_transcription(file_path, transcripts, youtube_id=None):
         file_path: Path to original audio file (or None for YouTube)
         transcripts: List of transcription segments or dict with transcription data
         youtube_id: YouTube video ID if applicable
+        site: Site identifier for storage location
     """
+    if not site:
+        raise ValueError("Site parameter is required")
+
     # Generate hash based on either file_path or youtube_id
     if youtube_id:
-        youtube_data_map = load_youtube_data_map()
+        youtube_data_map = load_youtube_data_map(site)
         youtube_data = youtube_data_map.get(youtube_id)
         if youtube_data and "file_hash" in youtube_data:
             file_hash = youtube_data["file_hash"]
@@ -288,7 +318,7 @@ def save_transcription(file_path, transcripts, youtube_id=None):
             transcription_data["youtube_id"] = youtube_id
 
     if youtube_id:
-        youtube_data_map = load_youtube_data_map()
+        youtube_data_map = load_youtube_data_map(site)
         if (
             youtube_id in youtube_data_map
             and "media_metadata" in youtube_data_map[youtube_id]
@@ -301,10 +331,11 @@ def save_transcription(file_path, transcripts, youtube_id=None):
 
     # Generate unique filename based on content
     json_filename = f"{file_hash}.json.gz"
-    json_filepath = os.path.join(TRANSCRIPTIONS_DIR, json_filename)
+    transcriptions_dir = get_transcriptions_dir(site)
+    json_filepath = os.path.join(transcriptions_dir, json_filename)
 
     # Ensure transcriptions directory exists
-    os.makedirs(TRANSCRIPTIONS_DIR, exist_ok=True)
+    os.makedirs(transcriptions_dir, exist_ok=True)
 
     # Save to gzipped JSON file
     with gzip.open(json_filepath, "wt", encoding="utf-8") as f:
@@ -312,7 +343,8 @@ def save_transcription(file_path, transcripts, youtube_id=None):
 
     # Update database
     try:
-        conn = sqlite3.connect(TRANSCRIPTIONS_DB_PATH)
+        db_path = get_transcriptions_db_path(site)
+        conn = sqlite3.connect(db_path)
         c = conn.cursor()
         c.execute(
             "INSERT OR REPLACE INTO transcriptions (file_hash, json_file, file_path, timestamp) VALUES (?, ?, ?, ?)",
@@ -331,6 +363,7 @@ def transcribe_media(
     is_youtube_video=False,
     youtube_id=None,
     interrupt_event=None,
+    site=None,
 ):
     """
     Transcribe audio file, using existing transcription if available and not forced.
@@ -338,11 +371,13 @@ def transcribe_media(
     This function first checks for an existing transcription using the hybrid storage system.
     If not found or if force is True, it performs the transcription and saves the result.
     """
+    if not site:
+        raise ValueError("Site parameter is required")
 
     file_name = os.path.basename(file_path) if file_path else f"YouTube_{youtube_id}"
 
     existing_transcription = get_saved_transcription(
-        file_path, is_youtube_video, youtube_id
+        file_path, is_youtube_video, youtube_id, site
     )
     if existing_transcription and not force:
         logger.debug("transcribe_media: Using existing transcription")
@@ -408,7 +443,7 @@ def transcribe_media(
 
         if transcripts:
             save_transcription(
-                file_path, transcripts, youtube_id if is_youtube_video else None
+                file_path, transcripts, youtube_id if is_youtube_video else None, site
             )
             return transcripts
 
@@ -718,11 +753,14 @@ def split_large_chunks(chunks, target_size):
     return new_chunks
 
 
-def save_youtube_transcription(youtube_data, file_path, transcripts):
+def save_youtube_transcription(youtube_data, file_path, transcripts, site=None):
     """Save transcription and update youtube data map with metadata"""
+    if not site:
+        raise ValueError("Site parameter is required")
+
     # Don't call save_transcription here since it's already called in transcribe_media
     file_hash = get_file_hash(file_path)
-    youtube_data_map = load_youtube_data_map()
+    youtube_data_map = load_youtube_data_map(site)
 
     # Get media metadata and store it in youtube_data
     try:
@@ -741,4 +779,4 @@ def save_youtube_transcription(youtube_data, file_path, transcripts):
         "file_size", os.path.getsize(file_path)
     )
     youtube_data_map[youtube_data["youtube_id"]] = youtube_data
-    save_youtube_data_map(youtube_data_map)
+    save_youtube_data_map(youtube_data_map, site)

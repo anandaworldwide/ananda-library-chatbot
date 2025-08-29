@@ -234,7 +234,7 @@ def _validate_and_setup_processing(
 
 
 def _perform_transcription(
-    file_path, file_name, is_youtube_video, youtube_id, force, youtube_data
+    file_path, file_name, is_youtube_video, youtube_id, force, youtube_data, site
 ):
     """
     Performs the actual transcription with comprehensive error handling.
@@ -256,12 +256,14 @@ def _perform_transcription(
     )
 
     try:
-        transcription = transcribe_media(file_path, force, is_youtube_video, youtube_id)
+        transcription = transcribe_media(
+            file_path, force, is_youtube_video, youtube_id, site=site
+        )
         if transcription:
             local_report["processed"] += 1
             # Cache YouTube transcriptions for future use
             if is_youtube_video:
-                save_youtube_transcription(youtube_data, file_path, transcription)
+                save_youtube_transcription(youtube_data, file_path, transcription, site)
             return transcription, local_report
         else:
             error_msg = f"Error transcribing {'YouTube video' if is_youtube_video else 'file'} {file_name}: No transcripts generated"
@@ -309,6 +311,7 @@ def _handle_transcription(
     default_author,
     library_name,
     youtube_data,
+    site,
 ):
     """
     Handles transcription logic - checking cache and transcribing if needed.
@@ -328,7 +331,7 @@ def _handle_transcription(
     # Check cache first to avoid redundant processing
     try:
         existing_transcription = get_saved_transcription(
-            file_path, is_youtube_video, youtube_id
+            file_path, is_youtube_video, youtube_id, site
         )
     except Exception as e:
         error_msg = (
@@ -372,7 +375,13 @@ def _handle_transcription(
 
         # Perform transcription
         return _perform_transcription(
-            file_path, file_name, is_youtube_video, youtube_id, force, youtube_data
+            file_path,
+            file_name,
+            is_youtube_video,
+            youtube_id,
+            force,
+            youtube_data,
+            site,
         )
 
 
@@ -534,6 +543,7 @@ def process_file(
     is_youtube_video=False,
     youtube_data=None,
     s3_key=None,
+    site=None,
 ):
     """
     Core processing pipeline for a single media file or YouTube video.
@@ -577,6 +587,7 @@ def process_file(
         default_author,
         library_name,
         youtube_data,
+        site,
     )
 
     if transcription is None:  # Error in transcription
@@ -682,7 +693,9 @@ def process_item(item, args, client, index, site_config):
         is_youtube_video = False
         youtube_data = None
     elif item["type"] == "youtube_video":
-        youtube_data, youtube_id = preprocess_youtube_video(item["data"]["url"], logger)
+        youtube_data, youtube_id = preprocess_youtube_video(
+            item["data"]["url"], logger, args.site
+        )
         if not youtube_data:
             logger.error(f"Failed to process YouTube video: {item['data']['url']}")
             error_report["error_details"].append(
@@ -716,6 +729,7 @@ def process_item(item, args, client, index, site_config):
         is_youtube_video=is_youtube_video,
         youtube_data=youtube_data,
         s3_key=s3_key,
+        site=args.site,
     )
     end_time = time.time()
     processing_time = end_time - start_time
@@ -735,12 +749,12 @@ def process_item(item, args, client, index, site_config):
 
 def initialize_environment(args):
     load_env(args.site)
-    init_db()
+    init_db(args.site)
     configure_logging(args.debug)
     return logger
 
 
-def preprocess_youtube_video(url, logger):
+def preprocess_youtube_video(url, logger, site):
     """
     Prepares YouTube video for processing by:
     1. Extracting video ID
@@ -751,7 +765,7 @@ def preprocess_youtube_video(url, logger):
     metadata and local audio path
     """
     youtube_id = extract_youtube_id(url)
-    youtube_data_map = load_youtube_data_map()
+    youtube_data_map = load_youtube_data_map(site)
     existing_youtube_data = youtube_data_map.get(youtube_id)
 
     if existing_youtube_data:
@@ -759,7 +773,7 @@ def preprocess_youtube_video(url, logger):
         existing_youtube_data["audio_path"] = None
 
         existing_transcription = get_saved_transcription(
-            None, is_youtube_video=True, youtube_id=youtube_id
+            None, is_youtube_video=True, youtube_id=youtube_id, site=site
         )
         if existing_transcription:
             logger.debug(

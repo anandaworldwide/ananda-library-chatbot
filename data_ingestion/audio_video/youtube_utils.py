@@ -32,13 +32,18 @@ from yt_dlp.utils import DownloadError
 # Set up logging
 logger = logging.getLogger(__name__)
 
+
 # Update the path to be relative to the project root
-YOUTUBE_DATA_MAP_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data_ingestion",
-    "media",
-    "youtube_data_map.json",
-)
+def get_youtube_data_map_path(site: str) -> str:
+    """Get site-specific YouTube data map path."""
+    if not site:
+        raise ValueError("Site parameter is required")
+    return os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "data_ingestion",
+        "media",
+        f"{site}-youtube_data_map.json",
+    )
 
 
 def extract_youtube_id(url: str) -> str:
@@ -184,15 +189,27 @@ def add_metadata_to_mp3(mp3_path: str, metadata: dict, url: str):
         logger.error(f"An error occurred while adding metadata to MP3: {e}")
 
 
-def load_youtube_data_map():
-    if os.path.exists(YOUTUBE_DATA_MAP_PATH):
-        with open(YOUTUBE_DATA_MAP_PATH) as f:
+def load_youtube_data_map(site: str):
+    """Load site-specific YouTube data map."""
+    if not site:
+        raise ValueError("Site parameter is required")
+
+    data_map_path = get_youtube_data_map_path(site)
+    if os.path.exists(data_map_path):
+        with open(data_map_path) as f:
             return json.load(f)
     return {}
 
 
-def save_youtube_data_map(youtube_data_map):
-    with open(YOUTUBE_DATA_MAP_PATH, "w") as f:
+def save_youtube_data_map(youtube_data_map, site: str):
+    """Save site-specific YouTube data map."""
+    if not site:
+        raise ValueError("Site parameter is required")
+
+    data_map_path = get_youtube_data_map_path(site)
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(data_map_path), exist_ok=True)
+    with open(data_map_path, "w") as f:
         json.dump(youtube_data_map, f, ensure_ascii=False, indent=2)
 
 
