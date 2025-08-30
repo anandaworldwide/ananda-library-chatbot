@@ -330,10 +330,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   }, [siteConfig, setMessageState, setError, setLoading, handleUrlBasedLoading]);
 
   // Custom hook for displaying popup messages
-  const { showPopup, closePopup, popupMessage } = usePopup(
-    "1.03",
-    "We've removed the Public Answers section of the site. Your questions and answers are always private now, unless you use the `temporarySession` feature, in which case the question will not be saved in your chat history."
-  );
+  const { showPopup, closePopup, popupMessage } = usePopup("1.03", "");
 
   // Function to handle collection change
   const handleCollectionChange = (newCollection: string) => {
