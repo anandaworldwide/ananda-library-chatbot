@@ -74,7 +74,7 @@ facilitate understanding and future development.
   - **OpenAI:** Used for Large Language Model (LLM) inference and text embeddings (via LangChain).
   - **Pinecone:** Vector database used for storing and retrieving document embeddings for the Retrieval-Augmented
     Generation (RAG) process (`pinecone-client.ts`, `config/pinecone.ts`).
-  - **Firestore:** NoSQL database used for storing chat logs, user data, votes, likes, cached related questions, and
+  - **Firestore:** NoSQL database used for storing chat logs, user data, votes, cached related questions, and
     potentially ingestion queue state (`firestoreUtils.ts`, `services/firebase.ts`).
   - **Redis:** In-memory data store used primarily for API rate limiting (`redisUtils.ts`, `genericRateLimiter.ts`).
   - **AWS S3:** Object storage used for hosting source audio files and prompt templates with environment separation
@@ -135,6 +135,16 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
   - **Auth:** Open.
   - **Logic:** Compares provided password with stored hash (`passwordUtils.ts`), generates a JWT (`jwtUtils.ts`), and
     sets it as an HttpOnly cookie.
+
+**Authorization Utilities:**
+
+- **Answers Page Authorization (`answersPageAuth.ts`):**
+  - Implements admin-only access control for the answers page.
+  - **Login-required sites:** Only superusers can access.
+  - **No-login sites:** Anyone can access (not advertised).
+  - **Discrete link visibility:** Only shown to highest privilege users (superusers on login sites, sudo users on
+    no-login sites).
+  - Functions: `isAnswersPageAllowed()`, `shouldShowAnswersPageLink()`, `getAnswersPageErrorMessage()`.
 - **`POST /api/logout`** (`pages/api/logout.ts`)
   - **Purpose:** Logs out the user.
   - **Auth:** Requires valid JWT.
@@ -155,14 +165,17 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
   - **Purpose:** Records user upvotes or downvotes on chat answers.
   - **Auth:** Requires JWT authentication (`authMiddleware.ts`).
   - **Logic:** Updates vote counts in Firestore (`firestoreUtils.ts`).
-- **`POST /api/like`** (`pages/api/like.ts`)
-  - **Purpose:** Records user likes on chat answers.
-  - **Auth:** Requires JWT authentication.
-  - **Logic:** Updates like counts in Firestore (`likeService.ts`, `firestoreUtils.ts`).
 - **`GET /api/answers`** (`pages/api/answers.ts`)
-  - **Purpose:** Retrieves specific answers or question details.
-  - **Auth:** Requires JWT authentication.
-  - **Logic:** Fetches data from Firestore (`answersUtils.ts`).
+  - **Purpose:** Retrieves specific answers or question details for admin users.
+  - **Auth:** Requires admin-level authorization (superuser for login-required sites, sudo for no-login sites).
+  - **Logic:** Fetches data from Firestore (`answersUtils.ts`), validates access via `answersPageAuth.ts`.
+
+**Answers Page Authorization:**
+
+- **`GET /api/answers/link-visibility`** (`pages/api/answers/link-visibility.ts`)
+  - **Purpose:** Determines if the discrete answers page link should be shown to the current user.
+  - **Auth:** Uses `answersPageAuth.ts` to check user privileges.
+  - **Logic:** Returns visibility status based on user role and site configuration.
 
 **Conversation History & Management:**
 
@@ -178,14 +191,12 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
   - **Logic:** Fetches all messages in a conversation grouped by `convId`, supports timestamp filtering for sharing.
   - **Response:** Complete conversation thread with all messages and metadata.
 - **`GET /api/document/[docId]`** (`pages/api/document/[docId].ts`)
+
   - **Purpose:** Retrieves single document for ownership verification and conversation lookup.
   - **Auth:** Optional JWT authentication (supports anonymous sharing).
   - **Logic:** Fetches document metadata including `convId` and ownership information.
   - **Response:** Document metadata with `convId`, `uuid`, and basic conversation info.
-- **`POST /api/relatedQuestions`** (`pages/api/relatedQuestions.ts`)
-  - **Purpose:** Generates and returns related questions based on the current query context.
-  - **Auth:** Requires JWT authentication.
-  - **Logic:** Uses LLM via `relatedQuestionsUtils.ts`, potentially caching results.
+
 - **`POST /api/contact`** (`pages/api/contact.ts`)
   - **Purpose:** Handles contact form submissions.
   - **Auth:** Likely open or uses basic CSRF protection.
@@ -230,7 +241,6 @@ Data is stored across multiple services:
     - `userId`: Identifier for the user (if logged in).
     - `sessionId`: Identifier for the chat session.
     - `vote`: Number indicating vote status (e.g., 1 for up, -1 for down, 0 for none).
-    - `likeCount`: Number of likes.
     - `messageId`: Unique ID for the message pair.
     - `namespace`: The Pinecone namespace used.
     - **`convId`**: UUID v4 string that groups messages into conversations. New conversations generate new IDs;
@@ -245,15 +255,12 @@ Data is stored across multiple services:
     - `userId`: Voting user.
     - `questionId`/`messageId`: Identifier for the voted item.
     - `voteType`: 'up' or 'down'.
-  - **`likes` (Collection):** Tracks individual likes.
-    - `userId`: Liking user.
-    - `questionId`/`messageId`: Identifier for the liked item.
   - **`users` (Collection - Inferred):** Stores user login credentials.
     - `username`: User identifier.
     - `passwordHash`: Hashed password (`bcrypt` used in `passwordUtils.ts`).
     - `roles`: (Potentially) User roles (e.g., 'admin').
   - **`npsSurveys` (Collection):** Stores NPS survey responses.
-  - **`relatedQuestionsCache` (Collection):** Caches generated related questions to avoid re-computation.
+
   - **`modelComparisons`, `modelComparisonVotes` (Collections):** Data related to A/B testing or comparing different LLM
     responses.
   - **`ingestQueue` (Collection - Inferred):** Used by Python scripts to manage the data ingestion pipeline for sources
@@ -526,10 +533,10 @@ if (siteConfig?.requireLogin) {
   - Takes the user's query and potentially the conversation context.
   - Sends a request to an LLM to generate relevant follow-up questions.
   - Caches results (Firestore/Redis) to reduce LLM calls.
-- **Voting and Liking:**
-  - API endpoints receive vote/like requests with message/answer IDs.
-  - Use Firestore transactions or atomic increments to update vote/like counts.
-  - Record individual votes/likes in separate collections to prevent duplicate actions.
+- **Voting:**
+  - API endpoints receive vote requests with message/answer IDs.
+  - Use Firestore transactions or atomic increments to update vote counts.
+  - Record individual votes in separate collections to prevent duplicate actions.
 - **Rate Limiting:**
   - Implemented as API middleware.
   - Uses Redis to store counters keyed by IP address (or potentially user ID).

@@ -114,8 +114,7 @@ authentication, and integration options, including a WordPress plugin.
   - **FR1.4:** Maintain conversation history within a session (`chatHistory`).
   - **FR1.5:** Allow users to clear the conversation history.
   - **FR1.6:** Offer mechanisms for user feedback (e.g., thumbs up/down) on individual answers (`useVote`, `/api/vote`).
-  - **FR1.7:** Display related questions based on the current query (`/api/relatedQuestions`).
-  - **FR1.8:** (Optional/Configurable) Support audio playback for answers or source material (`useAudioPlayer`).
+  - **FR1.7:** (Optional/Configurable) Support audio playback for answers or source material (`useAudioPlayer`).
 
 - **FR1B: Persistent Conversation History & Management**
   - **FR1B.1:** Group related messages into conversations using unique conversation IDs (`convId`).

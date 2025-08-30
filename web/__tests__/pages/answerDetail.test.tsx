@@ -47,9 +47,6 @@ jest.mock("@/utils/client/reactQueryConfig", () => ({
 }));
 
 // Mock various parts of the app
-jest.mock("@/services/likeService", () => ({
-  checkUserLikes: jest.fn().mockResolvedValue({}),
-}));
 
 jest.mock("@/utils/client/analytics", () => ({
   logEvent: jest.fn(),
@@ -119,15 +116,15 @@ describe("SingleAnswer page", () => {
     });
   });
 
-  test("Shows error message when JWT auth fails", async () => {
+  test("Shows redirect message when accessing answer detail page", async () => {
     // Render the component
     render(<SingleAnswer siteConfig={mockSiteConfig} />);
 
-    // Verify error message appears (using a more flexible approach)
-    const errorElement = await screen.findByText(/Error:/);
-    expect(errorElement).toBeInTheDocument();
+    // Verify redirect message appears
+    const redirectElement = await screen.findByText("Redirecting...");
+    expect(redirectElement).toBeInTheDocument();
 
-    // Verify the "Go Back" button is available
-    expect(screen.getByText("Go Back to All Answers")).toBeInTheDocument();
+    // Verify loading spinner is present
+    expect(document.querySelector(".animate-spin")).toBeInTheDocument();
   });
 });

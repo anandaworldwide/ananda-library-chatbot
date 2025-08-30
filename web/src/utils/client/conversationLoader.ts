@@ -24,13 +24,20 @@ export interface LoadedConversation {
 export async function loadConversationByConvId(
   convId: string,
   upToTimestamp?: any,
-  uuidOverride?: string
+  uuidOverride?: string | null
 ): Promise<LoadedConversation> {
   try {
-    const uuid = uuidOverride || getOrCreateUUID();
+    // For legacy documents, uuidOverride can be null to indicate no UUID filtering
+    const uuid = uuidOverride === null ? null : uuidOverride || getOrCreateUUID();
+
+    // Build API URL - for legacy documents, we may not have a UUID
+    let apiUrl = `/api/chats?convId=${convId}&limit=200`;
+    if (uuid) {
+      apiUrl += `&uuid=${encodeURIComponent(uuid)}`;
+    }
 
     // Fetch all messages in the conversation
-    const response = await fetchWithAuth(`/api/chats?uuid=${encodeURIComponent(uuid)}&convId=${convId}&limit=200`, {
+    const response = await fetchWithAuth(apiUrl, {
       method: "GET",
     });
 
@@ -171,13 +178,17 @@ export async function loadConversationByDocId(
     const { convId, uuid: docUuid, timestamp } = docData;
 
     const currentUuid = getOrCreateUUID();
-    const isOwner = currentUuid === docUuid;
+
+    // For legacy documents without UUID, treat as publicly viewable (not owned)
+    // For documents with UUID, check ownership
+    const isOwner = docUuid ? currentUuid === docUuid : false;
 
     // Load conversation - full if owner, up to timestamp if not
+    // For legacy documents without UUID, pass null to indicate no UUID filtering
     const conversation = await loadConversationByConvId(
       convId,
       isOwner ? undefined : timestamp,
-      isOwner ? undefined : docUuid
+      docUuid ? (isOwner ? undefined : docUuid) : null
     );
 
     return {

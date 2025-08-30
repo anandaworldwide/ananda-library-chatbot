@@ -218,7 +218,7 @@ tests more reliable and less prone to environment dependencies.
   - 🥚 High-volume endpoints (currently at ~49% line coverage, goal is 70%)
 - 🥚 Add comprehensive tests for all codebase functionality
 - [x] Move retrievalSequence.test.ts to `__tests__/utils/server/` directory
-- [x] Move relatedQuestionsUtils.test.ts to `__tests__/utils/server/` directory (completed on 6/26)
+
 - [x] Update Jest config to only look for tests in `__tests__/utils/server/` directory (completed on 6/26)
 - [x] Fix Jest hanging issues by adding forceExit and detectOpenHandles options (completed on 6/26)
 
@@ -248,7 +248,6 @@ tests more reliable and less prone to environment dependencies.
 
 - 🥚 **makechain.ts**: 49% → 70% (21% improvement needed)
 - 🥚 **index.tsx**: 25% → 70% (45% improvement needed)
-- 🥚 **relatedQuestions.ts**: 52% → 80% (28% improvement needed)
 
 ### Low Priority Coverage Areas
 

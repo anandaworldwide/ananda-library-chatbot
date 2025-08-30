@@ -849,12 +849,7 @@ class WebsiteCrawler:
     def _is_wordpress_login_redirect(self, final_url: str, original_url: str) -> bool:
         """Check if we were redirected to a WordPress login page."""
         # Check if the final URL is a WordPress login page
-        if "/wp-login.php" in final_url:
-            logging.info(
-                f"Detected WordPress login redirect: {original_url} -> {final_url}"
-            )
-            return True
-        return False
+        return "/wp-login.php" in final_url
 
     def should_skip_url(self, url: str) -> bool:
         """Check if URL should be skipped based on patterns"""

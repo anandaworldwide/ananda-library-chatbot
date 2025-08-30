@@ -11,17 +11,14 @@ import { useEffect, useState, useRef } from "react";
 import Layout from "@/components/layout";
 import AnswerItem from "@/components/AnswerItem";
 import { Answer } from "@/types/answer";
-import { checkUserLikes } from "@/services/likeService";
-import { getOrCreateUUID } from "@/utils/client/uuid";
-import { logEvent } from "@/utils/client/analytics";
 import Head from "next/head";
 import { getShortname } from "@/utils/client/siteConfig";
 import { useSudo } from "@/contexts/SudoContext";
 import { queryFetch } from "@/utils/client/reactQueryConfig";
-import { isAuthenticated } from "@/utils/client/tokenManager";
 import ReactMarkdown from "react-markdown";
 import gfm from "remark-gfm";
 import { Components } from "react-markdown";
+import { logEvent } from "@/utils/client/analytics";
 
 interface SingleAnswerProps {
   siteConfig: SiteConfig | null;
@@ -33,12 +30,24 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
 
   // Redirect to new share URL format
   useEffect(() => {
-    if (answerId && typeof answerId === "string") {
+    if (router.isReady && answerId && typeof answerId === "string") {
       router.replace(`/share/${answerId}`);
     }
-  }, [answerId, router]);
+  }, [router.isReady, answerId, router]);
+
+  // Show loading while redirecting
+  if (!router.isReady || (answerId && typeof answerId === "string")) {
+    return (
+      <Layout siteConfig={siteConfig}>
+        <div className="flex justify-center items-center h-screen">
+          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
+          <p className="text-lg text-gray-600 ml-4">Redirecting...</p>
+        </div>
+      </Layout>
+    );
+  }
+
   const [answer, setAnswer] = useState<Answer | null>(null);
-  const [likeStatuses, setLikeStatuses] = useState<Record<string, boolean>>({});
   const [notFound, setNotFound] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const { isSudoUser } = useSudo();
@@ -62,12 +71,6 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
       </a>
     );
   };
-
-  // Check if the user is authenticated
-  const userIsAuthenticated = isAuthenticated();
-
-  // For sites requiring login, only allow likes if authenticated
-  const allowLikes = siteConfig?.requireLogin === false || userIsAuthenticated;
 
   // Fetch the answer data when the component mounts or answerId changes
   useEffect(() => {
@@ -110,44 +113,6 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
     }
   }, [answerId]);
 
-  // Fetch like statuses for the answer when it's loaded
-  useEffect(() => {
-    // Skip fetching like statuses if likes are not allowed for unauthenticated users
-    if (!allowLikes) {
-      console.log("User not authenticated - skipping like status fetch");
-      return;
-    }
-
-    const fetchLikeStatuses = async (answerIds: string[]) => {
-      if (!answerIds.length) return;
-
-      try {
-        const uuid = getOrCreateUUID();
-        // Pass the site config to determine appropriate auth handling
-        const statuses = await checkUserLikes(answerIds, uuid);
-
-        // Important: completely replace the state, don't merge with previous
-        setLikeStatuses(statuses);
-      } catch (error) {
-        // Just log errors, don't display them to users
-        console.error("Error fetching like statuses:", error);
-        // Set default like status to false for errors
-        if (answerIds.length > 0) {
-          const defaultStatuses: Record<string, boolean> = {};
-          answerIds.forEach((id) => {
-            defaultStatuses[id] = false;
-          });
-          setLikeStatuses(defaultStatuses);
-        }
-      }
-    };
-
-    // Ensure answer is not null before fetching like statuses
-    if (answer) {
-      fetchLikeStatuses([answer.id]);
-    }
-  }, [answer, allowLikes]);
-
   // Scroll the main answer item into view only on initial load
   useEffect(() => {
     if (answer && initialLoadRef.current) {
@@ -167,33 +132,6 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
       return () => clearTimeout(timer); // Cleanup timeout
     }
   }, [answer]); // Still depends on answer, but now checks initialLoadRef
-
-  // Handle like count changes
-  const handleLikeCountChange = async (answerId: string, newLikeCount: number) => {
-    // Security check - don't allow likes for unauthenticated users
-    if (!allowLikes) {
-      console.log("User not authenticated - like action prevented");
-      return;
-    }
-
-    // Update the answer with the new like count, but don't trigger a re-render if only likeCount changed
-    if (answer) {
-      setAnswer((prevAnswer) => {
-        if (!prevAnswer || prevAnswer.likeCount === newLikeCount) return prevAnswer;
-        return {
-          ...prevAnswer,
-          likeCount: newLikeCount,
-        };
-      });
-    }
-
-    // Update the like status immediately in UI
-    const newLikeStatus = !likeStatuses[answerId];
-    setLikeStatuses((prev) => ({
-      ...prev,
-      [answerId]: newLikeStatus,
-    }));
-  };
 
   // Handle copying the answer link to clipboard
   const handleCopyLink = () => {
@@ -227,9 +165,6 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
       }
     }
   };
-
-  // Get whether related questions should be shown (defaults to true)
-  const showRelatedQuestions = siteConfig?.showRelatedQuestions ?? true;
 
   // Render "not found" message if the answer doesn't exist
   if (notFound) {
@@ -311,16 +246,12 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
           <div id="main-answer-item">
             <AnswerItem
               answer={answer}
-              // Only pass handleLikeCountChange if likes are allowed for this user
-              handleLikeCountChange={allowLikes ? handleLikeCountChange : undefined}
               handleCopyLink={handleCopyLink}
               handleDelete={handleDelete}
               linkCopied={linkCopied ? answer.id : null}
-              likeStatuses={likeStatuses}
               isSudoUser={isSudoUser}
               isFullPage={true}
               siteConfig={siteConfig}
-              showRelatedQuestions={showRelatedQuestions}
             />
           </div>
         )}

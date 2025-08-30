@@ -17,31 +17,24 @@ import { createIndexErrorResponse } from "@/utils/server/firestoreIndexErrorHand
 import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
 import { requireAdminRole } from "@/utils/server/authz";
 import { writeAuditLog } from "@/utils/server/auditLog";
+import { isAnswersPageAllowed } from "@/utils/server/answersPageAuth";
 
 // 6/23/24: likedOnly filtering not being used in UI but leaving here for potential future use
 
-// Retrieves answers based on specified criteria (page, limit, liked status, and sort order)
-// Returns an array of answers and the total number of pages
+// Retrieves answers based on specified criteria (page, limit, liked status)
+// Returns an array of answers and the total number of pages, sorted by most recent
 async function getAnswers(
   page: number,
   limit: number,
-  likedOnly: boolean,
-  sortBy: string
+  likedOnly: boolean
 ): Promise<{ answers: Answer[]; totalPages: number }> {
   // Check if db is available
   if (!db) {
     throw new Error("Database not available");
   }
 
-  // Initialize the query with sorting options
-  let answersQuery = db
-    .collection(getAnswersCollectionName())
-    .orderBy(sortBy === "mostPopular" ? "likeCount" : "timestamp", "desc");
-
-  // Add secondary sorting by timestamp for 'mostPopular' option
-  if (sortBy === "mostPopular") {
-    answersQuery = answersQuery.orderBy("timestamp", "desc");
-  }
+  // Initialize the query with sorting by timestamp (most recent)
+  let answersQuery = db.collection(getAnswersCollectionName()).orderBy("timestamp", "desc");
 
   // Calculate pagination details
   const totalDocs = await getTotalDocuments();
@@ -60,7 +53,7 @@ async function getAnswers(
   const answersSnapshot = await firestoreQueryGet(
     answersQuery,
     "answers list query",
-    `offset: ${offset}, limit: ${limit}, likedOnly: ${likedOnly}, sortBy: ${sortBy}`
+    `offset: ${offset}, limit: ${limit}, likedOnly: ${likedOnly}`
   );
 
   const answers = answersSnapshot.docs.map((doc: any) => {
@@ -164,6 +157,16 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
 // Main handler function for the API endpoint
 async function handleGetRequest(req: NextApiRequest, res: NextApiResponse) {
+  // Check authorization first
+  const siteConfig = loadSiteConfigSync(process.env.SITE_ID || "default");
+  const isAuthorized = await isAnswersPageAllowed(req, res, siteConfig);
+
+  if (!isAuthorized) {
+    return res.status(403).json({
+      error: "Access denied. You don't have permission to access this resource.",
+    });
+  }
+
   // Apply rate limiting
   const isAllowed = await genericRateLimiter(req, res, {
     windowMs: 5 * 60 * 1000, // 5 minutes
@@ -196,13 +199,12 @@ async function handleGetRequest(req: NextApiRequest, res: NextApiResponse) {
       res.status(200).json(answers);
     } else {
       // Handle fetching answers with pagination and filtering
-      const { page, limit, likedOnly, sortBy } = req.query;
+      const { page, limit, likedOnly } = req.query;
       const pageNumber = parseInt(page as string) || 1; // Default to page 1 if not provided
       const limitNumber = parseInt(limit as string) || 10;
       const likedOnlyFlag = likedOnly === "true";
-      const sortByValue = (sortBy as string) || "mostRecent";
 
-      const { answers, totalPages } = await getAnswers(pageNumber, limitNumber, likedOnlyFlag, sortByValue);
+      const { answers, totalPages } = await getAnswers(pageNumber, limitNumber, likedOnlyFlag);
 
       res.status(200).json({ answers, totalPages });
     }

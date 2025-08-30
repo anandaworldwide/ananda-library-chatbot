@@ -49,10 +49,7 @@
     "loginImage": "mascot.png",
     "header": {
       "logo": "ananda-logo.png",
-      "navItems": [
-        { "label": "Ask", "path": "/" },
-        { "label": "All&nbsp;Answers", "path": "/answers" }
-      ]
+      "navItems": [{ "label": "Home", "path": "/" }]
     },
     "footer": {
       "links": [
@@ -147,7 +144,7 @@
     "loginImage": null,
     "header": {
       "logo": "ananda-logo.png",
-      "navItems": [{ "label": "Ask", "path": "/" }]
+      "navItems": [{ "label": "Home", "path": "/" }]
     },
     "footer": {
       "links": [
@@ -305,10 +302,7 @@
     "allowAllAnswersPage": true,
     "header": {
       "logo": "photo-logo.png",
-      "navItems": [
-        { "label": "Ask", "path": "/" },
-        { "label": "All&nbsp;Answers", "path": "/answers" }
-      ]
+      "navItems": [{ "label": "Home", "path": "/" }]
     },
     "footer": {
       "links": [

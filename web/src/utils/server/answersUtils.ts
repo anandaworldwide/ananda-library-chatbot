@@ -36,17 +36,17 @@ export async function getAnswersByIds(ids: string[]): Promise<Answer[]> {
       // Parse and clean up sources data
       data.sources = parseAndRemoveWordsFromSources(data.sources as string | Document<DocMetadata>[] | undefined);
 
-      const relatedQuestions = data.relatedQuestionsV2 || [];
-
-      // Remove deprecated 'related_questions' field if present
+      // Remove deprecated related questions fields if present
       if ("related_questions" in data) {
         delete data.related_questions;
+      }
+      if ("relatedQuestionsV2" in data) {
+        delete data.relatedQuestionsV2;
       }
 
       answers.push({
         id: doc.id,
         ...data,
-        relatedQuestionsV2: relatedQuestions,
         // Explicitly include feedback fields from data if they exist
         feedbackReason: data.feedbackReason,
         feedbackComment: data.feedbackComment,

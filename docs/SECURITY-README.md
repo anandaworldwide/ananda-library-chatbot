@@ -459,7 +459,6 @@ This dual validation ensures that only legitimate Vercel cron jobs can bypass JW
 ### Endpoints using Hybrid Authentication
 
 - `/api/admin/digestSelfProvision` (daily digest of self-provision attempts)
-- `/api/relatedQuestions` (batch updates)
 
 ### Additional Safeguards
 

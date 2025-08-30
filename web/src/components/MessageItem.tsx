@@ -1,7 +1,7 @@
 // This component renders an individual message item in a chat-like interface,
 // supporting both user messages and AI responses with various interactive elements.
 
-import React, { Fragment, useState } from "react";
+import React, { Fragment } from "react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import gfm from "remark-gfm";
@@ -9,14 +9,11 @@ import styles from "@/styles/Home.module.css";
 import markdownStyles from "@/styles/MarkdownStyles.module.css";
 import SourcesList from "@/components/SourcesList";
 import CopyButton from "@/components/CopyButton";
-import LikeButton from "@/components/LikeButton";
 import { SiteConfig } from "@/types/siteConfig";
 import { ExtendedAIMessage } from "@/types/ExtendedAIMessage";
-import { RelatedQuestion } from "@/types/RelatedQuestion";
+
 import { useSudo } from "@/contexts/SudoContext";
-import { logEvent } from "@/utils/client/analytics";
 import { Components } from "react-markdown";
-import Link from "next/link";
 
 interface MessageItemProps {
   message: ExtendedAIMessage;
@@ -27,11 +24,9 @@ interface MessageItemProps {
   temporarySession: boolean;
   collectionChanged: boolean;
   hasMultipleCollections: boolean;
-  likeStatuses: Record<string, boolean>;
   linkCopied: string | null;
   votes?: Record<string, number>;
   siteConfig: SiteConfig | null;
-  handleLikeCountChange: (answerId: string, newLikeCount: number) => void;
   handleCopyLink: (answerId: string) => void;
   handleVote?: (docId: string, isUpvote: boolean) => void;
   lastMessageRef: React.RefObject<HTMLDivElement> | null;
@@ -39,7 +34,6 @@ interface MessageItemProps {
   voteError?: string | null;
   allowAllAnswersPage: boolean;
   showSourcesBelow?: boolean;
-  showRelatedQuestions: boolean;
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({
@@ -51,34 +45,16 @@ const MessageItem: React.FC<MessageItemProps> = ({
   temporarySession,
   collectionChanged,
   hasMultipleCollections,
-  likeStatuses,
   linkCopied,
   votes = {},
   siteConfig,
-  handleLikeCountChange,
   handleCopyLink,
   handleVote,
   lastMessageRef,
   messageKey,
-  allowAllAnswersPage,
   showSourcesBelow = false,
-  showRelatedQuestions,
 }) => {
   const { isSudoUser } = useSudo();
-  const [forceShowRelated, setForceShowRelated] = useState(false);
-
-  const onLikeButtonClick = (answerId: string) => {
-    // Update like status immediately for UI responsiveness
-    const newLikeStatus = !likeStatuses[answerId];
-    const newLikeCount = newLikeStatus ? 1 : 0; // Messages start with 0 likes
-    handleLikeCountChange(answerId, newLikeCount);
-
-    // Log the event (optimistically)
-    logEvent("like_answer", "Engagement", answerId);
-
-    // Server update happens in the parent/hook, error handled there
-    // No need to handle errors/revert UI here, keep it simple
-  };
 
   let icon;
   let className;
@@ -89,55 +65,6 @@ const MessageItem: React.FC<MessageItemProps> = ({
     icon = <Image src="/usericon.png" alt="Me" width={30} height={30} className="rounded-sm" priority />;
     className = loading && isLastMessage ? styles.usermessagewaiting : styles.usermessage;
   }
-
-  // Renders related questions with sudo toggle logic
-  const renderRelatedQuestions = (relatedQuestions: RelatedQuestion[] | undefined) => {
-    if (!allowAllAnswersPage) return null;
-    if (!relatedQuestions || !Array.isArray(relatedQuestions)) return null;
-    // Don't show related questions if we're loading and this is the last message
-    if (loading && isLastMessage) return null;
-
-    const SIMILARITY_THRESHOLD = 0.15;
-    const filteredQuestions = relatedQuestions.filter((q) => q.similarity >= SIMILARITY_THRESHOLD);
-
-    if (filteredQuestions.length === 0) return null;
-
-    // Show only if globally enabled OR if globally disabled but user is sudo and forcing show
-    const shouldDisplay = showRelatedQuestions || (isSudoUser && forceShowRelated);
-
-    return (
-      <>
-        {/* Sudo Toggle Button - Show only when globally disabled and user is sudo */}
-        {!showRelatedQuestions && isSudoUser && (
-          <button
-            onClick={() => setForceShowRelated(!forceShowRelated)}
-            className="text-sm text-blue-600 hover:underline mt-1 block"
-          >
-            Admin: {forceShowRelated ? "hide" : "show"} related Questions
-          </button>
-        )}
-        {/* Actual Related Questions List - Show if shouldDisplay is true */}
-        {shouldDisplay && (
-          <div className="bg-gray-200 pt-0.5 pb-3 px-3 rounded-lg mt-2 mb-2">
-            <h3 className="text-lg !font-bold mb-2">Related Questions</h3>
-            <ul className="list-disc pl-2">
-              {filteredQuestions.map((relatedQuestion) => (
-                <li key={relatedQuestion.id} className="ml-0">
-                  <Link href={`/answers/${relatedQuestion.id}`} className="text-blue-600 hover:underline">
-                    {truncateTitle(relatedQuestion.title, 150)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </>
-    );
-  };
-
-  const truncateTitle = (title: string, maxLength: number) => {
-    return title.length > maxLength ? `${title.slice(0, maxLength)}...` : title;
-  };
 
   const renderSources = () => {
     if (message.sourceDocs && message.sourceDocs.length > 0) {
@@ -243,21 +170,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                       >
                         <span className="material-icons">{linkCopied === message.docId ? "check" : "link"}</span>
                       </button>
-                      <div className="flex items-center">
-                        <LikeButton
-                          answerId={message.docId || ""}
-                          initialLiked={message.docId ? likeStatuses[message.docId] || false : false}
-                          likeCount={0}
-                          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                          onLikeCountChange={(answerId, _) => {
-                            if (message.docId) {
-                              onLikeButtonClick(answerId);
-                            }
-                          }}
-                          showLikeCount={false}
-                          disabled={!message.docId}
-                        />
-                      </div>
+
                       {message.docId ? (
                         renderDownvoteButton(message.docId)
                       ) : (
@@ -276,9 +189,6 @@ const MessageItem: React.FC<MessageItemProps> = ({
                 </>
               )}
             </div>
-            {message.type === "apiMessage" &&
-              message.relatedQuestions &&
-              renderRelatedQuestions(message.relatedQuestions)}
           </div>
         </div>
       </div>

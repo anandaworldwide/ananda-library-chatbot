@@ -18,6 +18,7 @@ import { ChatInput } from "@/components/ChatInput";
 import MessageItem from "@/components/MessageItem";
 import FeedbackModal from "@/components/FeedbackModal";
 import ChatHistorySidebar from "@/components/ChatHistorySidebar";
+import AnswersPageLink from "@/components/AnswersPageLink";
 
 // Hook imports
 import usePopup from "@/hooks/usePopup";
@@ -44,7 +45,6 @@ import { toast } from "react-toastify";
 
 import { ExtendedAIMessage } from "@/types/ExtendedAIMessage";
 import { StreamingResponseData } from "@/types/StreamingResponseData";
-import { RelatedQuestion } from "@/types/RelatedQuestion";
 import { SudoProvider, useSudo } from "@/contexts/SudoContext";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
@@ -65,7 +65,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   });
   const [collectionChanged, setCollectionChanged] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
-  const [likeStatuses, setLikeStatuses] = useState<Record<string, boolean>>({});
   const [temporarySession, setTemporarySession] = useState<boolean>(false);
   const [mediaTypes, setMediaTypes] = useState<{
     text: boolean;
@@ -332,11 +331,8 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
   // Custom hook for displaying popup messages
   const { showPopup, closePopup, popupMessage } = usePopup(
-    "1.02",
-    siteConfig?.allowTemporarySessions
-      ? "Others can see questions you ask and answers given. " +
-          "Please click 'Start Temporary Session' below the text entry box if you would prefer we not log or publish your session."
-      : ""
+    "1.03",
+    "We've removed the Public Answers section of the site. Your questions and answers are always private now, unless you use the `temporarySession` feature, in which case the question will not be saved in your chat history."
   );
 
   // Function to handle collection change
@@ -402,7 +398,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   }, [abortController, setLoading, setAbortController]);
 
   const [, setSourceDocs] = useState<Document[] | null>(null);
-  const [, setLastRelatedQuestionsUpdate] = useState<string | null>(null);
 
   const [, setMessageContainerBottom] = useState(0);
   const [, setViewportHeight] = useState(0);
@@ -410,26 +405,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Add a state variable to track the docId separately
   const [savedDocId, setSavedDocId] = useState<string | null>(null);
   const accumulatedResponseRef = useRef("");
-
-  const fetchRelatedQuestions = useCallback(async (docId: string) => {
-    try {
-      const response = await fetchWithAuth("/api/relatedQuestions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ docId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch related questions");
-      }
-
-      const data = await response.json();
-      return data.relatedQuestions as RelatedQuestion[];
-    } catch (error) {
-      console.error("Error fetching related questions:", error);
-      return null;
-    }
-  }, []);
 
   const [sourceCount, setSourceCount] = useState<number>(siteConfig?.defaultNumSources || 4);
 
@@ -778,23 +753,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
           return { ...prevState };
         });
-
-        // Start fetching related questions in the background
-        if (savedDocId) {
-          fetchRelatedQuestions(savedDocId).then((relatedQuestions) => {
-            const completionTimestamp = new Date().toISOString().substr(11, 12);
-            console.log(`[${completionTimestamp}] Completed fetching related questions for docId: ${savedDocId}`);
-            if (relatedQuestions) {
-              setMessageState((prevState) => ({
-                ...prevState,
-                messages: prevState.messages.map((msg) =>
-                  msg.docId === savedDocId ? { ...msg, relatedQuestions } : msg
-                ),
-              }));
-              setLastRelatedQuestionsUpdate(savedDocId ?? null);
-            }
-          });
-        }
       }
 
       if (data.error) {
@@ -807,14 +765,12 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       sourceCount,
       setLoading,
       setError,
-      fetchRelatedQuestions,
       setSavedDocId,
       setMessageState,
       setSourceDocs,
       setScrollClickState,
       setShowScrollDownButton,
       setTimingMetrics,
-      setLastRelatedQuestionsUpdate,
       siteConfig?.siteId,
     ]
   );
@@ -1055,19 +1011,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Custom hook for managing random queries
   const { randomQueries, shuffleQueries } = useRandomQueries(queriesForCollection, 3);
 
-  // Function to handle like count changes
-  const handleLikeCountChange = (answerId: string, newLikeCount: number) => {
-    // Update the like status in state
-    const newLikeStatus = newLikeCount > 0;
-    setLikeStatuses((prev) => ({
-      ...prev,
-      [answerId]: newLikeStatus,
-    }));
-
-    // Log the event
-    logEvent("like_answer", "Engagement", answerId);
-  };
-
   // Function to handle temporary session changes
   const handleTemporarySessionChange = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -1204,9 +1147,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     const ttfbSecs = (ttfb / 1000).toFixed(2);
     return `${ttfbSecs} secs to first character, then ${tokensPerSecond} chars/sec streamed (${totalTokens} total)`;
   }, [timingMetrics]);
-
-  // Get whether related questions should be shown (defaults to true)
-  const showRelatedQuestions = siteConfig?.showRelatedQuestions ?? true;
 
   // Function to handle scroll behavior and button visibility
   useEffect(() => {
@@ -1381,17 +1321,14 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                       temporarySession={temporarySession}
                       collectionChanged={collectionChanged}
                       hasMultipleCollections={hasMultipleCollections}
-                      likeStatuses={likeStatuses}
                       linkCopied={linkCopied}
                       votes={votes}
                       siteConfig={siteConfig}
-                      handleLikeCountChange={handleLikeCountChange}
                       handleCopyLink={handleCopyLink}
                       handleVote={handleVote}
                       lastMessageRef={lastMessageRef}
                       voteError={voteError}
                       allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
-                      showRelatedQuestions={showRelatedQuestions}
                     />
                   ))}
                   {/* Display timing metrics for sudo users */}
@@ -1474,6 +1411,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
               <span className="block sm:inline">{voteError}</span>
             </div>
           )}
+
+        {/* Discrete link to answers page for authorized users */}
+        <AnswersPageLink siteConfig={siteConfig} />
       </Layout>
     </SudoProvider>
   );

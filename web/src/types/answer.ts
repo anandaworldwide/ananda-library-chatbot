@@ -1,10 +1,10 @@
 // This file defines the types and interfaces related to answers in the application.
-// It includes structures for answer data, admin actions, and related questions.
+// It includes structures for answer data and admin actions.
 
-import { Document } from 'langchain/document';
+import { Document } from "langchain/document";
 
 // Possible admin actions that can be taken on an answer
-export type AdminAction = 'affirmed' | 'ignore' | 'fixed';
+export type AdminAction = "affirmed" | "ignore" | "fixed";
 
 // Main structure for an answer, including metadata and related information
 export type Answer = {
@@ -25,14 +25,6 @@ export type Answer = {
   ip?: string;
   // Number of likes the answer has received
   likeCount: number;
-  // Optional array of related questions with similarity scores
-  relatedQuestionsV2?: {
-    id: string;
-    title: string;
-    similarity: number;
-  }[];
-  // Deprecated field for related questions (kept for backwards compatibility)
-  related_questions?: string[];
   // Optional admin action taken on this answer
   adminAction?: AdminAction;
   // Timestamp of when the admin action was taken
@@ -45,7 +37,7 @@ export type Answer = {
   feedbackComment?: string;
   // Optional timestamp for feedback submission
   feedbackTimestamp?: Timestamp;
-  // Optional AI-generated restated question used for embeddings and related questions
+  // Optional AI-generated restated question used for embeddings
   restatedQuestion?: string;
 };
 

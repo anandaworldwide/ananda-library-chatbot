@@ -4,18 +4,16 @@
  *
  * Key features:
  * - Pagination with server-side rendering
- * - Sorting answers by most recent or most popular
- * - Like/unlike functionality with optimistic updates
+ * - Answers sorted by most recent
  * - Copy link to individual answers
  * - Delete answers (for sudo users only)
  * - Scroll position preservation
  * - JWT authentication with React Query
+ * - Admin-only access control
  */
 
 import Layout from "@/components/layout";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { checkUserLikes } from "@/services/likeService";
-import { getOrCreateUUID } from "@/utils/client/uuid";
 import { useRouter } from "next/router";
 import { logEvent } from "@/utils/client/analytics";
 import React from "react";
@@ -23,38 +21,35 @@ import { GetServerSideProps } from "next";
 import AnswerItem from "@/components/AnswerItem";
 import { SiteConfig } from "@/types/siteConfig";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
-import { getSudoCookie } from "@/utils/server/sudoCookieUtils";
 import { NextApiRequest, NextApiResponse } from "next";
 import { useSudo } from "@/contexts/SudoContext";
 import { SudoProvider } from "@/contexts/SudoContext";
 import { useAnswers } from "@/hooks/useAnswers";
 import { useMutation } from "@tanstack/react-query";
 import { queryFetch } from "@/utils/client/reactQueryConfig";
+import { isAnswersPageAllowed, getAnswersPageErrorMessage } from "@/utils/server/answersPageAuth";
 
 interface AllAnswersProps {
   siteConfig: SiteConfig | null;
   authorizationError?: boolean;
+  errorMessage?: string;
 }
 
-const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
+const AllAnswers = ({ siteConfig, authorizationError, errorMessage }: AllAnswersProps) => {
   const router = useRouter();
   const { isSudoUser, checkSudoStatus } = useSudo();
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Parse query parameters
   const urlPage = router.query.page ? Number(router.query.page) : 1;
-  const urlSortBy = router.query.sortBy || "mostRecent";
 
   // UI state
-  const [sortBy, setSortBy] = useState<string>("mostRecent");
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [isSortByInitialized, setIsSortByInitialized] = useState(false);
+  const [isPageInitialized, setIsPageInitialized] = useState(false);
   const [isChangingPage, setIsChangingPage] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [isRestoringScroll, setIsRestoringScroll] = useState(false);
-  const [likeStatuses, setLikeStatuses] = useState<Record<string, boolean>>({});
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
-  const [likeError, setLikeError] = useState<string | null>(null);
 
   // Refs for scroll management
   const scrollPositionRef = useRef<number>(0);
@@ -90,8 +85,8 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
   }, [siteConfig?.requireLogin, isSudoUser]);
 
   // Use React Query for data fetching with JWT authentication
-  const { data, isLoading, error } = useAnswers(currentPage, sortBy, {
-    enabled: isSortByInitialized && router.isReady,
+  const { data, isLoading, error } = useAnswers(currentPage, {
+    enabled: isPageInitialized && router.isReady,
   });
 
   // Show delayed spinner for long-running loads
@@ -225,27 +220,21 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
   useEffect(() => {
     if (router.isReady) {
       const pageFromUrl = Number(urlPage) || 1;
-      const sortByFromUrl = (urlSortBy as string) || "mostRecent";
 
-      setSortBy(sortByFromUrl);
       setCurrentPage(pageFromUrl);
-      setIsSortByInitialized(true);
+      setIsPageInitialized(true);
     }
-  }, [router.isReady, urlPage, urlSortBy]);
+  }, [router.isReady, urlPage]);
 
-  // Update URL with current page and sort order
+  // Update URL with current page
   const updateUrl = useCallback(
-    (page: number, sortBy: string) => {
+    (page: number) => {
       if (router.isReady) {
         let path = "/answers";
         const params = new URLSearchParams();
 
         if (page !== 1) {
           params.append("page", page.toString());
-        }
-
-        if (sortBy !== "mostRecent") {
-          params.append("sortBy", sortBy);
         }
 
         if (params.toString()) {
@@ -256,7 +245,7 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
         router.push(
           {
             pathname: "/answers",
-            query: { page: page.toString(), sortBy },
+            query: page !== 1 ? { page: page.toString() } : {},
           },
           path,
           { shallow: true }
@@ -266,80 +255,10 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
     [router]
   );
 
-  // Update URL when sort order changes
-  useEffect(() => {
-    if (router.isReady && isSortByInitialized) {
-      const currentSortBy = router.query.sortBy as string | undefined;
-      if (sortBy !== currentSortBy) {
-        updateUrl(currentPage, sortBy);
-      }
-    }
-  }, [sortBy, currentPage, router.isReady, isSortByInitialized, router.query.sortBy, updateUrl]);
-
-  // Fetch like statuses for answers
-  useEffect(() => {
-    const fetchLikeStatuses = async () => {
-      if (answersData.length === 0) return;
-
-      try {
-        const uuid = getOrCreateUUID();
-        const answerIds = answersData.map((answer) => answer.id);
-        const statuses = await checkUserLikes(answerIds, uuid);
-
-        // Important: replace the state entirely, don't merge with previous
-        setLikeStatuses(statuses);
-      } catch (error) {
-        console.error("Error fetching like statuses:", error);
-        setLikeError(error instanceof Error ? error.message : "An error occurred while checking likes.");
-        setTimeout(() => setLikeError(null), 5000); // Clear error after 5 seconds
-      }
-    };
-
-    fetchLikeStatuses();
-  }, [answersData]);
-
-  // Handle like count changes
-  const handleLikeCountChange = (answerId: string) => {
-    try {
-      // Update the like status immediately (don't wait for server refresh)
-      setLikeStatuses((prevStatuses) => {
-        const currentStatus = prevStatuses[answerId] || false;
-        return {
-          ...prevStatuses,
-          [answerId]: !currentStatus,
-        };
-      });
-
-      // Log the event
-      logEvent("like_answer", "Engagement", answerId);
-    } catch (error) {
-      setLikeError(error instanceof Error ? error.message : "An error occurred");
-      setTimeout(() => setLikeError(null), 3000);
-    }
-  };
-
   // Handle answer deletion (for sudo users only)
   const handleDelete = (answerId: string) => {
     if (confirm("Are you sure you want to delete this answer?")) {
       deleteMutation.mutate(answerId);
-    }
-  };
-
-  // Handle sort order change
-  const handleSortChange = (newSortBy: string) => {
-    if (newSortBy !== sortBy) {
-      scrollToTop(); // Scroll to top immediately
-      setSortBy(newSortBy);
-      setCurrentPage(1);
-      updateUrl(1, newSortBy);
-      setIsChangingPage(true);
-      logEvent("change_sort", "UI", newSortBy);
-
-      // With React Query, we don't need to manually call fetch as it will
-      // automatically refetch when dependencies change. However, we need to
-      // reset the UI state to show loading state.
-      setInitialLoadComplete(false);
-      hasInitiallyFetched.current = false;
     }
   };
 
@@ -361,7 +280,7 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
     setIsChangingPage(true);
     setCurrentPage(newPage);
     sessionStorage.removeItem("answersScrollPosition");
-    updateUrl(newPage, sortBy);
+    updateUrl(newPage);
     logEvent("change_answers_page", "UI", `page:${newPage}`);
 
     // React Query will handle the data fetching when currentPage changes
@@ -380,10 +299,6 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
     }
   }, [checkSudoStatus, siteConfig]);
 
-  // Get whether related questions should be shown (defaults to true)
-  // const showRelatedQuestions = true;
-  const showRelatedQuestions = siteConfig?.showRelatedQuestions ?? true;
-
   return (
     <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
       <Layout siteConfig={siteConfig}>
@@ -393,7 +308,7 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
             <div className="flex flex-col justify-center items-center min-h-screen">
               <div className="text-center">
                 <h1 className="text-6xl font-bold text-gray-400 mb-4">403</h1>
-                <h2 className="text-2xl font-semibold text-gray-800 mb-4">Access Restricted</h2>
+                <h2 className="text-2xl font-semibold text-gray-800 mb-4">{errorMessage || "Access Restricted"}</h2>
                 <p className="text-gray-600 mb-8 max-w-md">
                   You don't have permission to access this page. This page is restricted to authorized users only.
                 </p>
@@ -411,40 +326,6 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
         {/* Main content - only show if no authorization error */}
         {!authorizationError && (
           <>
-            {/* Sort controls */}
-            <div className="bg-white shadow">
-              <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-16">
-                  <div className="flex items-center">
-                    <span className="text-gray-700 mr-4">Sort by:</span>
-                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                      <button
-                        onClick={() => handleSortChange("mostRecent")}
-                        disabled={isLoading || !isSortByInitialized}
-                        className={`px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                          sortBy === "mostRecent"
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100"
-                        } disabled:cursor-not-allowed disabled:opacity-50`}
-                      >
-                        Most Recent
-                      </button>
-                      <button
-                        onClick={() => handleSortChange("mostPopular")}
-                        disabled={isLoading || !isSortByInitialized}
-                        className={`px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 border-l ${
-                          sortBy === "mostPopular"
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100"
-                        } disabled:cursor-not-allowed disabled:opacity-50`}
-                      >
-                        Most Popular
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
             <div className="mx-auto max-w-full sm:max-w-4xl px-2 sm:px-6 lg:px-8">
               {/* Loading spinner */}
               {(isLoading && !initialLoadComplete) || isChangingPage ? (
@@ -473,11 +354,34 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
                   )}
                 </div>
               ) : (
-                <div key={`${currentPage}-${sortBy}`}>
+                <div key={`${currentPage}-mostRecent`}>
                   {/* Error state */}
                   {error && (
                     <div className="text-red-500 text-center my-6">
                       {error instanceof Error ? error.message : "Error loading answers"}
+                    </div>
+                  )}
+
+                  {/* Top pagination controls */}
+                  {answersData.length > 0 && (
+                    <div className="flex justify-center mb-6">
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1 || isChangingPage}
+                        className="px-4 py-2 mr-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+                      >
+                        Previous
+                      </button>
+                      <span className="px-4 py-2">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages || isChangingPage}
+                        className="px-4 py-2 ml-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+                      >
+                        Next
+                      </button>
                     </div>
                   )}
 
@@ -488,14 +392,11 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
                         key={answer.id}
                         answer={answer}
                         siteConfig={siteConfig}
-                        handleLikeCountChange={handleLikeCountChange}
                         handleCopyLink={handleCopyLink}
                         handleDelete={isAdmin ? handleDelete : undefined}
                         linkCopied={linkCopied}
-                        likeStatuses={likeStatuses}
                         isSudoUser={isAdmin}
                         isFullPage={false}
-                        showRelatedQuestions={showRelatedQuestions}
                       />
                     ))}
                   </div>
@@ -507,9 +408,9 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
                     </div>
                   )}
 
-                  {/* Pagination controls */}
+                  {/* Bottom pagination controls */}
                   {answersData.length > 0 && (
-                    <div className="flex justify-center mt-4">
+                    <div className="flex justify-center mt-6">
                       <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1 || isChangingPage}
@@ -534,7 +435,6 @@ const AllAnswers = ({ siteConfig, authorizationError }: AllAnswersProps) => {
             </div>
 
             {/* Error messages */}
-            {likeError && <div className="text-red-500 text-sm mt-2 text-center">{likeError}</div>}
             {deleteMutation.isError && (
               <div className="text-red-500 text-sm mt-2 text-center">
                 {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Failed to delete answer"}
@@ -558,21 +458,21 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     };
   }
 
-  // Check if all answers page is allowed or if user has sudo access
-  if (!siteConfig.allowAllAnswersPage) {
-    const req = context.req as unknown as NextApiRequest;
-    const res = context.res as unknown as NextApiResponse;
+  // Check if user is allowed to access the answers page
+  const req = context.req as unknown as NextApiRequest;
+  const res = context.res as unknown as NextApiResponse;
 
-    const sudoStatus = getSudoCookie(req, res);
+  const isAllowed = await isAnswersPageAllowed(req, res, siteConfig);
 
-    if (!sudoStatus.sudoCookieValue) {
-      return {
-        props: {
-          siteConfig,
-          authorizationError: true,
-        },
-      };
-    }
+  if (!isAllowed) {
+    const errorMessage = getAnswersPageErrorMessage(siteConfig);
+    return {
+      props: {
+        siteConfig,
+        authorizationError: true,
+        errorMessage,
+      },
+    };
   }
 
   return {

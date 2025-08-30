@@ -16,15 +16,6 @@ async function handleRequest(req: NextApiRequest, res: NextApiResponse): Promise
   const hasGoogleCredentials = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
   const hasSheetId = !!process.env.NPS_SURVEY_GOOGLE_SHEET_ID;
 
-  if (!hasGoogleCredentials || !hasSheetId) {
-    // Log the configuration issue on the server side
-    console.error("NPS Survey configuration missing:", {
-      hasGoogleCredentials,
-      hasSheetId,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
   const isAvailable = hasGoogleCredentials && hasSheetId;
 
   res.status(200).json({

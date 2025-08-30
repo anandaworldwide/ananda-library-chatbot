@@ -6,7 +6,6 @@ import Link from "next/link";
 import TruncatedMarkdown from "@/components/TruncatedMarkdown";
 import SourcesList from "@/components/SourcesList";
 import CopyButton from "@/components/CopyButton";
-import LikeButton from "@/components/LikeButton";
 import { Answer } from "@/types/answer";
 import { collectionsConfig } from "@/utils/client/collectionsConfig";
 import { useMultipleCollections } from "@/hooks/useMultipleCollections";
@@ -14,21 +13,17 @@ import { SiteConfig } from "@/types/siteConfig";
 import markdownStyles from "@/styles/MarkdownStyles.module.css";
 import { DocMetadata } from "@/types/DocMetadata";
 import { Document } from "langchain/document";
-import { logEvent } from "@/utils/client/analytics";
-import { RelatedQuestion } from "@/types/RelatedQuestion";
+
 import { formatAnswerTimestamp } from "@/utils/client/dateUtils";
 
 export interface AnswerItemProps {
   answer: Answer;
-  handleLikeCountChange?: (answerId: string, newLikeCount: number) => void;
   handleCopyLink: (answerId: string) => void;
   handleDelete?: (answerId: string) => void;
   linkCopied: string | null;
-  likeStatuses: Record<string, boolean>;
   isSudoUser: boolean;
   isFullPage?: boolean;
   siteConfig: SiteConfig | null;
-  showRelatedQuestions?: boolean;
 }
 
 // Define a simple component for the comment modal
@@ -61,24 +56,18 @@ const CommentModal: React.FC<CommentModalProps> = ({ comment, onClose }) => {
   );
 };
 
-const SIMILARITY_THRESHOLD = 0.15;
-
 const AnswerItem: React.FC<AnswerItemProps> = ({
   answer,
-  handleLikeCountChange,
   handleCopyLink,
   handleDelete,
   linkCopied,
-  likeStatuses,
   isSudoUser,
   isFullPage = false,
   siteConfig,
-  showRelatedQuestions = true,
 }) => {
   const hasMultipleCollections = useMultipleCollections(siteConfig || undefined);
   const [expanded, setExpanded] = useState(isFullPage);
-  const [likeError, setLikeError] = useState<string | null>(null);
-  const [forceShowRelated, setForceShowRelated] = useState(false);
+
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
 
   // Renders a truncated version of the question with line breaks
@@ -94,28 +83,6 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
         {i < arr.length - 1 && <br />}
       </React.Fragment>
     ));
-  };
-
-  // Truncates a title to a specified maximum length
-  const truncateTitle = (title: string, maxLength: number) => {
-    return title.length > maxLength ? `${title.slice(0, maxLength)}...` : title;
-  };
-
-  // Handle the like button click
-  const onLikeButtonClick = (answerId: string, newLikeCount: number) => {
-    try {
-      // Call the passed handler for parent component updates
-      if (handleLikeCountChange) {
-        handleLikeCountChange(answerId, newLikeCount);
-      }
-
-      // Log the event
-      logEvent("like_answer", "Engagement", answerId);
-    } catch (error) {
-      setLikeError(error instanceof Error ? error.message : "An error occurred");
-      // Clear the error message after 3 seconds
-      setTimeout(() => setLikeError(null), 3000);
-    }
   };
 
   return (
@@ -142,7 +109,7 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
                 )}
               </b>
             ) : (
-              <Link href={`/answers/${answer.id}`} legacyBehavior>
+              <Link href={`/share/${answer.id}`} legacyBehavior>
                 <a className="text-black-600 hover:underline cursor-pointer">
                   <b className="block break-words">
                     {expanded ? (
@@ -209,37 +176,6 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
             />
           )}
 
-          {/* Sudo Toggle for Related Questions */}
-          {!showRelatedQuestions && isSudoUser && (
-            <button
-              onClick={() => setForceShowRelated(!forceShowRelated)}
-              className="text-sm text-blue-600 hover:underline mt-1 block"
-            >
-              Admin: {forceShowRelated ? "hide" : "show"} related Questions
-            </button>
-          )}
-
-          {/* Related Questions Section (Conditional Display) */}
-          {answer.relatedQuestionsV2 &&
-            answer.relatedQuestionsV2.filter((q: { similarity: number }) => q.similarity >= SIMILARITY_THRESHOLD)
-              .length > 0 &&
-            (showRelatedQuestions || forceShowRelated) && (
-              <div className="mt-4">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Related Questions</h3>
-                <div className="space-y-2">
-                  {answer.relatedQuestionsV2
-                    .filter((q: { similarity: number }) => q.similarity >= SIMILARITY_THRESHOLD)
-                    .map((relatedQuestion: RelatedQuestion, index: number) => (
-                      <div key={index} className="text-sm">
-                        <Link href={`/answers/${relatedQuestion.id}`} className="text-blue-600 hover:text-blue-800">
-                          {truncateTitle(relatedQuestion.title, 150)}
-                        </Link>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-
           {/* Action buttons section - Reverted Copy Link button style/position */}
           <div className="flex items-center space-x-4 mt-3 text-sm flex-wrap gap-y-2">
             {/* Copy Content Button */}
@@ -260,16 +196,6 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
                 <span className="material-icons">{linkCopied === answer.id ? "check" : "link"}</span>
               </button>
             )}
-            {/* Like Button */}
-            {handleLikeCountChange && (
-              <LikeButton
-                answerId={answer.id}
-                initialLiked={likeStatuses[answer.id] || false}
-                likeCount={answer.likeCount || 0}
-                onLikeCountChange={onLikeButtonClick}
-                showLikeCount={true}
-              />
-            )}
             {/* Delete Button */}
             {handleDelete && isSudoUser && (
               <button
@@ -281,8 +207,6 @@ const AnswerItem: React.FC<AnswerItemProps> = ({
                 Delete
               </button>
             )}
-            {/* Like Error */}
-            {likeError && <span className="text-red-500 text-xs">{likeError}</span>}
             {/* IP Address (Aligned Right) */}
             {isSudoUser && answer.ip && <span className="text-base text-gray-400 ml-auto">IP: {answer.ip}</span>}
           </div>

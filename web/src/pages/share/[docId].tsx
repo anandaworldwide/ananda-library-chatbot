@@ -137,17 +137,14 @@ export default function ShareConversation({ siteConfig }: ShareConversationProps
                 temporarySession={false}
                 collectionChanged={false}
                 hasMultipleCollections={false}
-                likeStatuses={{}}
                 linkCopied={null}
                 votes={{}}
                 siteConfig={siteConfig}
-                handleLikeCountChange={() => {}}
                 handleVote={() => {}}
                 handleCopyLink={() => {}}
                 lastMessageRef={index === messages.length - 1 ? lastMessageRef : null}
                 voteError={null}
                 allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
-                showRelatedQuestions={false}
               />
             ))}
             <div ref={lastMessageRef} />

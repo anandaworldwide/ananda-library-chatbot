@@ -1,10 +1,6 @@
 {
   "crons": [
     {
-      "path": "/api/relatedQuestions?updateBatch=100",
-      "schedule": "0 */2 * * *"
-    },
-    {
       "path": "/api/admin/digestSelfProvision",
       "schedule": "0 13 * * *"
     }

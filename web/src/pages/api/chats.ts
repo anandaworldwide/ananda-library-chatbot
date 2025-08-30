@@ -21,8 +21,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!allowed) return;
 
   const { uuid, limit, convId, startAfter } = req.query;
+
+  // UUID is required unless convId is provided (for legacy document support)
   if (!uuid || typeof uuid !== "string") {
-    return res.status(400).json({ error: "uuid query parameter is required" });
+    if (!convId || typeof convId !== "string") {
+      return res.status(400).json({ error: "uuid query parameter is required when convId is not provided" });
+    }
   }
 
   const limitNum = Math.min(Math.max(parseInt(String(limit || 50), 10) || 50, 1), 200);
@@ -30,12 +34,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     if (!db) return res.status(503).json({ error: "Database not available" });
 
-    // Build query based on whether convId is specified
-    let query = db.collection(getAnswersCollectionName()).where("uuid", "==", uuid);
+    // Build query based on available parameters
+    let query = db.collection(getAnswersCollectionName());
 
-    // Add convId filter if specified
+    // For legacy document support: if only convId is provided, query by convId only
     if (convId && typeof convId === "string") {
       query = query.where("convId", "==", convId);
+
+      // Add UUID filter only if UUID is also provided
+      if (uuid && typeof uuid === "string") {
+        query = query.where("uuid", "==", uuid);
+      }
+    } else if (uuid && typeof uuid === "string") {
+      // Standard case: query by UUID only
+      query = query.where("uuid", "==", uuid);
     }
 
     query = query.orderBy("timestamp", "desc");
@@ -50,8 +62,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     query = query.limit(limitNum);
 
     const contextString = convId
-      ? `uuid: ${uuid}, convId: ${convId}, limit: ${limitNum}, startAfter: ${startAfter || "none"}`
-      : `uuid: ${uuid}, limit: ${limitNum}, startAfter: ${startAfter || "none"}`;
+      ? `uuid: ${uuid || "none"}, convId: ${convId}, limit: ${limitNum}, startAfter: ${startAfter || "none"}`
+      : `uuid: ${uuid || "none"}, limit: ${limitNum}, startAfter: ${startAfter || "none"}`;
 
     const snapshot = await firestoreQueryGet(query, "user chats list", contextString);
 
@@ -73,11 +85,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(chats);
   } catch (error: any) {
     // Handle Firestore index errors with proper user messaging and ops notifications
+    const fields = [];
+    let queryDesc = "";
+
+    if (convId && uuid) {
+      fields.push("uuid", "convId", "timestamp");
+      queryDesc = `uuid=${uuid}, convId=${convId}, orderBy timestamp desc`;
+    } else if (convId) {
+      fields.push("convId", "timestamp");
+      queryDesc = `convId=${convId}, orderBy timestamp desc`;
+    } else if (uuid) {
+      fields.push("uuid", "timestamp");
+      queryDesc = `uuid=${uuid}, orderBy timestamp desc`;
+    }
+
     const errorResponse = createIndexErrorResponse(error, {
       endpoint: "/api/chats",
       collection: getAnswersCollectionName(),
-      fields: convId ? ["uuid", "convId", "timestamp"] : ["uuid", "timestamp"],
-      query: convId ? `uuid=${uuid}, convId=${convId}, orderBy timestamp desc` : `uuid=${uuid}, orderBy timestamp desc`,
+      fields,
+      query: queryDesc,
     });
 
     return res.status(500).json(errorResponse);

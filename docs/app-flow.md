@@ -63,8 +63,7 @@ Chatbot application.
    - The frontend sends the question (and selected collection) to the backend chat API (`app/api/chat/v1/route.ts`).
    - The backend processes the question, retrieves relevant information (likely from Pinecone vector store -
      `utils/server/pinecone-client.ts`, `utils/server/makechain.ts`), generates an answer, and streams it back.
-   - The frontend displays the answer, potentially showing sources or related questions
-     (`pages/api/relatedQuestions.ts`).
+   - The frontend displays the answer, potentially showing sources.
 7. **(Optional) Provide Feedback:** The user can like or dislike the answer using feedback buttons (`hooks/useVote.ts`,
    `pages/api/vote.ts`, `pages/api/like.ts`).
 

@@ -62,16 +62,6 @@ describe("/api/npsAvailable", () => {
       available: false,
       message: "NPS survey is not configured",
     });
-
-    // Should log configuration error
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      "NPS Survey configuration missing:",
-      expect.objectContaining({
-        hasGoogleCredentials: false,
-        hasSheetId: true,
-        timestamp: expect.any(String),
-      })
-    );
   });
 
   it("should return available: false when NPS_SURVEY_GOOGLE_SHEET_ID is missing", async () => {
@@ -90,16 +80,6 @@ describe("/api/npsAvailable", () => {
       available: false,
       message: "NPS survey is not configured",
     });
-
-    // Should log configuration error
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      "NPS Survey configuration missing:",
-      expect.objectContaining({
-        hasGoogleCredentials: true,
-        hasSheetId: false,
-        timestamp: expect.any(String),
-      })
-    );
   });
 
   it("should return available: false when both environment variables are missing", async () => {
@@ -117,16 +97,6 @@ describe("/api/npsAvailable", () => {
       available: false,
       message: "NPS survey is not configured",
     });
-
-    // Should log configuration error
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      "NPS Survey configuration missing:",
-      expect.objectContaining({
-        hasGoogleCredentials: false,
-        hasSheetId: false,
-        timestamp: expect.any(String),
-      })
-    );
   });
 
   it("should return available: false when NPS_SURVEY_GOOGLE_SHEET_ID is empty string", async () => {
@@ -146,16 +116,6 @@ describe("/api/npsAvailable", () => {
       available: false,
       message: "NPS survey is not configured",
     });
-
-    // Should log configuration error
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      "NPS Survey configuration missing:",
-      expect.objectContaining({
-        hasGoogleCredentials: true,
-        hasSheetId: false,
-        timestamp: expect.any(String),
-      })
-    );
   });
 
   it("should return 405 for non-GET requests", async () => {

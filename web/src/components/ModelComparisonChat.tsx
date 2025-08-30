@@ -676,11 +676,9 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
                     loading={loading}
                     collectionChanged={false}
                     hasMultipleCollections={false}
-                    likeStatuses={{}}
                     linkCopied={modelKey === "A" ? copiedMessageA : copiedMessageB}
                     votes={{}}
                     siteConfig={siteConfig}
-                    handleLikeCountChange={() => {}}
                     handleCopyLink={modelKey === "A" ? handleCopyLinkA : handleCopyLinkB}
                     handleVote={() => {}}
                     lastMessageRef={null}
@@ -689,7 +687,6 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
                     temporarySession={false}
                     allowAllAnswersPage={false}
                     showSourcesBelow={false}
-                    showRelatedQuestions={false}
                     previousMessage={
                       modelKey === "A" ? messagesA[messagesA.length - 2] : messagesB[messagesB.length - 2]
                     }
