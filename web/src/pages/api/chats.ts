@@ -35,7 +35,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     // Build query based on available parameters
-    let query = db.collection(getAnswersCollectionName());
+    let query: FirebaseFirestore.Query | FirebaseFirestore.CollectionReference =
+      db.collection(getAnswersCollectionName());
 
     // For legacy document support: if only convId is provided, query by convId only
     if (convId && typeof convId === "string") {
