@@ -1,5 +1,9 @@
 {
-  "web/**/*.{js,jsx,ts,tsx}": ["./bin/run-jest-for-lint-staged.sh"],
+  "web/**/*.{js,jsx,ts,tsx}": [
+    "./bin/run-typescript-check.sh",
+    "./bin/run-eslint-for-lint-staged.sh",
+    "./bin/run-jest-for-lint-staged.sh"
+  ],
   "data_ingestion/**/*.py": ["./bin/run-pytest-for-lint-staged.sh"],
   "pyutil/**/*.py": ["./bin/run-pytest-for-lint-staged.sh"],
   "*.py": ["./bin/run-pytest-for-lint-staged.sh"]

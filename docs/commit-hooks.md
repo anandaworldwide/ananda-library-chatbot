@@ -9,17 +9,20 @@ maintaining fast commit times (≤20-30 seconds).
 
 ### Pre-commit Hook Configuration
 
-The commit hook system automatically runs relevant tests based on the files you're committing:
+The commit hook system automatically runs comprehensive checks based on the files you're committing:
 
-- **JavaScript/TypeScript files** → Jest tests (client + server if needed)
+- **JavaScript/TypeScript files** → TypeScript compilation check + ESLint + Jest tests (client + server if needed)
 - **Python files** → pytest tests (targeted to changed modules)
+- **Build safety** → Catches errors that would break Vercel deployments
 - **Warning-only mode** → Tests run but don't block commits on failure
 
 ### Files Involved
 
 ```text
-.husky/pre-commit              # Git hook entry point
-.lintstagedrc.json            # File pattern → script mapping
+.husky/pre-commit                    # Git hook entry point
+.lintstagedrc.json                  # File pattern → script mapping
+bin/run-typescript-check.sh         # TypeScript compilation check
+bin/run-eslint-for-lint-staged.sh   # ESLint linting check
 bin/run-jest-for-lint-staged.sh     # JavaScript/TypeScript test runner
 bin/run-pytest-for-lint-staged.sh   # Python test runner
 ```
@@ -28,12 +31,14 @@ bin/run-pytest-for-lint-staged.sh   # Python test runner
 
 ### JavaScript/TypeScript Files
 
-When you change files in `web/`, the system:
+When you change files in `web/`, the system runs checks in this order:
 
-1. **Runs client tests** for all changed files using `--findRelatedTests`
-2. **Detects server files** (API routes, server utilities) and runs server tests
-3. **Uses timeouts** to ensure tests complete within 25 seconds
-4. **Provides clear feedback** with emojis and actionable suggestions
+1. **TypeScript compilation check** - Catches build-breaking type errors (same as Vercel)
+2. **ESLint check** - Enforces code quality and catches additional TypeScript issues
+3. **Jest tests** - Runs client tests for all changed files using `--findRelatedTests`
+4. **Server tests** - Detects server files (API routes, server utilities) and runs server tests
+5. **Timeout protection** - Ensures all checks complete within reasonable time limits
+6. **Clear feedback** - Provides actionable error messages and suggestions
 
 #### Server Test Triggers
 
@@ -101,7 +106,11 @@ pyutil/email_ops.py → tests/test_pyutil_email_ops.py
 
 ```json
 {
-  "web/**/*.{js,jsx,ts,tsx}": ["./bin/run-jest-for-lint-staged.sh"],
+  "web/**/*.{js,jsx,ts,tsx}": [
+    "./bin/run-typescript-check.sh",
+    "./bin/run-eslint-for-lint-staged.sh",
+    "./bin/run-jest-for-lint-staged.sh"
+  ],
   "data_ingestion/**/*.py": ["./bin/run-pytest-for-lint-staged.sh"],
   "pyutil/**/*.py": ["./bin/run-pytest-for-lint-staged.sh"],
   "*.py": ["./bin/run-pytest-for-lint-staged.sh"]
@@ -110,10 +119,64 @@ pyutil/email_ops.py → tests/test_pyutil_email_ops.py
 
 ### Customizing Test Selection
 
-To modify which tests run for specific files, edit the mapping logic in:
+To modify which checks run for specific files, edit the scripts:
 
-- `bin/run-jest-for-lint-staged.sh` - JavaScript/TypeScript mapping
-- `bin/run-pytest-for-lint-staged.sh` - Python mapping
+- `bin/run-typescript-check.sh` - TypeScript compilation check
+- `bin/run-eslint-for-lint-staged.sh` - ESLint configuration and rules
+- `bin/run-jest-for-lint-staged.sh` - JavaScript/TypeScript test mapping
+- `bin/run-pytest-for-lint-staged.sh` - Python test mapping
+
+## Build Safety Features
+
+### TypeScript Compilation Check
+
+The most important addition to the commit hooks is the **TypeScript compilation check** that runs the same validation as Vercel builds:
+
+```bash
+# Runs this command to catch build-breaking errors:
+npx tsc --noEmit --project tsconfig.json
+```
+
+**What it catches:**
+- Type assignment errors (like the Firestore Query/CollectionReference issue)
+- Missing imports and undefined variables
+- Interface violations and type mismatches
+- Generic type errors and constraint violations
+
+**Why it's critical:**
+- **Prevents Vercel build failures** - catches the exact same errors that would break deployment
+- **Fast feedback** - shows errors locally instead of discovering them in CI/CD
+- **Same validation** - uses identical TypeScript compiler settings as production builds
+
+### ESLint Integration
+
+ESLint runs with strict settings to catch additional issues:
+
+```bash
+# Runs with zero tolerance for warnings:
+npx eslint --max-warnings 0 [changed-files]
+```
+
+**What it catches:**
+- TypeScript-specific linting rules
+- Code quality issues and anti-patterns
+- Import/export problems
+- Unused variables and dead code
+
+### Error Examples
+
+**Before (would break Vercel):**
+```typescript
+let query = db.collection("test");
+query = query.where("field", "==", "value"); // Type error!
+```
+
+**After (caught by commit hook):**
+```bash
+❌ TypeScript compilation errors found!
+These errors would cause the Vercel build to fail.
+Please fix the TypeScript errors before committing.
+```
 
 ## Performance Metrics
 
