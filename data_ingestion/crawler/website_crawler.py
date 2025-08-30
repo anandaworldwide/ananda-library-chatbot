@@ -846,6 +846,16 @@ class WebsiteCrawler:
             normalized += "?" + parsed.query
         return normalized.lower()
 
+    def _is_wordpress_login_redirect(self, final_url: str, original_url: str) -> bool:
+        """Check if we were redirected to a WordPress login page."""
+        # Check if the final URL is a WordPress login page
+        if "/wp-login.php" in final_url:
+            logging.info(
+                f"Detected WordPress login redirect: {original_url} -> {final_url}"
+            )
+            return True
+        return False
+
     def should_skip_url(self, url: str) -> bool:
         """Check if URL should be skipped based on patterns"""
         return any(re.search(pattern, url) for pattern in self.skip_patterns)
@@ -1292,6 +1302,28 @@ class WebsiteCrawler:
                 page.set_default_timeout(30000)
 
                 response = page.goto(url, wait_until="commit")
+
+                # Check if we were redirected to a WordPress login page
+                final_url = page.url
+                if self._is_wordpress_login_redirect(final_url, url):
+                    logging.info(
+                        f"Ignoring WordPress login redirect: {url} -> {final_url}"
+                    )
+                    self.mark_url_status(
+                        url, "visited", content_hash="wp_login_redirect"
+                    )
+                    # Create a special marker content to signal successful handling
+                    wp_redirect_content = PageContent(
+                        url=url,
+                        title="WordPress Login Redirect",
+                        content="",  # Empty content
+                        metadata={
+                            "type": "wp_login_redirect",
+                            "source": url,
+                            "final_url": final_url,
+                        },
+                    )
+                    return wp_redirect_content, [], False
 
                 should_continue, exception = self._validate_response(response, url)
                 if not should_continue:
@@ -2486,6 +2518,22 @@ def _process_page_content(
         error_msg = f"No content extracted from {url}"
         crawler.mark_url_status(url, "failed", error_msg)
         return 0, 0, False
+
+    # Handle special cases (WordPress login redirects, etc.)
+    if (
+        hasattr(content, "metadata")
+        and content.metadata.get("type") == "wp_login_redirect"
+    ):
+        # WordPress login redirect was already handled and marked as visited
+        # Return small increment to avoid triggering browser restart (restart_inc == 0 and pages_inc == 0)
+        logging.debug(
+            f"Skipping content processing for WordPress login redirect: {url}"
+        )
+        return (
+            0,
+            1,
+            False,
+        )  # No pages processed, but increment restart counter to avoid browser restart
 
     try:
         chunks = create_chunks_from_page(content, crawler.text_splitter)
