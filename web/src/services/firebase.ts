@@ -1,17 +1,17 @@
 // import { isDevelopment } from '@/utils/env';
-import * as fbadmin from "firebase-admin";
+import firebase from "firebase-admin";
 import { initializeFirestore } from "firebase-admin/firestore";
 
 // Check if we're in a build environment
 const isBuildTime = process.env.NODE_ENV === "production" && process.env.NEXT_PHASE === "phase-production-build";
 
 // Initialize Firebase and export the Firestore database
-let db: fbadmin.firestore.Firestore | null = null;
+let db: firebase.firestore.Firestore | null = null;
 
 // Skip initialization during build time
 if (isBuildTime) {
   console.warn("Skipping Firebase initialization during build time");
-} else if (!fbadmin.apps.length) {
+} else if (!firebase.apps.length) {
   try {
     const serviceAccountJson = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
@@ -42,13 +42,13 @@ if (isBuildTime) {
       if (missingFields.length > 0) {
         throw new Error(`Firebase credentials missing required fields: ${missingFields.join(", ")}`);
       } else {
-        const app = fbadmin.initializeApp({
-          credential: fbadmin.credential.cert(serviceAccount),
+        const app = firebase.initializeApp({
+          credential: firebase.credential.cert(serviceAccount),
         });
 
         // Initialize Firestore with preferRest to improve cold start times
         initializeFirestore(app, { preferRest: true });
-        db = fbadmin.firestore();
+        db = firebase.firestore();
 
         // if (isDevelopment()) {
         //   db.settings({
@@ -68,7 +68,7 @@ if (isBuildTime) {
     }
   }
 } else {
-  db = fbadmin.firestore();
+  db = firebase.firestore();
 }
 
 export { db };

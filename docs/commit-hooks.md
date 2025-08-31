@@ -130,7 +130,8 @@ To modify which checks run for specific files, edit the scripts:
 
 ### TypeScript Compilation Check
 
-The most important addition to the commit hooks is the **TypeScript compilation check** that runs the same validation as Vercel builds:
+The most important addition to the commit hooks is the **TypeScript compilation check** that runs the same validation as
+Vercel builds:
 
 ```bash
 # Runs this command to catch build-breaking errors:
@@ -138,12 +139,14 @@ npx tsc --noEmit --project tsconfig.json
 ```
 
 **What it catches:**
+
 - Type assignment errors (like the Firestore Query/CollectionReference issue)
 - Missing imports and undefined variables
 - Interface violations and type mismatches
 - Generic type errors and constraint violations
 
 **Why it's critical:**
+
 - **Prevents Vercel build failures** - catches the exact same errors that would break deployment
 - **Fast feedback** - shows errors locally instead of discovering them in CI/CD
 - **Same validation** - uses identical TypeScript compiler settings as production builds
@@ -158,6 +161,7 @@ npx eslint --max-warnings 0 [changed-files]
 ```
 
 **What it catches:**
+
 - TypeScript-specific linting rules
 - Code quality issues and anti-patterns
 - Import/export problems
@@ -166,12 +170,14 @@ npx eslint --max-warnings 0 [changed-files]
 ### Error Examples
 
 **Before (would break Vercel):**
+
 ```typescript
 let query = db.collection("test");
 query = query.where("field", "==", "value"); // Type error!
 ```
 
 **After (caught by commit hook):**
+
 ```bash
 ❌ TypeScript compilation errors found!
 These errors would cause the Vercel build to fail.
