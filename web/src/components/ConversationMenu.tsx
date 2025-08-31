@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { logEvent } from "@/utils/client/analytics";
 
 interface ConversationMenuProps {
   onRename: () => void;
@@ -109,6 +110,9 @@ export default function ConversationMenu({ onRename, onDelete, isVisible }: Conv
     e.stopPropagation();
 
     if (!isOpen) {
+      // Track menu button click event
+      logEvent("chat_history_menu_open", "Chat History", "conversation_menu_opened");
+
       const position = calculateMenuPosition();
       setMenuPosition(position);
     }
@@ -120,6 +124,10 @@ export default function ConversationMenu({ onRename, onDelete, isVisible }: Conv
     e.preventDefault();
     e.stopPropagation();
     setIsOpen(false);
+
+    // Track rename action
+    logEvent("chat_history_rename_click", "Chat History", "conversation_rename_initiated");
+
     onRename();
   };
 
@@ -127,6 +135,10 @@ export default function ConversationMenu({ onRename, onDelete, isVisible }: Conv
     e.preventDefault();
     e.stopPropagation();
     setIsOpen(false);
+
+    // Track delete action
+    logEvent("chat_history_delete_click", "Chat History", "conversation_delete_initiated");
+
     onDelete();
   };
 
