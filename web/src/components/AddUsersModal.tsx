@@ -91,6 +91,15 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
       return;
     }
 
+    // Check email limit (40 emails maximum)
+    const EMAIL_LIMIT = 40;
+    if (validation.validEmails.length > EMAIL_LIMIT) {
+      setValidationError(
+        `Too many email addresses. Please limit to ${EMAIL_LIMIT} emails per invitation batch. You entered ${validation.validEmails.length} emails.`
+      );
+      return;
+    }
+
     setValidationError(null);
 
     try {
@@ -138,7 +147,7 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
           />
           <p className="mt-1 text-xs text-gray-500">
             Separate multiple email addresses with commas or new lines. You can use either bare email addresses or names
-            with angle brackets.
+            with angle brackets. <strong>Maximum 40 emails per batch.</strong>
           </p>
         </div>
 

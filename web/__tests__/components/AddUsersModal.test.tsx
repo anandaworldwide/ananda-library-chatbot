@@ -227,4 +227,63 @@ describe("AddUsersModal", () => {
       expect(textarea.value).toContain("Aums,\nAdmin");
     });
   });
+
+  it("shows error when more than 40 emails are entered", async () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    // Generate 41 email addresses
+    const emails = Array.from({ length: 41 }, (_, i) => `user${i + 1}@example.com`).join(", ");
+
+    const emailInput = screen.getByLabelText("Email Addresses");
+
+    fireEvent.change(emailInput, { target: { value: emails } });
+
+    // Wait for button text to update after email input change
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Add 41 Users/i })).toBeInTheDocument();
+    });
+
+    const submitButton = screen.getByRole("button", { name: /Add 41 Users/i });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /Too many email addresses. Please limit to 40 emails per invitation batch. You entered 41 emails./
+        )
+      ).toBeInTheDocument();
+    });
+
+    // Should not call onAddUsers
+    expect(defaultProps.onAddUsers).not.toHaveBeenCalled();
+  });
+
+  it("allows exactly 40 emails", async () => {
+    render(<AddUsersModal {...defaultProps} />);
+
+    // Generate exactly 40 email addresses
+    const emails = Array.from({ length: 40 }, (_, i) => `user${i + 1}@example.com`).join(", ");
+
+    const emailInput = screen.getByLabelText("Email Addresses");
+
+    fireEvent.change(emailInput, { target: { value: emails } });
+
+    // Wait for button text to update after email input change
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Add 40 Users/i })).toBeInTheDocument();
+    });
+
+    const submitButton = screen.getByRole("button", { name: /Add 40 Users/i });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(defaultProps.onAddUsers).toHaveBeenCalledWith(
+        expect.arrayContaining(Array.from({ length: 40 }, (_, i) => `user${i + 1}@example.com`)),
+        expect.stringContaining("Please join us in using Luca")
+      );
+    });
+
+    // Should not show any error
+    expect(screen.queryByText(/Too many email addresses/)).not.toBeInTheDocument();
+  });
 });
