@@ -311,30 +311,29 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       // Process emails one by one to get detailed feedback
       for (const email of emails) {
         try {
-          const res = await fetch("/api/admin/addUser", {
+          const { data, refreshedToken } = await fetchWithTokenRefresh<{ message: string }>("/api/admin/addUser", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
             },
             credentials: "include",
             body: JSON.stringify({ email, customMessage }),
           });
-          const data = await res.json();
 
-          if (!res.ok) {
-            errors.push(`${email}: ${data?.error || "Failed to add"}`);
+          // Update JWT if it was refreshed
+          if (refreshedToken) {
+            setJwt(refreshedToken);
+          }
+
+          // Interpret backend messages
+          if (data?.message === "already active") {
+            alreadyActiveEmails.push(email);
+          } else if (data?.message === "resent") {
+            resentCount++;
+          } else if (data?.message === "created") {
+            successCount++;
           } else {
-            // Interpret backend messages
-            if (data?.message === "already active") {
-              alreadyActiveEmails.push(email);
-            } else if (data?.message === "resent") {
-              resentCount++;
-            } else if (data?.message === "created") {
-              successCount++;
-            } else {
-              successCount++; // Default to success
-            }
+            successCount++; // Default to success
           }
         } catch (e: any) {
           errors.push(`${email}: ${e?.message || "Failed to add"}`);

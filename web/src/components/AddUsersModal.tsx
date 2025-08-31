@@ -15,6 +15,9 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
   const [validationError, setValidationError] = useState<string | null>(null);
   const [adminFirstName, setAdminFirstName] = useState<string>("Admin");
 
+  // Local storage key for persisting custom message
+  const CUSTOM_MESSAGE_STORAGE_KEY = "admin-invitation-custom-message";
+
   // Fetch admin's profile to get first name
   useEffect(() => {
     async function fetchAdminProfile() {
@@ -38,13 +41,33 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
     }
   }, [isOpen]);
 
-  // Set default message when admin name is available or modal opens
+  // Load custom message from local storage and set default when modal opens
   useEffect(() => {
     if (isOpen) {
-      const defaultMessage = `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`;
-      setCustomMessage(defaultMessage);
+      // Try to load saved custom message from local storage
+      const savedMessage = localStorage.getItem(CUSTOM_MESSAGE_STORAGE_KEY);
+
+      if (savedMessage) {
+        // Use saved message exactly as it was saved
+        setCustomMessage(savedMessage);
+      } else {
+        // Use default message if no saved message exists
+        const defaultMessage = `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`;
+        setCustomMessage(defaultMessage);
+      }
     }
-  }, [adminFirstName, isOpen]);
+  }, [adminFirstName, isOpen, CUSTOM_MESSAGE_STORAGE_KEY]);
+
+  // Save custom message to local storage when it changes
+  const handleCustomMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newMessage = e.target.value;
+    setCustomMessage(newMessage);
+
+    // Save to local storage (debounced by React's batching)
+    if (newMessage.trim()) {
+      localStorage.setItem(CUSTOM_MESSAGE_STORAGE_KEY, newMessage);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,12 +94,15 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
     setValidationError(null);
 
     try {
+      // Save the current custom message to local storage before submitting
+      if (customMessage.trim()) {
+        localStorage.setItem(CUSTOM_MESSAGE_STORAGE_KEY, customMessage);
+      }
+
       await onAddUsers(validation.validEmails, customMessage.trim() || undefined);
       // Clear the form and close modal on success
       setEmailInput("");
-      setCustomMessage(
-        `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`
-      );
+      // Don't reset custom message - it will be loaded from storage next time
       onClose();
     } catch (error) {
       // Error handling is done by the parent component
@@ -86,9 +112,7 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
   const handleClose = () => {
     if (!isSubmitting) {
       setEmailInput("");
-      setCustomMessage(
-        `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`
-      );
+      // Don't reset custom message - it will be loaded from storage next time
       setValidationError(null);
       onClose();
     }
@@ -125,14 +149,14 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
           <textarea
             id="custom-message"
             value={customMessage}
-            onChange={(e) => setCustomMessage(e.target.value)}
+            onChange={handleCustomMessageChange}
             disabled={isSubmitting}
             className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="Enter a personal message to include in the invitation email..."
           />
           <p className="mt-1 text-xs text-gray-500">
-            This message will appear prominently at the top of the invitation email. You can edit the default message or
-            clear it to use the standard invitation.
+            This message will appear prominently at the top of the invitation email. Your custom message will be
+            remembered for future invitations.
           </p>
         </div>
 

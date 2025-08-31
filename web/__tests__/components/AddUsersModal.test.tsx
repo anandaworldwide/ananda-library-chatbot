@@ -204,11 +204,14 @@ describe("AddUsersModal", () => {
   });
 
   it("uses admin first name in default custom message", async () => {
+    // Clear localStorage to ensure we get the default message
+    localStorage.clear();
+
     render(<AddUsersModal {...defaultProps} />);
 
     // Wait for the profile fetch and message update
     await waitFor(() => {
-      const textarea = screen.getByLabelText("Custom Message (Optional)");
+      const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
       expect(textarea.value).toContain("Aums,\nMichael");
     });
   });
@@ -220,7 +223,7 @@ describe("AddUsersModal", () => {
 
     // Should still show default message with "Admin" fallback
     await waitFor(() => {
-      const textarea = screen.getByLabelText("Custom Message (Optional)");
+      const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
       expect(textarea.value).toContain("Aums,\nAdmin");
     });
   });
