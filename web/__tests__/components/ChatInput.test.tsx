@@ -72,7 +72,6 @@ describe("ChatInput", () => {
     handleEnter: jest.fn(),
     handleClick: jest.fn(),
     handleCollectionChange: jest.fn(),
-    handleTemporarySessionChange: jest.fn(),
     collection: "all",
     temporarySession: false,
     error: null,
@@ -186,14 +185,12 @@ describe("ChatInput", () => {
     expect(screen.getByTestId("shuffle-button")).toBeInTheDocument();
   });
 
-  it("toggles temporary session correctly", () => {
-    render(<ChatInput {...defaultProps} />);
+  it("displays temporary session indicator when active", () => {
+    render(<ChatInput {...defaultProps} temporarySession={true} />);
 
-    // Find and click the temporary session button by its text content
-    const temporarySessionToggle = screen.getByText("Start Temporary Session");
-    fireEvent.click(temporarySessionToggle);
-
-    expect(defaultProps.handleTemporarySessionChange).toHaveBeenCalled();
+    // Check that the temporary session indicator is displayed
+    expect(screen.getByText("Temporary Session Active")).toBeInTheDocument();
+    expect(screen.getByText("hourglass_empty")).toBeInTheDocument();
   });
 
   it("toggles media types correctly", () => {

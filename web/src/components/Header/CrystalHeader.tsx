@@ -8,9 +8,19 @@ interface CrystalHeaderProps {
   siteConfig: SiteConfig;
   constrainWidth?: boolean;
   onNewChat?: () => void;
+  temporarySession?: boolean;
+  onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  isChatEmpty?: boolean;
 }
 
-export default function CrystalHeader({ siteConfig, constrainWidth, onNewChat }: CrystalHeaderProps) {
+export default function CrystalHeader({
+  siteConfig,
+  constrainWidth,
+  onNewChat,
+  temporarySession,
+  onTemporarySessionChange,
+  isChatEmpty,
+}: CrystalHeaderProps) {
   const parentSiteUrl = getParentSiteUrl(siteConfig);
 
   return (
@@ -32,7 +42,20 @@ export default function CrystalHeader({ siteConfig, constrainWidth, onNewChat }:
             </Link>
           </div>
           <div className="flex items-center space-x-4">
-            {onNewChat && (
+            {/* Show temporary session button when chat is empty and temporary sessions are allowed */}
+            {isChatEmpty && siteConfig.allowTemporarySessions && !temporarySession && onTemporarySessionChange && (
+              <button
+                onClick={onTemporarySessionChange}
+                aria-label="Start Temporary Session"
+                className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors flex items-center space-x-1"
+                title="Start Temporary Session"
+              >
+                <span className="material-icons text-xl">hourglass_empty</span>
+                <span className="text-sm font-medium">Temporary</span>
+              </button>
+            )}
+            {/* Show new chat button when chat is not empty OR when temporary session is active */}
+            {(!isChatEmpty || temporarySession) && onNewChat && (
               <button
                 onClick={onNewChat}
                 aria-label="New Chat"

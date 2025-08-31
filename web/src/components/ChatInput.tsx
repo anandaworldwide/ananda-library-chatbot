@@ -46,7 +46,6 @@ interface ChatInputProps {
   handleEnter: (e: React.KeyboardEvent<HTMLTextAreaElement>, query: string) => void;
   handleClick: (query: string) => void;
   handleCollectionChange: (newCollection: string) => void;
-  handleTemporarySessionChange: (event: React.MouseEvent<HTMLButtonElement>) => void;
   collection: string;
   temporarySession: boolean;
   error: string | null;
@@ -77,7 +76,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   handleEnter,
   handleClick,
   handleCollectionChange,
-  handleTemporarySessionChange,
   collection,
   temporarySession,
   error,
@@ -93,7 +91,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   setQuery,
   setIsNearBottom,
   isLoadingQueries,
-  showTemporarySessionOptions = true,
+
   sourceCount,
   setSourceCount,
 }) => {
@@ -284,17 +282,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     <div className={`${styles.center} w-full mt-4 px-2 md:px-0`}>
       <div className="w-full">
         <form onSubmit={onSubmit}>
-          {/* Temporary session indicator */}
+          {/* Temporary session indicator - now handled in navigation */}
           {temporarySession && (
             <div className="flex items-center justify-center mb-3 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
-              <span className="material-icons text-purple-600 text-lg mr-2">lock</span>
-              <span className="text-purple-800 text-sm font-medium">
-                Temporary Session Active (
-                <button onClick={handleTemporarySessionChange} className="underline hover:text-purple-900">
-                  end
-                </button>
-                )
-              </span>
+              <span className="material-icons text-purple-600 text-lg mr-2">hourglass_empty</span>
+              <span className="text-purple-800 text-sm font-medium">Temporary Session Active</span>
             </div>
           )}
 
@@ -336,21 +328,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </div>
 
           {/* Mobile options toggle - only show if there are options available */}
-          {isMobile &&
-            (showMediaTypeSelection ||
-              showAuthorSelection ||
-              siteConfig?.showSourceCountSelector ||
-              (showTemporarySessionOptions && !temporarySession && siteConfig?.allowTemporarySessions)) && (
-              <div className="mb-4">
-                <button
-                  type="button"
-                  onClick={() => setShowOptions(!showOptions)}
-                  className="text-blue-500 hover:underline mb-2"
-                >
-                  {showOptions ? "Hide options" : "Show options"}
-                </button>
-              </div>
-            )}
+          {isMobile && (showMediaTypeSelection || showAuthorSelection || siteConfig?.showSourceCountSelector) && (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={() => setShowOptions(!showOptions)}
+                className="text-blue-500 hover:underline mb-2"
+              >
+                {showOptions ? "Hide options" : "Show options"}
+              </button>
+            </div>
+          )}
 
           {/* Options section (media type, collection selector, private session) */}
           {(!isMobile || showOptions) && (
@@ -414,20 +402,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   </label>
                 </div>
               )}
-              {showTemporarySessionOptions && !temporarySession && siteConfig?.allowTemporarySessions && (
-                <button
-                  type="button"
-                  onClick={handleTemporarySessionChange}
-                  className="px-3 py-2 text-xs sm:text-sm rounded-md bg-purple-100 text-purple-800 hover:bg-purple-200 active:bg-purple-300 transition-colors duration-200 whitespace-nowrap shadow-sm border border-purple-300 font-medium"
-                >
-                  <span className="material-icons text-sm mr-1 align-middle">lock</span>
-                  <span className="align-middle">Start Temporary Session</span>
-                </button>
-              )}
-              {(showMediaTypeSelection ||
-                showAuthorSelection ||
-                siteConfig?.showSourceCountSelector ||
-                siteConfig?.allowTemporarySessions) && (
+
+              {(showMediaTypeSelection || showAuthorSelection || siteConfig?.showSourceCountSelector) && (
                 <button
                   type="button"
                   onClick={() => setShowControlsInfo(true)}
@@ -486,15 +462,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             Enable to use more sources (10 instead of 4) for potentially more comprehensive responses.
                             Relevant text passages are retrieved based on similarity to your query and used as context
                             for generating answers.
-                          </p>
-                        </div>
-                      )}
-
-                      {siteConfig?.allowTemporarySessions && (
-                        <div>
-                          <h4 className="font-medium mb-1">Temporary Session</h4>
-                          <p className="text-sm text-gray-600">
-                            Enable temporary mode to keep your queries confidential and unlisted.
                           </p>
                         </div>
                       )}

@@ -16,6 +16,11 @@ interface BaseHeaderProps {
   requireLogin: boolean;
   constrainWidth?: boolean;
   onNewChat?: () => void;
+  // Temporary session props
+  temporarySession?: boolean;
+  onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  isChatEmpty?: boolean;
+  allowTemporarySessions?: boolean;
 }
 
 export default function BaseHeader({
@@ -26,6 +31,10 @@ export default function BaseHeader({
   requireLogin,
   constrainWidth = false,
   onNewChat,
+  temporarySession = false,
+  onTemporarySessionChange,
+  isChatEmpty = true,
+  allowTemporarySessions = false,
 }: BaseHeaderProps) {
   const router = useRouter();
   // Fast initial state from non-HttpOnly cookie to avoid flicker; will be reconciled after init
@@ -109,7 +118,20 @@ export default function BaseHeader({
             </nav>
           </div>
           <div className="flex items-center space-x-4">
-            {onNewChat && (
+            {/* Show temporary session button when chat is empty and temporary sessions are allowed */}
+            {isChatEmpty && allowTemporarySessions && !temporarySession && onTemporarySessionChange && (
+              <button
+                onClick={onTemporarySessionChange}
+                aria-label="Start Temporary Session"
+                className="text-gray-600 hover:text-slate-800 p-1 rounded-md hover:bg-gray-100 transition-colors flex items-center space-x-1"
+                title="Start Temporary Session"
+              >
+                <span className="material-icons text-xl">hourglass_empty</span>
+                <span className="text-sm font-medium">Temporary</span>
+              </button>
+            )}
+            {/* Show new chat button when chat is not empty OR when temporary session is active */}
+            {(!isChatEmpty || temporarySession) && onNewChat && (
               <button
                 onClick={onNewChat}
                 aria-label="New Chat"

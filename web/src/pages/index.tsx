@@ -349,6 +349,12 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       handleStop();
     }
 
+    // End temporary session if one is active
+    if (temporarySession) {
+      setTemporarySession(false);
+      logEvent("end_temporary_session", "UI", "new_chat_button");
+    }
+
     // Push a new history entry for '/' without triggering a Next.js navigation.
     window.history.pushState(null, "", "/");
     pathRef.current = "/";
@@ -1008,17 +1014,67 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Custom hook for managing random queries
   const { randomQueries, shuffleQueries } = useRandomQueries(queriesForCollection, 3);
 
+  // Helper function to determine if chat is empty (only has greeting message)
+  const isChatEmpty = useMemo(() => {
+    if (!messages || messages.length === 0) return true;
+    if (messages.length === 1) {
+      const firstMessage = messages[0];
+      return firstMessage.type === "apiMessage" && firstMessage.message === getGreeting(siteConfig);
+    }
+    return false;
+  }, [messages, siteConfig]);
+
   // Function to handle temporary session changes
   const handleTemporarySessionChange = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     if (temporarySession) {
-      // If already in a temporary session, reload the page
+      // If already in a temporary session, end it and clear the interface like new chat
       logEvent("end_temporary_session", "UI", "");
-      window.location.reload();
+
+      // Stop any ongoing streaming before resetting
+      if (loading) {
+        handleStop();
+      }
+
+      // Reset temporary session state
+      setTemporarySession(false);
+
+      // Push a new history entry for '/' without triggering a Next.js navigation
+      window.history.pushState(null, "", "/");
+      pathRef.current = "/";
+
+      // Immediately reset local chat state so UI clears without waiting for
+      // handleUrlBasedLoading. This guarantees ending temporary session clears the conversation.
+      setCurrentConvId(null);
+      setCurrentQuestion("");
+      setMessageState({
+        messages: [
+          {
+            message: getGreeting(siteConfig),
+            type: "apiMessage",
+          },
+        ],
+        history: [],
+      });
+      setError(null);
+      setViewOnlyMode(false);
+
+      // Focus on the input field if not on mobile
+      if (window.innerWidth >= 768 && textAreaRef.current) {
+        textAreaRef.current.focus();
+      }
+
+      // Reload sidebar to clear any stale state
+      sidebarRefetchRef.current();
     } else {
       // Start a temporary session
       setTemporarySession(true);
       logEvent("start_temporary_session", "UI", "");
+
+      // Focus on the input field if not on mobile
+      if (window.innerWidth >= 768 && textAreaRef.current) {
+        textAreaRef.current.focus();
+      }
     }
   };
 
@@ -1243,7 +1299,14 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Main component render
   return (
     <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
-      <Layout siteConfig={siteConfig} useWideLayout={siteConfig?.requireLogin} onNewChat={handleNewChat}>
+      <Layout
+        siteConfig={siteConfig}
+        useWideLayout={siteConfig?.requireLogin}
+        onNewChat={handleNewChat}
+        temporarySession={temporarySession}
+        onTemporarySessionChange={handleTemporarySessionChange}
+        isChatEmpty={isChatEmpty}
+      >
         {showPopup && popupMessage && <Popup message={popupMessage} onClose={closePopup} siteConfig={siteConfig} />}
 
         <div className="flex h-full">
@@ -1363,7 +1426,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                     handleEnter={handleEnter}
                     handleClick={handleClick}
                     handleCollectionChange={handleCollectionChange}
-                    handleTemporarySessionChange={handleTemporarySessionChange}
                     collection={collection}
                     temporarySession={temporarySession}
                     error={chatError}

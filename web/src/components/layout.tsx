@@ -16,9 +16,21 @@ interface LayoutProps {
   siteConfig: SiteConfig | null;
   useWideLayout?: boolean;
   onNewChat?: () => void;
+  // Temporary session props
+  temporarySession?: boolean;
+  onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  isChatEmpty?: boolean;
 }
 
-export default function Layout({ children, siteConfig, useWideLayout = false, onNewChat }: LayoutProps) {
+export default function Layout({
+  children,
+  siteConfig,
+  useWideLayout = false,
+  onNewChat,
+  temporarySession = false,
+  onTemporarySessionChange,
+  isChatEmpty = true,
+}: LayoutProps) {
   const [isClient, setIsClient] = useState(false);
   const [, setVisitCount] = useLocalStorage("visitCount", 0);
   const { errorMessage } = useSudo();
@@ -45,6 +57,9 @@ export default function Layout({ children, siteConfig, useWideLayout = false, on
       siteConfig,
       constrainWidth: useWideLayout,
       onNewChat,
+      temporarySession,
+      onTemporarySessionChange,
+      isChatEmpty,
     };
 
     switch (siteConfig.siteId) {
