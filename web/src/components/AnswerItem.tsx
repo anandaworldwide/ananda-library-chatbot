@@ -1,5 +1,5 @@
 // This component renders an individual answer item, including the question, answer content,
-// related questions, and interactive elements like likes and copy buttons.
+// and interactive elements like votes and copy buttons.
 
 import React, { useState } from "react";
 import Link from "next/link";

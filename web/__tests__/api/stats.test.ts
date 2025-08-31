@@ -107,8 +107,8 @@ describe("/api/stats", () => {
       await handler(req, res);
 
       expect(res.statusCode).toBe(200);
-      expect(res._getJSONData()).toHaveProperty("questionsWithLikes");
-      expect(res._getJSONData()).toHaveProperty("mostPopularQuestion");
+      expect(res._getJSONData()).toHaveProperty("questionsPerDay");
+      expect(res._getJSONData()).toHaveProperty("totalQuestions");
     });
   });
 
@@ -159,7 +159,6 @@ describe("/api/stats", () => {
       const mockData = {
         timestamp: { _seconds: Date.now() / 1000 },
         question: "Test question?",
-        likeCount: 5,
       };
 
       const mockSnapshot = {
@@ -187,10 +186,10 @@ describe("/api/stats", () => {
       expect(res.statusCode).toBe(200);
       const responseData = res._getJSONData();
 
-      expect(responseData).toHaveProperty("questionsWithLikes");
-      expect(responseData).toHaveProperty("mostPopularQuestion");
-      expect(typeof responseData.questionsWithLikes).toBe("object");
-      expect(typeof responseData.mostPopularQuestion).toBe("object");
+      expect(responseData).toHaveProperty("questionsPerDay");
+      expect(responseData).toHaveProperty("totalQuestions");
+      expect(typeof responseData.questionsPerDay).toBe("object");
+      expect(typeof responseData.totalQuestions).toBe("number");
     });
   });
 });

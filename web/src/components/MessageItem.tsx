@@ -1,4 +1,4 @@
-// This component renders an individual message item in a chat-like interface,
+// This component renders an individual message item in a chat interface,
 // supporting both user messages and AI responses with various interactive elements.
 
 import React, { Fragment } from "react";
@@ -157,7 +157,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                     siteConfig={siteConfig}
                   />
 
-                  {/* Link, like, and downvote buttons - always visible after loading, but disabled until docId available */}
+                  {/* Link and vote buttons - always visible after loading, but disabled until docId available */}
                   {!temporarySession && (
                     <>
                       <button

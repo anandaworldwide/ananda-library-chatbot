@@ -1,4 +1,4 @@
-// It includes features like real-time chat, collection selection, private sessions,
+// It includes features such as real-time chat, collection selection, private sessions,
 // and media type filtering. The component manages chat state, handles user input,
 // and communicates with a backend API for chat responses.
 
@@ -13,7 +13,7 @@ import { useRouter } from "next/router";
 // Component imports
 import Layout from "@/components/layout";
 import Popup from "@/components/popup";
-import LikePrompt from "@/components/LikePrompt";
+
 import { ChatInput } from "@/components/ChatInput";
 import MessageItem from "@/components/MessageItem";
 import FeedbackModal from "@/components/FeedbackModal";
@@ -128,7 +128,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // window.history.replaceState without triggering navigation.)
 
   // UI state variables
-  const [showLikePrompt] = useState<boolean>(false);
+
   const [linkCopied, setLinkCopied] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
@@ -1245,7 +1245,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
       <Layout siteConfig={siteConfig} useWideLayout={siteConfig?.requireLogin} onNewChat={handleNewChat}>
         {showPopup && popupMessage && <Popup message={popupMessage} onClose={closePopup} siteConfig={siteConfig} />}
-        <LikePrompt show={showLikePrompt} siteConfig={siteConfig} />
+
         <div className="flex h-full">
           {/* Chat History Sidebar - Only show on sites that require login */}
           {siteConfig?.requireLogin && (
@@ -1400,7 +1400,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           error={feedbackSubmitError} // Pass feedback-specific error
         />
 
-        {/* Display general like/vote errors (e.g., from upvoting) */}
+        {/* Display general vote errors (e.g., from upvoting) */}
         {voteError &&
           !isFeedbackModalOpen && ( // Don't show if feedback modal is open showing its own error
             <div className="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-md z-50">

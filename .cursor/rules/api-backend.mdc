@@ -27,7 +27,6 @@ The backend uses **Next.js API routes** with both Pages Router and App Router pa
 ### Data Interaction APIs
 
 - **Voting**: [web/src/pages/api/vote.ts](mdc:web/src/pages/api/vote.ts) - User feedback on answers
-- **Likes**: [web/src/pages/api/like.ts](mdc:web/src/pages/api/like.ts) - Like functionality
 - **Answers**: [web/src/pages/api/answers.ts](mdc:web/src/pages/api/answers.ts) - Retrieve chat history
 - **Related Questions**: [web/src/pages/api/relatedQuestions.ts](mdc:web/src/pages/api/relatedQuestions.ts) - Generate suggestions
 
@@ -63,7 +62,6 @@ The backend uses **Next.js API routes** with both Pages Router and App Router pa
 - **Collections**:
   - `chatLogs` - Conversation history with metadata
   - `votes` - User feedback on answers
-  - `likes` - Like counts and user preferences
   - `users` - Authentication credentials and roles
   - `npsSurveys` - Net Promoter Score feedback
 

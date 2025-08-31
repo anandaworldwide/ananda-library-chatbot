@@ -48,8 +48,8 @@ export async function queryFetch(url: string, options: RequestInit = {}): Promis
   const authOptions = await withAuth(options);
   let response = await fetch(url, authOptions);
 
-  // Silent retry logic for 401 errors (especially for like API race conditions)
-  if (response.status === 401 && url.includes("/api/like")) {
+  // Silent retry logic for 401 errors
+  if (response.status === 401) {
     try {
       // Force token refresh and retry once
       await initializeTokenManager();

@@ -1,15 +1,18 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: true
 ---
+
 # Ananda Library Chatbot - Project Overview
 
 ## System Architecture
 
-The Ananda Library Chatbot is a sophisticated RAG (Retrieval-Augmented Generation) system that provides question-answering capabilities based on spiritual teachings and related materials. It consists of:
+The Ananda Library Chatbot is a sophisticated RAG (Retrieval-Augmented Generation) system that provides
+question-answering capabilities based on spiritual teachings and related materials. It consists of:
 
 ### Core Components
+
 - **Frontend**: Next.js 14 + React + TypeScript + Tailwind CSS web interface
 - **Backend**: Next.js API routes (both Pages Router and App Router) with TypeScript
 - **Data Ingestion**: Python scripts for processing PDFs, audio/video, web content, and databases
@@ -19,6 +22,7 @@ The Ananda Library Chatbot is a sophisticated RAG (Retrieval-Augmented Generatio
 - **WordPress Integration**: PHP plugin for embedding the chatbot
 
 ### Key Technologies
+
 - **Languages**: TypeScript, Python, PHP
 - **Frameworks**: Next.js, React, LangChain, spaCy
 - **Databases**: Pinecone (vector), Firestore (NoSQL), Redis (caching), MySQL (data source)
@@ -28,6 +32,7 @@ The Ananda Library Chatbot is a sophisticated RAG (Retrieval-Augmented Generatio
 ## Documentation Reference
 
 Always consult these key documentation files:
+
 - [docs/PRD.md](mdc:docs/PRD.md) - Product requirements and functional specifications
 - [docs/backend-structure.md](mdc:docs/backend-structure.md) - API endpoints and data flow
 - [docs/data-ingestion.md](mdc:docs/data-ingestion.md) - Semantic chunking strategy and pipelines
@@ -40,12 +45,14 @@ Always consult these key documentation files:
 ## Site Configurations
 
 The system supports multiple deployment instances with different content libraries:
+
 - **ananda**: Main Ananda community content
 - **ananda-public**: Public-facing Ananda content
 - **crystal**: Crystal Clarity Publishers content
 - **jairam**: Legal case documents
 
 Each site has its own:
+
 - Pinecone namespace ([site-config/config.json](mdc:site-config/config.json))
 - System prompts ([site-config/prompts/](mdc:site-config/prompts))
 - Environment configuration (`.env.[site]`)
@@ -53,12 +60,14 @@ Each site has its own:
 ## Key Directories
 
 ### Frontend ([web/](mdc:web))
+
 - **[web/src/app/](mdc:web/src/app)** - Next.js App Router pages and API routes
 - **[web/src/components/](mdc:web/src/components)** - Reusable React components
 - **[web/src/utils/](mdc:web/src/utils)** - Client and server utilities
-- **[web/__tests__/](mdc:web/__tests__)** - Jest/React Testing Library tests
+- **[web/**tests**/](mdc:web/**tests**)** - Jest/React Testing Library tests
 
 ### Data Ingestion ([data_ingestion/](mdc:data_ingestion))
+
 - **[data_ingestion/pdf_to_vector_db.py](mdc:data_ingestion/pdf_to_vector_db.py)** - PDF processing pipeline
 - **[data_ingestion/crawler/](mdc:data_ingestion/crawler)** - Web crawling system
 - **[data_ingestion/audio_video/](mdc:data_ingestion/audio_video)** - Media transcription and processing
@@ -66,6 +75,7 @@ Each site has its own:
 - **[data_ingestion/tests/](mdc:data_ingestion/tests)** - pytest test suite
 
 ### Configuration
+
 - **[site-config/](mdc:site-config)** - Site-specific settings and prompts
 - **[.env files](mdc:.env.example)** - Environment-specific configuration
 - **[web/next.config.js](mdc:web/next.config.js)** - Next.js build configuration
@@ -73,16 +83,20 @@ Each site has its own:
 ## Development Standards
 
 ### Memory Management
+
 Always read and update project memory:
+
 - **[.remember/memory/self.md](mdc:.remember/memory/self.md)** - Past mistakes and fixes
 - **[.remember/memory/project.md](mdc:.remember/memory/project.md)** - User preferences and project rules
 
 ### Testing Requirements
+
 - **Frontend**: Run `npm run test:all` from [web/](mdc:web) directory
 - **Backend Python**: Run `python -m pytest` from [data_ingestion/](mdc:data_ingestion) directory
 - Always update tests when changing code functionality
 
 ### Security Considerations
+
 - JWT authentication required for most API endpoints
 - Rate limiting implemented via Redis
 - Environment variables for sensitive configuration

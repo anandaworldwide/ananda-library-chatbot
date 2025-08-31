@@ -44,8 +44,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const chatLogsSnapshot = await chatLogsRef.where("timestamp", ">=", ninetyDaysAgo).get();
 
     const stats = {
-      questionsWithLikes: {} as Record<string, number>,
-      mostPopularQuestion: {} as Record<string, { question: string; likes: number }>,
+      questionsPerDay: {} as Record<string, number>,
+      totalQuestions: 0,
     };
 
     // Initialize stats for the last 90 days
@@ -53,35 +53,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       date.setTime(date.getTime() - date.getTimezoneOffset() * 60000); // Adjust to Pacific Time
       const dateString = date.toISOString().split("T")[0];
-      stats.questionsWithLikes[dateString] = 0;
-      stats.mostPopularQuestion[dateString] = { question: "", likes: 0 };
+      stats.questionsPerDay[dateString] = 0;
     }
 
-    let totalQuestions = 0;
     chatLogsSnapshot.forEach((doc) => {
       const data = doc.data();
       const date = new Date(data.timestamp._seconds * 1000);
       date.setTime(date.getTime() - date.getTimezoneOffset() * 60000); // Adjust to Pacific Time
       const dateString = date.toISOString().split("T")[0];
-      totalQuestions++;
 
-      if (data.likeCount > 0) {
-        stats.questionsWithLikes[dateString] = (stats.questionsWithLikes[dateString] || 0) + 1;
-      }
-
-      if (!stats.mostPopularQuestion[dateString] || data.likeCount > stats.mostPopularQuestion[dateString].likes) {
-        stats.mostPopularQuestion[dateString] = {
-          question: data.question,
-          likes: data.likeCount || 0,
-        };
-      }
-    });
-
-    // Calculate percentages of questions with likes
-    Object.keys(stats.questionsWithLikes).forEach((date) => {
-      const questionsForDate = totalQuestions / 90; // Assuming equal distribution over 90 days
-      const percentage = ((stats.questionsWithLikes[date] || 0) / questionsForDate) * 100;
-      stats.questionsWithLikes[date] = Math.round(percentage * 10) / 10; // Round to 1 decimal place
+      stats.totalQuestions++;
+      stats.questionsPerDay[dateString] = (stats.questionsPerDay[dateString] || 0) + 1;
     });
 
     cache.set("stats", stats);

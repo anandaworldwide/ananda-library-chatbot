@@ -1,5 +1,5 @@
 // This component renders a single answer page, fetching and displaying the answer details,
-// handling likes, and providing admin functionality for deletion.
+// handling votes, and providing admin functionality for deletion.
 
 // Special features:
 // - GETHUMAN links: For the 'ananda-public' site ID, links in the format [text](GETHUMAN)

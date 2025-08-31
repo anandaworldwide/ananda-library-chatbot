@@ -372,7 +372,7 @@ async function saveOrUpdateDocument(
     answer: fullResponse,
     collection: collection,
     sources: JSON.stringify(finalDocuments), // Save the correct final documents
-    likeCount: 0, // Reset or handle like count as needed
+
     history: history,
     ip: clientIP,
     timestamp: fbadmin.firestore.FieldValue.serverTimestamp(), // Update timestamp on save/update

@@ -1,27 +1,27 @@
-// This component displays user engagement statistics, including questions with likes
-// and most popular questions over various time periods.
+// This component displays user engagement statistics, including questions per day
+// and total questions over various time periods.
 
-import { SiteConfig } from '@/types/siteConfig';
-import { useState, useEffect } from 'react';
-import Layout from '@/components/layout';
-import { fetchWithAuth } from '@/utils/client/tokenManager';
+import { SiteConfig } from "@/types/siteConfig";
+import { useState, useEffect } from "react";
+import Layout from "@/components/layout";
+import { fetchWithAuth } from "@/utils/client/tokenManager";
 
 // Structure for the statistics data
 interface StatsData {
-  questionsWithLikes: Record<string, number>;
-  mostPopularQuestion: Record<string, { question: string; likes: number }>;
+  questionsPerDay: Record<string, number>;
+  totalQuestions: number;
 }
 
 // Formats a date string to a more readable format (Today, Yesterday, or MM/DD)
 const formatDate = (dateString: string): string => {
-  const date = new Date(dateString + 'T00:00:00');
+  const date = new Date(dateString + "T00:00:00");
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   if (date.getTime() === today.getTime()) {
-    return 'Today';
+    return "Today";
   } else if (date.getTime() === today.getTime() - 86400000) {
-    return 'Yesterday';
+    return "Yesterday";
   }
   return `${date.getMonth() + 1}/${date.getDate()}`;
 };
@@ -39,15 +39,15 @@ const Stats = ({ siteConfig }: StatsProps) => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetchWithAuth('/api/stats');
+        const response = await fetchWithAuth("/api/stats");
         if (!response.ok) {
-          throw new Error('Failed to fetch stats');
+          throw new Error("Failed to fetch stats");
         }
         const data = await response.json();
         setStats(data);
       } catch (err) {
-        console.error('Error fetching stats:', err);
-        setError('Failed to load stats');
+        console.error("Error fetching stats:", err);
+        setError("Failed to load stats");
       } finally {
         setIsLoading(false);
       }
@@ -56,19 +56,23 @@ const Stats = ({ siteConfig }: StatsProps) => {
     fetchStats();
   }, []);
 
-  // Display loading, error, or no data messages if applicable
+  // Show loading state
   if (isLoading)
     return (
       <Layout siteConfig={siteConfig}>
-        <div>Loading...</div>
+        <div>Loading stats...</div>
       </Layout>
     );
+
+  // Show error state
   if (error)
     return (
       <Layout siteConfig={siteConfig}>
         <div>Error: {error}</div>
       </Layout>
     );
+
+  // Show no data state
   if (!stats)
     return (
       <Layout siteConfig={siteConfig}>
@@ -77,37 +81,19 @@ const Stats = ({ siteConfig }: StatsProps) => {
     );
 
   // Sort dates in descending order
-  const dates = Object.keys(stats.questionsWithLikes);
-  const sortedDates = dates.sort(
-    (a, b) => new Date(b).getTime() - new Date(a).getTime(),
-  );
+  const dates = Object.keys(stats.questionsPerDay);
+  const sortedDates = dates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
   // Calculate aggregate statistics for a given number of days
   const calculateAggregateStats = (days: number) => {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
-    const relevantDates = sortedDates.filter(
-      (date) => new Date(date) >= cutoffDate,
-    );
+    const relevantDates = sortedDates.filter((date) => new Date(date) >= cutoffDate);
 
-    const totalLikes = relevantDates.reduce(
-      (sum, date) => sum + (stats.questionsWithLikes[date] || 0),
-      0,
-    );
-    const averageLikes =
-      relevantDates.length > 0
-        ? (totalLikes / relevantDates.length).toFixed(1)
-        : 'N/A';
+    const totalQuestions = relevantDates.reduce((sum, date) => sum + (stats.questionsPerDay[date] || 0), 0);
+    const averageQuestions = relevantDates.length > 0 ? (totalQuestions / relevantDates.length).toFixed(1) : "N/A";
 
-    const mostPopular = relevantDates.reduce(
-      (max, date) => {
-        const current = stats.mostPopularQuestion[date];
-        return current && current.likes > (max?.likes || 0) ? current : max;
-      },
-      { question: 'N/A', likes: 0 },
-    );
-
-    return { averageLikes, mostPopular };
+    return { averageQuestions, totalQuestions };
   };
 
   // Calculate statistics for different time periods
@@ -117,66 +103,81 @@ const Stats = ({ siteConfig }: StatsProps) => {
 
   return (
     <Layout siteConfig={siteConfig}>
-      <h1 className="text-2xl font-bold mb-4">User Engagement Statistics</h1>
-      {sortedDates.length === 0 ? (
-        <p>No data available for the last three days.</p>
-      ) : (
-        <table className="min-w-full bg-white">
-          <thead>
-            <tr>
-              <th className="py-2 px-4 border-b">Date</th>
-              <th className="py-2 px-4 border-b">Questions with Likes (%)</th>
-              <th className="py-2 px-4 border-b">Most Popular Question</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* Render rows for individual dates */}
-            {sortedDates.map((date) => (
-              <tr key={date}>
-                <td className="py-2 px-4 border-b">{formatDate(date)}</td>
-                <td className="py-2 px-4 border-b text-center">
-                  {stats.questionsWithLikes[date] || 0}%
-                </td>
-                <td className="py-2 px-4 border-b text-center">
-                  {stats.mostPopularQuestion[date]?.question || 'N/A'} (
-                  {stats.mostPopularQuestion[date]?.likes || 0} likes)
-                </td>
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-6">User Engagement Statistics</h1>
+
+        {/* Summary Statistics */}
+        <div className="mb-8 p-6 bg-gray-50 rounded-lg">
+          <h2 className="text-xl font-semibold mb-4">Summary</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{stats.totalQuestions}</div>
+              <div className="text-sm text-gray-600">Total Questions (90 days)</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">{sevenDayStats.averageQuestions}</div>
+              <div className="text-sm text-gray-600">Avg Questions/Day (7 days)</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">{thirtyDayStats.averageQuestions}</div>
+              <div className="text-sm text-gray-600">Avg Questions/Day (30 days)</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Daily Statistics Table */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border border-gray-300">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="py-2 px-4 border-b">Date</th>
+                <th className="py-2 px-4 border-b">Questions</th>
               </tr>
-            ))}
-            {/* Render aggregate statistics rows */}
-            <tr>
-              <td className="py-2 px-4 border-b font-bold">Last 7 Days</td>
-              <td className="py-2 px-4 border-b text-center">
-                {sevenDayStats.averageLikes}%
-              </td>
-              <td className="py-2 px-4 border-b text-center">
-                {sevenDayStats.mostPopular.question} (
-                {sevenDayStats.mostPopular.likes} likes)
-              </td>
-            </tr>
-            <tr>
-              <td className="py-2 px-4 border-b font-bold">Last 30 Days</td>
-              <td className="py-2 px-4 border-b text-center">
-                {thirtyDayStats.averageLikes}%
-              </td>
-              <td className="py-2 px-4 border-b text-center">
-                {thirtyDayStats.mostPopular.question} (
-                {thirtyDayStats.mostPopular.likes} likes)
-              </td>
-            </tr>
-            <tr>
-              <td className="py-2 px-4 border-b font-bold">Last 90 Days</td>
-              <td className="py-2 px-4 border-b text-center">
-                {ninetyDayStats.averageLikes}%
-              </td>
-              <td className="py-2 px-4 border-b text-center">
-                {ninetyDayStats.mostPopular.question} (
-                {ninetyDayStats.mostPopular.likes} likes)
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
+            </thead>
+            <tbody>
+              {sortedDates.slice(0, 30).map((date) => (
+                <tr key={date} className="hover:bg-gray-50">
+                  <td className="py-2 px-4 border-b">{formatDate(date)}</td>
+                  <td className="py-2 px-4 border-b text-center">{stats.questionsPerDay[date] || 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Period Statistics */}
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-6 border border-gray-300 rounded-lg">
+            <h3 className="text-lg font-semibold mb-2">7-Day Statistics</h3>
+            <p>
+              Average Questions/Day: <strong>{sevenDayStats.averageQuestions}</strong>
+            </p>
+            <p>
+              Total Questions: <strong>{sevenDayStats.totalQuestions}</strong>
+            </p>
+          </div>
+
+          <div className="bg-white p-6 border border-gray-300 rounded-lg">
+            <h3 className="text-lg font-semibold mb-2">30-Day Statistics</h3>
+            <p>
+              Average Questions/Day: <strong>{thirtyDayStats.averageQuestions}</strong>
+            </p>
+            <p>
+              Total Questions: <strong>{thirtyDayStats.totalQuestions}</strong>
+            </p>
+          </div>
+
+          <div className="bg-white p-6 border border-gray-300 rounded-lg">
+            <h3 className="text-lg font-semibold mb-2">90-Day Statistics</h3>
+            <p>
+              Average Questions/Day: <strong>{ninetyDayStats.averageQuestions}</strong>
+            </p>
+            <p>
+              Total Questions: <strong>{ninetyDayStats.totalQuestions}</strong>
+            </p>
+          </div>
+        </div>
+      </div>
     </Layout>
   );
 };

@@ -101,7 +101,6 @@ describe("answersUtils", () => {
             },
           ]),
           timestamp: { _seconds: 1234567890, _nanoseconds: 0 },
-          likeCount: 5,
         },
       ];
 

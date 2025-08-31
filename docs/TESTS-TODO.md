@@ -252,5 +252,5 @@ tests more reliable and less prone to environment dependencies.
 ### Low Priority Coverage Areas
 
 - 🥚 **AudioPlayer.tsx**: 7% → 50% (43% improvement needed)
-- 🥚 **likeService.ts**: 4% → 30% (26% improvement needed)
+
 - 🥚 **authConfig.ts**: 34% → 60% (26% improvement needed)

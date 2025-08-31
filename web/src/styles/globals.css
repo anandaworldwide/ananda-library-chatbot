@@ -1,21 +1,6 @@
-.heart-button {
-  cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0;
-}
-
-.heart-button.liked {
-  color: red;
-}
-
-.heart-button:hover {
-  color: #ff8585;
-}
-
 /* Set a minimum height for very zoomed-in screens */
 .answers-container {
-  min-height: 300px; 
+  min-height: 300px;
   border-left: 1px solid lightgray;
   border-right: 1px solid lightgray;
   border-bottom: 1px solid lightgray;

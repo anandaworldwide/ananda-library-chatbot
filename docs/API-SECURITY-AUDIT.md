@@ -72,7 +72,6 @@ This audit reviewed **23 API endpoints** across Pages Router and App Router impl
 | `/api/chat/v1/route` | POST       | ✅ JWT (conditional) | ✅ 100/1min | **A**          |
 | `/api/answers`       | GET/DELETE | ✅ JWT               | ✅ 50/5min  | **A**          |
 | `/api/vote`          | POST       | ✅ JWT               | ✅ 10/5min  | **A**          |
-| `/api/like`          | POST       | ✅ JWT               | ✅ 10/5min  | **A**          |
 
 **Security Features:**
 

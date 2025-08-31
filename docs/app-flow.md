@@ -64,8 +64,8 @@ Chatbot application.
    - The backend processes the question, retrieves relevant information (likely from Pinecone vector store -
      `utils/server/pinecone-client.ts`, `utils/server/makechain.ts`), generates an answer, and streams it back.
    - The frontend displays the answer, potentially showing sources.
-7. **(Optional) Provide Feedback:** The user can like or dislike the answer using feedback buttons (`hooks/useVote.ts`,
-   `pages/api/vote.ts`, `pages/api/like.ts`).
+7. **(Optional) Provide Feedback:** The user can provide feedback on the answer using voting buttons
+   (`hooks/useVote.ts`, `pages/api/vote.ts`).
 
 #### B. Authenticated User Flow
 
@@ -219,10 +219,9 @@ If the site is configured to require user login:
 
 - **Sending a Chat Message:** Typing text and submitting via button or Enter key (`hooks/useChat.ts`).
 - **Selecting a Collection:** Choosing from a dropdown or list (`components/CollectionSelector.jsx`).
-- **Liking/Disliking an Answer:** Clicking thumbs-up/down icons (`hooks/useVote.ts`, `pages/api/vote.ts`,
-  `pages/api/like.ts`).
+- **Voting on an Answer:** Clicking thumbs-up/down icons (`hooks/useVote.ts`, `pages/api/vote.ts`).
 - **Viewing Sources:** Clicking links associated with an answer to see the origin of the information.
-- **Viewing All Answers:** Viewing answers from all users (if turned on for the site) and liking them.
+- **Viewing All Answers:** Viewing answers from all users (if turned on for the site).
 - **Viewing Related Questions:** Clicking on suggested follow-up questions.
 - **(Authenticated) Logging In/Out:** Using forms/buttons to manage authentication state.
 - **(WordPress) Opening/Closing Chat Widget:** Interacting with the embedded chat element on the page.

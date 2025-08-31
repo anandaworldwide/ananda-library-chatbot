@@ -23,11 +23,11 @@
  * with the necessary Firebase configuration.
  */
 
-import { config } from 'dotenv';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { config } from "dotenv";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+import { initializeApp, cert, getApps } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,11 +35,11 @@ const siteId = process.argv[2];
 const count = parseInt(process.argv[3], 10);
 
 if (!siteId || isNaN(count) || count <= 0) {
-  console.error('Usage: node generateRandomQA.js <siteId> <count>');
+  console.error("Usage: node generateRandomQA.js <siteId> <count>");
   process.exit(1);
 }
 
-const envPath = resolve(__dirname, '..', `.env.${siteId}`);
+const envPath = resolve(__dirname, "..", `.env.${siteId}`);
 config({ path: envPath });
 
 let db;
@@ -47,15 +47,11 @@ let db;
 // Initialize the Firebase admin SDK
 if (getApps().length === 0) {
   const serviceAccountJson = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (typeof serviceAccountJson !== 'string') {
+  if (typeof serviceAccountJson !== "string") {
     if (serviceAccountJson === undefined) {
-      throw new Error(
-        'The GOOGLE_APPLICATION_CREDENTIALS environment variable is not set.',
-      );
+      throw new Error("The GOOGLE_APPLICATION_CREDENTIALS environment variable is not set.");
     } else {
-      throw new Error(
-        'The GOOGLE_APPLICATION_CREDENTIALS environment variable is not a string.',
-      );
+      throw new Error("The GOOGLE_APPLICATION_CREDENTIALS environment variable is not a string.");
     }
   }
   const serviceAccount = JSON.parse(serviceAccountJson);
@@ -72,20 +68,16 @@ if (getApps().length === 0) {
 // Inline implementation of getAnswersCollectionName
 const getAnswersCollectionName = () => {
   // hardwired to dev since we don't want to accidentally add dev data to prod
-  const env = 'dev';
+  const env = "dev";
   return `${env}_chatLogs`;
 };
 
 function generateRandomWord(length) {
-  return Array.from({ length }, () =>
-    String.fromCharCode(65 + Math.floor(Math.random() * 26)),
-  ).join('');
+  return Array.from({ length }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
 }
 
 function generateRandomSentence(wordCount) {
-  return Array.from({ length: wordCount }, () =>
-    generateRandomWord(Math.floor(Math.random() * 10) + 1),
-  ).join(' ');
+  return Array.from({ length: wordCount }, () => generateRandomWord(Math.floor(Math.random() * 10) + 1)).join(" ");
 }
 
 async function generateRandomQA(count) {
@@ -95,21 +87,20 @@ async function generateRandomQA(count) {
     const answerEntry = {
       question: generateRandomSentence(5),
       answer: generateRandomSentence(20),
-      collection: Math.random() < 0.5 ? 'master_swami' : 'whole_library',
-      likeCount: Math.floor(Math.random() * 10),
+      collection: Math.random() < 0.5 ? "master_swami" : "whole_library",
       history: Array.from({ length: 3 }, () => ({
         question: generateRandomSentence(3),
         answer: generateRandomSentence(10),
       })),
-      ip: `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`,
+      ip: `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(
+        Math.random() * 256
+      )}.${Math.floor(Math.random() * 256)}`,
       timestamp: new Date(),
     };
 
     try {
       const docRef = await answerRef.add(answerEntry);
-      console.log(
-        `Successfully added entry ${i + 1}/${count} with ID: ${docRef.id}`,
-      );
+      console.log(`Successfully added entry ${i + 1}/${count} with ID: ${docRef.id}`);
     } catch (error) {
       console.error(`Error adding entry ${i + 1}:`, error);
     }
@@ -119,5 +110,5 @@ async function generateRandomQA(count) {
 }
 
 generateRandomQA(count).catch((error) => {
-  console.error('Error in generateRandomQA:', error);
+  console.error("Error in generateRandomQA:", error);
 });

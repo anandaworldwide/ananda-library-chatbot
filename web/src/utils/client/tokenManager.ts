@@ -76,7 +76,7 @@ function isTokenValid(): boolean {
 async function fetchNewToken(): Promise<string> {
   try {
     // Include the full URL as Referer so web-token endpoint can identify special cases
-    // like audio files and contact form that need JWT but not siteAuth
+    // such as audio files and contact form that need JWT but not siteAuth
     const response = await fetch("/api/web-token", {
       headers: {
         // Use the current URL as the referer - this tells the server which page is requesting the token

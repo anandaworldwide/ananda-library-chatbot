@@ -23,8 +23,7 @@ export type Answer = {
   collection?: string;
   // Optional IP address of the user who submitted the question
   ip?: string;
-  // Number of likes the answer has received
-  likeCount: number;
+
   // Optional admin action taken on this answer
   adminAction?: AdminAction;
   // Timestamp of when the admin action was taken

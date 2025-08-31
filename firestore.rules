@@ -21,13 +21,7 @@ service cloud.firestore {
             }
         }
 
-        // Match the likes collection
-        match /{envName} {
-            match /likes/{likeId} {
-                allow read: if true;
-                allow create, update, delete: if isServerRequest(); // Only your server can modify
-            }
-        }
+
 
         // Match the rateLimits collection
         match /rateLimits/{document=**} {

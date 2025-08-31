@@ -19,15 +19,9 @@ import { requireAdminRole } from "@/utils/server/authz";
 import { writeAuditLog } from "@/utils/server/auditLog";
 import { isAnswersPageAllowed } from "@/utils/server/answersPageAuth";
 
-// 6/23/24: likedOnly filtering not being used in UI but leaving here for potential future use
-
-// Retrieves answers based on specified criteria (page, limit, liked status)
+// Retrieves answers based on specified criteria (page, limit)
 // Returns an array of answers and the total number of pages, sorted by most recent
-async function getAnswers(
-  page: number,
-  limit: number,
-  likedOnly: boolean
-): Promise<{ answers: Answer[]; totalPages: number }> {
+async function getAnswers(page: number, limit: number): Promise<{ answers: Answer[]; totalPages: number }> {
   // Check if db is available
   if (!db) {
     throw new Error("Database not available");
@@ -44,16 +38,11 @@ async function getAnswers(
   // Apply pagination to the query
   answersQuery = answersQuery.offset(offset).limit(limit);
 
-  // Filter for liked answers if specified
-  if (likedOnly) {
-    answersQuery = answersQuery.where("likeCount", ">", 0);
-  }
-
   // Execute the query and process the results
   const answersSnapshot = await firestoreQueryGet(
     answersQuery,
     "answers list query",
-    `offset: ${offset}, limit: ${limit}, likedOnly: ${likedOnly}`
+    `offset: ${offset}, limit: ${limit}`
   );
 
   const answers = answersSnapshot.docs.map((doc: any) => {
@@ -84,7 +73,7 @@ async function getAnswers(
       vote: data.vote,
       collection: data.collection,
       ip: data.ip,
-      likeCount: data.likeCount || 0,
+
       relatedQuestionsV2: data.relatedQuestionsV2 || [],
       related_questions: data.related_questions,
       adminAction: data.adminAction,
@@ -198,13 +187,12 @@ async function handleGetRequest(req: NextApiRequest, res: NextApiResponse) {
 
       res.status(200).json(answers);
     } else {
-      // Handle fetching answers with pagination and filtering
-      const { page, limit, likedOnly } = req.query;
+      // Handle fetching answers with pagination
+      const { page, limit } = req.query;
       const pageNumber = parseInt(page as string) || 1; // Default to page 1 if not provided
       const limitNumber = parseInt(limit as string) || 10;
-      const likedOnlyFlag = likedOnly === "true";
 
-      const { answers, totalPages } = await getAnswers(pageNumber, limitNumber, likedOnlyFlag);
+      const { answers, totalPages } = await getAnswers(pageNumber, limitNumber);
 
       res.status(200).json({ answers, totalPages });
     }
@@ -223,7 +211,7 @@ async function handleGetRequest(req: NextApiRequest, res: NextApiResponse) {
         const errorResponse = createIndexErrorResponse(error, {
           endpoint: "/api/answers",
           collection: getAnswersCollectionName(),
-          fields: ["likeCount", "timestamp"],
+          fields: ["timestamp"],
           query: "Paginated answers with sorting",
         });
 

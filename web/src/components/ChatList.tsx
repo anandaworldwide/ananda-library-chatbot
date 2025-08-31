@@ -4,14 +4,12 @@ import { formatSmartTimestamp } from "@/utils/client/dateUtils";
 interface ChatItem {
   id: string;
   question: string;
-  likeCount?: number;
   timestamp?: { _seconds: number; _nanoseconds: number } | Date | number | any;
 }
 
 interface ChatListProps {
   chats: ChatItem[];
   showTimestamps?: boolean;
-  showLikeCounts?: boolean;
   emptyMessage?: string;
   className?: string;
 }
@@ -19,7 +17,6 @@ interface ChatListProps {
 export const ChatList: React.FC<ChatListProps> = ({
   chats,
   showTimestamps = false,
-  showLikeCounts = true,
   emptyMessage = "No chats yet",
   className = "",
 }) => {
@@ -35,13 +32,8 @@ export const ChatList: React.FC<ChatListProps> = ({
             {chat.question}
           </a>
 
-          {(showLikeCounts || showTimestamps) && (
-            <span className="ml-2 text-gray-500">
-              {showLikeCounts && `(${chat.likeCount || 0} likes)`}
-              {showTimestamps && chat.timestamp && (
-                <span className="ml-2">• {formatSmartTimestamp(chat.timestamp)}</span>
-              )}
-            </span>
+          {showTimestamps && chat.timestamp && (
+            <span className="ml-2 text-gray-500">• {formatSmartTimestamp(chat.timestamp)}</span>
           )}
         </li>
       ))}

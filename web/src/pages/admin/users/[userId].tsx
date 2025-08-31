@@ -14,7 +14,7 @@ interface Chat {
   question: string;
   answer: string;
   timestamp: { _seconds: number; _nanoseconds: number } | Date | number | any;
-  likeCount: number;
+
   collection: string;
 }
 
@@ -226,12 +226,7 @@ export default function EditUserPage({ siteConfig }: PageProps) {
             {currentUserRole === "superuser" && (
               <div className="mb-6 rounded border bg-gray-50 p-4">
                 <h2 className="text-lg font-semibold mb-3">Recent Chats</h2>
-                <ChatList
-                  chats={user.chats || []}
-                  showTimestamps={true}
-                  showLikeCounts={true}
-                  emptyMessage="No chats yet"
-                />
+                <ChatList chats={user.chats || []} showTimestamps={true} emptyMessage="No chats yet" />
               </div>
             )}
 

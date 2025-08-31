@@ -99,7 +99,7 @@ authentication, and integration options, including a WordPress plugin.
 ### 3. User Roles
 
 - **End User:** Interacts with the chatbot via a web interface or integrated plugin to ask questions and receive
-  answers. May provide feedback on answer quality (like/dislike).
+  answers.
 - **Administrator:** Configures chatbot instances (prompts, models, data sources), manages the data ingestion process,
   monitors system health and usage, manages user access (if applicable), and potentially reviews feedback.
 
@@ -176,8 +176,8 @@ authentication, and integration options, including a WordPress plugin.
   - **FR5.5:** Implement "sudo" mode for privileged actions using cookies (`/api/sudoCookie.ts`, `sudoCookieUtils.ts`).
   - **FR5.6:** Secure administrative actions (`/api/adminAction`).
 - **FR6: Monitoring & Feedback**
-  - **FR6.1:** Log chat interactions (questions, answers, feedback) to a persistent store (likely Firestore based on
-    `firestoreUtils.ts`, `likeService.ts`).
+  - **FR6.1:** Log chat interactions (questions, answers, votes) to a persistent store (likely Firestore based on
+    `firestoreUtils.ts`).
   - **FR6.2:** Provide API endpoints to retrieve chat logs and feedback (`/api/answers`, `/api/downvotedAnswers`).
   - **FR6.3:** Implement analytics tracking (client-side) (`analytics.ts`).
   - **FR6.4:** (Optional) Support NPS surveys (`/api/submitNpsSurvey`).
@@ -228,7 +228,7 @@ authentication, and integration options, including a WordPress plugin.
 - **Backend:** Node.js (via Next.js API routes), TypeScript, Python (for data ingestion & utilities)
 - **AI/ML:** Langchain (JS & Python), OpenAI API (GPT models)
 - **Vector Database:** Pinecone
-- **Data Storage:** Firestore (for chat logs, feedback, potentially rate limiting/user data), AWS S3 (likely for storing
+- **Data Storage:** Firestore (for chat logs, votes, potentially rate limiting/user data), AWS S3 (likely for storing
   media files for transcription)
 - **Caching/Rate Limiting:** Redis (inferred)
 - **Authentication:** JWT, Basic Auth (Password hashing)

@@ -81,7 +81,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
               question: chatData.question,
               answer: chatData.answer,
               timestamp: chatData.timestamp,
-              likeCount: chatData.likeCount || 0,
+
               collection: chatData.collection,
             };
           });
@@ -180,7 +180,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
                 question: chatData.question,
                 answer: chatData.answer,
                 timestamp: chatData.timestamp,
-                likeCount: chatData.likeCount || 0,
+
                 collection: chatData.collection,
               };
             });
@@ -292,7 +292,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
               question: chatData.question,
               answer: chatData.answer,
               timestamp: chatData.timestamp,
-              likeCount: chatData.likeCount || 0,
+
               collection: chatData.collection,
             };
           });

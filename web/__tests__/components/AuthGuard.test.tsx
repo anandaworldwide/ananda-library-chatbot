@@ -60,7 +60,6 @@ describe("AuthGuard", () => {
     enableAudioPlayer: false,
     enableDownloadPdf: false,
     enableNPS: false,
-    enableLikeButtons: true,
     enableFeedback: true,
     maxTokens: 1000,
     temperature: 0.7,

@@ -246,7 +246,7 @@ def test_chunk_word_count_distribution():
 ### Quality Monitoring
 
 - **Chunk quality dashboards**: Real-time metrics
-- **User feedback tracking**: Vote and like patterns
+- **User feedback tracking**: Vote patterns
 - **System health monitoring**: Database and service availability
 - **Performance regression detection**: Automated alerts
 

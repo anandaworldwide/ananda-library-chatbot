@@ -7,7 +7,7 @@ export interface ChatHistoryItem {
   question: string;
   answer: string;
   timestamp: any; // Firestore timestamp
-  likeCount: number;
+
   collection: string;
   convId?: string;
   title?: string; // AI-generated title
@@ -172,7 +172,7 @@ export function useChatHistory(limit: number = 20) {
         question,
         answer: "", // Will be populated when response comes
         timestamp: { seconds: Math.floor(Date.now() / 1000) }, // Current timestamp
-        likeCount: 0,
+
         collection: "",
         convId,
         title,

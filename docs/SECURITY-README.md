@@ -322,7 +322,6 @@ used.
 - **React Query Configuration**: `/utils/client/reactQueryConfig.ts` includes JWT handling for all API requests.
 - **Auth Hooks**:
   - `useAnswers`: Fetches paginated answers with authentication
-  - `useLike`: Manages liking answers
   - `useVote`: Handles voting on messages
 
 #### How It Works
@@ -375,17 +374,17 @@ export default withJwtOnlyAuth(handler);
 
 ```typescript
 // Example of using hooks in a component
-import { useAnswers, useLike } from "@/hooks";
+import { useAnswers } from "@/hooks";
 
 function MyComponent() {
   // Fetch data with authentication
   const { data, isLoading } = useAnswers(1, "mostRecent");
 
-  // Handle liking
-  const likeMutation = useLike();
+  // Handle voting
+  const voteMutation = useVote();
 
-  const handleLike = (answerId) => {
-    likeMutation.mutate({ answerId, like: true });
+  const handleVote = (answerId, voteType) => {
+    voteMutation.mutate({ answerId, voteType });
   };
 
   // Rest of component...

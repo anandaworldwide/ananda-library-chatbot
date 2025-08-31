@@ -39,7 +39,7 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const { siteConfig } = pageProps;
 
-  // Initialize token manager for background features (like error handling)
+  // Initialize token manager for background features (such as error handling)
   // The main authentication check is now handled by AuthGuard
   useEffect(() => {
     if (typeof window !== "undefined" && siteConfig !== null) {
@@ -87,7 +87,7 @@ function MyApp({ Component, pageProps }: CustomAppProps) {
         console.log("401 error detected in _app.tsx:", event.detail);
 
         // Don't show errors for public endpoints
-        if (isPublicEndpoint(event.detail.url, event.detail.method, siteConfig)) {
+        if (isPublicEndpoint(event.detail.url, event.detail.method)) {
           console.log("Ignoring expected 401 for public endpoint:", event.detail.url);
           return;
         }
