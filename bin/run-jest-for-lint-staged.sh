@@ -50,7 +50,29 @@ fi
 
 # Run client tests first (always run these)
 echo "Running client tests..."
-client_cmd="npx jest --bail --passWithNoTests --no-coverage --config=src/config/jest.pre-commit.cjs --findRelatedTests"
+
+# Check if we have test files vs source files
+has_test_files=false
+has_source_files=false
+for file in "$@"; do
+    case "$file" in
+        */__tests__/*|*.test.*|*.spec.*)
+            has_test_files=true
+            ;;
+        *)
+            has_source_files=true
+            ;;
+    esac
+done
+
+# Build client command based on file types
+if [ "$has_test_files" = true ] && [ "$has_source_files" = false ]; then
+    # Only test files - run them directly
+    client_cmd="npx jest --bail --passWithNoTests --no-coverage --config=src/config/jest.pre-commit.cjs"
+else
+    # Source files or mixed - use findRelatedTests
+    client_cmd="npx jest --bail --passWithNoTests --no-coverage --config=src/config/jest.pre-commit.cjs --findRelatedTests"
+fi
 
 # Add all files to client test command
 for file in "$@"; do
@@ -99,10 +121,10 @@ overall_success=true
 if [ $client_exit_code -eq 0 ]; then
     echo "✅ Client tests passed!"
 elif [ $client_exit_code -eq 124 ]; then
-    echo "⚠️  Client tests timed out (>25s)"
+    echo "❌ Client tests timed out (>25s)"
     overall_success=false
 else
-    echo "⚠️  Client tests failed (exit code: $client_exit_code)"
+    echo "❌ Client tests failed (exit code: $client_exit_code)"
     overall_success=false
 fi
 
@@ -110,20 +132,23 @@ if [ "$run_server_tests" = true ]; then
     if [ $server_exit_code -eq 0 ]; then
         echo "✅ Server tests passed!"
     elif [ $server_exit_code -eq 124 ]; then
-        echo "⚠️  Server tests timed out (>25s)"
+        echo "❌ Server tests timed out (>25s)"
         overall_success=false
     else
-        echo "⚠️  Server tests failed (exit code: $server_exit_code)"
+        echo "❌ Server tests failed (exit code: $server_exit_code)"
         overall_success=false
     fi
 fi
 
 if [ "$overall_success" = false ]; then
     echo ""
-    echo "⚠️  Some tests failed - this is a warning, commit will proceed"
-    echo "   Consider running full test suite before pushing:"
+    echo "❌ Tests failed - commit blocked!"
+    echo "   Fix the failing tests before committing."
+    echo "   Run full test suite to debug:"
     echo "   cd web && npm run test:all"
+    echo ""
+    exit 1
 fi
 
-# Always exit 0 to allow commit (warning-only mode)
+echo "✅ All tests passed - commit allowed"
 exit 0
