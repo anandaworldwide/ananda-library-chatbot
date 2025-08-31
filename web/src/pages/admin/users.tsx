@@ -308,36 +308,68 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       const alreadyActiveEmails: string[] = [];
       const errors: string[] = [];
 
-      // Process emails one by one to get detailed feedback
-      for (const email of emails) {
-        try {
-          const { data, refreshedToken } = await fetchWithTokenRefresh<{ message: string }>("/api/admin/addUser", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({ email, customMessage }),
-          });
+      // Process emails in parallel batches for better performance
+      const BATCH_SIZE = 10; // Process 10 emails simultaneously
+      const batches = [];
 
-          // Update JWT if it was refreshed
-          if (refreshedToken) {
-            setJwt(refreshedToken);
+      // Split emails into batches
+      for (let i = 0; i < emails.length; i += BATCH_SIZE) {
+        batches.push(emails.slice(i, i + BATCH_SIZE));
+      }
+
+      // Process each batch in parallel
+      for (const batch of batches) {
+        const batchPromises = batch.map(async (email) => {
+          try {
+            const { data, refreshedToken } = await fetchWithTokenRefresh<{ message: string }>("/api/admin/addUser", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              credentials: "include",
+              body: JSON.stringify({ email, customMessage }),
+            });
+
+            return {
+              email,
+              success: true,
+              message: data?.message,
+              refreshedToken,
+            };
+          } catch (e: any) {
+            return {
+              email,
+              success: false,
+              error: e?.message || "Failed to add",
+            };
           }
+        });
 
-          // Interpret backend messages
-          if (data?.message === "already active") {
-            alreadyActiveEmails.push(email);
-          } else if (data?.message === "resent") {
-            resentCount++;
-          } else if (data?.message === "created") {
-            successCount++;
+        // Wait for all emails in this batch to complete
+        const batchResults = await Promise.all(batchPromises);
+
+        // Process results and update JWT if any token was refreshed
+        batchResults.forEach((result) => {
+          if (result.success) {
+            // Update JWT if it was refreshed (only need to do this once)
+            if (result.refreshedToken) {
+              setJwt(result.refreshedToken);
+            }
+
+            // Interpret backend messages
+            if (result.message === "already active") {
+              alreadyActiveEmails.push(result.email);
+            } else if (result.message === "resent") {
+              resentCount++;
+            } else if (result.message === "created") {
+              successCount++;
+            } else {
+              successCount++; // Default to success
+            }
           } else {
-            successCount++; // Default to success
+            errors.push(`${result.email}: ${result.error}`);
           }
-        } catch (e: any) {
-          errors.push(`${email}: ${e?.message || "Failed to add"}`);
-        }
+        });
       }
 
       // Generate summary message
