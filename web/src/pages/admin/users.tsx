@@ -77,6 +77,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"info" | "error">("info");
   const [pendingCount, setPendingCount] = useState<number>(0);
+  const [pendingLoading, setPendingLoading] = useState<boolean>(true);
   const [active, setActive] = useState<ActiveUser[]>([]);
   const [activeLoading, setActiveLoading] = useState(false);
   const [showLoading, setShowLoading] = useState(false);
@@ -143,9 +144,11 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       }
 
       setPendingCount(data.items?.length || 0);
+      setPendingLoading(false);
     } catch (e: any) {
       setMessage(e?.message || "Failed to load pending users count");
       setMessageType("error");
+      setPendingLoading(false);
     }
   }
 
@@ -405,6 +408,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       }
 
       // Refresh the lists
+      setPendingLoading(true);
       await fetchPendingCount();
       await fetchActive(currentPage);
     } catch (e: any) {
@@ -454,16 +458,19 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
         <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Pending User Invitations</h3>
-              <p className="text-sm text-gray-600">
-                {pendingCount === 0 ? (
-                  "No pending invitations"
-                ) : (
+              {pendingLoading ? (
+                <h3 className="text-lg font-semibold text-gray-900">
+                  <span className="opacity-0">0 pending user invitations</span>
+                </h3>
+              ) : pendingCount === 0 ? (
+                <h3 className="text-lg font-semibold text-gray-900">No pending invitations</h3>
+              ) : (
+                <h3 className="text-lg font-semibold text-gray-900">
                   <a href="/admin/users/pending" className="text-blue-600 hover:text-blue-800 underline">
-                    {pendingCount} user{pendingCount === 1 ? "" : "s"} waiting for activation
+                    {pendingCount} pending user invitation{pendingCount === 1 ? "" : "s"}
                   </a>
-                )}
-              </p>
+                </h3>
+              )}
             </div>
           </div>
         </div>
