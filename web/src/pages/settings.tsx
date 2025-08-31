@@ -1,26 +1,18 @@
-// Settings page: shows user email, liked answers, and a logout button
+// Settings page: shows user email and a logout button
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import Layout from "@/components/layout";
 import type { GetServerSideProps } from "next";
 import type { SiteConfig } from "@/types/siteConfig";
-import { fetchWithAuth } from "@/utils/client/tokenManager";
-import { getOrCreateUUID } from "@/utils/client/uuid";
-import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
-import { ChatList } from "@/components/ChatList";
-import { EmailChangeModal } from "@/components/EmailChangeModal";
 
-interface LikedAnswer {
-  id: string;
-  question: string;
-  likeCount: number;
-}
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
+
+import { EmailChangeModal } from "@/components/EmailChangeModal";
 
 export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | null }) {
   const [email, setEmail] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
-  const [likedAnswers, setLikedAnswers] = useState<LikedAnswer[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
@@ -63,31 +55,6 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
         } catch {
           setEmail(null);
           setRole("user");
-        }
-
-        // Ensure UUID exists (cookie-based)
-        const uuidCookie = getOrCreateUUID();
-
-        if (!uuidCookie) {
-          setLikedAnswers([]);
-          setLoading(false);
-          return;
-        }
-
-        const likedIdsRes = await fetchWithAuth(`/api/like?uuid=${encodeURIComponent(uuidCookie)}`);
-        const likedIds = (await likedIdsRes.json().catch(() => [])) as string[];
-
-        if (Array.isArray(likedIds) && likedIds.length > 0) {
-          const answersRes = await fetch(`/api/answers?answerIds=${encodeURIComponent(likedIds.join(","))}`);
-          const answers = (await answersRes.json().catch(() => [])) as any[];
-          const mapped: LikedAnswer[] = (answers || []).map((a: any) => ({
-            id: a.id,
-            question: a.question,
-            likeCount: a.likeCount || 0,
-          }));
-          setLikedAnswers(mapped);
-        } else {
-          setLikedAnswers([]);
         }
       } catch (e: any) {
         setMessage(e?.message || "Failed to load settings");
@@ -227,16 +194,6 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
                     {savingProfile ? "Saving…" : "Save Profile"}
                   </button>
                 </form>
-              </section>
-
-              <section className="mb-6">
-                <h2 className="text-lg font-semibold mb-2">Liked Answers</h2>
-                <ChatList
-                  chats={likedAnswers}
-                  showTimestamps={false}
-                  showLikeCounts={true}
-                  emptyMessage="No liked answers"
-                />
               </section>
 
               <button onClick={handleLogout} className="rounded bg-gray-800 px-3 py-1 text-white disabled:opacity-50">
