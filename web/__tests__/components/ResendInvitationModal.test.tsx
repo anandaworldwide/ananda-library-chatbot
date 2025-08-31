@@ -41,6 +41,7 @@ describe("ResendInvitationModal", () => {
   });
 
   it("submits with custom message", async () => {
+    const user = userEvent.setup();
     const mockOnResend = jest.fn().mockResolvedValue(undefined);
     render(<ResendInvitationModal {...defaultProps} onResend={mockOnResend} />);
 
@@ -50,10 +51,16 @@ describe("ResendInvitationModal", () => {
     });
 
     const textarea = screen.getByLabelText("Custom Message (Optional)");
-    fireEvent.change(textarea, { target: { value: "Custom test message" } });
+
+    // Clear the existing content and type the new message
+    await user.clear(textarea);
+    await user.type(textarea, "Custom test message");
+
+    // Verify the textarea has the expected value
+    expect(textarea).toHaveValue("Custom test message");
 
     const submitButton = screen.getByRole("button", { name: /resend invitation/i });
-    fireEvent.click(submitButton);
+    await user.click(submitButton);
 
     await waitFor(() => {
       expect(mockOnResend).toHaveBeenCalledWith("test@example.com", "Custom test message");
