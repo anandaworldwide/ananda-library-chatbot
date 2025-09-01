@@ -17,12 +17,6 @@ jest.mock("next/router", () => ({
   }),
 }));
 
-// Mock fetchWithAuth from tokenManager
-jest.mock("@/utils/client/tokenManager", () => ({
-  fetchWithAuth: jest.fn(),
-  isAuthenticated: jest.fn().mockReturnValue(true),
-}));
-
 // Mock the site config
 const mockSiteConfig = {
   siteId: "test",
@@ -73,10 +67,10 @@ describe("AdminUsersPage - handleAddUsers functionality", () => {
           ok: true,
           json: () => Promise.resolve({ firstName: "TestAdmin" }),
         });
-      } else if (url === "/api/admin/listPendingUsers") {
+      } else if (url === "/api/admin/pendingUsersCount") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }),
+          json: () => Promise.resolve({ count: 0 }),
         });
       } else if (url.startsWith("/api/admin/listActiveUsers")) {
         return Promise.resolve({

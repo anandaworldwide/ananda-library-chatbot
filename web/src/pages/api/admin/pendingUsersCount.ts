@@ -1,4 +1,4 @@
-// Lists pending users for the current site for admin UI
+// Gets the total count of pending users for the current site
 import type { NextApiRequest, NextApiResponse } from "next";
 import { db } from "@/services/firebase";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
@@ -36,49 +36,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const usersCol = getUsersCollectionName();
 
-  // Parse pagination parameters
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 20;
-  const offset = (page - 1) * limit;
-
   try {
-    // Get total count first
-    const countSnapshot = await db.collection(usersCol).where("inviteStatus", "==", "pending").get();
-    const totalCount = countSnapshot.size;
+    // Get total count of pending users without limit
+    const snapshot = await db.collection(usersCol).where("inviteStatus", "==", "pending").get();
+    const totalCount = snapshot.size;
 
-    // Get paginated results
-    const snapshot = await db
-      .collection(usersCol)
-      .where("inviteStatus", "==", "pending")
-      .orderBy("createdAt", "desc")
-      .offset(offset)
-      .limit(limit)
-      .get();
-
-    const items = snapshot.docs.map((d: any) => {
-      const data = d.data() || {};
-      return {
-        email: data.email,
-        invitedAt: data.createdAt?.toDate?.() ? data.createdAt.toDate().toLocaleString() : null,
-        expiresAt: data.inviteExpiresAt?.toDate?.() ? data.inviteExpiresAt.toDate().toLocaleString() : null,
-      };
-    });
-
-    const totalPages = Math.ceil(totalCount / limit);
-
-    return res.status(200).json({
-      items,
-      pagination: {
-        page,
-        limit,
-        totalCount,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
-      },
-    });
+    return res.status(200).json({ count: totalCount });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || "Failed to list pending users" });
+    return res.status(500).json({ error: err?.message || "Failed to get pending users count" });
   }
 }
 

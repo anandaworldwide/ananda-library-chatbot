@@ -136,14 +136,14 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
 
   async function fetchPendingCount() {
     try {
-      const { data, refreshedToken } = await fetchWithTokenRefresh<{ items: any[] }>("/api/admin/listPendingUsers");
+      const { data, refreshedToken } = await fetchWithTokenRefresh<{ count: number }>("/api/admin/pendingUsersCount");
 
       // Update JWT if it was refreshed
       if (refreshedToken) {
         setJwt(refreshedToken);
       }
 
-      setPendingCount(data.items?.length || 0);
+      setPendingCount(data.count || 0);
       setPendingLoading(false);
     } catch (e: any) {
       setMessage(e?.message || "Failed to load pending users count");

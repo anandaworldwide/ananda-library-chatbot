@@ -19,6 +19,15 @@ interface AdminPendingUsersPageProps {
   siteConfig: SiteConfig | null;
 }
 
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
 export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersPageProps) {
   const [pending, setPending] = useState<PendingUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,6 +37,8 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
   const [isResendModalOpen, setIsResendModalOpen] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<string>("");
   const [resending, setResending] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
 
   // Shared function to handle token refresh and retry logic
   async function fetchWithTokenRefresh<T>(
@@ -74,10 +85,19 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
     return { data };
   }
 
-  async function fetchPending() {
+  async function fetchPending(page: number = 1) {
     setLoading(true);
     try {
-      const { data, refreshedToken } = await fetchWithTokenRefresh<{ items: any[] }>("/api/admin/listPendingUsers");
+      // Build query parameters
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: "20",
+      });
+
+      const { data, refreshedToken } = await fetchWithTokenRefresh<{
+        items: any[];
+        pagination: PaginationInfo;
+      }>(`/api/admin/listPendingUsers?${params.toString()}`);
 
       // Update JWT if it was refreshed
       if (refreshedToken) {
@@ -86,10 +106,11 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
 
       const items: PendingUser[] = (data.items || []).map((it: any) => ({
         email: it.email,
-        invitedAt: it.invitedAt ? new Date(it.invitedAt).toLocaleString() : null,
-        expiresAt: it.expiresAt ? new Date(it.expiresAt).toLocaleString() : null,
+        invitedAt: it.invitedAt || null,
+        expiresAt: it.expiresAt || null,
       }));
       setPending(items);
+      setPagination(data.pagination);
     } catch (e: any) {
       setMessage(e?.message || "Failed to load pending users");
       setMessageType("error");
@@ -120,7 +141,7 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
       if (!res.ok) throw new Error(data?.error || "Failed to resend");
       setMessage(`Resent invitation to ${targetEmail}`);
       setMessageType("info");
-      await fetchPending();
+      await fetchPending(currentPage);
     } catch (e: any) {
       setMessage(e?.message || "Failed to resend");
       setMessageType("error");
@@ -166,7 +187,7 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
             setJwt(data.token);
             setMessage(null);
             // Refresh data with new token
-            fetchPending();
+            fetchPending(currentPage);
           } else if (res.status === 401) {
             const fullPath = window.location.pathname + (window.location.search || "");
             window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
@@ -179,13 +200,19 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
 
     window.addEventListener("focus", handleWindowFocus);
     return () => window.removeEventListener("focus", handleWindowFocus);
-  }, [jwt]);
+  }, [jwt, currentPage]);
 
   // Fetch pending users once JWT is available
   useEffect(() => {
     if (!jwt) return;
-    fetchPending();
+    fetchPending(currentPage);
   }, [jwt]);
+
+  // Fetch pending users when page changes
+  useEffect(() => {
+    if (!jwt) return;
+    fetchPending(currentPage);
+  }, [currentPage, jwt]);
 
   return (
     <Layout siteConfig={siteConfig}>
@@ -202,10 +229,25 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
         />
 
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Pending User Invitations</h1>
-          <p className="text-gray-600 mt-2">
-            Manage users who have been invited but haven't completed their activation yet.
-          </p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Pending User Invitations</h1>
+              <p className="text-gray-600 mt-2">
+                Manage users who have been invited but haven't completed their activation yet.
+              </p>
+            </div>
+            <div className="text-sm text-gray-600 min-w-0 flex-shrink-0">
+              {pagination && pagination.totalCount > 0 ? (
+                <>
+                  Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+                  {Math.min(pagination.page * pagination.limit, pagination.totalCount)} of {pagination.totalCount}{" "}
+                  pending invitations
+                </>
+              ) : (
+                <span className="opacity-0">Showing 1 to 20 of 100 invitations</span>
+              )}
+            </div>
+          </div>
         </div>
 
         {message && (
@@ -260,6 +302,45 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
             </div>
           )}
         </div>
+
+        {/* Pagination Controls - only show when not loading and have data */}
+        {!loading && pagination && pagination.totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 mt-6">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={!pagination.hasPrev}
+              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={!pagination.hasPrev}
+              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Previous
+            </button>
+
+            <span className="px-3 py-1 text-sm">
+              Page {pagination.page} of {pagination.totalPages}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={!pagination.hasNext}
+              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setCurrentPage(pagination.totalPages)}
+              disabled={!pagination.hasNext}
+              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Last
+            </button>
+          </div>
+        )}
 
         <div className="mt-6">
           <a

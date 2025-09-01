@@ -67,10 +67,10 @@ describe("AdminUsersPage", () => {
           ok: true,
           json: () => Promise.resolve({ token: "mock-jwt" }),
         });
-      } else if (url === "/api/admin/listPendingUsers") {
+      } else if (url === "/api/admin/pendingUsersCount") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }), // No pending users for count
+          json: () => Promise.resolve({ count: 0 }), // No pending users for count
         });
       } else if (url.startsWith("/api/admin/listActiveUsers")) {
         return Promise.resolve({
@@ -148,10 +148,10 @@ describe("AdminUsersPage", () => {
           ok: true,
           json: () => Promise.resolve({ token: "mock-jwt" }),
         });
-      } else if (url === "/api/admin/listPendingUsers") {
+      } else if (url === "/api/admin/pendingUsersCount") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }), // No pending users for count
+          json: () => Promise.resolve({ count: 0 }), // No pending users for count
         });
       } else if (url.startsWith("/api/admin/listActiveUsers")) {
         return Promise.resolve({
@@ -214,10 +214,10 @@ describe("AdminUsersPage", () => {
           ok: true,
           json: () => Promise.resolve({ token: "mock-jwt" }),
         });
-      } else if (url === "/api/admin/listPendingUsers") {
+      } else if (url === "/api/admin/pendingUsersCount") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }),
+          json: () => Promise.resolve({ count: 0 }),
         });
       } else if (url.startsWith("/api/admin/listActiveUsers")) {
         return Promise.resolve({
@@ -330,10 +330,10 @@ describe("AdminUsersPage", () => {
           ok: true,
           json: () => Promise.resolve({ token: "mock-jwt" }),
         });
-      } else if (url === "/api/admin/listPendingUsers") {
+      } else if (url === "/api/admin/pendingUsersCount") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }),
+          json: () => Promise.resolve({ count: 0 }),
         });
       } else if (url.startsWith("/api/admin/listActiveUsers")) {
         // Check if the URL contains sortBy=name-asc
@@ -450,10 +450,10 @@ describe("AdminUsersPage", () => {
           ok: true,
           json: () => Promise.resolve({ token: "mock-jwt" }),
         });
-      } else if (url === "/api/admin/listPendingUsers") {
+      } else if (url === "/api/admin/pendingUsersCount") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }),
+          json: () => Promise.resolve({ count: 0 }),
         });
       } else if (url.startsWith("/api/admin/listActiveUsers")) {
         // Check if the URL contains a search parameter
@@ -526,10 +526,10 @@ describe("AdminUsersPage", () => {
           ok: true,
           json: () => Promise.resolve({ token: "mock-jwt" }),
         });
-      } else if (url === "/api/admin/listPendingUsers") {
+      } else if (url === "/api/admin/pendingUsersCount") {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ items: [] }),
+          json: () => Promise.resolve({ count: 0 }),
         });
       } else if (url.startsWith("/api/admin/listActiveUsers")) {
         // Delay the response to simulate slow loading

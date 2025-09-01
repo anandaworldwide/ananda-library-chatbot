@@ -36,6 +36,7 @@ const preCommitConfig = {
     // Also skip some slower integration tests
     path.join("<rootDir>", "__tests__/api/chat/v1/route.test.ts"),
     path.join("<rootDir>", "__tests__/pages/admin/users.test.tsx"),
+    path.join("<rootDir>", "__tests__/pages/admin/users.handleAddUsers.test.tsx"),
   ],
 
   // Faster test execution for pre-commit
