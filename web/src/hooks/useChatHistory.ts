@@ -12,6 +12,7 @@ export interface ChatHistoryItem {
   convId?: string;
   title?: string; // AI-generated title
   sources?: string; // JSON string of source documents
+  suggestions?: string[]; // Follow-up question suggestions
 }
 
 export interface ConversationGroup {

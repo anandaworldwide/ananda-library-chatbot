@@ -1040,9 +1040,12 @@ async function generateFollowUpSuggestions(
       .filter((suggestion) => typeof suggestion === "string" && suggestion.length >= 3 && suggestion.length <= 50)
       .slice(0, 3); // Limit to 3 suggestions
 
-    // Send suggestions to frontend
+    // Send suggestions to frontend immediately for real-time display
     sendData({ suggestions: validSuggestions });
 
+    console.log("🔍 SUGGESTIONS DEBUG: Generated suggestions:", validSuggestions);
+
+    // Return suggestions for saving to database
     return validSuggestions;
   } catch (error) {
     console.error("Failed to generate follow-up suggestions:", error);
@@ -1063,7 +1066,7 @@ export async function setupAndExecuteLanguageModelChain(
   temporarySession: boolean = false,
   request?: NextRequest,
   timingMetrics?: any // Accept timing metrics for detailed tracking
-): Promise<{ fullResponse: string; finalDocs: Document[]; restatedQuestion: string }> {
+): Promise<{ fullResponse: string; finalDocs: Document[]; restatedQuestion: string; suggestions: string[] }> {
   const TIMEOUT_MS = process.env.NODE_ENV === "test" ? 1000 : 30000;
   const RETRY_DELAY_MS = process.env.NODE_ENV === "test" ? 10 : 1000;
   const MAX_RETRIES = 3;
@@ -1352,8 +1355,8 @@ export async function setupAndExecuteLanguageModelChain(
         return [];
       });
 
-      // Wait for suggestions to complete (they're sent via sendData when ready)
-      await suggestionsPromise;
+      // Wait for suggestions to complete and capture them for saving
+      const generatedSuggestions = await suggestionsPromise;
 
       if (timingMetrics) {
         timingMetrics.suggestionsGenerationComplete = Date.now();
@@ -1366,6 +1369,7 @@ export async function setupAndExecuteLanguageModelChain(
         fullResponse: fullResponse || result.answer.content, // Prefer streamed content, fallback to result.answer.content
         finalDocs: result.sourceDocuments,
         restatedQuestion: result.question,
+        suggestions: generatedSuggestions, // Include suggestions for saving
       };
     } catch (error) {
       lastError = error as Error;

@@ -123,12 +123,27 @@ export async function loadConversationByConvId(
         console.warn("Failed to parse sources for chat:", chat.id, error);
       }
 
+      // Parse suggestions if available
+      let suggestions: string[] = [];
+      try {
+        if (chat.suggestions) {
+          if (Array.isArray(chat.suggestions)) {
+            suggestions = chat.suggestions;
+          } else if (typeof chat.suggestions === "string") {
+            suggestions = JSON.parse(chat.suggestions);
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to parse suggestions for chat:", chat.id, error);
+      }
+
       messages.push({
         type: "apiMessage",
         message: chat.answer,
         sourceDocs: sourceDocs.length > 0 ? sourceDocs : undefined,
         docId: chat.id,
         collection: chat.collection,
+        suggestions: suggestions.length > 0 ? suggestions : undefined,
       });
 
       // Add to history for continuation

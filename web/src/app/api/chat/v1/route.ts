@@ -364,7 +364,8 @@ async function saveOrUpdateDocument(
   clientIP: string,
   restatedQuestion: string,
   uuid?: string | undefined,
-  convId?: string | undefined // Accept convId from frontend
+  convId?: string | undefined, // Accept convId from frontend
+  suggestions?: string[] // Accept suggestions for saving
 ): Promise<string | null> {
   if (!db) {
     return null;
@@ -387,6 +388,7 @@ async function saveOrUpdateDocument(
     restatedQuestion: restatedQuestion,
     uuid: uuid || null, // legacy DB rows may be null; new writes always provide uuid
     convId: finalConvId, // Add conversation ID for grouping
+    suggestions: suggestions || [], // Save follow-up suggestions
   };
 
   try {
@@ -973,7 +975,7 @@ async function handleChatRequest(req: NextRequest) {
 
         // Execute the full chain
         timingMetrics.chainExecutionStart = Date.now();
-        const { fullResponse, finalDocs, restatedQuestion } = await setupAndExecuteLanguageModelChain(
+        const { fullResponse, finalDocs, restatedQuestion, suggestions } = await setupAndExecuteLanguageModelChain(
           retriever,
           sanitizedInput.question, // Use sanitized question (whitespace normalized) for AI processing
           sanitizedInput.history || [],
@@ -1014,7 +1016,8 @@ async function handleChatRequest(req: NextRequest) {
               clientIP,
               restatedQuestion, // Pass the restated question
               sanitizedInput.uuid, // Persist client UUID when provided
-              finalConversationId // Use the final conversation ID
+              finalConversationId, // Use the final conversation ID
+              suggestions // Pass suggestions for saving
             );
 
             if (savedDocId) {

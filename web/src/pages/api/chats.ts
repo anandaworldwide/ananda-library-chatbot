@@ -80,6 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         convId: data.convId || null, // Include convId in response
         title: data.title || null, // Include title in response
         sources: data.sources || null, // Include sources in response
+        suggestions: data.suggestions || null, // Include suggestions in response
       };
     });
 
