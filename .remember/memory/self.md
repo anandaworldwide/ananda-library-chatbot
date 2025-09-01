@@ -533,3 +533,29 @@ object before spreading it.
 
 **Applied To**: Fixed `digestSelfProvision.test.ts` by ensuring proper module resolution in pre-commit Jest
 configuration.
+
+### 22. Chat Sidebar Conversation Limit Issue
+
+**Issue**: Chat sidebar was only showing 5 conversations by default instead of the expected 20, even though
+`useChatHistory(20)` was being called.
+
+**Root Cause**: The API fetches individual chat messages (up to 50 by default), but the frontend groups them by `convId`
+to create conversations. If users have many conversations with only a few messages each, they might only see 5
+conversations even though 20+ individual messages were fetched.
+
+**Solution**: Modified the `useChatHistory` hook to fetch more messages to ensure we get enough to group into the
+desired number of conversations.
+
+**Implementation**:
+
+- Changed message limit calculation: `const messageLimit = Math.max(limit * 3, 50);` to fetch at least 3x the
+  conversation limit or 50, whichever is higher
+- Updated `hasMore` logic to use the new `messageLimit` instead of the conversation limit
+- This ensures we fetch enough individual messages to group into 20 conversations
+
+**Pattern**: For conversation grouping systems, always fetch more individual messages than the desired conversation
+count to account for the grouping ratio.
+
+**Files Modified**: `web/src/hooks/useChatHistory.ts` - updated message limit calculation and pagination logic.
+
+**Result**: Chat sidebar now shows 20 conversations by default before showing the "Load More Conversations" button.

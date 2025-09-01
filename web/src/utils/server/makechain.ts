@@ -955,11 +955,50 @@ export const makeComparisonChains = async (
   }
 };
 
+// Load follow-up prompt template from site-specific or default file
+async function loadFollowUpPrompt(siteId?: string): Promise<string> {
+  const promptsDir = path.join(process.cwd(), "site-config", "followup-prompts");
+
+  // Try site-specific prompt first
+  if (siteId) {
+    const siteSpecificPath = path.join(promptsDir, `${siteId}-followup-prompt.txt`);
+    try {
+      const sitePrompt = await fs.readFile(siteSpecificPath, "utf-8");
+      return sitePrompt.trim();
+    } catch (error) {
+      // Site-specific prompt not found, fall back to default
+    }
+  }
+
+  // Try default prompt
+  const defaultPath = path.join(promptsDir, "default-followup-prompt.txt");
+  try {
+    const defaultPrompt = await fs.readFile(defaultPath, "utf-8");
+    return defaultPrompt.trim();
+  } catch (error) {
+    // If no prompt files exist, use hardcoded fallback
+    return `Based on the full conversation context, generate 3 short follow-up questions as pill buttons.
+
+Conversation History:
+{conversationHistory}
+
+Current Question: "{originalQuestion}"
+
+Current AI Response: "{aiResponse}"
+
+Generate 3 short, specific follow-up questions (3-5 words each) that would be natural next steps considering the full conversation context. Focus on deepening the discussion or exploring related aspects that haven't been covered yet. Return only a JSON array of strings, no explanations or formatting.
+
+Example format: ["Daily routine tips", "Common mistakes", "Advanced techniques"]`;
+  }
+}
+
 // Generate follow-up question suggestions using GPT-3.5-turbo
 async function generateFollowUpSuggestions(
   originalQuestion: string,
   aiResponse: string,
-  sendData: (data: StreamingResponseData) => void
+  conversationHistory: ChatMessage[],
+  sendData: (data: StreamingResponseData) => void,
+  siteId?: string
 ): Promise<string[]> {
   try {
     // Create a lightweight model for suggestions
@@ -969,15 +1008,23 @@ async function generateFollowUpSuggestions(
       maxTokens: 150,
     });
 
-    const prompt = `Based on the user's question and the AI's response, generate 3 short follow-up questions as pill buttons.
+    // Load the appropriate prompt template
+    const promptTemplate = await loadFollowUpPrompt(siteId);
 
-User Question: "${originalQuestion}"
+    // Format conversation history for context
+    const formattedHistory = conversationHistory
+      .slice(-6) // Last 6 messages (3 Q&A pairs) to avoid token limits
+      .map((msg) => {
+        const role = msg.role === "user" ? "User" : "AI";
+        return `${role}: ${msg.content}`;
+      })
+      .join("\n\n");
 
-AI Response: "${aiResponse.substring(0, 500)}..."
-
-Generate 3 short, specific follow-up questions (3-5 words each) that would be natural next steps in this conversation. Return only a JSON array of strings, no explanations or formatting.
-
-Example format: ["Daily routine tips", "Common mistakes", "Advanced techniques"]`;
+    // Replace placeholders in the template
+    const prompt = promptTemplate
+      .replace("{originalQuestion}", originalQuestion)
+      .replace("{aiResponse}", aiResponse.substring(0, 2500) + "...")
+      .replace("{conversationHistory}", formattedHistory || "No previous conversation");
 
     const response = await suggestionModel.invoke([{ role: "user", content: prompt }]);
 
@@ -1296,7 +1343,9 @@ export async function setupAndExecuteLanguageModelChain(
       const suggestionsPromise = generateFollowUpSuggestions(
         sanitizedQuestion,
         fullResponse || result.answer.content,
-        sendData
+        history,
+        sendData,
+        siteConfig?.siteId
       ).catch((error) => {
         console.error("Suggestion generation failed:", error);
         // Return empty suggestions on failure - graceful degradation

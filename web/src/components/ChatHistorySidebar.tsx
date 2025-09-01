@@ -176,15 +176,15 @@ export default function ChatHistorySidebar({
         style={{ backgroundColor: "#f8f7f6" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-400">Chats</h2>
           <button onClick={onClose} className="lg:hidden p-1 rounded-md hover:bg-gray-100" aria-label="Close sidebar">
             <span className="material-icons text-gray-500">close</span>
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Content - Fixed height with independent scrolling */}
+        <div className="h-[calc(100vh-4rem)] overflow-y-auto">
           {loading && conversations.length === 0 ? (
             <div className="p-4 text-center text-gray-500">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>

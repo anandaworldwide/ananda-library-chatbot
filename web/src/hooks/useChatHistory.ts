@@ -40,7 +40,9 @@ export function useChatHistory(limit: number = 20) {
         const uuid = getOrCreateUUID();
 
         // Build URL with pagination cursor for "load more"
-        let url = `/api/chats?uuid=${uuid}&limit=${limit}`;
+        // Use a higher limit to ensure we get enough messages to group into the desired number of conversations
+        const messageLimit = Math.max(limit * 3, 50); // Fetch at least 3x the conversation limit or 50, whichever is higher
+        let url = `/api/chats?uuid=${uuid}&limit=${messageLimit}`;
         if (loadMore && lastTimestamp) {
           url += `&startAfter=${encodeURIComponent(lastTimestamp)}`;
         }
@@ -141,7 +143,9 @@ export function useChatHistory(limit: number = 20) {
         }
 
         // Check if there are more conversations to load
-        setHasMore(chats.length === limit);
+        // We fetched more messages than the conversation limit, so if we got exactly the message limit,
+        // there are likely more messages (and thus conversations) available
+        setHasMore(chats.length === messageLimit);
       } catch (err) {
         console.error("Error fetching chat history:", err);
         setError(err instanceof Error ? err.message : "Failed to fetch chat history");

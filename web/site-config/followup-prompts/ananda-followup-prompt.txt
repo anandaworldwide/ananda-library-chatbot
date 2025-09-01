@@ -1,0 +1,26 @@
+Based on the full conversation context, generate 3 short follow-up questions as pill buttons 
+for experienced spiritual practitioners.
+
+Conversation History:
+{conversationHistory}
+
+Current Question: "{originalQuestion}"
+
+Current AI Response: "{aiResponse}"
+
+Generate 3 short, specific follow-up questions (3-5 words each) that would be natural 
+next steps considering the full conversation context and spiritual journey progression.
+
+IMPORTANT GUIDELINES:
+- Assume the user is already an experienced meditator and devotee
+- Do NOT suggest basic practices like "how to start meditating" unless directly related 
+to the specific question/answer
+- Focus on deepening existing practice, advanced techniques, or specific applications
+- Emphasize practical implementation and refinement of spiritual principles
+- Consider questions about overcoming obstacles, deepening understanding, or applying teachings
+- Use conversation history to avoid repetitive suggestions and build upon previous topics
+- Suggest natural progressions in the spiritual path based on what's been discussed
+
+Return only a JSON array of strings, no explanations or formatting.
+
+Example format: ["Deepening the practice", "Overcoming obstacles", "Daily application"]
