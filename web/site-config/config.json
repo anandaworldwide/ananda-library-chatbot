@@ -82,6 +82,7 @@
     "temperature": 0.4,
     "modelName": "gpt-4o",
     "enableGeoAwareness": true,
+    "feedbackIcon": "michael.jpeg",
     "redirectMappings": {
       "mg": {
         "url": "https://www.ananda.org/contact-us/",
@@ -168,7 +169,8 @@
     "temperature": 0.3,
     "modelName": "gpt-4o-mini",
     "showRelatedQuestions": false,
-    "enableGeoAwareness": true
+    "enableGeoAwareness": true,
+    "feedbackIcon": "michael.jpeg"
   },
   "jairam": {
     "name": "The Free Joe Hunt Chatbot",
@@ -222,7 +224,8 @@
     "enableModelComparison": true,
     "showSourceCountSelector": true,
     "temperature": 0.2,
-    "modelName": "gpt-4o"
+    "modelName": "gpt-4o",
+    "feedbackIcon": "michael.jpeg"
   },
   "crystal": {
     "name": "Crystal Clarity Library Magic",
@@ -277,7 +280,8 @@
     "enableModelComparison": false,
     "showSourceCountSelector": false,
     "temperature": 0.2,
-    "modelName": "gpt-4o-mini"
+    "modelName": "gpt-4o-mini",
+    "feedbackIcon": "bot-image.png"
   },
   "photo": {
     "name": "PhotoWise, The Photography Assistant",
@@ -324,6 +328,7 @@
     "showSourceCountSelector": true,
     "temperature": 0.4,
     "modelName": "gpt-4o",
-    "enableGeoAwareness": false
+    "enableGeoAwareness": false,
+    "feedbackIcon": "michael.jpeg"
   }
 }

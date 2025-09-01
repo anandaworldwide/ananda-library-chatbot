@@ -1,38 +1,84 @@
-// This component renders a contact form, handles form submission,
+// This component renders a contact/feedback form, handles form submission,
 // and displays success or error messages to the user.
 
-import { SiteConfig } from '@/types/siteConfig';
-import React, { useState } from 'react';
-import Layout from '@/components/layout';
-import Link from 'next/link';
-import validator from 'validator';
-import { getToken } from '@/utils/client/tokenManager';
+import { SiteConfig } from "@/types/siteConfig";
+import React, { useState, useEffect } from "react";
+import Layout from "@/components/layout";
+import Link from "next/link";
+import { useRouter } from "next/router";
+import validator from "validator";
+import { getToken } from "@/utils/client/tokenManager";
 
 interface ContactProps {
   siteConfig: SiteConfig | null;
 }
 
 const Contact = ({ siteConfig }: ContactProps) => {
+  const router = useRouter();
+  const { mode } = router.query;
+
+  // Determine if we're in feedback mode
+  const isFeedbackMode = mode === "feedback";
+
   // State for form fields and submission status
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Auto-fill user data for logged-in users
+  useEffect(() => {
+    const autoFillUserData = async () => {
+      try {
+        const token = await getToken();
+        if (token) {
+          setIsLoggedIn(true);
+
+          // Fetch user profile if login is required
+          if (siteConfig?.requireLogin) {
+            const profileResponse = await fetch("/api/profile", {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+
+            if (profileResponse.ok) {
+              const profileData = await profileResponse.json();
+              if (profileData.firstName || profileData.lastName) {
+                const nameParts = [profileData.firstName, profileData.lastName].filter(Boolean);
+                const fullName = nameParts.join(" ");
+                setName(fullName);
+              }
+              if (profileData.email) {
+                setEmail(profileData.email);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Silently fail - user can still fill form manually
+        console.warn("Failed to auto-fill user data:", error);
+      }
+    };
+
+    autoFillUserData();
+  }, [siteConfig?.requireLogin]);
 
   // Validate form inputs
   const validateInputs = () => {
     if (!validator.isLength(name, { min: 1, max: 100 })) {
-      setError('Name must be between 1 and 100 characters');
+      setError("Name must be between 1 and 100 characters");
       return false;
     }
     if (!validator.isEmail(email)) {
-      setError('Invalid email address');
+      setError("Invalid email address");
       return false;
     }
     if (!validator.isLength(message, { min: 1, max: 1000 })) {
-      setError('Message must be between 1 and 1000 characters');
+      setError("Message must be between 1 and 1000 characters");
       return false;
     }
     return true;
@@ -53,10 +99,11 @@ const Contact = ({ siteConfig }: ContactProps) => {
       // Get a token first
       const token = await getToken();
 
-      const res = await fetch('/api/contact', {
-        method: 'POST',
+      const apiUrl = isFeedbackMode ? "/api/contact?mode=feedback" : "/api/contact";
+      const res = await fetch(apiUrl, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name, email, message }),
@@ -66,13 +113,11 @@ const Contact = ({ siteConfig }: ContactProps) => {
         setIsSubmitted(true);
       } else {
         const data = await res.json();
-        setError(
-          data.message || 'Failed to send message. Please try again later.',
-        );
+        setError(data.message || "Failed to send message. Please try again later.");
       }
     } catch (error) {
-      console.error('Error submitting contact form:', error);
-      setError('Failed to send message. Please try again later.');
+      console.error("Error submitting contact form:", error);
+      setError("Failed to send message. Please try again later.");
     } finally {
       setIsSubmitting(false);
     }
@@ -81,58 +126,79 @@ const Contact = ({ siteConfig }: ContactProps) => {
   return (
     <Layout siteConfig={siteConfig}>
       <div className="container mx-auto p-4">
-        <h1 className="text-2xl mb-4">Contact Us</h1>
+        <h1 className="text-2xl mb-4">{isFeedbackMode ? "Feedback" : "Contact Us"}</h1>
+
+        {/* Feedback mode introduction text */}
+        {isFeedbackMode && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <p className="text-blue-800">
+              We are constantly striving to improve the site and provide the best experience possible. Please send us
+              your candid feedback - we appreciate all comments, suggestions, and insights!
+            </p>
+          </div>
+        )}
         {/* Display error message if any */}
         {error && (
-          <div
-            className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
-            role="alert"
-          >
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
             <span className="block sm:inline">{error}</span>
           </div>
         )}
         {/* Contact form */}
         <form
+          data-testid="contact-form"
           onSubmit={handleSubmit}
-          className={`space-y-4 ${isSubmitted ? 'opacity-50 pointer-events-none' : ''}`}
+          className={`space-y-4 ${isSubmitted ? "opacity-50 pointer-events-none" : ""}`}
         >
           <div className="flex space-x-4">
             {/* Name input field */}
             <div className="w-1/2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label htmlFor="name-input" className="block text-sm font-medium text-gray-700">
                 Name
               </label>
               <input
+                id="name-input"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm"
+                className={`mt-1 block w-full border rounded-md shadow-sm ${
+                  isLoggedIn && siteConfig?.requireLogin
+                    ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
+                    : "border-gray-300"
+                }`}
                 required
+                readOnly={isLoggedIn && siteConfig?.requireLogin}
                 disabled={isSubmitted || isSubmitting}
                 maxLength={100}
               />
             </div>
             {/* Email input field */}
             <div className="w-1/2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email-input" className="block text-sm font-medium text-gray-700">
                 Email
               </label>
               <input
+                id="email-input"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm"
+                className={`mt-1 block w-full border rounded-md shadow-sm ${
+                  isLoggedIn && siteConfig?.requireLogin
+                    ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
+                    : "border-gray-300"
+                }`}
                 required
+                readOnly={isLoggedIn && siteConfig?.requireLogin}
                 disabled={isSubmitted || isSubmitting}
               />
             </div>
           </div>
           {/* Message textarea */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Message
+            <label htmlFor="message-input" className="block text-sm font-medium text-gray-700">
+              {isFeedbackMode ? "Your Feedback" : "Message"}
             </label>
             <textarea
+              id="message-input"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm h-48"
@@ -147,19 +213,22 @@ const Contact = ({ siteConfig }: ContactProps) => {
             className="bg-blue-500 text-white px-4 py-2 rounded-md disabled:bg-blue-300"
             disabled={isSubmitted || isSubmitting}
           >
-            {isSubmitting ? 'Sending...' : 'Send'}
+            {isSubmitting
+              ? isFeedbackMode
+                ? "Sending Feedback..."
+                : "Sending..."
+              : isFeedbackMode
+                ? "Send Feedback"
+                : "Send"}
           </button>
         </form>
         {/* Success message and homepage link */}
         {isSubmitted && (
           <div className="mt-8 text-center">
             <h2 className="text-xl font-semibold text-green-600 mb-4">
-              Thanks, message sent!
+              {isFeedbackMode ? "Thanks for your feedback!" : "Thanks, message sent!"}
             </h2>
-            <Link
-              href="/"
-              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
-            >
+            <Link href="/" className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors">
               Go to Homepage
             </Link>
           </div>

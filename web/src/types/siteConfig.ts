@@ -58,6 +58,7 @@ export interface SiteConfig {
   modelName?: string; // Added for LLM model selection
   showRelatedQuestions?: boolean; // Added to control visibility of related questions
   enableGeoAwareness?: boolean; // Added for geo-awareness functionality
+  feedbackIcon?: string; // Site-specific feedback button icon
   redirectMappings?: {
     // Added for code-based redirect tracking
     [code: string]: {

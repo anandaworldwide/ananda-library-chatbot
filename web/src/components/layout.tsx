@@ -7,6 +7,7 @@ import JairamHeader from "./Header/JairamHeader";
 import CrystalHeader from "./Header/CrystalHeader";
 import Footer from "./Footer";
 import NPSSurvey from "./NPSSurvey";
+import FeedbackButton from "./FeedbackButton";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useSudo } from "@/contexts/SudoContext";
 import Link from "next/link";
@@ -91,6 +92,8 @@ export default function Layout({
         </div>
       </div>
       <Footer siteConfig={siteConfig} />
+      {/* Feedback button */}
+      {siteConfig && <FeedbackButton siteConfig={siteConfig} />}
       {/* Error popup */}
       {showErrorPopup && errorMessage && (
         <div className="fixed bottom-4 right-4 bg-red-100 text-red-700 py-2 px-4 rounded-lg shadow-md flex items-center justify-between text-sm z-50 max-w-md">

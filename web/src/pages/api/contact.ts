@@ -1,29 +1,29 @@
 // This file handles API requests for the contact form.
 // It validates inputs, rate limits submissions, and sends emails via AWS SES.
 
-import { NextApiRequest, NextApiResponse } from 'next';
-import { withJwtOnlyAuth } from '@/utils/server/apiMiddleware';
-import { runMiddleware } from '@/utils/server/corsMiddleware';
-import Cors from 'cors';
-import validator from 'validator';
-import { genericRateLimiter } from '@/utils/server/genericRateLimiter';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import { loadSiteConfigSync } from '@/utils/server/loadSiteConfig';
+import { NextApiRequest, NextApiResponse } from "next";
+import { withJwtOnlyAuth } from "@/utils/server/apiMiddleware";
+import { runMiddleware } from "@/utils/server/corsMiddleware";
+import Cors from "cors";
+import validator from "validator";
+import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
+import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { loadSiteConfigSync } from "@/utils/server/loadSiteConfig";
 
 const ses = new SESClient({
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.AWS_REGION || "us-east-1",
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
   },
 });
 
 // Configure CORS for contact form
 const contactCors = Cors({
-  methods: ['POST', 'OPTIONS'],
-  origin: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000', // Only allow our frontend domain
+  methods: ["POST", "OPTIONS"],
+  origin: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000", // Only allow our frontend domain
   credentials: true, // Required for Authorization header
-  allowedHeaders: ['Authorization', 'Content-Type'], // Explicitly allow Authorization header
+  allowedHeaders: ["Authorization", "Content-Type"], // Explicitly allow Authorization header
 });
 
 /**
@@ -35,22 +35,19 @@ const contactCors = Cors({
  * 2. siteAuth cookie is NOT required - This allows non-logged-in users to contact us
  * 3. CORS is configured to only allow requests from our frontend domain
  */
-const handleRequest = async (
-  req: NextApiRequest,
-  res: NextApiResponse,
-): Promise<void> => {
+const handleRequest = async (req: NextApiRequest, res: NextApiResponse): Promise<void> => {
   // Apply CORS middleware first
   await runMiddleware(req, res, contactCors);
 
   // Handle preflight OPTIONS request for CORS
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     res.status(200).end();
     return;
   }
 
   // Only allow POST requests
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
@@ -58,7 +55,7 @@ const handleRequest = async (
   const isAllowed = await genericRateLimiter(req, res, {
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 3, // 3 requests per 15 minutes
-    name: 'contact_form',
+    name: "contact_form",
   });
 
   if (!isAllowed) {
@@ -70,33 +67,33 @@ const handleRequest = async (
 
     // Input validation
     if (!validator.isLength(name, { min: 1, max: 100 })) {
-      return res.status(400).json({ message: 'Invalid name' });
+      return res.status(400).json({ message: "Invalid name" });
     }
     if (!validator.isEmail(email)) {
-      return res.status(400).json({ message: 'Invalid email' });
+      return res.status(400).json({ message: "Invalid email" });
     }
     if (!validator.isLength(message, { min: 1, max: 1000 })) {
-      return res.status(400).json({ message: 'Invalid message length' });
+      return res.status(400).json({ message: "Invalid message length" });
     }
 
     // Sanitize inputs (only remove potentially harmful characters)
-    const sanitizedName = name.trim().replace(/[<>]/g, '');
+    const sanitizedName = name.trim().replace(/[<>]/g, "");
     const sanitizedEmail = email.trim();
-    const sanitizedMessage = message.trim().replace(/[<>]/g, '');
+    const sanitizedMessage = message.trim().replace(/[<>]/g, "");
 
     const sourceEmail = process.env.CONTACT_EMAIL;
     if (!sourceEmail) {
-      return res
-        .status(500)
-        .json({ message: 'CONTACT_EMAIL environment variable is not set' });
+      return res.status(500).json({ message: "CONTACT_EMAIL environment variable is not set" });
     }
 
     const siteConfig = loadSiteConfigSync();
     if (!siteConfig) {
-      return res
-        .status(500)
-        .json({ message: 'Failed to load site configuration' });
+      return res.status(500).json({ message: "Failed to load site configuration" });
     }
+
+    // Check if this is feedback mode from query parameters
+    const isFeedbackMode = req.query?.mode === "feedback";
+    const subjectPrefix = isFeedbackMode ? "Feedback" : "Contact Form Msg";
 
     const params = {
       Source: sourceEmail,
@@ -105,21 +102,21 @@ const handleRequest = async (
       },
       Message: {
         Subject: {
-          Data: `${siteConfig.shortname} Contact Form Msg from ${sanitizedName}`,
+          Data: `${siteConfig.shortname} ${subjectPrefix} from ${sanitizedName}`,
         },
         Body: {
           Text: {
-            Data: `From: ${sanitizedName} <${sanitizedEmail}>\n\nMessage:\n\n${sanitizedMessage}`,
+            Data: `Type: ${isFeedbackMode ? "Feedback" : "Contact"}\nFrom: ${sanitizedName} <${sanitizedEmail}>\n\nMessage:\n\n${sanitizedMessage}`,
           },
         },
       },
     };
 
     await ses.send(new SendEmailCommand(params));
-    res.status(200).json({ message: 'Message sent successfully' });
+    res.status(200).json({ message: "Message sent successfully" });
   } catch (error) {
-    console.error('Error processing contact form:', error);
-    res.status(500).json({ error: 'Failed to process contact form' });
+    console.error("Error processing contact form:", error);
+    res.status(500).json({ error: "Failed to process contact form" });
   }
 };
 

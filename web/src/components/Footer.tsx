@@ -220,6 +220,8 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
           </div>
         </div>
       </footer>
+      {/* Mobile spacing for feedback button */}
+      <div className="pb-20 md:pb-0" />
     </>
   );
 };
