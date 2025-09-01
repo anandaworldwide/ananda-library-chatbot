@@ -4,6 +4,7 @@
  */
 
 import React from "react";
+import { logEvent } from "@/utils/client/analytics";
 
 interface FirestoreIndexErrorProps {
   error?: string;
@@ -58,7 +59,10 @@ export function FirestoreIndexError({ error, isBuilding = false, className = "" 
           {!isBuilding && (
             <div className="mt-3">
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  logEvent("error_recovery_attempt", "Error", "firestore_index_retry");
+                  window.location.reload();
+                }}
                 className="rounded-md bg-red-100 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
               >
                 Try Again

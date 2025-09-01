@@ -68,10 +68,12 @@ export function AudioPlayer({
     try {
       const url = await getCachedSecureAudioUrl(src, library, docId);
       setSecureAudioUrl(url);
+      logEvent("audio_url_fetch_success", "Engagement", audioId);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to load audio";
       setUrlError(errorMessage);
       console.error("Failed to fetch secure audio URL:", error);
+      logEvent("audio_url_fetch_error", "Error", `${audioId}:${errorMessage}`);
     } finally {
       setIsLoadingUrl(false);
     }
@@ -130,6 +132,13 @@ export function AudioPlayer({
     logEvent("seek_audio", "Engagement", `${audioId}:${newTime}`);
   };
 
+  // Handle audio playback errors (from useAudioPlayer hook)
+  useEffect(() => {
+    if (audioError) {
+      logEvent("audio_playback_error", "Error", `${audioId}:${audioError}`);
+    }
+  }, [audioError, audioId]);
+
   // Handle download button click
   const handleDownload = () => {
     if (secureAudioUrl) {
@@ -164,8 +173,15 @@ export function AudioPlayer({
       <audio
         ref={audioRef}
         preload="metadata"
-        onLoadedMetadata={() => setAudioTime(startTime)}
-        onError={() => setError("Failed to load audio. Please try again.")}
+        onLoadedMetadata={() => {
+          setAudioTime(startTime);
+          logEvent("audio_loaded", "Engagement", audioId);
+        }}
+        onEnded={() => logEvent("audio_completed", "Engagement", audioId)}
+        onError={() => {
+          setError("Failed to load audio. Please try again.");
+          logEvent("audio_load_error", "Error", audioId);
+        }}
       />
 
       {/* Error display */}

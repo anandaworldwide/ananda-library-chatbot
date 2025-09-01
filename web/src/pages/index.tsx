@@ -52,9 +52,71 @@ import { loadConversationByConvId } from "@/utils/client/conversationLoader";
 import { getGreeting } from "@/utils/client/siteConfig";
 import { SidebarFunctions, SidebarRefetch } from "@/components/ChatHistorySidebar";
 
+// Custom hook for scroll depth tracking
+function useScrollDepthTracking() {
+  const [scrollDepthsTracked, setScrollDepthsTracked] = useState<Set<number>>(new Set());
+  const [pageLoadTime] = useState<number>(Date.now());
+  const [firstInteractionTime, setFirstInteractionTime] = useState<number | null>(null);
+  const [hasTrackedFirstInteraction, setHasTrackedFirstInteraction] = useState<boolean>(false);
+
+  const trackFirstInteraction = useCallback(() => {
+    if (!hasTrackedFirstInteraction && firstInteractionTime === null) {
+      const timeToFirstInteraction = Date.now() - pageLoadTime;
+      setFirstInteractionTime(Date.now());
+      setHasTrackedFirstInteraction(true);
+      logEvent("first_interaction", "Engagement", "time_to_first_interaction", timeToFirstInteraction);
+    }
+  }, [hasTrackedFirstInteraction, firstInteractionTime, pageLoadTime]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      trackFirstInteraction();
+
+      const scrollTop = window.scrollY;
+      const windowHeight = window.innerHeight;
+      const documentHeight = document.documentElement.scrollHeight;
+
+      const scrollPercentage = Math.round((scrollTop / (documentHeight - windowHeight)) * 100);
+
+      const thresholds = [25, 50, 75, 100];
+      thresholds.forEach((threshold) => {
+        if (scrollPercentage >= threshold && !scrollDepthsTracked.has(threshold)) {
+          setScrollDepthsTracked((prev) => new Set([...prev, threshold]));
+          logEvent("scroll_depth", "Engagement", `${threshold}%`, scrollPercentage);
+        }
+      });
+    };
+
+    const handleUserInteraction = () => {
+      trackFirstInteraction();
+    };
+
+    // Track various user interactions that indicate engagement
+    const interactionEvents = ["click", "keydown", "touchstart", "scroll", "mousemove", "mousedown", "touchmove"];
+
+    interactionEvents.forEach((event) => {
+      document.addEventListener(event, handleUserInteraction, { passive: true });
+    });
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      interactionEvents.forEach((event) => {
+        document.removeEventListener(event, handleUserInteraction);
+      });
+    };
+  }, [scrollDepthsTracked, trackFirstInteraction]);
+
+  return { trackFirstInteraction };
+}
+
 // Main component for the chat interface
 export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) {
   const router = useRouter();
+
+  // Initialize scroll depth and interaction tracking
+  useScrollDepthTracking();
 
   // State variables for various features and UI elements
   const [isMaintenanceMode] = useState<boolean>(false);
@@ -1138,6 +1200,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         // If not currently downvoted (-1), open the feedback modal
         setCurrentFeedbackDocId(docId);
         setIsFeedbackModalOpen(true);
+        logEvent("open_feedback_modal", "Engagement", docId);
       }
     }
   };

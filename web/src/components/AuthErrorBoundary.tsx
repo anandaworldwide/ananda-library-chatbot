@@ -1,7 +1,8 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { toast } from 'react-toastify';
-import Link from 'next/link';
-import { initializeTokenManager } from '@/utils/client/tokenManager';
+import React, { Component, ErrorInfo, ReactNode } from "react";
+import { toast } from "react-toastify";
+import Link from "next/link";
+import { initializeTokenManager } from "@/utils/client/tokenManager";
+import { logEvent } from "@/utils/client/analytics";
 
 interface AuthErrorBoundaryProps {
   children: ReactNode;
@@ -19,10 +20,7 @@ interface AuthErrorBoundaryState {
  * across the application. It catches rendering errors that might be caused by
  * authentication issues and provides a fallback UI with recovery options.
  */
-class AuthErrorBoundary extends Component<
-  AuthErrorBoundaryProps,
-  AuthErrorBoundaryState
-> {
+class AuthErrorBoundary extends Component<AuthErrorBoundaryProps, AuthErrorBoundaryState> {
   constructor(props: AuthErrorBoundaryProps) {
     super(props);
     this.state = {
@@ -33,28 +31,22 @@ class AuthErrorBoundary extends Component<
     };
   }
 
-  static getDerivedStateFromError(
-    error: Error,
-  ): Partial<AuthErrorBoundaryState> {
+  static getDerivedStateFromError(error: Error): Partial<AuthErrorBoundaryState> {
     // Update state so the next render will show the fallback UI
     return {
       hasError: true,
       error,
       isSessionExpired:
-        error.message.includes('unauthorized') ||
-        error.message.includes('authentication') ||
-        error.message.includes('401') ||
-        error.message.includes('token'),
+        error.message.includes("unauthorized") ||
+        error.message.includes("authentication") ||
+        error.message.includes("401") ||
+        error.message.includes("token"),
     };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     // Log the error to an error reporting service
-    console.error(
-      'Authentication Error Boundary caught an error:',
-      error,
-      errorInfo,
-    );
+    console.error("Authentication Error Boundary caught an error:", error, errorInfo);
 
     this.setState({
       errorInfo,
@@ -66,9 +58,10 @@ class AuthErrorBoundary extends Component<
    * refreshing the token and resetting the error state
    */
   handleRecoveryAttempt = async (): Promise<void> => {
+    logEvent("error_recovery_attempt", "Error", "restore_session");
     try {
       // Show loading toast
-      toast.info('Attempting to restore your session...', {
+      toast.info("Attempting to restore your session...", {
         autoClose: 2000,
       });
 
@@ -83,17 +76,16 @@ class AuthErrorBoundary extends Component<
         isSessionExpired: false,
       });
 
-      toast.success('Session restored successfully!', {
+      logEvent("error_recovery_success", "Error", "restore_session");
+      toast.success("Session restored successfully!", {
         autoClose: 3000,
       });
     } catch (error) {
-      console.error('Recovery attempt failed:', error);
-      toast.error(
-        'Could not restore your session. Please try logging in again.',
-        {
-          autoClose: 5000,
-        },
-      );
+      console.error("Recovery attempt failed:", error);
+      logEvent("error_recovery_failed", "Error", "restore_session");
+      toast.error("Could not restore your session. Please try logging in again.", {
+        autoClose: 5000,
+      });
     }
   };
 
@@ -101,7 +93,8 @@ class AuthErrorBoundary extends Component<
    * Handles a page refresh to attempt recovery
    */
   handleRefresh = (): void => {
-    if (typeof window !== 'undefined') {
+    logEvent("error_recovery_attempt", "Error", "page_refresh");
+    if (typeof window !== "undefined") {
       window.location.reload();
     }
   };
@@ -110,6 +103,7 @@ class AuthErrorBoundary extends Component<
    * Handle navigation to login page and reset error state
    */
   handleGoToLogin = (): void => {
+    logEvent("error_recovery_attempt", "Error", "go_to_login");
     // Reset error state before navigation
     this.setState({
       hasError: false,
@@ -145,15 +139,13 @@ class AuthErrorBoundary extends Component<
             </div>
 
             <h2 className="mb-4 text-xl font-bold text-center text-gray-800">
-              {this.state.isSessionExpired
-                ? 'Your session has expired'
-                : 'Something went wrong'}
+              {this.state.isSessionExpired ? "Your session has expired" : "Something went wrong"}
             </h2>
 
             <p className="mb-6 text-gray-600 text-center">
               {this.state.isSessionExpired
-                ? 'Your authentication session has expired or is invalid. Please restore your session to continue.'
-                : 'We encountered an unexpected error. Please try again.'}
+                ? "Your authentication session has expired or is invalid. Please restore your session to continue."
+                : "We encountered an unexpected error. Please try again."}
             </p>
 
             <div className="flex flex-col space-y-3">
@@ -182,15 +174,11 @@ class AuthErrorBoundary extends Component<
             </div>
 
             {/* Show more details if in development environment */}
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {process.env.NODE_ENV === "development" && this.state.error && (
               <div className="mt-6 p-4 bg-gray-100 rounded text-sm overflow-auto">
-                <p className="font-mono text-red-600">
-                  {this.state.error.toString()}
-                </p>
+                <p className="font-mono text-red-600">{this.state.error.toString()}</p>
                 {this.state.errorInfo && (
-                  <pre className="mt-2 font-mono text-xs text-gray-700">
-                    {this.state.errorInfo.componentStack}
-                  </pre>
+                  <pre className="mt-2 font-mono text-xs text-gray-700">{this.state.errorInfo.componentStack}</pre>
                 )}
               </div>
             )}

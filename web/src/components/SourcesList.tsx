@@ -220,16 +220,21 @@ const SourcesList: React.FC<SourcesListProps> = ({
 
   // Handle clicking on a source link
   const handleSourceClick = (e: React.MouseEvent<HTMLAnchorElement> | any, source: string) => {
-    e.preventDefault && e.preventDefault(); // Prevent default link behavior if preventDefault exists
-    logEvent("click_source", "UI", source);
+    try {
+      e.preventDefault && e.preventDefault(); // Prevent default link behavior if preventDefault exists
+      logEvent("click_source", "UI", source);
 
-    // Ensure the URL has a protocol to prevent relative path issues
-    let fullUrl = source;
-    if (source && !source.startsWith("http://") && !source.startsWith("https://")) {
-      fullUrl = `https://${source}`;
+      // Ensure the URL has a protocol to prevent relative path issues
+      let fullUrl = source;
+      if (source && !source.startsWith("http://") && !source.startsWith("https://")) {
+        fullUrl = `https://${source}`;
+      }
+
+      window.open(fullUrl, "_blank", "noopener,noreferrer"); // Open link manually
+    } catch (error) {
+      console.error("Error opening source link:", error);
+      logEvent("click_source_error", "Error", source);
     }
-
-    window.open(fullUrl, "_blank", "noopener,noreferrer"); // Open link manually
   };
 
   // Handle clicking on a library link
@@ -328,6 +333,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
         document.body.removeChild(link);
       } catch (error) {
         console.error("Error downloading PDF:", error);
+        logEvent("download_pdf_error", "Error", doc.metadata.pdf_s3_key || "unknown");
         // TODO: Show user-friendly error message
       }
     };
@@ -367,6 +373,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
       setCurrentSourceUrl(linkUrl);
       setCurrentSourceDoc(doc);
       setShowAccessInterstitial(true);
+      logEvent("show_access_interstitial", "UI", doc.metadata.source || "unknown");
     };
 
     return (
@@ -403,7 +410,10 @@ const SourcesList: React.FC<SourcesListProps> = ({
     return (
       <div className="relative">
         <button
-          onClick={() => setShowSourcesPopover(!showSourcesPopover)}
+          onClick={() => {
+            setShowSourcesPopover(!showSourcesPopover);
+            logEvent(showSourcesPopover ? "hide_sources_popover" : "show_sources_popover", "UI", "admin");
+          }}
           className="text-blue-600 hover:underline text-sm"
         >
           {showSourcesPopover ? "Admin: Hide sources" : "Admin: Show sources"}
@@ -412,13 +422,25 @@ const SourcesList: React.FC<SourcesListProps> = ({
         {showSourcesPopover && (
           <>
             {/* Backdrop */}
-            <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setShowSourcesPopover(false)} />
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40"
+              onClick={() => {
+                setShowSourcesPopover(false);
+                logEvent("close_sources_popover", "UI", "backdrop_click");
+              }}
+            />
 
             {/* Popover */}
             <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-50 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">Sources</h3>
-                <button onClick={() => setShowSourcesPopover(false)} className="text-gray-500 hover:text-gray-700">
+                <button
+                  onClick={() => {
+                    setShowSourcesPopover(false);
+                    logEvent("close_sources_popover", "UI", "close_button");
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
                   <span className="material-icons">close</span>
                 </button>
               </div>
@@ -470,7 +492,10 @@ const SourcesList: React.FC<SourcesListProps> = ({
             {shouldHideSources ? (
               isSudoAdmin && (
                 <button
-                  onClick={() => setShowSourcesPopover(!showSourcesPopover)}
+                  onClick={() => {
+                    setShowSourcesPopover(!showSourcesPopover);
+                    logEvent(showSourcesPopover ? "hide_sources_popover" : "show_sources_popover", "UI", "admin");
+                  }}
                   className="text-sm text-blue-600 hover:underline"
                 >
                   {showSourcesPopover ? "(hide sources)" : "(show sources)"}
@@ -570,13 +595,25 @@ const SourcesList: React.FC<SourcesListProps> = ({
       {showAccessInterstitial && (
         <>
           {/* Backdrop */}
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50" onClick={() => setShowAccessInterstitial(false)} />
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-50"
+            onClick={() => {
+              setShowAccessInterstitial(false);
+              logEvent("dismiss_access_interstitial", "UI", "backdrop_click");
+            }}
+          />
 
           {/* Interstitial Modal */}
           <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-50 max-w-md w-full mx-4">
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Access to Source</h3>
-              <button onClick={() => setShowAccessInterstitial(false)} className="text-gray-400 hover:text-gray-600">
+              <button
+                onClick={() => {
+                  setShowAccessInterstitial(false);
+                  logEvent("dismiss_access_interstitial", "UI", "close_button");
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <span className="material-icons">close</span>
               </button>
             </div>
@@ -591,6 +628,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
                   onClick={() => {
                     handleSourceClick({} as any, currentSourceUrl);
                     setShowAccessInterstitial(false);
+                    logEvent("access_interstitial_choice", "UI", "has_access");
                   }}
                   className="w-full flex items-center gap-3 p-3 text-left bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors"
                 >
@@ -605,6 +643,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
                   <button
                     onClick={async () => {
                       setShowAccessInterstitial(false);
+                      logEvent("access_interstitial_choice", "UI", "download_pdf");
                       // Trigger PDF download if available
                       if (currentSourceDoc.metadata.pdf_s3_key) {
                         try {
@@ -652,6 +691,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
                           document.body.removeChild(link);
                         } catch (error) {
                           console.error("Error downloading PDF:", error);
+                          logEvent("download_pdf_error", "Error", currentSourceDoc.metadata.pdf_s3_key || "unknown");
                         }
                       }
                     }}
@@ -678,6 +718,11 @@ const SourcesList: React.FC<SourcesListProps> = ({
                   type="checkbox"
                   onChange={(e) => {
                     handleDontShowAgain(e.target.checked);
+                    logEvent(
+                      "access_interstitial_preference",
+                      "UI",
+                      e.target.checked ? "dont_show_again" : "show_again"
+                    );
                   }}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />

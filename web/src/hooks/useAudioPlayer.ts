@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface UseAudioPlayerProps {
   src: string | null;
@@ -35,18 +35,19 @@ export function useAudioPlayer({ src, startTime }: UseAudioPlayerProps) {
     const handleEnded = () => {
       setIsPlaying(false);
       audio.currentTime = startTime;
+      // Note: Analytics will be logged in AudioPlayer component
     };
 
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('canplaythrough', handleCanPlayThrough);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("canplaythrough", handleCanPlayThrough);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
 
     return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('canplaythrough', handleCanPlayThrough);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("canplaythrough", handleCanPlayThrough);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
     };
   }, [startTime]);
 
@@ -69,9 +70,10 @@ export function useAudioPlayer({ src, startTime }: UseAudioPlayerProps) {
     } else {
       setError(null);
       audio.play().catch((error) => {
-        console.error('Error playing audio:', error);
-        setError('Failed to play audio. Please try again.');
+        console.error("Error playing audio:", error);
+        setError("Failed to play audio. Please try again.");
         setIsPlaying(false);
+        // Note: Analytics will be logged in AudioPlayer component
       });
       setIsPlaying(true);
     }
@@ -86,15 +88,16 @@ export function useAudioPlayer({ src, startTime }: UseAudioPlayerProps) {
         setCurrentTime(time);
         if (isPlaying) {
           audio.play().catch((error) => {
-            console.error('Error playing audio after seeking:', error);
-            setError('Failed to play audio after seeking. Please try again.');
+            console.error("Error playing audio after seeking:", error);
+            setError("Failed to play audio after seeking. Please try again.");
             setIsPlaying(false);
+            // Note: Analytics will be logged in AudioPlayer component
           });
         }
         setIsSeeking(false);
       }
     },
-    [isPlaying],
+    [isPlaying]
   );
 
   return {

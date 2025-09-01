@@ -332,7 +332,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <div className="mb-4">
               <button
                 type="button"
-                onClick={() => setShowOptions(!showOptions)}
+                onClick={() => {
+                  setShowOptions(!showOptions);
+                  logEvent(showOptions ? "hide_mobile_options" : "show_mobile_options", "UI", "mobile_toggle");
+                }}
                 className="text-blue-500 hover:underline mb-2"
               >
                 {showOptions ? "Hide options" : "Show options"}
@@ -406,7 +409,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               {(showMediaTypeSelection || showAuthorSelection || siteConfig?.showSourceCountSelector) && (
                 <button
                   type="button"
-                  onClick={() => setShowControlsInfo(true)}
+                  onClick={() => {
+                    setShowControlsInfo(true);
+                    logEvent("show_controls_info", "UI", "info_button");
+                  }}
                   className="px-2 py-1 text-xs sm:text-sm rounded-full border border-gray-300 w-6 h-6 flex items-center justify-center hover:bg-gray-100 self-center"
                   aria-label="Controls information"
                 >
@@ -419,14 +425,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <>
                   <div
                     className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100]"
-                    onClick={() => setShowControlsInfo(false)}
+                    onClick={() => {
+                      setShowControlsInfo(false);
+                      logEvent("dismiss_controls_info", "UI", "backdrop_click");
+                    }}
                     aria-hidden="true"
                   />
                   <div className="fixed z-[101] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
                     <div className="flex justify-between items-start mb-4">
                       <h3 className="text-lg font-semibold">Available Controls</h3>
                       <button
-                        onClick={() => setShowControlsInfo(false)}
+                        onClick={() => {
+                          setShowControlsInfo(false);
+                          logEvent("dismiss_controls_info", "UI", "close_button");
+                        }}
                         className="text-gray-500 hover:text-gray-700"
                         aria-label="Close"
                       >
