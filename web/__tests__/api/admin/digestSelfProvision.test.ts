@@ -349,8 +349,8 @@ describe("/api/admin/digestSelfProvision", () => {
       });
     });
 
-    it("limits samples to 10 entries", async () => {
-      const mockActivationDocs = Array.from({ length: 15 }, (_, i) => ({
+    it("limits samples to 100 entries", async () => {
+      const mockActivationDocs = Array.from({ length: 150 }, (_, i) => ({
         data: () => ({
           details: { outcome: "activation_completed" },
           target: `user${i}@example.com`,
@@ -390,8 +390,56 @@ describe("/api/admin/digestSelfProvision", () => {
       expect(res.statusCode).toBe(200);
       const responseData = res._getJSONData();
 
-      expect(responseData.samples).toHaveLength(10);
-      expect(responseData.counts.activationsCompleted).toBe(15);
+      expect(responseData.samples).toHaveLength(100);
+      expect(responseData.counts.activationsCompleted).toBe(150);
+    });
+
+    it("shows 'plus X more' message when there are more activations than the limit", async () => {
+      const mockActivationDocs = Array.from({ length: 150 }, (_, i) => ({
+        data: () => ({
+          details: { outcome: "activation_completed" },
+          target: `user${i}@example.com`,
+        }),
+      }));
+
+      const mockActivationForEach = jest.fn((callback) => {
+        mockActivationDocs.forEach(callback);
+      });
+
+      // Set up the mock to return empty self-provision data and lots of activation data
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn((field, op, value) => ({
+          where: jest.fn(() => ({
+            get: jest.fn(() => {
+              if (value === "self_provision_attempt") {
+                return Promise.resolve({ forEach: jest.fn() }); // Empty self_provision_attempt data
+              } else if (value === "user_activation_completed") {
+                return Promise.resolve({ forEach: mockActivationForEach }); // Lots of activation data
+              }
+              return Promise.resolve({ forEach: jest.fn() });
+            }),
+          })),
+        })),
+      }));
+
+      const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+        method: "POST",
+        headers: {
+          "user-agent": "vercel-cron/1.0",
+          authorization: "Bearer test-cron-secret",
+        },
+      });
+
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const responseData = res._getJSONData();
+
+      // Verify the email body contains the "plus X more" message
+      const emailBody = (sendOpsAlert as jest.Mock).mock.calls[0][1];
+      expect(emailBody).toContain("plus 50 more not shown here");
+      expect(responseData.samples).toHaveLength(100);
+      expect(responseData.counts.activationsCompleted).toBe(150);
     });
   });
 

@@ -124,7 +124,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
       if (outcome === "activation_completed") {
         activationsCompleted++;
-        if (samples.length < 10) {
+        if (samples.length < 100) {
           samples.push({ target: email, outcome });
           if (email) {
             emailsToLookup.push(email);
@@ -175,11 +175,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         outcome?: string;
         firstName?: string;
         lastName?: string;
-      }>
+      }>,
+      totalCount: number
     ) => {
       if (samples.length === 0) return "No activity in the last 24 hours.";
 
-      return samples
+      const samplesList = samples
         .map((sample, index) => {
           const email = sample.target || "unknown@email.com";
           const outcome = sample.outcome || "unknown";
@@ -201,6 +202,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           return `${index + 1}. ${displayName} (${email}) - ${statusText}`;
         })
         .join("\n");
+
+      // Add "plus X more" if there are additional activations beyond the limit
+      const additionalCount = totalCount - samples.length;
+      if (additionalCount > 0) {
+        return `${samplesList}\n\nplus ${additionalCount} more not shown here`;
+      }
+
+      return samplesList;
     };
 
     const body = [
@@ -212,7 +221,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       `• Server errors: ${errors}`,
       ``,
       `ACTIVITY DETAILS:`,
-      formatSamples(samples),
+      formatSamples(samples, activationsCompleted),
     ].join("\n");
 
     // Create subject line with error counts
