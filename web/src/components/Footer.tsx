@@ -126,10 +126,12 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
                     <span className="material-icons text-sm ml-1">people</span>
                   </Link>
                 )}
-                <Link href="/bless" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">
-                  Manage Blessing
-                  <span className="material-icons text-sm ml-1">auto_fix_high</span>
-                </Link>
+                {!siteConfig?.requireLogin && (
+                  <Link href="/bless" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">
+                    Manage Blessing
+                    <span className="material-icons text-sm ml-1">auto_fix_high</span>
+                  </Link>
+                )}
                 <Link href="/stats" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">
                   Statistics
                   <span className="material-icons text-sm ml-1">trending_up</span>
