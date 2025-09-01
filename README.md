@@ -32,7 +32,7 @@ accurate, contextual answers with complete source attribution.
 - **Context Preservation** - Multi-turn conversations with intelligent question reformulation
 - **Conversation History** - AI-generated titles and persistent chat history across devices
 - **Streaming Responses** - Real-time answer generation with source attribution
-
+- **Dynamic Follow-up Questions** - AI-generated contextual questions to guide deeper exploration
 - **Smart Sharing** - Share specific conversation points with view-only access for recipients
 
 ### 🔧 **Developer-Friendly Architecture**

@@ -8,6 +8,27 @@ import { getSiteName } from "@/utils/client/siteConfig";
 import { SiteConfig } from "@/types/siteConfig";
 import { getCachedPublicAudioUrl } from "@/utils/client/getPublicAudioUrl";
 
+/**
+ * Truncates a question to approximately 60 characters, breaking at word boundaries when possible
+ */
+const truncateQuestion = (question: string, maxLength: number = 60): string => {
+  if (question.length <= maxLength) {
+    return question;
+  }
+
+  // Find the last space before maxLength
+  const truncated = question.substring(0, maxLength);
+  const lastSpaceIndex = truncated.lastIndexOf(" ");
+
+  // If we found a space and it's not too close to the beginning, break there
+  if (lastSpaceIndex > maxLength * 0.7) {
+    return truncated.substring(0, lastSpaceIndex) + "...";
+  }
+
+  // Otherwise, just truncate at maxLength
+  return truncated + "...";
+};
+
 interface CopyButtonProps {
   markdown: string;
   answerId?: string;
@@ -113,10 +134,12 @@ const CopyButton: React.FC<CopyButtonProps> = ({ markdown, answerId, sources, qu
       contentToCopy += "\n\n### Sources\n" + (await formatSources(sources));
     }
 
+    const truncatedQuestion = truncateQuestion(question);
+    const siteName = getSiteName(siteConfig);
     contentToCopy +=
-      `\n\n### From:\n\n[${getSiteName(siteConfig)}](` +
-      `${process.env.NEXT_PUBLIC_BASE_URL}/answers/${answerId}` +
-      ")";
+      `\n\n### From:\n\n[${truncatedQuestion}](` +
+      `${process.env.NEXT_PUBLIC_BASE_URL}/share/${answerId}` +
+      `) (${siteName})`;
     const htmlContent = convertMarkdownToHtml(contentToCopy);
     await copyTextToClipboard(htmlContent, true);
     setCopied(true);

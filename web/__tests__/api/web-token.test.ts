@@ -243,7 +243,7 @@ describe("/api/web-token", () => {
     // Setup request from public answers page
     req.cookies = {}; // No auth cookie
     req.headers = {
-      referer: "https://example.com/answers/abc123",
+      referer: "https://example.com/share/abc123",
     };
 
     await handler(req as NextApiRequest, res as NextApiResponse);

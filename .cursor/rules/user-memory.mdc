@@ -34,19 +34,10 @@ All requests must reference stored knowledge in:
    ### Mistake: [Short Description]
 
    **Wrong**:
-   ```
-
    [Insert incorrect code or logic]
 
-   ```
-
    **Correct**:
-   ```
-
    [Insert corrected code or logic]
-
-   ```
-
    ```
 
 **Important:** Do not log mistakes that are extremely specific to a circumstance.
@@ -69,7 +60,7 @@ All requests must reference stored knowledge in:
 
 ## Rule: Prevent Repetition
 
-### On Every Request
+### On Every Request do this
 
 - Always **read @self.md** before applying logic.
 - If a related mistake is found:

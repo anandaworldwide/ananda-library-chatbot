@@ -63,6 +63,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const publicJwtPaths = [
       "/contact", // Contact form
       "/answers/", // Public answers
+      "/share/", // Public share
       "/verify", // Activation page must be able to fetch a token without siteAuth
     ];
 

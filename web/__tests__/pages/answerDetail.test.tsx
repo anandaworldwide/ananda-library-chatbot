@@ -106,7 +106,7 @@ describe("SingleAnswer page", () => {
       replace: jest.fn(),
       push: jest.fn(),
       back: jest.fn(),
-      asPath: "/answers/test-id",
+      asPath: "/share/test-id",
     });
 
     // Mock sudo context

@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { Answer, AdminAction } from '@/types/answer';
-import TruncatedMarkdown from './TruncatedMarkdown';
-import SourcesList from './SourcesList';
-import { useMultipleCollections } from '../hooks/useMultipleCollections';
-import { SiteConfig } from '../types/siteConfig';
-import { fetchWithAuth } from '@/utils/client/tokenManager';
+import React, { useState } from "react";
+import Link from "next/link";
+import { Answer, AdminAction } from "@/types/answer";
+import TruncatedMarkdown from "./TruncatedMarkdown";
+import SourcesList from "./SourcesList";
+import { useMultipleCollections } from "../hooks/useMultipleCollections";
+import { SiteConfig } from "../types/siteConfig";
+import { fetchWithAuth } from "@/utils/client/tokenManager";
 
 interface DownvotedAnswerReviewProps {
   answer: Answer;
@@ -13,24 +13,18 @@ interface DownvotedAnswerReviewProps {
   isSudoAdmin?: boolean;
 }
 
-const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
-  answer,
-  siteConfig,
-  isSudoAdmin = false,
-}) => {
+const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({ answer, siteConfig, isSudoAdmin = false }) => {
   const hasMultipleCollections = useMultipleCollections(siteConfig);
 
-  const [adminAction, setAdminAction] = useState<AdminAction | undefined>(
-    answer.adminAction,
-  );
+  const [adminAction, setAdminAction] = useState<AdminAction | undefined>(answer.adminAction);
 
   const handleReview = async (newAction: AdminAction) => {
     try {
       const updatedAction = adminAction === newAction ? undefined : newAction;
-      const response = await fetchWithAuth('/api/adminAction', {
-        method: 'POST',
+      const response = await fetchWithAuth("/api/adminAction", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ docId: answer.id, action: updatedAction }),
       });
@@ -38,10 +32,10 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
       if (response.ok) {
         setAdminAction(updatedAction);
       } else {
-        console.error('Failed to update admin action');
+        console.error("Failed to update admin action");
       }
     } catch (error) {
-      console.error('Error updating admin action:', error);
+      console.error("Error updating admin action:", error);
     }
   };
 
@@ -52,14 +46,14 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
           _nanoseconds: number;
         }
       | string
-      | null,
+      | null
   ) => {
     if (!timestamp) {
-      return 'Unknown date';
+      return "Unknown date";
     }
 
     // Handle string timestamp format
-    if (typeof timestamp === 'string') {
+    if (typeof timestamp === "string") {
       return new Date(timestamp).toLocaleString();
     }
 
@@ -68,7 +62,7 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
       return new Date(timestamp._seconds * 1000).toLocaleString();
     }
 
-    return 'Unknown date';
+    return "Unknown date";
   };
 
   // Parse sources if they are stored as a string
@@ -84,8 +78,8 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
               {
                 pageContent: answer.sources,
                 metadata: {
-                  type: 'text',
-                  title: 'Legacy Source',
+                  type: "text",
+                  title: "Legacy Source",
                 },
               },
             ];
@@ -95,14 +89,11 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
 
   return (
     <div className="bg-white shadow-md rounded-lg p-4 mb-4">
-      <Link
-        href={`/answers/${answer.id}`}
-        className="text-black-600 hover:underline cursor-pointer"
-      >
+      <Link href={`/share/${answer.id}`} className="text-black-600 hover:underline cursor-pointer">
         <h2 className="text-xl font-semibold mb-2">{answer.question}</h2>
       </Link>
       <div className="mb-4">
-        <TruncatedMarkdown markdown={answer.answer || ''} maxCharacters={300} />
+        <TruncatedMarkdown markdown={answer.answer || ""} maxCharacters={300} />
       </div>
       {parsedSources.length > 0 && (
         <SourcesList
@@ -116,49 +107,40 @@ const DownvotedAnswerReview: React.FC<DownvotedAnswerReviewProps> = ({
         <div className="mt-3 p-3 bg-red-50 rounded-md border border-red-100">
           {answer.feedbackReason && (
             <div className="mb-2">
-              <span className="font-medium text-red-700">Reason:</span>{' '}
+              <span className="font-medium text-red-700">Reason:</span>{" "}
               <span className="text-gray-800">{answer.feedbackReason}</span>
             </div>
           )}
           {answer.feedbackComment && (
             <div>
-              <span className="font-medium text-red-700">Comments:</span>{' '}
+              <span className="font-medium text-red-700">Comments:</span>{" "}
               <span className="text-gray-800">{answer.feedbackComment}</span>
             </div>
           )}
         </div>
       )}
-      <div className="mt-2 text-sm text-gray-600">
-        Downvoted on: {formatTimestamp(answer.timestamp)}
-      </div>
+      <div className="mt-2 text-sm text-gray-600">Downvoted on: {formatTimestamp(answer.timestamp)}</div>
       {answer.adminAction && (
         <div className="mt-2 text-sm text-gray-600">
-          Previous admin action: {answer.adminAction} on{' '}
-          {formatTimestamp(answer.adminActionTimestamp!)}
+          Previous admin action: {answer.adminAction} on {formatTimestamp(answer.adminActionTimestamp!)}
         </div>
       )}
       <div className="mt-4 flex justify-end space-x-2">
         <button
-          onClick={() => handleReview('affirmed')}
-          className={`px-4 py-2 rounded ${
-            adminAction === 'affirmed' ? 'bg-red-500 text-white' : 'bg-red-200'
-          }`}
+          onClick={() => handleReview("affirmed")}
+          className={`px-4 py-2 rounded ${adminAction === "affirmed" ? "bg-red-500 text-white" : "bg-red-200"}`}
         >
           Affirm Downvote
         </button>
         <button
-          onClick={() => handleReview('ignore')}
-          className={`px-4 py-2 rounded ${
-            adminAction === 'ignore' ? 'bg-gray-500 text-white' : 'bg-gray-200'
-          }`}
+          onClick={() => handleReview("ignore")}
+          className={`px-4 py-2 rounded ${adminAction === "ignore" ? "bg-gray-500 text-white" : "bg-gray-200"}`}
         >
           Ignore
         </button>
         <button
-          onClick={() => handleReview('fixed')}
-          className={`px-4 py-2 rounded ${
-            adminAction === 'fixed' ? 'bg-green-500 text-white' : 'bg-green-200'
-          }`}
+          onClick={() => handleReview("fixed")}
+          className={`px-4 py-2 rounded ${adminAction === "fixed" ? "bg-green-500 text-white" : "bg-green-200"}`}
         >
           Fixed
         </button>

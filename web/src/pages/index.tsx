@@ -1000,6 +1000,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
   // Function to handle suggestion pill clicks
   const handleSuggestionClick = (suggestion: string) => {
+    // Track suggestion pill click in Google Analytics
+    logEvent("suggestion_pill_click", "Engagement", suggestion);
+
     // Submit the suggestion as a new question
     handleSubmit(new Event("submit") as unknown as React.FormEvent, suggestion);
   };

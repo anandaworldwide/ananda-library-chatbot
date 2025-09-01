@@ -14,9 +14,20 @@ jest.mock("../../src/utils/client/clipboard", () => ({
 
 jest.mock("../../src/utils/client/getPublicAudioUrl", () => ({
   getCachedPublicAudioUrl: jest.fn().mockImplementation((filename: string, library?: string) => {
-    const encodedLibrary = library ? encodeURIComponent(library.toLowerCase()) : "";
-    const path = library ? `${encodedLibrary}/${filename}` : filename;
-    return Promise.resolve(`https://ananda-chatbot.s3.us-west-1.amazonaws.com/public/audio/${path}`);
+    let path = filename;
+    if (library && !filename.includes("/")) {
+      path = `${library.toLowerCase()}/${filename}`;
+    } else if (library) {
+      path = `${library.toLowerCase()}/${filename}`;
+    }
+
+    // Properly encode each path segment to match real implementation
+    const encodedPath = path
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+
+    return Promise.resolve(`https://ananda-chatbot.s3.us-west-1.amazonaws.com/public/audio/${encodedPath}`);
   }),
 }));
 
@@ -593,5 +604,112 @@ describe("CopyButton", () => {
     expect(copyTextToClipboard).toHaveBeenCalledWith(expect.stringContaining("<p>Test question</p>"), true);
     expect(copyTextToClipboard).toHaveBeenCalledWith(expect.stringContaining('<h2 id="answer">Answer:</h2>'), true);
     expect(copyTextToClipboard).toHaveBeenCalledWith(expect.stringContaining("<p>Test markdown</p>"), true);
+  });
+
+  it("formats 'From:' section with truncated question as hyperlink and site name in parentheses", async () => {
+    const longQuestionProps = {
+      ...mockProps,
+      question: "This is a very long question that should be truncated because it exceeds the maximum length limit",
+      siteConfig: mockSiteConfig,
+    };
+
+    const { getByTitle } = render(<CopyButton {...longQuestionProps} />);
+    const button = getByTitle("Copy answer to clipboard");
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callHtml = mockedCopyTextToClipboard.mock.calls[0][0];
+
+    // Should contain truncated question as link text and site name in parentheses
+    expect(callHtml).toContain(
+      '<a href="https://test.com/share/123">This is a very long question that should be truncated…</a> (Test Site)'
+    );
+  });
+
+  it("formats 'From:' section with short question as hyperlink and site name in parentheses", async () => {
+    const shortQuestionProps = {
+      ...mockProps,
+      question: "Short question",
+      siteConfig: mockSiteConfig,
+    };
+
+    const { getByTitle } = render(<CopyButton {...shortQuestionProps} />);
+    const button = getByTitle("Copy answer to clipboard");
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callHtml = mockedCopyTextToClipboard.mock.calls[0][0];
+
+    // Should contain full question as link text (no truncation) and site name in parentheses
+    expect(callHtml).toContain('<a href="https://test.com/share/123">Short question</a> (Test Site)');
+  });
+
+  it("truncates question at word boundary when possible", async () => {
+    const wordBoundaryProps = {
+      ...mockProps,
+      question: "This is a question that should be truncated at a word boundary instead of mid-word",
+      siteConfig: mockSiteConfig,
+    };
+
+    const { getByTitle } = render(<CopyButton {...wordBoundaryProps} />);
+    const button = getByTitle("Copy answer to clipboard");
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callHtml = mockedCopyTextToClipboard.mock.calls[0][0];
+
+    // Should truncate at word boundary, not mid-word
+    expect(callHtml).toContain(
+      '<a href="https://test.com/share/123">This is a question that should be truncated at a word…</a> (Test Site)'
+    );
+    // Should not contain partial words
+    expect(callHtml).not.toContain("boundar…");
+  });
+
+  it("should properly convert audio sources to HTML links (regression test)", async () => {
+    const audioSourceProps = {
+      ...mockProps,
+      sources: [
+        {
+          pageContent: "audio content",
+          metadata: {
+            title: "Spiritual Marriage & Family 8/2/80",
+            type: "audio",
+            library: "Treasures",
+            filename: "Thumb drive from Krishna 7-2024/MP3 2017/sp-marriage-8-2-80.mp3",
+            start_time: 1871, // 31:11
+          },
+        },
+      ],
+    };
+
+    const { getByTitle } = render(<CopyButton {...audioSourceProps} />);
+    const button = getByTitle("Copy answer to clipboard");
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    expect(mockedCopyTextToClipboard).toHaveBeenCalled();
+    const callHtml = mockedCopyTextToClipboard.mock.calls[0][0];
+
+    // This test ensures audio sources with complex filenames are properly converted to HTML links
+
+    // Should NOT contain raw markdown syntax
+    expect(callHtml).not.toContain("[Spiritual Marriage & Family 8/2/80](https://");
+
+    // Should contain properly formatted HTML link with encoded URL
+    expect(callHtml).toContain(
+      '<a href="https://ananda-chatbot.s3.us-west-1.amazonaws.com/public/audio/treasures/Thumb%20drive%20from%20Krishna%207-2024/MP3%202017/sp-marriage-8-2-80.mp3">Spiritual Marriage & Family 8/2/80</a> (Treasures) → 31:11'
+    );
   });
 });

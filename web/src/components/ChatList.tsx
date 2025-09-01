@@ -28,7 +28,7 @@ export const ChatList: React.FC<ChatListProps> = ({
     <ul className={`list-disc pl-5 text-sm space-y-1 ${className}`}>
       {chats.map((chat) => (
         <li key={chat.id} className="mb-1">
-          <a href={`/answers/${chat.id}`} className="text-blue-600 underline hover:text-blue-800">
+          <a href={`/share/${chat.id}`} className="text-blue-600 underline hover:text-blue-800">
             {chat.question}
           </a>
 

@@ -117,7 +117,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // Generate public URL (non-expiring)
-    const publicUrl = `https://${bucketName}.s3.us-west-1.amazonaws.com/${fullS3Key}`;
+    // Properly encode the S3 key path segments to handle spaces and special characters
+    const encodedS3Key = fullS3Key
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+
+    const publicUrl = `https://${bucketName}.s3.us-west-1.amazonaws.com/${encodedS3Key}`;
 
     return res.status(200).json({
       publicUrl,
