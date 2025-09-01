@@ -675,6 +675,27 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         sidebarFunctionsRef.current.updateConversationTitle(data.convId, data.title);
       }
 
+      // Handle follow-up question suggestions
+      if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+        setMessageState((prevState) => {
+          const newMessages = [...prevState.messages];
+          const lastMessage = newMessages[newMessages.length - 1];
+
+          if (lastMessage && lastMessage.type === "apiMessage") {
+            // Add suggestions to the last AI message
+            newMessages[newMessages.length - 1] = {
+              ...lastMessage,
+              suggestions: data.suggestions,
+            };
+          }
+
+          return {
+            ...prevState,
+            messages: newMessages,
+          };
+        });
+      }
+
       if (data.done) {
         // Check for docId one more time right when done is received.
         // Immediately set loading to false so the buttons appear right away
@@ -975,6 +996,12 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Function to handle input change in the chat input field
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setQuery(e.target.value);
+  };
+
+  // Function to handle suggestion pill clicks
+  const handleSuggestionClick = (suggestion: string) => {
+    // Submit the suggestion as a new question
+    handleSubmit(new Event("submit") as unknown as React.FormEvent, suggestion);
   };
 
   // Effect to fetch collection queries on component mount
@@ -1389,6 +1416,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                       lastMessageRef={lastMessageRef}
                       voteError={voteError}
                       allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
+                      onSuggestionClick={handleSuggestionClick}
                     />
                   ))}
                   {/* Display timing metrics for sudo users */}

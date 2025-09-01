@@ -8,4 +8,5 @@ export interface ExtendedAIMessage {
   docId?: string;
   collection?: string;
   isSudoAdmin?: boolean;
+  suggestions?: string[]; // Follow-up question suggestions
 }

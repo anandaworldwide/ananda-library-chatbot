@@ -504,3 +504,32 @@ processing, get specific guidance on fixing format issues.
 
 **Files Modified**: `manage_queue.py` with `validate_playlists_file_format()` function and enhanced
 `process_playlists_file()` error handling.
+
+### 21. Jest Pre-commit Configuration Module Resolution Issues
+
+**Issue**: Tests that import admin page components fail in pre-commit Jest configuration due to Firebase initialization
+requirements, even though they pass in regular Jest runs.
+
+**Root Cause**: Pre-commit Jest config was not properly inheriting module resolution settings from the main Jest
+configuration. The main config exports a function (`createJestConfig(customJestConfig)`) but the pre-commit config was
+trying to spread it directly, resulting in empty configuration.
+
+**Solution**: Fixed pre-commit Jest configuration to properly extract and inherit module resolution settings from the
+main config.
+
+**Pattern**: For Jest configurations that export functions, always call the function to get the actual configuration
+object before spreading it.
+
+**Implementation**: Modified `web/src/config/jest.pre-commit.cjs` to:
+
+1. Properly handle the main config function vs object distinction
+2. Recreate the `customJestConfig` object with proper `moduleNameMapper` settings
+3. Ensure `@/services/firebase` and other path mappings work correctly
+
+**Key Fix**: Instead of trying to extract config from `createJestConfig(customJestConfig)`, directly recreate the
+`customJestConfig` object with all necessary module resolution settings.
+
+**Result**: Pre-commit hooks now properly resolve module paths and can mock Firebase services correctly.
+
+**Applied To**: Fixed `digestSelfProvision.test.ts` by ensuring proper module resolution in pre-commit Jest
+configuration.

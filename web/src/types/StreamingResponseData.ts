@@ -23,5 +23,6 @@ export interface StreamingResponseData {
     totalTokens?: number;
     firstTokenGenerated?: number;
   };
+  suggestions?: string[]; // Follow-up question suggestions as pill buttons
   log?: string;
 }

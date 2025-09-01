@@ -101,8 +101,15 @@ interface MediaTypes {
 interface TimingMetrics {
   startTime: number;
   pineconeSetupComplete?: number;
+  vectorStoreSetupComplete?: number;
+  chainExecutionStart?: number;
   firstTokenGenerated?: number;
   firstByteTime?: number;
+  answerStreamingComplete?: number;
+  suggestionsGenerationStart?: number;
+  suggestionsGenerationComplete?: number;
+  documentSaveStart?: number;
+  documentSaveComplete?: number;
   totalTokens?: number;
   tokensPerSecond?: number;
   totalTime?: number;
@@ -763,12 +770,6 @@ async function handleChatRequest(req: NextRequest) {
     startTime: Date.now(),
   };
 
-  const stages = {
-    startTime: Date.now(),
-    pineconeComplete: 0,
-    retrievalComplete: 0, // This might not be tracked separately anymore
-  };
-
   // Load site configuration
   const siteConfig = loadSiteConfigSync();
 
@@ -879,13 +880,11 @@ async function handleChatRequest(req: NextRequest) {
             }
             if (data.done && !performanceLogged) {
               performanceLogged = true;
-              timingMetrics.totalTime = Date.now() - timingMetrics.startTime;
               const streamingTime = timingMetrics.firstByteTime ? Date.now() - timingMetrics.firstByteTime : 0;
               timingMetrics.totalTokens = tokensStreamed;
               if (streamingTime > 0) {
                 timingMetrics.tokensPerSecond = Math.round((tokensStreamed / streamingTime) * 1000);
               }
-              logPerformanceMetrics(timingMetrics, stages, modelName);
               data.timing = {
                 ttfb: timingMetrics.firstByteTime ? timingMetrics.firstByteTime - timingMetrics.startTime : 0,
                 total: timingMetrics.totalTime,
@@ -961,7 +960,7 @@ async function handleChatRequest(req: NextRequest) {
           sanitizedInput.mediaTypes,
           siteConfig
         );
-        stages.pineconeComplete = Date.now();
+        timingMetrics.pineconeSetupComplete = Date.now();
 
         // --- Call the Encapsulated RAG Chain Function ---
         const { retriever /*, documentPromise, resolveWithDocuments*/ } = await setupVectorStoreAndRetriever(
@@ -970,8 +969,10 @@ async function handleChatRequest(req: NextRequest) {
           sendData, // Pass sendData for internal progress updates
           sourceCount
         );
+        timingMetrics.vectorStoreSetupComplete = Date.now();
 
         // Execute the full chain
+        timingMetrics.chainExecutionStart = Date.now();
         const { fullResponse, finalDocs, restatedQuestion } = await setupAndExecuteLanguageModelChain(
           retriever,
           sanitizedInput.question, // Use sanitized question (whitespace normalized) for AI processing
@@ -982,13 +983,16 @@ async function handleChatRequest(req: NextRequest) {
           siteConfig,
           timingMetrics.startTime,
           sanitizedInput.temporarySession || false,
-          req // Pass the request object for geo-awareness
+          req, // Pass the request object for geo-awareness
+          timingMetrics // Pass timing metrics for detailed tracking
         );
         // --- End of Encapsulated Call ---
+        timingMetrics.answerStreamingComplete = Date.now();
 
         // SAVE DOCUMENT AFTER RESPONSE IS READY
         if (!sanitizedInput.temporarySession) {
           try {
+            timingMetrics.documentSaveStart = Date.now();
             // Use pre-generated conversationId for new conversations, or provided convId for follow-ups
             const finalConversationId = conversationId || sanitizedInput.convId || uuidv4();
 
@@ -1039,8 +1043,10 @@ async function handleChatRequest(req: NextRequest) {
               }
               // For follow-up messages, no title generation needed
             }
+            timingMetrics.documentSaveComplete = Date.now();
           } catch (saveError) {
             // Silently handle save errors to avoid breaking the chat flow
+            timingMetrics.documentSaveComplete = Date.now();
           }
         }
       } catch (error: unknown) {
@@ -1054,6 +1060,12 @@ async function handleChatRequest(req: NextRequest) {
             // Title generation errors are already logged, just ensure cleanup
           }
         }
+
+        // Mark total completion time
+        timingMetrics.totalTime = Date.now() - timingMetrics.startTime;
+
+        // Log comprehensive performance metrics
+        logPerformanceMetrics(timingMetrics, modelName);
 
         if (!isControllerClosed) {
           controller.close();
@@ -1073,37 +1085,107 @@ async function handleChatRequest(req: NextRequest) {
   return corsMiddleware.addCorsHeaders(response, req, siteConfig);
 }
 
-// Consolidated logging function for better summary messages
-function logPerformanceMetrics(metrics: TimingMetrics, stages: Record<string, number>, modelName: string = "unknown") {
+// Comprehensive performance logging function
+function logPerformanceMetrics(metrics: TimingMetrics, modelName: string = "unknown") {
   // Use setTimeout to log metrics asynchronously
   setTimeout(() => {
-    const summaryMetrics = {
-      setup: stages.pineconeComplete ? stages.pineconeComplete - stages.startTime : 0,
-      retrieval: stages.retrievalComplete ? stages.retrievalComplete - stages.pineconeComplete : 0,
-      llmThinkTime:
-        metrics.firstTokenGenerated && stages.retrievalComplete
-          ? metrics.firstTokenGenerated - stages.retrievalComplete
+    const {
+      startTime,
+      pineconeSetupComplete,
+      vectorStoreSetupComplete,
+      chainExecutionStart,
+      firstTokenGenerated,
+      firstByteTime,
+      answerStreamingComplete,
+      suggestionsGenerationStart,
+      suggestionsGenerationComplete,
+      documentSaveStart,
+      documentSaveComplete,
+      totalTime,
+      tokensPerSecond,
+      totalTokens,
+    } = metrics;
+
+    // Calculate detailed timing breakdown
+    const timings = {
+      pineconeSetup: pineconeSetupComplete ? pineconeSetupComplete - startTime : 0,
+      vectorStoreSetup:
+        vectorStoreSetupComplete && pineconeSetupComplete ? vectorStoreSetupComplete - pineconeSetupComplete : 0,
+      chainExecution:
+        chainExecutionStart && vectorStoreSetupComplete ? chainExecutionStart - vectorStoreSetupComplete : 0,
+      llmThinkTime: firstTokenGenerated && chainExecutionStart ? firstTokenGenerated - chainExecutionStart : 0,
+      tokenDelivery: firstByteTime && firstTokenGenerated ? firstByteTime - firstTokenGenerated : 0,
+      ttfb: firstByteTime ? firstByteTime - startTime : 0,
+      answerStreaming: answerStreamingComplete && firstByteTime ? answerStreamingComplete - firstByteTime : 0,
+      suggestionsGeneration:
+        suggestionsGenerationComplete && suggestionsGenerationStart
+          ? suggestionsGenerationComplete - suggestionsGenerationStart
           : 0,
-      tokenDelivery:
-        metrics.firstByteTime && metrics.firstTokenGenerated ? metrics.firstByteTime - metrics.firstTokenGenerated : 0,
-      ttfb: metrics.firstByteTime ? metrics.firstByteTime - stages.startTime : 0,
-      streaming:
-        metrics.firstByteTime && metrics.totalTime ? metrics.totalTime - (metrics.firstByteTime - stages.startTime) : 0,
-      total: metrics.totalTime || 0,
-      tokensPerSecond: metrics.tokensPerSecond || 0,
-      totalTokens: metrics.totalTokens || 0,
+      documentSave: documentSaveComplete && documentSaveStart ? documentSaveComplete - documentSaveStart : 0,
+      totalSessionTime: totalTime || 0,
     };
 
+    // Calculate what's unaccounted for in TTFB
+    const accountedTTFB =
+      timings.pineconeSetup +
+      timings.vectorStoreSetup +
+      timings.chainExecution +
+      timings.llmThinkTime +
+      timings.tokenDelivery;
+    const unaccountedTTFB = timings.ttfb - accountedTTFB;
+
+    // Build setup phase section conditionally
+    const setupPhaseLines = [];
+    if (timings.pineconeSetup > 50) {
+      setupPhaseLines.push(`        Pinecone setup: ${(timings.pineconeSetup / 1000).toFixed(2)}s`);
+    }
+    if (timings.vectorStoreSetup > 50) {
+      setupPhaseLines.push(`        Vector store setup: ${(timings.vectorStoreSetup / 1000).toFixed(2)}s`);
+    }
+    if (timings.chainExecution > 50) {
+      setupPhaseLines.push(`        Chain execution prep: ${(timings.chainExecution / 1000).toFixed(2)}s`);
+    }
+
+    // Build AI processing section conditionally
+    const aiProcessingLines = [];
+    if (timings.llmThinkTime > 50) {
+      aiProcessingLines.push(`        LLM think time: ${(timings.llmThinkTime / 1000).toFixed(2)}s`);
+    }
+    if (timings.tokenDelivery > 50) {
+      aiProcessingLines.push(`        Token delivery: ${(timings.tokenDelivery / 1000).toFixed(2)}s`);
+    }
+    if (unaccountedTTFB > 100) {
+      aiProcessingLines.push(`        Unaccounted TTFB: ${(unaccountedTTFB / 1000).toFixed(2)}s`);
+    }
+
     console.log(`
-    ⚡️ Chat Performance:
+    ⚡️ Chat Performance Breakdown:
       Model: ${modelName}
-      Setup: ${(summaryMetrics.setup / 1000).toFixed(2)}s
-      Retrieval: ${(summaryMetrics.retrieval / 1000).toFixed(2)}s
-      LLM think time: ${(summaryMetrics.llmThinkTime / 1000).toFixed(2)}s
-      Token delivery: ${(summaryMetrics.tokenDelivery / 1000).toFixed(2)}s
-      (Time to first byte: ${(summaryMetrics.ttfb / 1000).toFixed(2)}s)
-      Streaming: ${(summaryMetrics.streaming / 1000).toFixed(2)}s (${summaryMetrics.tokensPerSecond} chars/sec)
-      Total time: ${(summaryMetrics.total / 1000).toFixed(2)}s (${summaryMetrics.totalTokens} total tokens)
+      
+      ${
+        setupPhaseLines.length > 0
+          ? `🔧 Setup Phase:
+${setupPhaseLines.join("\n")}`
+          : ""
+      }
+      
+      ${
+        aiProcessingLines.length > 0
+          ? `🤖 AI Processing:
+${aiProcessingLines.join("\n")}
+        → Time to first byte: ${(timings.ttfb / 1000).toFixed(2)}s`
+          : `🤖 AI Processing:
+        → Time to first byte: ${(timings.ttfb / 1000).toFixed(2)}s`
+      }
+      
+      📡 Streaming & Processing:
+        Answer streaming: ${(timings.answerStreaming / 1000).toFixed(2)}s (${tokensPerSecond || 0} chars/sec)
+        ${timings.suggestionsGeneration > 0 ? `Suggestions generation: ${(timings.suggestionsGeneration / 1000).toFixed(2)}s` : "Suggestions: skipped"}
+        Document save: ${(timings.documentSave / 1000).toFixed(2)}s
+      
+      📊 Summary:
+        Answer complete: ${answerStreamingComplete ? ((answerStreamingComplete - startTime) / 1000).toFixed(2) : "N/A"}s
+        Total session: ${(timings.totalSessionTime / 1000).toFixed(2)}s (${totalTokens || 0} tokens)
       `);
-  }, 0); // Using setTimeout with 0 delay to execute after the current execution stack
+  }, 0);
 }

@@ -955,6 +955,54 @@ export const makeComparisonChains = async (
   }
 };
 
+// Generate follow-up question suggestions using GPT-3.5-turbo
+async function generateFollowUpSuggestions(
+  originalQuestion: string,
+  aiResponse: string,
+  sendData: (data: StreamingResponseData) => void
+): Promise<string[]> {
+  try {
+    // Create a lightweight model for suggestions
+    const suggestionModel = new ChatOpenAI({
+      modelName: "gpt-3.5-turbo",
+      temperature: 0.7,
+      maxTokens: 150,
+    });
+
+    const prompt = `Based on the user's question and the AI's response, generate 3 short follow-up questions as pill buttons.
+
+User Question: "${originalQuestion}"
+
+AI Response: "${aiResponse.substring(0, 500)}..."
+
+Generate 3 short, specific follow-up questions (3-5 words each) that would be natural next steps in this conversation. Return only a JSON array of strings, no explanations or formatting.
+
+Example format: ["Daily routine tips", "Common mistakes", "Advanced techniques"]`;
+
+    const response = await suggestionModel.invoke([{ role: "user", content: prompt }]);
+
+    if (!response.content || typeof response.content !== "string") {
+      return [];
+    }
+
+    // Parse the JSON response
+    const suggestions = JSON.parse(response.content.trim()) as string[];
+
+    // Validate and filter suggestions
+    const validSuggestions = suggestions
+      .filter((suggestion) => typeof suggestion === "string" && suggestion.length >= 3 && suggestion.length <= 50)
+      .slice(0, 3); // Limit to 3 suggestions
+
+    // Send suggestions to frontend
+    sendData({ suggestions: validSuggestions });
+
+    return validSuggestions;
+  } catch (error) {
+    console.error("Failed to generate follow-up suggestions:", error);
+    return [];
+  }
+}
+
 // Export the setupAndExecuteLanguageModelChain function
 export async function setupAndExecuteLanguageModelChain(
   retriever: ReturnType<PineconeStore["asRetriever"]>,
@@ -966,7 +1014,8 @@ export async function setupAndExecuteLanguageModelChain(
   siteConfig?: AppSiteConfig | null,
   startTime?: number,
   temporarySession: boolean = false,
-  request?: NextRequest
+  request?: NextRequest,
+  timingMetrics?: any // Accept timing metrics for detailed tracking
 ): Promise<{ fullResponse: string; finalDocs: Document[]; restatedQuestion: string }> {
   const TIMEOUT_MS = process.env.NODE_ENV === "test" ? 1000 : 30000;
   const RETRY_DELAY_MS = process.env.NODE_ENV === "test" ? 10 : 1000;
@@ -1238,6 +1287,28 @@ export async function setupAndExecuteLanguageModelChain(
 
       sendData({ done: true, timing: finalTiming });
       sendData({ log: "[RAG] Sent done event to frontend" });
+
+      // Generate follow-up suggestions in parallel (non-blocking)
+      if (timingMetrics) {
+        timingMetrics.suggestionsGenerationStart = Date.now();
+      }
+
+      const suggestionsPromise = generateFollowUpSuggestions(
+        sanitizedQuestion,
+        fullResponse || result.answer.content,
+        sendData
+      ).catch((error) => {
+        console.error("Suggestion generation failed:", error);
+        // Return empty suggestions on failure - graceful degradation
+        return [];
+      });
+
+      // Wait for suggestions to complete (they're sent via sendData when ready)
+      await suggestionsPromise;
+
+      if (timingMetrics) {
+        timingMetrics.suggestionsGenerationComplete = Date.now();
+      }
 
       // Use the streamed fullResponse as the authoritative answer since it's what was sent to the frontend
       // result.sourceDocuments are the correctly filtered documents from makeChain.

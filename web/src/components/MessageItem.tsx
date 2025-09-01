@@ -11,6 +11,7 @@ import SourcesList from "@/components/SourcesList";
 import CopyButton from "@/components/CopyButton";
 import { SiteConfig } from "@/types/siteConfig";
 import { ExtendedAIMessage } from "@/types/ExtendedAIMessage";
+import SuggestionPills from "@/components/SuggestionPills";
 
 import { useSudo } from "@/contexts/SudoContext";
 import { Components } from "react-markdown";
@@ -34,6 +35,7 @@ interface MessageItemProps {
   voteError?: string | null;
   allowAllAnswersPage: boolean;
   showSourcesBelow?: boolean;
+  onSuggestionClick?: (suggestion: string) => void;
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({
@@ -53,6 +55,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
   lastMessageRef,
   messageKey,
   showSourcesBelow = false,
+  onSuggestionClick,
 }) => {
   const { isSudoUser } = useSudo();
 
@@ -144,6 +147,15 @@ const MessageItem: React.FC<MessageItemProps> = ({
                 {message.message.replace(/\n/g, "  \n").replace(/\n\n/g, "\n\n")}
               </ReactMarkdown>
               {showSourcesBelow && renderSources()}
+
+              {/* Follow-up question suggestions - only for AI messages */}
+              {message.type === "apiMessage" && message.suggestions && message.suggestions.length > 0 && (
+                <SuggestionPills
+                  suggestions={message.suggestions}
+                  onSuggestionClick={onSuggestionClick || (() => {})}
+                  loading={loading}
+                />
+              )}
             </div>
             <div className="mt-2 flex items-center space-x-2">
               {message.type === "apiMessage" && index !== 0 && (!loading || !isLastMessage) && (

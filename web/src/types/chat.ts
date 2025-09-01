@@ -1,10 +1,11 @@
-import { Document } from 'langchain/document';
+import { Document } from "langchain/document";
 
 export interface Message {
-  type: 'apiMessage' | 'userMessage';
+  type: "apiMessage" | "userMessage";
   message: string;
   sourceDocs?: Document[] | null;
   isStreaming?: boolean;
   docId?: string;
   collection?: string;
+  suggestions?: string[]; // Follow-up question suggestions
 }
