@@ -1451,11 +1451,13 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                 <div className="flex items-center justify-center mb-3 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
                   <span className="material-icons text-purple-600 text-lg mr-2">lock</span>
                   <span className="text-purple-800 text-sm font-medium">
-                    Temporary Session Active (
-                    <button onClick={handleTemporarySessionChange} className="underline hover:text-purple-900">
-                      end
+                    Temporary Session Active
+                    <button
+                      onClick={handleTemporarySessionChange}
+                      className="ml-2 px-2 py-1 text-xs bg-purple-200 hover:bg-purple-300 text-purple-800 rounded border border-purple-300 transition-colors"
+                    >
+                      End
                     </button>
-                    )
                   </span>
                 </div>
               )}
@@ -1540,6 +1542,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                     isLoadingQueries={isLoadingQueries}
                     sourceCount={sourceCount}
                     setSourceCount={setSourceCount}
+                    onTemporarySessionChange={handleTemporarySessionChange}
                   />
                 )}
               </div>

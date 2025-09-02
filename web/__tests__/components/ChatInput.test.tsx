@@ -89,6 +89,7 @@ describe("ChatInput", () => {
     isNearBottom: true,
     setIsNearBottom: jest.fn(),
     isLoadingQueries: false,
+    onTemporarySessionChange: jest.fn(),
     sourceCount: 0,
     setSourceCount: jest.fn(),
   };
@@ -189,7 +190,7 @@ describe("ChatInput", () => {
     render(<ChatInput {...defaultProps} temporarySession={true} />);
 
     // Check that the temporary session indicator is displayed
-    expect(screen.getByText("Temporary Session Active")).toBeInTheDocument();
+    expect(screen.getByText(/Temporary Session Active/)).toBeInTheDocument();
     expect(screen.getByText("hourglass_empty")).toBeInTheDocument();
   });
 

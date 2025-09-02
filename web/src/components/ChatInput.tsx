@@ -66,6 +66,7 @@ interface ChatInputProps {
   showTemporarySessionOptions?: boolean;
   sourceCount: number;
   setSourceCount: (count: number) => void;
+  onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -91,7 +92,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   setQuery,
   setIsNearBottom,
   isLoadingQueries,
-
+  onTemporarySessionChange,
   sourceCount,
   setSourceCount,
 }) => {
@@ -286,7 +287,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           {temporarySession && (
             <div className="flex items-center justify-center mb-3 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
               <span className="material-icons text-purple-600 text-lg mr-2">hourglass_empty</span>
-              <span className="text-purple-800 text-sm font-medium">Temporary Session Active</span>
+              <span className="text-purple-800 text-sm font-medium">
+                Temporary Session Active
+                <button
+                  onClick={onTemporarySessionChange}
+                  className="ml-2 px-2 py-1 text-xs bg-purple-200 hover:bg-purple-300 text-purple-800 rounded border border-purple-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!onTemporarySessionChange}
+                >
+                  End
+                </button>
+              </span>
             </div>
           )}
 
