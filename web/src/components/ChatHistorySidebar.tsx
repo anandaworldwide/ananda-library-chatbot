@@ -233,6 +233,7 @@ export default function ChatHistorySidebar({
                     <div className="absolute right-3 top-2 z-10">
                       <ConversationMenu
                         isVisible={true}
+                        isRowSelected={isCurrentConversation}
                         onRename={() => handleRename(conversation)}
                         onDelete={() => handleDelete(conversation)}
                       />

@@ -6,6 +6,7 @@ interface ConversationMenuProps {
   onRename: () => void;
   onDelete: () => void;
   isVisible: boolean;
+  isRowSelected?: boolean;
 }
 
 interface MenuPosition {
@@ -14,7 +15,7 @@ interface MenuPosition {
   right?: number;
 }
 
-export default function ConversationMenu({ onRename, onDelete, isVisible }: ConversationMenuProps) {
+export default function ConversationMenu({ onRename, onDelete, isVisible, isRowSelected }: ConversationMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition>({ top: 0, left: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -152,7 +153,9 @@ export default function ConversationMenu({ onRename, onDelete, isVisible }: Conv
       <button
         ref={buttonRef}
         onClick={handleMenuClick}
-        className="p-1 rounded-md text-gray-500 hover:bg-gray-200 hover:bg-opacity-60 transition-colors duration-150 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:[@media(hover:hover)]:opacity-100"
+        className={`p-1 rounded-md text-gray-500 hover:bg-gray-200 hover:bg-opacity-60 transition-colors duration-150 ${
+          isRowSelected ? "opacity-100" : "opacity-0"
+        } group-hover:[@media(hover:hover)]:opacity-100 ${isRowSelected ? "bg-gray-100" : ""}`}
         aria-label="Conversation options"
         title="More options"
       >
