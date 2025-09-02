@@ -209,17 +209,19 @@ export default function ChatHistorySidebar({
                   <div
                     key={conversation.convId}
                     className={`relative rounded-lg transition-colors duration-150 mb-1 group ${
-                      isCurrentConversation ? "bg-white bg-opacity-80 shadow-sm" : "hover:bg-white hover:bg-opacity-60"
+                      isCurrentConversation
+                        ? "bg-white bg-opacity-80 shadow-sm"
+                        : "lg:hover:bg-white lg:hover:bg-opacity-60"
                     }`}
                   >
                     <button
                       onClick={() => handleConversationClick(conversation)}
-                      className="w-full text-left p-2 pr-8 rounded-lg"
+                      className="w-full text-left p-2 pr-12 rounded-lg"
                     >
                       <div className="flex-1 min-w-0">
                         <p
                           className={`text-sm font-medium truncate ${
-                            isCurrentConversation ? "text-blue-700" : "text-gray-900 group-hover:text-blue-600"
+                            isCurrentConversation ? "text-blue-700" : "text-gray-900 lg:group-hover:text-blue-600"
                           }`}
                         >
                           {conversation.title}
@@ -228,7 +230,7 @@ export default function ChatHistorySidebar({
                     </button>
 
                     {/* Three-dot menu */}
-                    <div className="absolute right-2 top-2">
+                    <div className="absolute right-3 top-2">
                       <ConversationMenu
                         isVisible={true}
                         onRename={() => handleRename(conversation)}
