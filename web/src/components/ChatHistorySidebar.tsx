@@ -230,7 +230,7 @@ export default function ChatHistorySidebar({
                     </button>
 
                     {/* Three-dot menu */}
-                    <div className="absolute right-3 top-2">
+                    <div className="absolute right-3 top-2 z-10">
                       <ConversationMenu
                         isVisible={true}
                         onRename={() => handleRename(conversation)}

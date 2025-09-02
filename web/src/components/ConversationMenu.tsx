@@ -152,7 +152,7 @@ export default function ConversationMenu({ onRename, onDelete, isVisible }: Conv
       <button
         ref={buttonRef}
         onClick={handleMenuClick}
-        className="p-1 rounded-md hover:bg-gray-200 hover:bg-opacity-60 transition-colors duration-150 opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+        className="p-1 rounded-md text-gray-500 hover:bg-gray-200 hover:bg-opacity-60 transition-colors duration-150 opacity-100 lg:opacity-0 group-hover:opacity-100"
         aria-label="Conversation options"
         title="More options"
       >

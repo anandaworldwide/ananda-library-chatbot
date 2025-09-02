@@ -24,7 +24,7 @@ process.env.SITE_ID = site;
 console.log(`Starting Next.js with SITE_ID: ${site}`);
 
 // Pass the environment to the spawned process
-const nextDev = spawn("next", ["dev"], {
+const nextDev = spawn("next", ["dev", "-H", "0.0.0.0"], {
   stdio: "inherit",
   env: process.env,
 });
