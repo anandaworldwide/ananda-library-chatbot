@@ -1043,8 +1043,6 @@ async function generateFollowUpSuggestions(
     // Send suggestions to frontend immediately for real-time display
     sendData({ suggestions: validSuggestions });
 
-    console.log("🔍 SUGGESTIONS DEBUG: Generated suggestions:", validSuggestions);
-
     // Return suggestions for saving to database
     return validSuggestions;
   } catch (error) {

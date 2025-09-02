@@ -12,7 +12,7 @@ jest.mock("@/components/CollectionSelector", () =>
   ))
 );
 
-jest.mock("@/components/RandomQueries", () =>
+jest.mock("@/components/SuggestedQueries", () =>
   jest.fn().mockImplementation(({ queries, onQueryClick, onShuffleClick }) => (
     <div data-testid="random-queries">
       {queries.map((query: string, index: number) => (
@@ -76,7 +76,7 @@ describe("ChatInput", () => {
     temporarySession: false,
     error: null,
     setError: jest.fn(),
-    randomQueries: ["How can I meditate?", "What is yoga?"],
+    suggestedQueries: ["How can I meditate?", "What is yoga?"],
     shuffleQueries: jest.fn(),
     textAreaRef: { current: null } as React.RefObject<HTMLTextAreaElement>,
     mediaTypes: { text: true, audio: false, youtube: false },
@@ -92,6 +92,7 @@ describe("ChatInput", () => {
     onTemporarySessionChange: jest.fn(),
     sourceCount: 0,
     setSourceCount: jest.fn(),
+    isChatEmpty: true,
   };
 
   beforeEach(() => {

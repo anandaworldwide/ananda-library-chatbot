@@ -13,6 +13,7 @@ export interface ChatHistoryItem {
   title?: string; // AI-generated title
   sources?: string; // JSON string of source documents
   suggestions?: string[]; // Follow-up question suggestions
+  restatedQuestion?: string; // AI-generated restated question for better context
 }
 
 export interface ConversationGroup {

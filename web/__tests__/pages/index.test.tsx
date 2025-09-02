@@ -68,11 +68,11 @@ jest.mock("@/hooks/usePopup", () => ({
   }),
 }));
 
-jest.mock("@/hooks/useRandomQueries", () => ({
+jest.mock("@/hooks/useSuggestedQueries", () => ({
   __esModule: true,
-  useRandomQueries: () => ({
-    randomQueries: [],
-    isLoading: false,
+  useSuggestedQueries: () => ({
+    suggestedQueries: [],
+    shuffleQueries: jest.fn(),
   }),
 }));
 

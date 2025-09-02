@@ -22,7 +22,7 @@ import AnswersPageLink from "@/components/AnswersPageLink";
 
 // Hook imports
 import usePopup from "@/hooks/usePopup";
-import { useRandomQueries } from "@/hooks/useRandomQueries";
+import { useSuggestedQueries } from "@/hooks/useSuggestedQueries";
 import { useChat } from "@/hooks/useChat";
 import { useMultipleCollections } from "@/hooks/useMultipleCollections";
 
@@ -472,6 +472,13 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   const accumulatedResponseRef = useRef("");
 
   const [sourceCount, setSourceCount] = useState<number>(siteConfig?.defaultNumSources || 4);
+  const [, setAiSuggestionsRefresh] = useState<(() => void) | null>(null);
+  const aiSuggestionsRefreshRef = useRef<(() => void) | null>(null);
+
+  const handleAISuggestionsRefreshReady = useCallback((fn: () => void) => {
+    aiSuggestionsRefreshRef.current = fn;
+    setAiSuggestionsRefresh(() => fn);
+  }, []);
 
   // Add state for timing information
   const [timingMetrics, setTimingMetrics] = useState<{
@@ -1032,6 +1039,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       }
 
       setLoading(false);
+
+      // Refresh AI suggestions after successful completion
+      aiSuggestionsRefreshRef.current?.();
     } catch (error) {
       console.error("Error in handleSubmit:", error);
       setError(error instanceof Error ? error.message : "An error occurred while streaming the response.");
@@ -1103,18 +1113,19 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     return queries;
   }, [collection, collectionQueries]);
 
-  // Custom hook for managing random queries
-  const { randomQueries, shuffleQueries } = useRandomQueries(queriesForCollection, 3);
+  // Custom hook for managing suggested queries
+  const { suggestedQueries, shuffleQueries } = useSuggestedQueries(queriesForCollection, 3);
 
-  // Helper function to determine if chat is empty (only has greeting message)
-  const isChatEmpty = useMemo(() => {
+  // Helper function to determine if user has completed any Q&A (show suggestions until first Q&A)
+  const shouldShowSuggestions = useMemo(() => {
     if (!messages || messages.length === 0) return true;
-    if (messages.length === 1) {
-      const firstMessage = messages[0];
-      return firstMessage.type === "apiMessage" && firstMessage.message === getGreeting(siteConfig);
-    }
-    return false;
-  }, [messages, siteConfig]);
+
+    // Count user messages (questions)
+    const userMessages = messages.filter((msg) => msg.type === "userMessage");
+
+    // Show suggestions until user has asked at least one question
+    return userMessages.length === 0;
+  }, [messages]);
 
   // Function to handle temporary session changes
   const handleTemporarySessionChange = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -1398,7 +1409,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         onNewChat={handleNewChat}
         temporarySession={temporarySession}
         onTemporarySessionChange={handleTemporarySessionChange}
-        isChatEmpty={isChatEmpty}
+        isChatEmpty={shouldShowSuggestions}
       >
         {showPopup && popupMessage && <Popup message={popupMessage} onClose={closePopup} siteConfig={siteConfig} />}
 
@@ -1526,7 +1537,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                     temporarySession={temporarySession}
                     error={chatError}
                     setError={setError}
-                    randomQueries={randomQueries}
+                    suggestedQueries={suggestedQueries}
                     shuffleQueries={shuffleQueries}
                     textAreaRef={textAreaRef}
                     mediaTypes={mediaTypes}
@@ -1543,6 +1554,8 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                     sourceCount={sourceCount}
                     setSourceCount={setSourceCount}
                     onTemporarySessionChange={handleTemporarySessionChange}
+                    onAISuggestionsRefreshReady={handleAISuggestionsRefreshReady}
+                    isChatEmpty={shouldShowSuggestions}
                   />
                 )}
               </div>

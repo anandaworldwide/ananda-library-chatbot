@@ -23,7 +23,7 @@ import React, { useState, useEffect } from "react";
 import DOMPurify from "dompurify";
 import validator from "validator";
 import styles from "@/styles/Home.module.css";
-import RandomQueries from "@/components/RandomQueries";
+import SuggestedQueries from "@/components/SuggestedQueries";
 import CollectionSelector from "@/components/CollectionSelector";
 import { SiteConfig } from "@/types/siteConfig";
 import {
@@ -50,7 +50,7 @@ interface ChatInputProps {
   temporarySession: boolean;
   error: string | null;
   setError: (error: string | null) => void;
-  randomQueries: string[];
+  suggestedQueries: string[];
   shuffleQueries: () => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   mediaTypes: { text: boolean; audio: boolean; youtube: boolean };
@@ -67,6 +67,8 @@ interface ChatInputProps {
   sourceCount: number;
   setSourceCount: (count: number) => void;
   onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onAISuggestionsRefreshReady?: (refreshFn: () => void) => void;
+  isChatEmpty: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -81,7 +83,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   temporarySession,
   error,
   setError,
-  randomQueries,
+  suggestedQueries,
   shuffleQueries,
   textAreaRef,
   mediaTypes,
@@ -95,6 +97,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onTemporarySessionChange,
   sourceCount,
   setSourceCount,
+  onAISuggestionsRefreshReady,
+  isChatEmpty,
 }) => {
   // State variables for managing component behavior
   const [, setLocalQuery] = useState<string>("");
@@ -506,17 +510,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             ))}
         </form>
 
-        {/* Suggested queries section */}
-        {!isLoadingQueries && showSuggestedQueries && randomQueries.length > 0 && (
+        {/* Suggested queries section - only show when chat is empty */}
+        {!isLoadingQueries && showSuggestedQueries && suggestedQueries.length > 0 && isChatEmpty && (
           <div className="w-full mb-4">
             {suggestionsExpanded && (
               <>
-                <RandomQueries
-                  queries={randomQueries}
+                <SuggestedQueries
+                  queries={suggestedQueries}
                   onQueryClick={onQueryClick}
                   isLoading={loading}
                   shuffleQueries={shuffleQueries}
                   isMobile={isMobile}
+                  siteConfig={siteConfig}
+                  onRefreshFunctionReady={onAISuggestionsRefreshReady}
                 />
               </>
             )}

@@ -583,7 +583,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
     temporarySession: false,
     error,
     setError,
-    randomQueries: [],
+    suggestedQueries: [],
     shuffleQueries: () => {},
     textAreaRef,
     mediaTypes,
@@ -601,6 +601,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
     setSourceCount,
     useExtraSources: false,
     onExtraSourcesChange: () => {},
+    isChatEmpty: true, // Required property for ChatInput component
   };
 
   const handleCompareAnotherClick = () => {
