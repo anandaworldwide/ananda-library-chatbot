@@ -31,7 +31,7 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
   const [hasEnoughHistory, setHasEnoughHistory] = useState<boolean>(false);
   const [initializing, setInitializing] = useState<boolean>(true);
 
-  // Check if user has enough chat history (5+ questions) - only for sites that require login
+  // Check if user has enough chat history - only for sites that require login
   useEffect(() => {
     const checkChatHistory = async () => {
       try {

@@ -60,7 +60,7 @@ async function suggestPromptHandler(
     }));
 
     // Check if we have enough history
-    if (chats.length < 5) {
+    if (chats.length < 3) {
       return res.status(200).json({
         suggestions: [],
         hasEnoughHistory: false,
