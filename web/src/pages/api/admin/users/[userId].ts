@@ -62,32 +62,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       if (!doc.exists) return res.status(404).json({ error: "User not found" });
       const data = doc.data() || {};
 
-      // Fetch user's chats only if requester is superuser and user has a UUID
-      let chats: any[] = [];
-      if (data.uuid && requesterRole === "superuser") {
+      // Fetch user's total question count for all admin roles
+      let conversationCount = 0;
+
+      if (data.uuid && (requesterRole === "admin" || requesterRole === "superuser")) {
         try {
-          const query = db
-            .collection(getAnswersCollectionName())
-            .where("uuid", "==", data.uuid)
-            .orderBy("timestamp", "desc")
-            .limit(50);
+          const countQuery = db.collection(getAnswersCollectionName()).where("uuid", "==", data.uuid);
 
-          const snapshot = await firestoreQueryGet(query, "admin user chats list", `uuid: ${data.uuid}, limit: 50`);
+          const countSnapshot = await firestoreQueryGet(countQuery, "admin user question count", `uuid: ${data.uuid}`);
 
-          chats = snapshot.docs.map((doc: any) => {
-            const chatData = doc.data();
-            return {
-              id: doc.id,
-              question: chatData.question,
-              answer: chatData.answer,
-              timestamp: chatData.timestamp,
-
-              collection: chatData.collection,
-            };
-          });
+          // Count total number of questions (documents)
+          conversationCount = countSnapshot.docs.length;
         } catch (chatError: any) {
-          // Don't fail the entire request if chats can't be fetched
-          console.warn("Failed to fetch user chats:", chatError?.message);
+          // Don't fail the entire request if question count can't be fetched
+          console.warn("Failed to fetch user question count:", chatError?.message);
         }
       }
 
@@ -103,7 +91,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           entitlements: data.entitlements || {},
           firstName: typeof (data as any)?.firstName === "string" ? (data as any).firstName : null,
           lastName: typeof (data as any)?.lastName === "string" ? (data as any).lastName : null,
-          chats,
+          conversationCount,
         },
       });
     } catch (err: any) {
@@ -161,31 +149,23 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         const updated = await db.collection(usersCol).doc(currentId).get();
         const data = updated.data() || {};
 
-        // Fetch user's chats only if requester is superuser and user has a UUID
-        let chats: any[] = [];
-        if (data.uuid && requesterRole === "superuser") {
+        // Fetch user's total question count for all admin roles
+        let conversationCount = 0;
+
+        if (data.uuid && (requesterRole === "admin" || requesterRole === "superuser")) {
           try {
-            const query = db
-              .collection(getAnswersCollectionName())
-              .where("uuid", "==", data.uuid)
-              .orderBy("timestamp", "desc")
-              .limit(50);
+            const countQuery = db.collection(getAnswersCollectionName()).where("uuid", "==", data.uuid);
 
-            const snapshot = await firestoreQueryGet(query, "admin user chats list", `uuid: ${data.uuid}, limit: 50`);
+            const countSnapshot = await firestoreQueryGet(
+              countQuery,
+              "admin user question count",
+              `uuid: ${data.uuid}`
+            );
 
-            chats = snapshot.docs.map((doc: any) => {
-              const chatData = doc.data();
-              return {
-                id: doc.id,
-                question: chatData.question,
-                answer: chatData.answer,
-                timestamp: chatData.timestamp,
-
-                collection: chatData.collection,
-              };
-            });
+            // Count total number of questions (documents)
+            conversationCount = countSnapshot.docs.length;
           } catch (chatError: any) {
-            console.warn("Failed to fetch user chats:", chatError?.message);
+            console.warn("Failed to fetch user question count:", chatError?.message);
           }
         }
 
@@ -201,7 +181,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             entitlements: data.entitlements || {},
             firstName: typeof (data as any)?.firstName === "string" ? (data as any).firstName : null,
             lastName: typeof (data as any)?.lastName === "string" ? (data as any).lastName : null,
-            chats,
+            conversationCount,
           },
         });
       }
@@ -273,31 +253,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       const finalDoc = await (db as NonNullable<typeof db>).collection(usersCol).doc(newEmail).get();
       const out = finalDoc.data() || {};
 
-      // Fetch user's chats only if requester is superuser and user has a UUID
-      let chats: any[] = [];
-      if (out.uuid && requesterRole === "superuser") {
+      // Fetch user's total question count for all admin roles
+      let conversationCount = 0;
+
+      if (out.uuid && (requesterRole === "admin" || requesterRole === "superuser")) {
         try {
-          const query = db
-            .collection(getAnswersCollectionName())
-            .where("uuid", "==", out.uuid)
-            .orderBy("timestamp", "desc")
-            .limit(50);
+          const countQuery = db.collection(getAnswersCollectionName()).where("uuid", "==", out.uuid);
 
-          const snapshot = await firestoreQueryGet(query, "admin user chats list", `uuid: ${out.uuid}, limit: 50`);
+          const countSnapshot = await firestoreQueryGet(countQuery, "admin user question count", `uuid: ${out.uuid}`);
 
-          chats = snapshot.docs.map((doc: any) => {
-            const chatData = doc.data();
-            return {
-              id: doc.id,
-              question: chatData.question,
-              answer: chatData.answer,
-              timestamp: chatData.timestamp,
-
-              collection: chatData.collection,
-            };
-          });
+          // Count total number of questions (documents)
+          conversationCount = countSnapshot.docs.length;
         } catch (chatError: any) {
-          console.warn("Failed to fetch user chats:", chatError?.message);
+          console.warn("Failed to fetch user question count:", chatError?.message);
         }
       }
 
@@ -343,7 +311,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           entitlements: out.entitlements || {},
           firstName: typeof (out as any)?.firstName === "string" ? (out as any).firstName : null,
           lastName: typeof (out as any)?.lastName === "string" ? (out as any).lastName : null,
-          chats,
+          conversationCount,
         },
       });
     } catch (err: any) {

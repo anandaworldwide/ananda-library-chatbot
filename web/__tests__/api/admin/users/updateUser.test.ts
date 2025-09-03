@@ -21,6 +21,7 @@ jest.mock("firebase-admin", () => ({
 // Users collection name (site-scoped)
 jest.mock("@/utils/server/firestoreUtils", () => ({
   getUsersCollectionName: jest.fn(() => "test_users"),
+  getAnswersCollectionName: jest.fn(() => "test_answers"),
 }));
 
 // Mock site config for email brand
@@ -38,6 +39,13 @@ jest.mock("@aws-sdk/client-ses", () => ({
 const writeAuditLogSpy = jest.fn();
 jest.mock("@/utils/server/auditLog", () => ({
   writeAuditLog: (...args: any[]) => writeAuditLogSpy(...args),
+}));
+
+// Mock Firestore retry utils
+jest.mock("@/utils/server/firestoreRetryUtils", () => ({
+  firestoreQueryGet: jest.fn().mockResolvedValue({
+    docs: [], // Empty array for conversation count tests
+  }),
 }));
 
 // Minimal in-memory Firestore mock with transaction support
@@ -224,10 +232,10 @@ describe("/api/admin/users/[userId] update user", () => {
     });
   });
 
-  it("GET returns chats only for superusers", async () => {
+  it("GET returns conversation count for all admin roles, no chat details", async () => {
     const jwtUtils = await import("@/utils/server/jwtUtils");
 
-    // Test admin user - should not get chats
+    // Test admin user - should get conversation count only
     (jwtUtils.verifyToken as jest.Mock).mockReturnValue({ email: "admin@example.com", role: "admin" });
     const adminReq = createMocks<NextApiRequest, NextApiResponse>({
       method: "GET",
@@ -238,9 +246,11 @@ describe("/api/admin/users/[userId] update user", () => {
     await handler(adminReq.req, adminReq.res);
     expect(adminReq.res.statusCode).toBe(200);
     const adminResponse = adminReq.res._getJSONData();
-    expect(adminResponse.user.chats).toEqual([]); // Empty array for non-superusers
+    expect(adminResponse.user).not.toHaveProperty("chats"); // No chats field at all
+    expect(adminResponse.user).toHaveProperty("conversationCount");
+    expect(typeof adminResponse.user.conversationCount).toBe("number");
 
-    // Test superuser - should get chats (mocked)
+    // Test superuser - should also only get conversation count, no chat details
     (jwtUtils.verifyToken as jest.Mock).mockReturnValue({ email: "super@example.com", role: "superuser" });
     const superReq = createMocks<NextApiRequest, NextApiResponse>({
       method: "GET",
@@ -251,8 +261,9 @@ describe("/api/admin/users/[userId] update user", () => {
     await handler(superReq.req, superReq.res);
     expect(superReq.res.statusCode).toBe(200);
     const superResponse = superReq.res._getJSONData();
-    // Chats would be populated if the user had a UUID and chats existed
-    expect(superResponse.user).toHaveProperty("chats");
+    expect(superResponse.user).not.toHaveProperty("chats"); // No chats field for superusers either
+    expect(superResponse.user).toHaveProperty("conversationCount");
+    expect(typeof superResponse.user.conversationCount).toBe("number");
   });
 
   it("should update JWT cookie when admin changes their own email", async () => {
