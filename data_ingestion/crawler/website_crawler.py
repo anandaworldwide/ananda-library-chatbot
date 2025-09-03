@@ -909,15 +909,23 @@ class WebsiteCrawler:
                 ".webp",
                 ".rss",
                 ".xml",  # Added feed types
+                ".ico",  # Favicon files
+                ".css",  # Stylesheet files
+                ".js",  # JavaScript files
+                ".woff",
+                ".woff2",
+                ".ttf",
+                ".eot",  # Font files
             ]
-            # Added '/feed/' path check
-            if any(path.endswith(ext) for ext in skip_extensions) or "/feed/" in path:
+            # Check for media extensions and common non-HTML paths
+            if (
+                any(path.endswith(ext) for ext in skip_extensions)
+                or "/feed/" in path
+                or "/wp-content/uploads/" in path
+                or "/wp-includes/" in path
+                or "/wp-admin/" in path
+            ):
                 logging.debug(f"Skipping non-HTML content: {url}")
-                return False
-
-            # Skip wp-content uploads directory
-            if "/wp-content/uploads/" in path:
-                logging.debug(f"Skipping uploads directory: {url}")
                 return False
 
             # Skip anchor-only URLs or root path (already handled by crawler logic, but explicit check is fine)
@@ -1136,6 +1144,35 @@ class WebsiteCrawler:
             self.mark_url_status(url, "visited", content_hash="non_html")
             return False, None  # None indicates successful skip, not error
 
+        # Additional check: if URL changed significantly (like to a media file), skip it
+        final_url = response.url
+        if final_url != url:
+            final_path = final_url.lower()
+            media_extensions = [
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".gif",
+                ".svg",
+                ".webp",
+                ".avif",
+                ".heic",
+                ".pdf",
+                ".mp3",
+                ".mp4",
+                ".avi",
+                ".mov",
+                ".webm",
+                ".mkv",
+                ".zip",
+                ".doc",
+                ".docx",
+            ]
+            if any(final_path.endswith(ext) for ext in media_extensions):
+                logging.info(f"Skipping media redirect: {url} -> {final_url}")
+                self.mark_url_status(url, "visited", content_hash="media_redirect")
+                return False, None
+
         return True, None
 
     def _extract_page_content(
@@ -1144,8 +1181,55 @@ class WebsiteCrawler:
         """Extract content and links from page."""
         logging.debug(f"Starting content extraction for {url}")
 
-        page.wait_for_selector("body", timeout=15000)
-        logging.debug(f"Body selector found for {url}")
+        # Check if we've been redirected to non-HTML content
+        final_url = page.url
+        if final_url != url:
+            logging.debug(f"URL redirected from {url} to {final_url}")
+
+            # Check if final URL looks like a media file
+            final_path = final_url.lower()
+            media_extensions = [
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".gif",
+                ".svg",
+                ".pdf",
+                ".mp3",
+                ".mp4",
+                ".avi",
+                ".mov",
+                ".zip",
+                ".doc",
+                ".docx",
+            ]
+            if any(final_path.endswith(ext) for ext in media_extensions):
+                logging.info(f"Skipping media file redirect: {url} -> {final_url}")
+                self.mark_url_status(url, "visited", content_hash="media_redirect")
+                return None, []
+
+        try:
+            page.wait_for_selector("body", timeout=15000)
+            logging.debug(f"Body selector found for {url}")
+        except Exception as e:
+            # If body selector fails, check if this is actually an image or other non-HTML content
+            try:
+                # Try to get the content type from the page
+                content_type = page.evaluate(
+                    "() => document.contentType || document.mimeType || ''"
+                )
+                if content_type and not content_type.startswith("text/html"):
+                    logging.info(f"Skipping non-HTML content ({content_type}): {url}")
+                    self.mark_url_status(
+                        url, "visited", content_hash="non_html_content"
+                    )
+                    return None, []
+            except Exception:
+                pass
+
+            # If we still can't determine the content type, re-raise the original error
+            logging.warning(f"Failed to find body selector for {url}: {e}")
+            raise
 
         # Handle menu expansion
         try:
@@ -2432,14 +2516,103 @@ def _graceful_sleep(total_seconds: int, check_interval: int = 10) -> bool:
     return False
 
 
-def _setup_browser(p) -> tuple:
-    """Setup and return browser and page."""
-    browser = p.firefox.launch(
-        headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
-    )
-    page = browser.new_page()
-    page.set_extra_http_headers({"User-Agent": USER_AGENT})
-    return browser, page
+def _log_system_resources() -> None:
+    """Log current system resource usage for debugging."""
+    try:
+        import psutil
+
+        # Memory info
+        memory = psutil.virtual_memory()
+        logging.info(
+            f"System Memory: {memory.percent}% used ({memory.available / 1024**3:.1f}GB available)"
+        )
+
+        # CPU info
+        cpu_percent = psutil.cpu_percent(interval=1)
+        logging.info(f"CPU Usage: {cpu_percent}%")
+
+        # Disk space
+        disk = psutil.disk_usage("/")
+        logging.info(
+            f"Disk Space: {disk.percent}% used ({disk.free / 1024**3:.1f}GB free)"
+        )
+
+        # Process count
+        process_count = len(psutil.pids())
+        logging.info(f"Running Processes: {process_count}")
+
+    except ImportError:
+        logging.debug("psutil not available for system resource monitoring")
+    except Exception as e:
+        logging.debug(f"Error getting system resources: {e}")
+
+
+def _setup_browser(p, timeout_ms: int = 300000) -> tuple:
+    """Setup and return browser and page with retry logic and resource cleanup."""
+    max_retries = 3
+    base_delay = 10  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            # Log system resources before browser launch
+            if attempt == 0:
+                logging.info("System resources before browser launch:")
+                _log_system_resources()
+
+            # Force garbage collection before browser launch to free memory
+            import gc
+
+            gc.collect()
+
+            # Add small delay between attempts to let system recover
+            if attempt > 0:
+                delay = base_delay * (
+                    2 ** (attempt - 1)
+                )  # Exponential backoff: 10s, 20s
+                logging.info(
+                    f"Browser launch attempt {attempt + 1}/{max_retries} after {delay}s delay..."
+                )
+                logging.info("System resources before retry:")
+                _log_system_resources()
+                time.sleep(delay)
+
+            logging.info(
+                f"Launching Firefox browser (timeout: {timeout_ms / 1000:.0f}s)..."
+            )
+            browser = p.firefox.launch(
+                headless=True,
+                firefox_user_prefs={"media.volume_scale": "0.0"},
+                timeout=timeout_ms,  # 5 minutes default, configurable
+            )
+            page = browser.new_page()
+            page.set_extra_http_headers({"User-Agent": USER_AGENT})
+            logging.info("Browser launched successfully")
+            return browser, page
+
+        except Exception as e:
+            error_msg = (
+                f"Browser launch attempt {attempt + 1}/{max_retries} failed: {e}"
+            )
+            logging.warning(error_msg)
+
+            if attempt == max_retries - 1:
+                # Final attempt failed
+                logging.error(
+                    f"All {max_retries} browser launch attempts failed. Last error: {e}"
+                )
+                raise Exception(
+                    f"Browser launch failed after {max_retries} attempts: {e}"
+                ) from e
+
+            # Clean up any partially created browser instances
+            try:
+                if "browser" in locals():
+                    browser.close()
+            except Exception:
+                pass
+
+    # Should never reach here due to exception above, but for type safety
+    raise Exception("Unexpected error in browser setup")
 
 
 def _handle_browser_restart(
@@ -2451,7 +2624,7 @@ def _handle_browser_restart(
     batch_start_time: float,
     crawler: WebsiteCrawler,
 ) -> tuple:
-    """Handle browser restart logic and stats calculation."""
+    """Handle browser restart logic and stats calculation with enhanced resource management."""
     batch_attempts = len(batch_results)
     batch_successes = batch_results.count(True)
     batch_success_rate = (
@@ -2482,22 +2655,40 @@ def _handle_browser_restart(
     logging.info(
         f"Restarting browser after {pages_since_restart} pages (or due to error)..."
     )
+
+    # Enhanced browser cleanup with timeout protection
+    cleanup_start = time.time()
     try:
         if page and not page.is_closed():
+            logging.debug("Closing page...")
             page.close()
         if browser and browser.is_connected():
+            logging.debug("Closing browser...")
             browser.close()
+        cleanup_time = time.time() - cleanup_start
+        logging.debug(f"Browser cleanup completed in {cleanup_time:.1f}s")
     except Exception as close_err:
-        logging.warning(f"Error closing browser during restart: {close_err}")
+        cleanup_time = time.time() - cleanup_start
+        logging.warning(
+            f"Error closing browser during restart (after {cleanup_time:.1f}s): {close_err}"
+        )
 
-    browser = p.firefox.launch(
-        headless=True, firefox_user_prefs={"media.volume_scale": "0.0"}
-    )
-    page = browser.new_page()
-    page.set_extra_http_headers({"User-Agent": USER_AGENT})
-    logging.info("Browser restarted successfully.")
+    # Add delay to let system resources recover after cleanup
+    recovery_delay = 5  # seconds
+    logging.debug(f"Waiting {recovery_delay}s for system resource recovery...")
+    time.sleep(recovery_delay)
 
-    return browser, page, time.time(), []
+    # Use enhanced browser setup with retry logic
+    try:
+        browser, page = _setup_browser(p)
+        logging.info("Browser restarted successfully.")
+        return browser, page, time.time(), []
+    except Exception as restart_err:
+        logging.error(
+            f"Critical error: Browser restart failed completely: {restart_err}"
+        )
+        # Re-raise the exception to be handled by the main loop
+        raise
 
 
 def _process_page_content(
@@ -3158,6 +3349,19 @@ def run_crawl_loop(
         except SystemExit:
             logging.info("Received exit signal, shutting down crawler loop.")
         except Exception as e:
+            # Check if this is a browser launch failure
+            if "Browser launch failed" in str(e) or "TimeoutError" in str(e):
+                logging.error(f"Critical browser failure detected: {e}")
+                logging.error(
+                    "This may indicate system resource exhaustion or browser installation issues"
+                )
+                logging.error("Consider:")
+                logging.error("1. Restarting the system to free resources")
+                logging.error("2. Checking available memory and disk space")
+                logging.error(
+                    "3. Updating Playwright browsers: playwright install firefox"
+                )
+                logging.error("4. Running with --debug flag for more details")
             _handle_crawl_loop_exception(e)
         finally:
             _cleanup_browser(page, browser)
