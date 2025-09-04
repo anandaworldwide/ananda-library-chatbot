@@ -119,11 +119,14 @@ async function suggestPromptHandler(
 - Be under 15 words
 - Be conversational and relevant to the topics discussed
 - Offer different angles or aspects to explore
-- Aim for variety in question types (practical, conceptual, exploratory, etc.)
 
-IMPORTANT: You MUST provide exactly 3 questions. Do not provide fewer than 3. If you're struggling to find 3 different angles, think creatively about related topics, practical applications, or deeper exploration of the themes discussed. Ensure the questions are diverse in their approach and focus.
+IMPORTANT: You MUST provide exactly 3 questions. Do not provide fewer than 3. If you're struggling to find 3 different angles, think creatively about related topics, practical applications, or deeper exploration of the themes discussed.
 
-Recent conversation (NEWEST first, prioritize the first few exchanges):
+FOCUS: Pay special attention to the LAST 5 questions in the conversation below, but do NOT repeat the same angle three times. The 3 suggestions **must each explore a different sub-topic or perspective** so the user sees variety.
+
+(If the recent questions are all on one theme, introduce practical, conceptual, and exploratory angles rather than repeating the theme.)
+
+Recent conversation (NEWEST first):
 ${context}
 
 Format your response as exactly 3 numbered questions:
