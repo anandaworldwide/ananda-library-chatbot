@@ -25,6 +25,7 @@
 # Standard library imports
 import argparse
 import csv
+import gc
 import hashlib
 import json
 import logging
@@ -51,6 +52,17 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 from readability import Document
 
+# Optional imports (may not be available in all environments)
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+# Additional imports for specific functionality
+from contextlib import suppress
+
+from langchain_openai import OpenAIEmbeddings
+
 # OpenAI imports for rate limit handling (used for fallback checks)
 try:
     import openai
@@ -68,6 +80,7 @@ from utils.pinecone_utils import (
     get_pinecone_ingest_index_name,
 )
 from utils.progress_utils import is_exiting, setup_signal_handlers
+from utils.text_splitter_utils import SpacyTextSplitter
 
 # Configure logging with timestamps (will be updated in main() if debug mode)
 logging.basicConfig(
@@ -78,8 +91,16 @@ logging.basicConfig(
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
 
+# Suppress INFO messages from Pinecone library (plugin discovery, installation)
+pinecone_logger = logging.getLogger("pinecone")
+pinecone_logger.setLevel(logging.WARNING)
+
 # Define User-Agent constant
 USER_AGENT = "Ananda Chatbot Crawler"
+
+# Constants
+MAX_PLAYWRIGHT_FIREFOX_PROCS = 3  # Soft cap before we start force-cleaning
+CLEANUP_AGE_SECONDS = 600  # 10 minutes
 
 
 # --- Configuration Loading ---
@@ -250,8 +271,6 @@ class WebsiteCrawler:
     def text_splitter(self):
         """Lazy initialization of text splitter to avoid loading spaCy models in tests."""
         if self._text_splitter is None:
-            from utils.text_splitter_utils import SpacyTextSplitter
-
             # Historical: 1000 chars (~250 tokens) with 200 chars (~50 tokens, 20% overlap)
             self._text_splitter = SpacyTextSplitter(
                 chunk_size=250,  # Historical web content chunk size
@@ -263,8 +282,6 @@ class WebsiteCrawler:
     def embeddings(self):
         """Lazy initialization of embeddings to avoid API calls in tests."""
         if self._embeddings is None:
-            from langchain_openai import OpenAIEmbeddings
-
             model_name = os.getenv("OPENAI_INGEST_EMBEDDINGS_MODEL")
             if not model_name:
                 raise ValueError(
@@ -1213,8 +1230,8 @@ class WebsiteCrawler:
             logging.debug(f"Body selector found for {url}")
         except Exception as e:
             # If body selector fails, check if this is actually an image or other non-HTML content
-            try:
-                # Try to get the content type from the page
+            # Try to get the content type from the page (with error suppression)
+            with suppress(Exception):
                 content_type = page.evaluate(
                     "() => document.contentType || document.mimeType || ''"
                 )
@@ -1224,8 +1241,6 @@ class WebsiteCrawler:
                         url, "visited", content_hash="non_html_content"
                     )
                     return None, []
-            except Exception:
-                pass
 
             # If we still can't determine the content type, re-raise the original error
             logging.warning(f"Failed to find body selector for {url}: {e}")
@@ -1527,8 +1542,6 @@ class WebsiteCrawler:
             # Query Pinecone to find all vectors with this URL in metadata
             # Use a dummy vector for the query (we only care about metadata filtering)
             # Get vector dimension from environment
-            import os
-
             vector_dimension = int(os.getenv("OPENAI_EMBEDDING_DIMENSION", 3072))
             dummy_vector = [0.0] * vector_dimension
 
@@ -1680,8 +1693,6 @@ class WebsiteCrawler:
                 return text_content
             else:
                 # Fallback to page content and extract from HTML
-                from bs4 import BeautifulSoup
-
                 soup = BeautifulSoup(content, "html.parser")
                 return soup.get_text()
         except Exception:
@@ -2417,6 +2428,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Enable debug mode with detailed logging and page screenshots.",
     )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Run in non-interactive mode (auto-continue on health check warnings, suitable for daemons).",
+    )
     return parser.parse_args()
 
 
@@ -2428,7 +2444,7 @@ def initialize_pinecone(env_file: str) -> pinecone.Index | None:
         return None
 
     load_dotenv(env_file)
-    logging.info(f"Loaded environment from: {os.path.abspath(env_file)}")
+    logging.debug(f"Loaded environment from: {os.path.abspath(env_file)}")
 
     try:
         # Use shared utilities for Pinecone setup
@@ -2516,11 +2532,72 @@ def _graceful_sleep(total_seconds: int, check_interval: int = 10) -> bool:
     return False
 
 
+def _check_system_health() -> tuple[bool, list[str]]:
+    """Perform comprehensive system health check before starting crawler.
+    Returns (is_healthy, list_of_issues)."""
+    issues = []
+
+    try:
+        # Check memory - be more lenient for systems with plenty of RAM
+        memory = psutil.virtual_memory()
+
+        # Only flag as critical if memory usage is very high (>95%) OR available memory is very low (<512MB)
+        # For systems with 16GB+ RAM, 90% usage is normal and cached files don't count against available memory
+        available_gb = memory.available / 1024**3
+
+        if memory.percent > 95:
+            issues.append(
+                f"Critical memory usage: {memory.percent:.1f}% used ({available_gb:.1f}GB available)"
+            )
+        elif available_gb < 0.5:  # Less than 512MB available
+            issues.append(f"Very low memory available: {available_gb:.1f}GB")
+        elif (
+            memory.percent > 90 and available_gb < 2
+        ):  # High usage AND low availability
+            issues.append(
+                f"High memory pressure: {memory.percent:.1f}% used ({available_gb:.1f}GB available)"
+            )
+
+        # Check disk space
+        disk = psutil.disk_usage("/")
+        if disk.percent > 90:
+            issues.append(
+                f"Low disk space: {disk.percent}% used ({disk.free / 1024**3:.1f}GB free)"
+            )
+        elif disk.free < 5 * 1024**3:  # Less than 5GB free
+            issues.append(f"Very low disk space: {disk.free / 1024**3:.1f}GB free")
+
+        # Check for orphaned Firefox processes
+        firefox_count = 0
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                if proc.info["name"] and "firefox" in proc.info["name"].lower():
+                    firefox_count += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        if firefox_count > 2:  # More than 2 Firefox processes might indicate issues
+            issues.append(
+                f"Multiple Firefox processes detected: {firefox_count} (may indicate orphaned processes)"
+            )
+
+        # Check CPU usage
+        cpu_percent = psutil.cpu_percent(interval=1)
+        if cpu_percent > 80:
+            issues.append(f"High CPU usage: {cpu_percent}%")
+
+    except ImportError:
+        issues.append("psutil not available - cannot perform system health checks")
+    except Exception as e:
+        issues.append(f"Error during system health check: {e}")
+
+    is_healthy = len(issues) == 0
+    return is_healthy, issues
+
+
 def _log_system_resources() -> None:
     """Log current system resource usage for debugging."""
     try:
-        import psutil
-
         # Memory info
         memory = psutil.virtual_memory()
         logging.info(
@@ -2547,46 +2624,353 @@ def _log_system_resources() -> None:
         logging.debug(f"Error getting system resources: {e}")
 
 
-def _setup_browser(p, timeout_ms: int = 300000) -> tuple:
+def _log_process_diagnostics() -> None:
+    """Log detailed process diagnostics, especially Firefox-related processes."""
+    try:
+        # Count Firefox processes
+        firefox_processes = []
+        for proc in psutil.process_iter(["pid", "name", "cmdline", "memory_info"]):
+            try:
+                if proc.info["name"] and "firefox" in proc.info["name"].lower():
+                    firefox_processes.append(
+                        {
+                            "pid": proc.info["pid"],
+                            "name": proc.info["name"],
+                            "cmdline": proc.info["cmdline"][:3]
+                            if proc.info["cmdline"]
+                            else [],  # First 3 args only
+                            "memory_mb": proc.info["memory_info"].rss / 1024 / 1024
+                            if proc.info["memory_info"]
+                            else 0,
+                        }
+                    )
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        if firefox_processes:
+            # Only warn about potentially problematic Firefox processes
+            problematic_processes = [
+                proc
+                for proc in firefox_processes
+                if proc["memory_mb"] > 1000  # Over 1GB memory usage
+            ]
+
+            if problematic_processes:
+                logging.warning(
+                    f"Found {len(problematic_processes)} potentially problematic Firefox processes:"
+                )
+                for proc in problematic_processes[:3]:  # Show first 3 problematic ones
+                    logging.warning(
+                        f"  PID {proc['pid']}: High memory usage "
+                        f"(Memory: {proc['memory_mb']:.1f}MB) "
+                        f"CMD: {' '.join(proc['cmdline'][:2])}"
+                    )
+            else:
+                # Normal Firefox processes - log at INFO level
+                logging.info(
+                    f"Found {len(firefox_processes)} Firefox processes (normal):"
+                )
+                for proc in firefox_processes[:3]:  # Show first 3
+                    logging.info(
+                        f"  PID {proc['pid']}: {proc['name']} "
+                        f"(Memory: {proc['memory_mb']:.1f}MB)"
+                    )
+        else:
+            logging.info("No Firefox processes found")
+
+        # Check for Playwright processes
+        playwright_processes = []
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                if proc.info["name"] and (
+                    "playwright" in proc.info["name"].lower()
+                    or "node" in proc.info["name"].lower()
+                ):
+                    playwright_processes.append(proc.info["pid"])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        if playwright_processes:
+            logging.info(
+                f"Found {len(playwright_processes)} Playwright/Node processes: {playwright_processes[:10]}"
+            )
+
+    except ImportError:
+        logging.debug("psutil not available for process diagnostics")
+    except Exception as e:
+        logging.debug(f"Error in process diagnostics: {e}")
+
+
+def _should_skip_process(proc, current_pid: int) -> bool:
+    """Check if a process should be skipped from cleanup."""
+    return (
+        proc.info["pid"] == current_pid
+        or not (proc.info["name"] and "firefox" in proc.info["name"].lower())
+        or not proc.info["cmdline"]
+    )
+
+
+def _is_playwright_firefox_process(cmdline_str: str) -> bool:
+    """Check if command line indicates a Playwright Firefox process."""
+    # Must be headless (automated)
+    if "-headless" not in cmdline_str:
+        return False
+
+    # Must have Playwright-specific arguments
+    playwright_indicators = [
+        "-juggler-pipe",  # Playwright's communication pipe
+        "playwright",  # Direct Playwright reference
+        "sync_playwright",  # Playwright's sync API
+    ]
+
+    if not any(indicator in cmdline_str for indicator in playwright_indicators):
+        return False
+
+    # Must have a temporary profile (not user's permanent profile)
+    has_temp_profile = (
+        "/tmp/" in cmdline_str
+        or "/var/folders/" in cmdline_str  # macOS temp dirs
+        or "-profile" in cmdline_str
+        and (
+            "playwright" in cmdline_str.lower()
+            or "tmp" in cmdline_str.lower()
+            or "temp" in cmdline_str.lower()
+        )
+    )
+
+    return has_temp_profile
+
+
+def _is_process_old_enough(proc) -> tuple[bool, float]:
+    """Check if process is old enough to be considered orphaned."""
+    if not proc.info["create_time"]:
+        return False, 0
+
+    process_age = time.time() - proc.info["create_time"]
+
+    if process_age <= CLEANUP_AGE_SECONDS:  # 10 minutes
+        return False, process_age
+
+    return True, process_age
+
+
+def _is_resource_usage_high(proc) -> tuple[bool, float, float]:
+    """Check if process has high resource usage indicating it's problematic."""
+    try:
+        cpu_percent = proc.cpu_percent(interval=0.1)
+        memory_mb = proc.memory_info().rss / 1024 / 1024
+
+        is_high_usage = cpu_percent > 50 or memory_mb > 500
+        return is_high_usage, cpu_percent, memory_mb
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return False, 0, 0
+
+
+def _terminate_process_safely(proc) -> bool:
+    """Safely terminate a process with SIGTERM then SIGKILL if needed."""
+    try:
+        proc.send_signal(signal.SIGTERM)
+        time.sleep(2)  # Give more time to terminate gracefully
+
+        if proc.is_running():
+            logging.warning(
+                f"Process {proc.info['pid']} didn't respond to SIGTERM, using SIGKILL"
+            )
+            proc.kill()
+
+        return True
+    except Exception as kill_e:
+        logging.debug(f"Error killing process {proc.info['pid']}: {kill_e}")
+        return False
+
+
+def _cleanup_orphaned_processes() -> None:
+    """Clean up orphaned Playwright Firefox processes from this crawler session.
+
+    This function targets Firefox processes that are:
+    1. Running in headless mode (indicating automated use)
+    2. Have Playwright-specific arguments
+    3. Either: old enough (10+ minutes) OR exceed the soft cap limit
+    4. Have a temporary profile path (not user profiles)
+
+    This should NOT affect normal Firefox browsers used by users.
+    """
+    try:
+        orphaned_count = 0
+        current_pid = os.getpid()  # Our current process ID
+
+        # First pass: collect all Playwright Firefox processes
+        playwright_firefox_procs = []
+        for proc in psutil.process_iter(["pid", "name", "cmdline", "create_time"]):
+            try:
+                # Skip our own process and non-Firefox processes
+                if _should_skip_process(proc, current_pid):
+                    continue
+
+                cmdline_str = " ".join(proc.info["cmdline"])
+
+                # Check if this is a Playwright Firefox process
+                if not _is_playwright_firefox_process(cmdline_str):
+                    continue
+
+                # Collect this Playwright Firefox process for analysis
+                is_old_enough, process_age = _is_process_old_enough(proc)
+                is_high_usage, cpu_percent, memory_mb = _is_resource_usage_high(proc)
+
+                playwright_firefox_procs.append(
+                    {
+                        "proc": proc,
+                        "pid": proc.info["pid"],
+                        "age": process_age,
+                        "is_old": is_old_enough,
+                        "is_high_usage": is_high_usage,
+                        "cpu_percent": cpu_percent,
+                        "memory_mb": memory_mb,
+                    }
+                )
+
+            except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                continue
+
+        # Second pass: decide which processes to kill
+        processes_to_kill = []
+
+        # Kill processes that are old enough OR have high resource usage
+        for pf_proc in playwright_firefox_procs:
+            if pf_proc["is_old"] or pf_proc["is_high_usage"]:
+                processes_to_kill.append(pf_proc)
+
+        # If we still have too many Playwright Firefox processes, kill the oldest ones
+        if len(playwright_firefox_procs) > MAX_PLAYWRIGHT_FIREFOX_PROCS:
+            # Sort by age (oldest first) and add excess processes to kill list
+            sorted_procs = sorted(
+                playwright_firefox_procs, key=lambda x: x["age"], reverse=True
+            )
+            excess_count = len(playwright_firefox_procs) - MAX_PLAYWRIGHT_FIREFOX_PROCS
+
+            for pf_proc in sorted_procs[:excess_count]:
+                if pf_proc not in processes_to_kill:
+                    processes_to_kill.append(pf_proc)
+                    logging.warning(
+                        f"Adding Firefox process to kill list due to soft cap exceeded: "
+                        f"PID {pf_proc['pid']} (age: {pf_proc['age']:.0f}s)"
+                    )
+
+        # Kill the selected processes
+        for pf_proc in processes_to_kill:
+            if pf_proc["is_high_usage"]:
+                logging.warning(
+                    f"Killing high-usage Playwright Firefox process (PID: {pf_proc['pid']}) - "
+                    f"CPU: {pf_proc['cpu_percent']:.1f}%, Memory: {pf_proc['memory_mb']:.1f}MB, "
+                    f"Age: {pf_proc['age']:.0f}s"
+                )
+            else:
+                logging.warning(
+                    f"Killing old/excess Playwright Firefox process (PID: {pf_proc['pid']}, "
+                    f"age: {pf_proc['age']:.0f}s, CPU: {pf_proc['cpu_percent']:.1f}%, "
+                    f"Memory: {pf_proc['memory_mb']:.1f}MB)"
+                )
+
+            if _terminate_process_safely(pf_proc["proc"]):
+                orphaned_count += 1
+                logging.info(
+                    f"Successfully terminated Firefox process {pf_proc['pid']}"
+                )
+
+        if orphaned_count > 0:
+            logging.info(
+                f"Cleaned up {orphaned_count} orphaned Playwright Firefox processes"
+            )
+            time.sleep(3)  # Give system more time to fully clean up
+        else:
+            logging.debug("No orphaned Playwright Firefox processes found")
+
+    except ImportError:
+        logging.debug("psutil not available for orphaned process cleanup")
+    except Exception as e:
+        logging.debug(f"Error in orphaned process cleanup: {e}")
+
+
+def _setup_browser(p, timeout_ms: int = 60000) -> tuple:
     """Setup and return browser and page with retry logic and resource cleanup."""
     max_retries = 3
-    base_delay = 10  # seconds
+    base_delay = 15  # seconds - increased delay for better recovery
 
     for attempt in range(max_retries):
         try:
-            # Log system resources before browser launch
+            # Enhanced resource monitoring before browser launch
             if attempt == 0:
+                logging.info("=== BROWSER LAUNCH DIAGNOSTICS ===")
                 logging.info("System resources before browser launch:")
                 _log_system_resources()
+                _log_process_diagnostics()
+                logging.info("==================================")
 
             # Force garbage collection before browser launch to free memory
-            import gc
-
             gc.collect()
 
-            # Add small delay between attempts to let system recover
+            # Kill any orphaned Firefox processes before launching new one
+            _cleanup_orphaned_processes()
+
+            # Add increased delay between attempts to let system recover
             if attempt > 0:
                 delay = base_delay * (
                     2 ** (attempt - 1)
-                )  # Exponential backoff: 10s, 20s
-                logging.info(
-                    f"Browser launch attempt {attempt + 1}/{max_retries} after {delay}s delay..."
+                )  # Exponential backoff: 15s, 30s
+                logging.warning(
+                    f"Browser launch attempt {attempt + 1}/{max_retries} failed. "
+                    f"Waiting {delay}s before retry..."
                 )
                 logging.info("System resources before retry:")
                 _log_system_resources()
+                _log_process_diagnostics()
                 time.sleep(delay)
 
             logging.info(
-                f"Launching Firefox browser (timeout: {timeout_ms / 1000:.0f}s)..."
+                f"Launching Firefox browser (timeout: {timeout_ms / 1000:.0f}s, attempt {attempt + 1}/{max_retries})..."
             )
+
+            # Enhanced browser launch with better arguments
             browser = p.firefox.launch(
                 headless=True,
-                firefox_user_prefs={"media.volume_scale": "0.0"},
-                timeout=timeout_ms,  # 5 minutes default, configurable
+                firefox_user_prefs={
+                    "media.volume_scale": "0.0",
+                    "dom.disable_beforeunload": True,  # Reduce memory usage
+                    "browser.sessionstore.resume_from_crash": False,
+                    "browser.tabs.warnOnClose": False,
+                    "browser.tabs.warnOnCloseOtherTabs": False,
+                },
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-features=TranslateUI",
+                    "--disable-ipc-flooding-protection",
+                    "--max_old_space_size=4096",  # Increase Node.js heap size
+                ],
+                timeout=timeout_ms,  # 10 minutes default, configurable
             )
+
             page = browser.new_page()
             page.set_extra_http_headers({"User-Agent": USER_AGENT})
-            logging.info("Browser launched successfully")
+
+            # Test that browser is actually responsive
+            try:
+                test_result = page.evaluate("() => 'browser_ready'")
+                if test_result != "browser_ready":
+                    raise Exception("Browser launched but not responsive to JavaScript")
+            except Exception as test_e:
+                logging.warning(
+                    f"Browser launched but failed responsiveness test: {test_e}"
+                )
+                with suppress(Exception):
+                    browser.close()
+                raise Exception(f"Browser not responsive: {test_e}") from test_e
+
+            logging.info("Browser launched successfully and passed responsiveness test")
             return browser, page
 
         except Exception as e:
@@ -2595,21 +2979,48 @@ def _setup_browser(p, timeout_ms: int = 300000) -> tuple:
             )
             logging.warning(error_msg)
 
+            # Log additional diagnostic information on failure
+            if "timeout" in str(e).lower():
+                logging.warning("Browser launch timed out - this may indicate:")
+                logging.warning("  - Insufficient system memory or CPU resources")
+                logging.warning(
+                    "  - Previous browser processes not properly cleaned up"
+                )
+                logging.warning("  - System under heavy load")
+                _log_process_diagnostics()
+            elif "connection" in str(e).lower():
+                logging.warning(
+                    "Browser connection failed - check network connectivity"
+                )
+
             if attempt == max_retries - 1:
-                # Final attempt failed
+                # Final attempt failed - provide comprehensive error info
+                logging.error("=== CRITICAL BROWSER LAUNCH FAILURE ===")
                 logging.error(
                     f"All {max_retries} browser launch attempts failed. Last error: {e}"
                 )
+                logging.error("Troubleshooting recommendations:")
+                logging.error("1. Check system resources (memory, CPU, disk space)")
+                logging.error(
+                    "2. Kill any orphaned Firefox processes: pkill -f firefox"
+                )
+                logging.error(
+                    "3. Update Playwright browsers: playwright install firefox"
+                )
+                logging.error("4. Restart the system if resources are exhausted")
+                logging.error("5. Run with --debug flag for more detailed diagnostics")
+                logging.error("======================================")
                 raise Exception(
                     f"Browser launch failed after {max_retries} attempts: {e}"
                 ) from e
 
-            # Clean up any partially created browser instances
+            # Enhanced cleanup of any partially created browser instances
             try:
-                if "browser" in locals():
+                if "browser" in locals() and browser:
+                    logging.debug("Cleaning up partially created browser instance")
                     browser.close()
-            except Exception:
-                pass
+            except Exception as cleanup_e:
+                logging.debug(f"Error during browser cleanup: {cleanup_e}")
 
     # Should never reach here due to exception above, but for type safety
     raise Exception("Unexpected error in browser setup")
@@ -2656,27 +3067,55 @@ def _handle_browser_restart(
         f"Restarting browser after {pages_since_restart} pages (or due to error)..."
     )
 
-    # Enhanced browser cleanup with timeout protection
+    # Enhanced browser cleanup with timeout protection and process killing
     cleanup_start = time.time()
+    cleanup_success = False
+
     try:
+        # First try graceful shutdown
         if page and not page.is_closed():
             logging.debug("Closing page...")
-            page.close()
+            try:
+                page.close(timeout=5000)  # 5 second timeout for page close
+            except Exception as page_close_err:
+                logging.warning(f"Page close failed, proceeding: {page_close_err}")
+
         if browser and browser.is_connected():
             logging.debug("Closing browser...")
-            browser.close()
+            try:
+                browser.close(timeout=10000)  # 10 second timeout for browser close
+            except Exception as browser_close_err:
+                logging.warning(
+                    f"Browser close failed, proceeding: {browser_close_err}"
+                )
+
+        cleanup_success = True
         cleanup_time = time.time() - cleanup_start
-        logging.debug(f"Browser cleanup completed in {cleanup_time:.1f}s")
+        logging.debug(f"Browser cleanup completed successfully in {cleanup_time:.1f}s")
+
     except Exception as close_err:
         cleanup_time = time.time() - cleanup_start
         logging.warning(
-            f"Error closing browser during restart (after {cleanup_time:.1f}s): {close_err}"
+            f"Error during graceful browser cleanup (after {cleanup_time:.1f}s): {close_err}"
         )
+        cleanup_success = False
+
+    # If graceful cleanup failed or we're being extra thorough, kill Firefox processes
+    if not cleanup_success:
+        logging.warning("Graceful cleanup failed, attempting force cleanup...")
+        _cleanup_orphaned_processes()
 
     # Add delay to let system resources recover after cleanup
-    recovery_delay = 5  # seconds
-    logging.debug(f"Waiting {recovery_delay}s for system resource recovery...")
+    recovery_delay = 10  # Increased delay for better recovery
+    logging.info(
+        f"Waiting {recovery_delay}s for system resource recovery after browser cleanup..."
+    )
     time.sleep(recovery_delay)
+
+    # Log system state after cleanup
+    logging.info("System state after browser cleanup:")
+    _log_system_resources()
+    _log_process_diagnostics()
 
     # Use enhanced browser setup with retry logic
     try:
@@ -2701,6 +3140,23 @@ def _process_page_content(
 ) -> tuple[int, int, bool]:
     """Process page content and return (pages_processed_increment, pages_since_restart_increment)."""
     if not content:
+        # Check if this URL was already marked as successfully skipped (non-HTML content)
+        crawler.cursor.execute(
+            "SELECT status, content_hash FROM crawl_queue WHERE url = ?",
+            (crawler.normalize_url(url),),
+        )
+        result = crawler.cursor.fetchone()
+
+        if (
+            result
+            and result[0] == "visited"
+            and result[1] in ["non_html", "non_html_content"]
+        ):
+            # This was already successfully processed as non-HTML content
+            logging.debug(f"Non-HTML content already processed: {url}")
+            return 1, 1, False  # Count as successful processing
+
+        # Otherwise, this is a genuine failure
         error_msg = f"No content extracted from {url}"
         crawler.mark_url_status(url, "failed", error_msg)
         return 0, 0, False
@@ -3095,8 +3551,6 @@ def _handle_no_url_processing(
                 crawler.conn.close()
 
             # Recreate the connection
-            import sqlite3
-
             crawler.conn = sqlite3.connect(str(crawler.db_file))
             crawler.conn.row_factory = sqlite3.Row
             crawler.cursor = crawler.conn.cursor()
@@ -3349,19 +3803,95 @@ def run_crawl_loop(
         except SystemExit:
             logging.info("Received exit signal, shutting down crawler loop.")
         except Exception as e:
-            # Check if this is a browser launch failure
-            if "Browser launch failed" in str(e) or "TimeoutError" in str(e):
-                logging.error(f"Critical browser failure detected: {e}")
+            # Enhanced error categorization and recovery suggestions
+            error_str = str(e).lower()
+            error_type = type(e).__name__
+
+            # Browser launch failures - most critical
+            if (
+                "browser launch failed" in error_str
+                or "timeout" in error_str
+                or "BrowserType.launch" in error_str
+            ):
+                logging.error("=== CRITICAL BROWSER LAUNCH FAILURE ===")
+                logging.error(f"Error: {e}")
+                logging.error("This indicates a fundamental browser setup issue.")
+                logging.error("IMMEDIATE ACTION REQUIRED:")
+                logging.error("1. Check system resources (memory, CPU, disk):")
+                _log_system_resources()
+                _log_process_diagnostics()
+                logging.error("2. Kill any orphaned Firefox processes:")
+                logging.error("   pkill -f firefox")
+                logging.error("3. Update Playwright browsers:")
+                logging.error("   playwright install firefox")
+                logging.error("4. If system is resource-starved, restart it")
+                logging.error("5. Run with --debug flag for more diagnostics")
+                logging.error("======================================")
+
+            # Memory-related errors
+            elif (
+                "memory" in error_str
+                or "out of memory" in error_str
+                or "cannot allocate" in error_str
+            ):
+                logging.error("=== MEMORY ALLOCATION ERROR ===")
+                logging.error(f"Error: {e}")
+                logging.error("System is running out of memory.")
+                logging.error("RECOMMENDED ACTIONS:")
+                logging.error("1. Check memory usage:")
+                _log_system_resources()
+                logging.error("2. Close other memory-intensive applications")
+                logging.error("3. Restart the system to clear memory")
+                logging.error("4. Consider increasing system memory")
+                logging.error("==================================")
+
+            # Network connectivity issues
+            elif (
+                "connection" in error_str
+                or "network" in error_str
+                or "dns" in error_str
+            ):
+                logging.error("=== NETWORK CONNECTIVITY ERROR ===")
+                logging.error(f"Error: {e}")
+                logging.error("Network connectivity issues detected.")
+                logging.error("RECOMMENDED ACTIONS:")
+                logging.error("1. Check internet connection")
+                logging.error("2. Verify DNS resolution")
+                logging.error("3. Check firewall/proxy settings")
+                logging.error("4. Try again later")
+                logging.error("================================")
+
+            # File system issues
+            elif (
+                "disk" in error_str
+                or "permission" in error_str
+                or "no such file" in error_str
+            ):
+                logging.error("=== FILE SYSTEM ERROR ===")
+                logging.error(f"Error: {e}")
+                logging.error("File system or permission issues detected.")
+                logging.error("RECOMMENDED ACTIONS:")
+                logging.error("1. Check disk space:")
+                _log_system_resources()
+                logging.error("2. Verify file permissions")
+                logging.error("3. Check if required directories exist")
+                logging.error("4. Run with proper user permissions")
+                logging.error("=========================")
+
+            # Generic error handling
+            else:
+                logging.error(f"=== UNEXPECTED ERROR ({error_type}) ===")
+                logging.error(f"Error: {e}")
                 logging.error(
-                    "This may indicate system resource exhaustion or browser installation issues"
+                    "This is an unexpected error that may require investigation."
                 )
-                logging.error("Consider:")
-                logging.error("1. Restarting the system to free resources")
-                logging.error("2. Checking available memory and disk space")
-                logging.error(
-                    "3. Updating Playwright browsers: playwright install firefox"
-                )
-                logging.error("4. Running with --debug flag for more details")
+                logging.error("RECOMMENDED ACTIONS:")
+                logging.error("1. Check the full traceback above for clues")
+                logging.error("2. Run with --debug flag for more details")
+                logging.error("3. Check system logs for related errors")
+                logging.error("4. Consider filing a bug report")
+                logging.error("==================================")
+
             _handle_crawl_loop_exception(e)
         finally:
             _cleanup_browser(page, browser)
@@ -3457,9 +3987,8 @@ def cleanup_and_exit(crawler: WebsiteCrawler) -> None:
     sys.exit(exit_code)
 
 
-def main():
-    args = parse_arguments()
-
+def _setup_logging_and_config(args: argparse.Namespace) -> dict:
+    """Setup logging and load site configuration."""
     # Configure logging level based on debug flag
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -3473,6 +4002,13 @@ def main():
         )
         sys.exit(1)
 
+    return site_config
+
+
+def _setup_environment_and_paths(
+    args: argparse.Namespace, site_config: dict
+) -> tuple[str, str, str]:
+    """Setup environment and return domain, start_url, env_file."""
     # Environment File
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent.parent
@@ -3498,16 +4034,85 @@ def main():
     start_url = ensure_scheme(domain)
     logging.info(f"Configured domain: {domain}")
 
-    setup_signal_handlers()
+    return domain, start_url, env_file_str
 
+
+def _perform_system_health_check(args) -> None:
+    """Perform system health check and handle critical issues."""
+    logging.info("Performing pre-flight system health check...")
+    is_healthy, issues = _check_system_health()
+
+    if not is_healthy:
+        logging.warning("=== SYSTEM HEALTH CHECK FAILED ===")
+        for issue in issues:
+            logging.warning(f"  - {issue}")
+        logging.warning("These issues may cause browser launch failures.")
+        logging.warning("Consider addressing them before proceeding.")
+        logging.warning("====================================")
+
+        # For critical issues, ask user if they want to continue
+        critical_issues = [
+            i
+            for i in issues
+            if any(
+                keyword in i.lower()
+                for keyword in [
+                    "critical memory",
+                    "very low memory",
+                    "high memory pressure",
+                    "low disk",
+                    "very low disk",
+                    "multiple firefox",
+                ]
+            )
+        ]
+        if critical_issues:
+            print("\n⚠️  CRITICAL SYSTEM ISSUES DETECTED:")
+            for issue in critical_issues:
+                print(f"  - {issue}")
+            print("\nThese issues are likely to cause browser launch failures.")
+            # Check if running in non-interactive mode (for daemons)
+            if hasattr(args, "non_interactive") and args.non_interactive:
+                print(
+                    "Running in non-interactive mode - continuing despite health issues."
+                )
+                logging.warning(
+                    "Non-interactive mode: Continuing despite critical system health issues: %s",
+                    "; ".join(critical_issues),
+                )
+            else:
+                try:
+                    response = input("Continue anyway? [y/N]: ").strip().lower()
+                    if response not in ["y", "yes"]:
+                        print("Crawler startup cancelled due to system health issues.")
+                        logging.info(
+                            "Crawler startup cancelled by user due to system health issues."
+                        )
+                        sys.exit(1)
+                except EOFError:
+                    # Handle case where input is not available (e.g., when run as daemon)
+                    print("No interactive input available - continuing automatically.")
+                    logging.warning(
+                        "No interactive input available: Continuing despite critical system health issues: %s",
+                        "; ".join(critical_issues),
+                    )
+    else:
+        logging.info("System health check passed - proceeding with crawler startup")
+
+
+def _initialize_crawler_and_services(
+    args: argparse.Namespace, site_config: dict, env_file_str: str
+) -> tuple[WebsiteCrawler, pinecone.Index, str]:
+    """Initialize crawler, Pinecone, and handle clear vectors."""
     # Load environment variables first before initializing crawler
     if not os.path.exists(env_file_str):
         print(f"Error: Environment file {env_file_str} not found.")
         sys.exit(1)
 
     load_dotenv(env_file_str)
-    logging.info(f"Loaded environment from: {os.path.abspath(env_file_str)}")
+    logging.debug(f"Loaded environment from: {os.path.abspath(env_file_str)}")
 
+    domain = site_config.get("domain")
     crawler = WebsiteCrawler(
         site_id=args.site,
         site_config=site_config,
@@ -3515,6 +4120,7 @@ def main():
         debug=args.debug,
     )
 
+    env_file = Path(env_file_str)
     pinecone_index = initialize_pinecone(env_file)
     if not pinecone_index:
         crawler.close()
@@ -3522,13 +4128,23 @@ def main():
 
     handle_clear_vectors(args, pinecone_index, domain, crawler)
 
+    return crawler, pinecone_index, domain
+
+
+def _execute_crawler(
+    crawler: WebsiteCrawler,
+    pinecone_index: pinecone.Index,
+    args: argparse.Namespace,
+    start_url: str,
+) -> None:
+    """Execute the main crawler logic with proper error handling."""
     try:
         logging.info(f"Starting crawl of {start_url} for site '{args.site}'")
         if crawler.csv_mode_enabled:
-            logging.info(
+            logging.debug(
                 f"CSV mode enabled - will check {crawler.csv_export_url} once per hour when system wakes up"
             )
-            logging.info(
+            logging.debug(
                 f"CSV modified threshold: {crawler.csv_modified_days_threshold} days"
             )
         else:
@@ -3542,6 +4158,26 @@ def main():
         else:
             logging.error(f"Unexpected error in main execution: {e}")
             logging.error(traceback.format_exc())
+
+
+def main():
+    args = parse_arguments()
+
+    # Setup phase
+    site_config = _setup_logging_and_config(args)
+    domain, start_url, env_file_str = _setup_environment_and_paths(args, site_config)
+
+    setup_signal_handlers()
+    _perform_system_health_check(args)
+
+    # Initialization phase
+    crawler, pinecone_index, domain = _initialize_crawler_and_services(
+        args, site_config, env_file_str
+    )
+
+    # Execution phase
+    try:
+        _execute_crawler(crawler, pinecone_index, args, start_url)
     finally:
         cleanup_and_exit(crawler)
 

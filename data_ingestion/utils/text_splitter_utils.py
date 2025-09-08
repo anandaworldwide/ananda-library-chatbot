@@ -456,7 +456,7 @@ class SpacyTextSplitter:
             max_chunk_tokens = max(chunk_token_counts)
             avg_chunk_chars = sum(chunk_char_counts) / len(chunk_char_counts)
 
-            self.logger.info(
+            self.logger.debug(
                 f"Chunk statistics (ID: {document_id}): "
                 f"avg={avg_chunk_tokens:.1f} tokens, "
                 f"min={min_chunk_tokens}, max={max_chunk_tokens} tokens, "
@@ -1105,7 +1105,7 @@ class SpacyTextSplitter:
             word_count = self._estimate_word_count(text)
 
             # Log document-level metrics with FIXED chunking parameters
-            self.logger.info(
+            self.logger.debug(
                 f"Processing document - ID: {document_id} - {word_count} words, "
                 f"original length: {original_length} chars, cleaned: {cleaned_length} chars"
             )
@@ -1140,7 +1140,7 @@ class SpacyTextSplitter:
 
         # Log results
         processing_time = time.time() - start_time
-        self.logger.info(
+        self.logger.debug(
             f"Chunking completed: {len(overlapped_chunks)} chunks in {processing_time:.2f}s"
         )
 
@@ -1158,7 +1158,7 @@ class SpacyTextSplitter:
             )
             compliance_rate = (target_range_count / len(chunk_sizes)) * 100
 
-            self.logger.info(
+            self.logger.debug(
                 f"Chunk stats: avg={avg_size:.1f} tokens, range=[{min_size}-{max_size}], "
                 f"target compliance={compliance_rate:.1f}% ({target_range_count}/{len(chunk_sizes)} in {target_min}-{target_max} range)"
             )
