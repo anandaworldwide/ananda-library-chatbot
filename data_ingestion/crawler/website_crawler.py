@@ -91,10 +91,6 @@ logging.basicConfig(
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
 
-# Suppress INFO messages from Pinecone library (plugin discovery, installation)
-pinecone_logger = logging.getLogger("pinecone")
-pinecone_logger.setLevel(logging.WARNING)
-
 # Define User-Agent constant
 USER_AGENT = "Ananda Chatbot Crawler"
 
@@ -2784,6 +2780,114 @@ def _terminate_process_safely(proc) -> bool:
         return False
 
 
+def _collect_playwright_firefox_processes(current_pid: int) -> list:
+    """Collect all Playwright Firefox processes for analysis.
+
+    Returns:
+        List of process dictionaries with metadata for analysis.
+    """
+    playwright_firefox_procs = []
+    for proc in psutil.process_iter(["pid", "name", "cmdline", "create_time"]):
+        try:
+            # Skip our own process and non-Firefox processes
+            if _should_skip_process(proc, current_pid):
+                continue
+
+            cmdline_str = " ".join(proc.info["cmdline"])
+
+            # Check if this is a Playwright Firefox process
+            if not _is_playwright_firefox_process(cmdline_str):
+                continue
+
+            # Collect this Playwright Firefox process for analysis
+            is_old_enough, process_age = _is_process_old_enough(proc)
+            is_high_usage, cpu_percent, memory_mb = _is_resource_usage_high(proc)
+
+            playwright_firefox_procs.append(
+                {
+                    "proc": proc,
+                    "pid": proc.info["pid"],
+                    "age": process_age,
+                    "is_old": is_old_enough,
+                    "is_high_usage": is_high_usage,
+                    "cpu_percent": cpu_percent,
+                    "memory_mb": memory_mb,
+                }
+            )
+
+        except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+            continue
+
+    return playwright_firefox_procs
+
+
+def _select_processes_to_kill(playwright_firefox_procs: list) -> list:
+    """Select which Playwright Firefox processes should be terminated.
+
+    Args:
+        playwright_firefox_procs: List of process dictionaries from collection phase.
+
+    Returns:
+        List of processes that should be terminated.
+    """
+    processes_to_kill = []
+
+    # Kill processes that are old enough OR have high resource usage
+    for pf_proc in playwright_firefox_procs:
+        if pf_proc["is_old"] or pf_proc["is_high_usage"]:
+            processes_to_kill.append(pf_proc)
+
+    # If we still have too many Playwright Firefox processes, kill the oldest ones
+    if len(playwright_firefox_procs) > MAX_PLAYWRIGHT_FIREFOX_PROCS:
+        # Sort by age (oldest first) and add excess processes to kill list
+        sorted_procs = sorted(
+            playwright_firefox_procs, key=lambda x: x["age"], reverse=True
+        )
+        excess_count = len(playwright_firefox_procs) - MAX_PLAYWRIGHT_FIREFOX_PROCS
+
+        for pf_proc in sorted_procs[:excess_count]:
+            if pf_proc not in processes_to_kill:
+                processes_to_kill.append(pf_proc)
+                logging.warning(
+                    f"Adding Firefox process to kill list due to soft cap exceeded: "
+                    f"PID {pf_proc['pid']} (age: {pf_proc['age']:.0f}s)"
+                )
+
+    return processes_to_kill
+
+
+def _terminate_selected_processes(processes_to_kill: list) -> int:
+    """Terminate the selected processes and return count of successful terminations.
+
+    Args:
+        processes_to_kill: List of process dictionaries to terminate.
+
+    Returns:
+        Number of successfully terminated processes.
+    """
+    orphaned_count = 0
+
+    for pf_proc in processes_to_kill:
+        if pf_proc["is_high_usage"]:
+            logging.warning(
+                f"Killing high-usage Playwright Firefox process (PID: {pf_proc['pid']}) - "
+                f"CPU: {pf_proc['cpu_percent']:.1f}%, Memory: {pf_proc['memory_mb']:.1f}MB, "
+                f"Age: {pf_proc['age']:.0f}s"
+            )
+        else:
+            logging.warning(
+                f"Killing old/excess Playwright Firefox process (PID: {pf_proc['pid']}, "
+                f"age: {pf_proc['age']:.0f}s, CPU: {pf_proc['cpu_percent']:.1f}%, "
+                f"Memory: {pf_proc['memory_mb']:.1f}MB)"
+            )
+
+        if _terminate_process_safely(pf_proc["proc"]):
+            orphaned_count += 1
+            logging.info(f"Successfully terminated Firefox process {pf_proc['pid']}")
+
+    return orphaned_count
+
+
 def _cleanup_orphaned_processes() -> None:
     """Clean up orphaned Playwright Firefox processes from this crawler session.
 
@@ -2796,87 +2900,18 @@ def _cleanup_orphaned_processes() -> None:
     This should NOT affect normal Firefox browsers used by users.
     """
     try:
-        orphaned_count = 0
         current_pid = os.getpid()  # Our current process ID
 
-        # First pass: collect all Playwright Firefox processes
-        playwright_firefox_procs = []
-        for proc in psutil.process_iter(["pid", "name", "cmdline", "create_time"]):
-            try:
-                # Skip our own process and non-Firefox processes
-                if _should_skip_process(proc, current_pid):
-                    continue
+        # Collect all Playwright Firefox processes
+        playwright_firefox_procs = _collect_playwright_firefox_processes(current_pid)
 
-                cmdline_str = " ".join(proc.info["cmdline"])
+        # Select which processes should be terminated
+        processes_to_kill = _select_processes_to_kill(playwright_firefox_procs)
 
-                # Check if this is a Playwright Firefox process
-                if not _is_playwright_firefox_process(cmdline_str):
-                    continue
+        # Terminate the selected processes
+        orphaned_count = _terminate_selected_processes(processes_to_kill)
 
-                # Collect this Playwright Firefox process for analysis
-                is_old_enough, process_age = _is_process_old_enough(proc)
-                is_high_usage, cpu_percent, memory_mb = _is_resource_usage_high(proc)
-
-                playwright_firefox_procs.append(
-                    {
-                        "proc": proc,
-                        "pid": proc.info["pid"],
-                        "age": process_age,
-                        "is_old": is_old_enough,
-                        "is_high_usage": is_high_usage,
-                        "cpu_percent": cpu_percent,
-                        "memory_mb": memory_mb,
-                    }
-                )
-
-            except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
-                continue
-
-        # Second pass: decide which processes to kill
-        processes_to_kill = []
-
-        # Kill processes that are old enough OR have high resource usage
-        for pf_proc in playwright_firefox_procs:
-            if pf_proc["is_old"] or pf_proc["is_high_usage"]:
-                processes_to_kill.append(pf_proc)
-
-        # If we still have too many Playwright Firefox processes, kill the oldest ones
-        if len(playwright_firefox_procs) > MAX_PLAYWRIGHT_FIREFOX_PROCS:
-            # Sort by age (oldest first) and add excess processes to kill list
-            sorted_procs = sorted(
-                playwright_firefox_procs, key=lambda x: x["age"], reverse=True
-            )
-            excess_count = len(playwright_firefox_procs) - MAX_PLAYWRIGHT_FIREFOX_PROCS
-
-            for pf_proc in sorted_procs[:excess_count]:
-                if pf_proc not in processes_to_kill:
-                    processes_to_kill.append(pf_proc)
-                    logging.warning(
-                        f"Adding Firefox process to kill list due to soft cap exceeded: "
-                        f"PID {pf_proc['pid']} (age: {pf_proc['age']:.0f}s)"
-                    )
-
-        # Kill the selected processes
-        for pf_proc in processes_to_kill:
-            if pf_proc["is_high_usage"]:
-                logging.warning(
-                    f"Killing high-usage Playwright Firefox process (PID: {pf_proc['pid']}) - "
-                    f"CPU: {pf_proc['cpu_percent']:.1f}%, Memory: {pf_proc['memory_mb']:.1f}MB, "
-                    f"Age: {pf_proc['age']:.0f}s"
-                )
-            else:
-                logging.warning(
-                    f"Killing old/excess Playwright Firefox process (PID: {pf_proc['pid']}, "
-                    f"age: {pf_proc['age']:.0f}s, CPU: {pf_proc['cpu_percent']:.1f}%, "
-                    f"Memory: {pf_proc['memory_mb']:.1f}MB)"
-                )
-
-            if _terminate_process_safely(pf_proc["proc"]):
-                orphaned_count += 1
-                logging.info(
-                    f"Successfully terminated Firefox process {pf_proc['pid']}"
-                )
-
+        # Report results
         if orphaned_count > 0:
             logging.info(
                 f"Cleaned up {orphaned_count} orphaned Playwright Firefox processes"
@@ -3270,6 +3305,7 @@ def _handle_url_processing(
 ) -> tuple[tuple, bool]:
     """Handle URL processing setup and skip checks. Returns ((content, links, restart_needed), should_skip)."""
     crawler.current_processing_url = url
+    logging.info(f"Processing page: {url}")
 
     if crawler.should_skip_url(url):
         logging.info(f"Skipping URL based on skip patterns: {url}")
