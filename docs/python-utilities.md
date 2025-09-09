@@ -295,7 +295,7 @@ project. For specific implementation details, refer to the individual utility fi
 
 ## RAG Evaluation Utilities (`bin/`)
 
-### Overview
+### RAG Evaluation Overview
 
 The project includes comprehensive utilities for evaluating Retrieval-Augmented Generation (RAG) system performance
 using embedding-based semantic similarity.
@@ -357,19 +357,19 @@ massive API overhead. Without caching: ~12,800 API calls (4+ hours). With cachin
 
 ### Key Evaluation Principles
 
-**1. Always Use Embedding-Based Similarity**
+#### 1. Always Use Embedding-Based Similarity
 
 - **Problem**: Textual similarity (difflib.SequenceMatcher) fails to capture semantic relevance
 - **Solution**: OpenAI embeddings with cosine similarity for accurate semantic matching
 - **Impact**: Prevents false performance alarms and misdirected optimization efforts
 
-**2. Implement Embedding Caching**
+#### 2. Implement Embedding Caching
 
 - **Problem**: Embedding API calls create massive overhead (12,800+ calls = 4+ hours)
 - **Solution**: Pre-compute and cache all unique text embeddings at startup
 - **Implementation**: Global cache with MD5 hash keys based on text+model combination
 
-**3. Use Representative Query Sets**
+#### 3. Use Representative Query Sets
 
 - **Purpose**: Understand whether performance issues are query-specific or systemic
 - **Method**: Test diverse queries across different content domains and complexity levels
