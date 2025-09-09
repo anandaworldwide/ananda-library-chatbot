@@ -65,8 +65,27 @@ export default function BaseHeader({
     const handleRoute = () => updateAuthState();
     router.events.on("routeChangeComplete", handleRoute);
 
-    // Also listen for focus events to catch auth state changes when user returns to tab
-    const handleFocus = () => updateAuthState();
+    // Enhanced focus handler for mobile browser restoration
+    const handleFocus = async () => {
+      const cookieLoggedIn = Cookies.get("isLoggedIn") === "true";
+      const tokenAuthenticated = isAuthenticated();
+
+      // If we have cookies but no token (mobile browser restoration scenario)
+      if (cookieLoggedIn && !tokenAuthenticated) {
+        console.log("BaseHeader: Mobile browser restoration detected - refreshing token");
+        try {
+          await initializeTokenManager();
+          updateAuthState();
+        } catch (error) {
+          console.error("BaseHeader: Failed to refresh token on focus:", error);
+          // Still update auth state to reflect cookie state
+          updateAuthState();
+        }
+      } else {
+        updateAuthState();
+      }
+    };
+
     window.addEventListener("focus", handleFocus);
 
     return () => {

@@ -40,10 +40,45 @@ function isOriginAllowed(origin: string | undefined): boolean {
     if (origin.match(/^https?:\/\/[^.]+\.local(:\d+)?$/)) {
       return true;
     }
+    // Allow private IP addresses (192.168.x.x, 10.x.x.x, 127.x.x.x)
+    if (isPrivateIPAddress(origin)) {
+      return true;
+    }
   }
 
   // Check exact matches from the allowed list
   return allowedOrigins.includes(origin);
+}
+
+/**
+ * Helper to check if an origin contains a private IP address
+ */
+function isPrivateIPAddress(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+
+    // Check for private IP ranges
+    // 192.168.x.x
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      return true;
+    }
+
+    // 10.x.x.x
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      return true;
+    }
+
+    // 127.x.x.x (loopback)
+    if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      return true;
+    }
+
+    return false;
+  } catch (e) {
+    // If URL parsing fails, it's not a valid URL
+    return false;
+  }
 }
 
 /**

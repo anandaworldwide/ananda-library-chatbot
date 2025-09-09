@@ -58,7 +58,30 @@ export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
           setUserAuthenticated(true);
           setAuthChecked(true);
         } else {
-          // User is not authenticated - redirect to login immediately
+          // Check if we have authentication cookies (for mobile browser restoration scenarios)
+          const hasAuthCookie = document.cookie.includes("isLoggedIn=true") || document.cookie.includes("siteAuth=");
+
+          if (hasAuthCookie) {
+            // User has auth cookies but no in-memory token (mobile browser restoration)
+            console.log("Auth cookies found but no token - attempting token refresh for mobile restoration");
+
+            try {
+              // Force a fresh token fetch
+              await initializeTokenManager();
+              const refreshedAuth = isAuthenticated();
+
+              if (refreshedAuth) {
+                clearTimeout(loadingTimer);
+                setUserAuthenticated(true);
+                setAuthChecked(true);
+                return;
+              }
+            } catch (refreshError) {
+              console.error("Token refresh failed during mobile restoration:", refreshError);
+            }
+          }
+
+          // User is not authenticated - redirect to login
           clearTimeout(loadingTimer);
           console.log("User not authenticated, redirecting to login");
 
@@ -87,6 +110,34 @@ export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
       checkAuth();
     }
   }, [router, siteConfig]);
+
+  // Add window focus listener to handle mobile browser restoration
+  useEffect(() => {
+    const handleWindowFocus = async () => {
+      // Only attempt refresh if we're not authenticated but should be
+      if (!userAuthenticated && authChecked && siteConfig?.requireLogin) {
+        const hasAuthCookie = document.cookie.includes("isLoggedIn=true") || document.cookie.includes("siteAuth=");
+
+        if (hasAuthCookie) {
+          console.log("Window focus detected with auth cookies - refreshing token");
+          try {
+            await initializeTokenManager();
+            const authenticated = isAuthenticated();
+            if (authenticated) {
+              setUserAuthenticated(true);
+              // Refresh the page to ensure clean state
+              window.location.reload();
+            }
+          } catch (error) {
+            console.error("Failed to refresh token on window focus:", error);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    return () => window.removeEventListener("focus", handleWindowFocus);
+  }, [userAuthenticated, authChecked, siteConfig]);
 
   // Show loading spinner only after 2 seconds if still checking authentication
   if (!authChecked && showLoading) {

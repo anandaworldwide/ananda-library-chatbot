@@ -174,6 +174,19 @@ export async function initializeTokenManager(): Promise<string> {
     return tokenData!.token;
   }
 
+  // For mobile browser restoration scenarios, always force a fresh token fetch
+  // if we detect that we might be in a restored session (no in-memory token but auth cookies exist)
+  const hasAuthCookies =
+    typeof document !== "undefined" &&
+    (document.cookie.includes("isLoggedIn=true") || document.cookie.includes("siteAuth="));
+
+  if (!tokenData && hasAuthCookies) {
+    console.log("Mobile browser restoration detected - forcing fresh token fetch");
+    // Clear any stale state
+    tokenData = null;
+    inflightFetchPromise = null;
+  }
+
   // Start initialization and create a promise
   isInitializing = true;
 

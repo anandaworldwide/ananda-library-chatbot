@@ -127,10 +127,44 @@ function isAllowedOrigin(origin: string, allowedDomains: string[]) {
 function isAllowedDevOrigin(origin: string | undefined | null, referer: string | undefined | null) {
   if (!isDevelopment()) return false;
 
+  // Check for localhost and .local domains
   const isLocalOrigin = origin?.includes("localhost") || origin?.includes(".local");
   const isLocalReferer = referer?.includes("localhost") || referer?.includes(".local");
 
-  return isLocalOrigin || isLocalReferer;
+  // Check for private IP ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+  const isPrivateIPOrigin = origin ? isPrivateIPAddress(origin) : false;
+  const isPrivateIPReferer = referer ? isPrivateIPAddress(referer) : false;
+
+  return isLocalOrigin || isLocalReferer || isPrivateIPOrigin || isPrivateIPReferer;
+}
+
+// Helper to check if an origin contains a private IP address
+function isPrivateIPAddress(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+
+    // Check for private IP ranges
+    // 192.168.x.x
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      return true;
+    }
+
+    // 10.x.x.x
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      return true;
+    }
+
+    // 127.x.x.x (loopback)
+    if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      return true;
+    }
+
+    return false;
+  } catch (e) {
+    // If URL parsing fails, it's not a valid URL
+    return false;
+  }
 }
 
 // Helper to check if the request is from WordPress
