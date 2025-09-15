@@ -20,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   if (!allowed) return;
 
-  const { uuid, limit, convId, startAfter } = req.query;
+  const { uuid, limit, convId, startAfter, starred } = req.query;
 
   // UUID is required unless convId is provided (for legacy document support)
   if (!uuid || typeof uuid !== "string") {
@@ -51,6 +51,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       query = query.where("uuid", "==", uuid);
     }
 
+    // Add starred filter if requested
+    if (starred === "true") {
+      query = query.where("isStarred", "==", true);
+    }
+
     query = query.orderBy("timestamp", "desc");
 
     // Add pagination cursor if provided
@@ -63,8 +68,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     query = query.limit(limitNum);
 
     const contextString = convId
-      ? `uuid: ${uuid || "none"}, convId: ${convId}, limit: ${limitNum}, startAfter: ${startAfter || "none"}`
-      : `uuid: ${uuid || "none"}, limit: ${limitNum}, startAfter: ${startAfter || "none"}`;
+      ? `uuid: ${uuid || "none"}, convId: ${convId}, limit: ${limitNum}, startAfter: ${startAfter || "none"}, starred: ${starred || "false"}`
+      : `uuid: ${uuid || "none"}, limit: ${limitNum}, startAfter: ${startAfter || "none"}, starred: ${starred || "false"}`;
 
     const snapshot = await firestoreQueryGet(query, "user chats list", contextString);
 
@@ -81,6 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         title: data.title || null, // Include title in response
         sources: data.sources || null, // Include sources in response
         suggestions: data.suggestions || null, // Include suggestions in response
+        isStarred: data.isStarred || false, // Include star state in response
       };
     });
 

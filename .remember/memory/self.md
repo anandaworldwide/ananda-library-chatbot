@@ -559,3 +559,25 @@ count to account for the grouping ratio.
 **Files Modified**: `web/src/hooks/useChatHistory.ts` - updated message limit calculation and pagination logic.
 
 **Result**: Chat sidebar now shows 20 conversations by default before showing the "Load More Conversations" button.
+
+### 23. Star Functionality API Response Format Mismatch
+
+**Issue**: Starred conversations showed a blank list despite backend returning data. The `fetchStarredConversations`
+function expected a response object with `chats`, `hasMore`, and `nextCursor` properties, but the `/api/chats` endpoint
+returns a simple array of `ChatHistoryItem` objects.
+
+**Root Cause**: The `fetchStarredConversations` function was trying to access `data.chats` when `data` was actually the
+array itself, resulting in `undefined` and empty starred conversations list.
+
+**Solution**: Updated `fetchStarredConversations` to:
+
+- Handle the correct API response format (direct array instead of object with `chats` property)
+- Implement the same conversation grouping logic as `fetchConversations`
+- Use proper pagination parameter (`startAfter` instead of `cursor`)
+- Apply the same timestamp handling and sorting logic
+
+**Pattern**: When reusing API endpoints for different purposes, ensure the response handling logic matches the actual
+API response format, not assumptions about the format.
+
+**Files Modified**: `web/src/hooks/useChatHistory.ts` - completely rewrote `fetchStarredConversations` function to match
+API response format and implement proper conversation grouping.
