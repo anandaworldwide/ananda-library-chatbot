@@ -183,21 +183,25 @@ describe("/api/verifyMagicLink", () => {
     expect(res.statusCode).not.toBe(400); // Should not get "Invalid status" error
   });
 
-  it("should return 400 for fully accepted user", async () => {
+  it("should return 400 for fully accepted user without setting auth cookies", async () => {
     const firestoreRetryUtils = await import("@/utils/server/firestoreRetryUtils");
+    const bcrypt = await import("bcryptjs");
 
     // Mock user exists but is already fully accepted
     (firestoreRetryUtils.firestoreGet as jest.MockedFunction<any>).mockResolvedValueOnce({
       exists: true,
       data: () => ({
         email: "test@example.com",
-        inviteStatus: "accepted",
+        inviteStatus: "accepted", // ALREADY ACTIVATED - should not proceed
         inviteTokenHash: "hashed-token",
         inviteExpiresAt: { toMillis: () => Date.now() + 86400000 },
         role: "user",
         entitlements: { basic: true },
       }),
     });
+
+    // Even if token is valid, should not proceed due to status check
+    (bcrypt.compare as jest.MockedFunction<any>).mockResolvedValueOnce(true);
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
@@ -207,11 +211,20 @@ describe("/api/verifyMagicLink", () => {
       },
     });
 
+    // Set JWT secret for testing
+    process.env.SECURE_TOKEN = "test-jwt-secret";
+
     await handler(req, res);
 
     expect(res.statusCode).toBe(400);
     expect(res._getJSONData()).toEqual({
-      error: "Invalid status",
+      error: "Account already activated",
+      errorCode: "ALREADY_ACTIVATED",
+      userStatus: "accepted",
     });
+
+    // SECURITY: Verify no authentication cookies were set
+    const cookies = res.getHeaders()["set-cookie"] as string[] | undefined;
+    expect(cookies).toBeUndefined();
   });
 });

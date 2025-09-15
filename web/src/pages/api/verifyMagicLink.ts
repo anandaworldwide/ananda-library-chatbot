@@ -38,9 +38,23 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const doc = await firestoreGet(userDocRef, "get user for verify", email);
     if (!doc.exists) return res.status(404).json({ error: "User not found" });
     const data = doc.data() as any;
-    // Allow both 'pending' (first time) and 'activated_pending_profile' (subsequent clicks before name entry)
+
+    // SECURITY: Check account status FIRST before any authentication processing
+    // Only allow activation for 'pending' (first time) and 'activated_pending_profile' (subsequent clicks before name entry)
     if (data?.inviteStatus !== "pending" && data?.inviteStatus !== "activated_pending_profile") {
-      return res.status(400).json({ error: "Invalid status" });
+      // Provide specific error for already activated accounts - DO NOT LOG THEM IN
+      if (data?.inviteStatus === "accepted") {
+        return res.status(400).json({
+          error: "Account already activated",
+          errorCode: "ALREADY_ACTIVATED",
+          userStatus: data?.inviteStatus,
+        });
+      }
+      return res.status(400).json({
+        error: "Invalid account status",
+        errorCode: "INVALID_STATUS",
+        userStatus: data?.inviteStatus,
+      });
     }
     const now = Date.now();
     const exp = (data?.inviteExpiresAt?.toMillis?.() ?? 0) as number;

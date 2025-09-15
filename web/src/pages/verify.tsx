@@ -6,8 +6,11 @@ import { useRouter } from "next/router";
 export default function VerifyPage() {
   const router = useRouter();
   const { token, email } = router.query as { token?: string; email?: string };
-  const [status, setStatus] = useState<"idle" | "activating" | "collecting" | "saving" | "success" | "error">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "activating" | "collecting" | "saving" | "success" | "error" | "already-activated"
+  >("idle");
   const [message, setMessage] = useState<string>("");
+  const [, setErrorCode] = useState<string>("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
@@ -23,9 +26,19 @@ export default function VerifyPage() {
           body: JSON.stringify({ token, email: decodeURIComponent(email) }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error || "Activation failed");
-        setStatus("collecting");
-        setMessage("");
+        if (!res.ok) {
+          // Handle specific error cases
+          if (data?.errorCode === "ALREADY_ACTIVATED") {
+            setStatus("already-activated");
+            setErrorCode(data.errorCode);
+            setMessage(data.error || "Account already activated");
+          } else {
+            throw new Error(data?.error || "Activation failed");
+          }
+        } else {
+          setStatus("collecting");
+          setMessage("");
+        }
       } catch (e: any) {
         setStatus("error");
         setMessage(e?.message || "Activation failed");
@@ -41,6 +54,10 @@ export default function VerifyPage() {
     }, 2000);
     return () => clearTimeout(t);
   }, [status, router]);
+
+  // SECURITY: Do NOT auto-redirect for failed activation attempts
+  // Only redirect after successful activation (status === "success")
+  // Failed activations (like already-activated) should show error message only
 
   async function onSubmitName(e: React.FormEvent) {
     e.preventDefault();
@@ -114,6 +131,21 @@ export default function VerifyPage() {
           <div className="rounded border border-green-300 bg-green-50 p-3 text-sm mb-3">
             {message}
             <div className="mt-1">Redirecting to home…</div>
+          </div>
+        ) : null}
+        {status === "already-activated" ? (
+          <div className="rounded border border-blue-300 bg-blue-50 p-3 text-sm mb-3">
+            <div className="font-medium mb-2">Account Already Activated</div>
+            <p className="mb-3">Your account has already been activated and is ready to use.</p>
+            <div>
+              <p className="mb-3">Please log in with your email address to access your account.</p>
+              <button
+                onClick={() => router.push("/login")}
+                className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+              >
+                Go to Login Page
+              </button>
+            </div>
           </div>
         ) : null}
         {status === "error" ? (
