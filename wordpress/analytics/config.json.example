@@ -1,0 +1,24 @@
+{
+  "google_analytics": {
+    "property_id": "266581873",
+    "credentials_path": "/path/to/your/service-account-credentials.json"
+  },
+  "analysis_settings": {
+    "default_days_back": 30,
+    "output_directory": "reports",
+    "charts_directory": "charts"
+  },
+  "event_mapping": {
+    "popup_open": "chatbot_vivek_popup_open",
+    "popup_close": "chatbot_vivek_popup_close",
+    "question_submit": "chatbot_vivek_question_submit",
+    "fullpage_click": "chatbot_vivek_fullpage_click",
+    "contact_human": "chatbot_vivek_contact_human",
+    "language_click": "chatbot_vivek_language_click",
+    "nps_submit": "chatbot_vivek_nps_submit",
+    "nps_dismiss": "chatbot_vivek_nps_dismiss",
+    "clear_history": "chatbot_vivek_clear_history",
+    "source_link_click": "chatbot_vivek_source_link_click",
+    "ask_experts_click": "chatbot_vivek_ask_experts_link_click"
+  }
+}

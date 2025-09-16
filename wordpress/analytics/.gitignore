@@ -1,0 +1,31 @@
+# Google Analytics credentials
+credentials/*.json
+!credentials/README.md
+
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Output files
+reports/
+charts/
+*.json
+*.png
+*.jpg
+*.pdf
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
