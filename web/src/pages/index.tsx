@@ -17,7 +17,7 @@ import Popup from "@/components/popup";
 
 import { ChatInput } from "@/components/ChatInput";
 import MessageItem from "@/components/MessageItem";
-import FeedbackModal from "@/components/FeedbackModal";
+import DownvoteFeedbackModal from "@/components/DownvoteFeedbackModal";
 import ChatHistorySidebar from "@/components/ChatHistorySidebar";
 import AnswersPageLink from "@/components/AnswersPageLink";
 
@@ -1598,7 +1598,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         </div>
 
         {/* Render the Feedback Modal */}
-        <FeedbackModal
+        <DownvoteFeedbackModal
           isOpen={isFeedbackModalOpen}
           docId={currentFeedbackDocId}
           onConfirm={submitFeedback}

@@ -1,130 +1,255 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
+import { Modal } from "@/components/ui/Modal";
+import { SiteConfig } from "@/types/siteConfig";
+import { getToken } from "@/utils/client/tokenManager";
+import validator from "validator";
 
 interface FeedbackModalProps {
   isOpen: boolean;
-  docId: string | null;
-  onConfirm: (docId: string, reason: string, comment: string) => void;
-  onCancel: () => void;
-  error?: string | null; // Optional error message prop
+  onClose: () => void;
+  siteConfig: SiteConfig | null;
 }
 
-const feedbackReasons = [
-  'Incorrect Information',
-  'Off-Topic Response',
-  'Bad Links',
-  'Vague or Unhelpful',
-  'Technical Issue',
-  'Poor Style or Tone',
-  'Other',
-];
+const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConfig }) => {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-const FeedbackModal: React.FC<FeedbackModalProps> = ({
-  isOpen,
-  docId,
-  onConfirm,
-  onCancel,
-  error,
-}) => {
-  const [selectedReason, setSelectedReason] = useState<string>('');
-  const [commentText, setCommentText] = useState<string>('');
-
-  // Reset state when modal opens or docId changes
+  // Auto-fill user data for logged-in users
   useEffect(() => {
-    if (isOpen) {
-      setSelectedReason('');
-      setCommentText('');
+    const autoFillUserData = async () => {
+      if (!isOpen) return;
+
+      try {
+        const token = await getToken();
+        if (token) {
+          setIsLoggedIn(true);
+
+          // Fetch user profile if login is required
+          if (siteConfig?.requireLogin) {
+            const profileResponse = await fetch("/api/profile", {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+
+            if (profileResponse.ok) {
+              const profileData = await profileResponse.json();
+              if (profileData.firstName || profileData.lastName) {
+                const nameParts = [profileData.firstName, profileData.lastName].filter(Boolean);
+                const fullName = nameParts.join(" ");
+                setName(fullName);
+              }
+              if (profileData.email) {
+                setEmail(profileData.email);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Silently fail - user can still fill form manually
+        console.warn("Failed to auto-fill user data:", error);
+      }
+    };
+
+    autoFillUserData();
+  }, [isOpen, siteConfig?.requireLogin]);
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setName("");
+      setEmail("");
+      setMessage("");
+      setError(null);
+      setIsSubmitting(false);
+      setIsSubmitted(false);
+      setIsLoggedIn(false);
     }
-  }, [isOpen, docId]);
+  }, [isOpen]);
 
-  if (!isOpen || !docId) {
-    return null;
-  }
+  // Validate form inputs
+  const validateInputs = () => {
+    if (!validator.isLength(name, { min: 1, max: 100 })) {
+      setError("Name must be between 1 and 100 characters");
+      return false;
+    }
+    if (!validator.isEmail(email)) {
+      setError("Invalid email address");
+      return false;
+    }
+    if (!validator.isLength(message, { min: 1, max: 1000 })) {
+      setError("Message must be between 1 and 1000 characters");
+      return false;
+    }
+    return true;
+  };
 
-  const handleSubmit = () => {
-    if (selectedReason && docId) {
-      onConfirm(docId, selectedReason, commentText);
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+
+    if (!validateInputs()) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      // Get a token first
+      const token = await getToken();
+
+      const res = await fetch("/api/contact?mode=feedback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name, email, message }),
+      });
+
+      if (res.ok) {
+        setIsSubmitted(true);
+      } else {
+        const data = await res.json();
+        setError(data.message || "Failed to send feedback. Please try again later.");
+      }
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      setError("Failed to send feedback. Please try again later.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (!isSubmitting) {
+      onClose();
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
-      onClick={onCancel} // Click away to cancel
-    >
-      <div
-        className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md mx-4"
-        onClick={(e) => e.stopPropagation()} // Prevent click inside from closing modal
-      >
-        <h2 className="text-xl font-semibold mb-4">Why the Downvote?</h2>
-        <p className="text-sm text-gray-600 mb-4">
-          Please select a reason for your downvote. Your feedback helps us
-          improve.
-        </p>
-
-        <div className="space-y-2 mb-4">
-          {feedbackReasons.map((reason) => (
-            <label
-              key={reason}
-              className="flex items-center space-x-2 cursor-pointer"
-            >
-              <input
-                type="radio"
-                name="feedbackReason"
-                value={reason}
-                checked={selectedReason === reason}
-                onChange={(e) => setSelectedReason(e.target.value)}
-                className="form-radio h-4 w-4 text-indigo-600"
-              />
-              <span>{reason}</span>
-            </label>
-          ))}
-        </div>
-
-        <div className="mb-4">
-          <label
-            htmlFor="feedbackComment"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Optional Comment (max 1000 chars):
-          </label>
-          <textarea
-            id="feedbackComment"
-            rows={3}
-            maxLength={1000}
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-          />
-        </div>
-
-        {/* Display error message if provided */}
-        {error && (
-          <div className="text-red-500 text-sm mb-3 p-2 bg-red-50 rounded border border-red-200">
-            Error: {error}
+    <Modal isOpen={isOpen} onClose={handleClose} title="Feedback" className="max-w-lg">
+      {isSubmitted ? (
+        <div className="text-center py-4">
+          <div className="mb-4">
+            <svg className="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
           </div>
-        )}
-
-        <div className="flex justify-end space-x-3">
+          <h3 className="text-lg font-semibold text-green-600 mb-2">Thanks for your feedback!</h3>
+          <p className="text-gray-600 mb-4">We appreciate your input and will use it to improve the site.</p>
           <button
-            onClick={onCancel}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+            onClick={handleClose}
+            className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
           >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!selectedReason} // Disable submit if no reason selected
-            className={`px-4 py-2 text-white rounded ${
-              !selectedReason
-                ? 'bg-indigo-300 cursor-not-allowed'
-                : 'bg-indigo-600 hover:bg-indigo-700'
-            }`}
-          >
-            Submit Feedback
+            Close
           </button>
         </div>
-      </div>
-    </div>
+      ) : (
+        <>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <p className="text-blue-800 text-sm">
+              We are constantly striving to improve the site and provide the best experience possible. Please send us
+              your candid feedback - we appreciate all comments, suggestions, and insights!
+            </p>
+          </div>
+
+          {/* Display error message if any */}
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+              <span className="block sm:inline">{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4" data-testid="feedback-form">
+            <div className="flex space-x-4">
+              {/* Name input field */}
+              <div className="w-1/2">
+                <label htmlFor="feedback-name-input" className="block text-sm font-medium text-gray-700">
+                  Name
+                </label>
+                <input
+                  id="feedback-name-input"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={`mt-1 block w-full border rounded-md shadow-sm px-3 py-2 ${
+                    isLoggedIn && siteConfig?.requireLogin
+                      ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
+                      : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                  }`}
+                  required
+                  readOnly={isLoggedIn && siteConfig?.requireLogin}
+                  disabled={isSubmitting}
+                  maxLength={100}
+                />
+              </div>
+              {/* Email input field */}
+              <div className="w-1/2">
+                <label htmlFor="feedback-email-input" className="block text-sm font-medium text-gray-700">
+                  Email
+                </label>
+                <input
+                  id="feedback-email-input"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`mt-1 block w-full border rounded-md shadow-sm px-3 py-2 ${
+                    isLoggedIn && siteConfig?.requireLogin
+                      ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
+                      : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                  }`}
+                  required
+                  readOnly={isLoggedIn && siteConfig?.requireLogin}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            {/* Message textarea */}
+            <div>
+              <label htmlFor="feedback-message-input" className="block text-sm font-medium text-gray-700">
+                Your Feedback
+              </label>
+              <textarea
+                id="feedback-message-input"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 h-32 focus:ring-blue-500 focus:border-blue-500"
+                required
+                disabled={isSubmitting}
+                maxLength={1000}
+                placeholder="Please share your thoughts, suggestions, or any issues you've encountered..."
+              />
+              <div className="text-right text-xs text-gray-500 mt-1">{message.length}/1000 characters</div>
+            </div>
+            {/* Submit button */}
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? "Sending Feedback..." : "Send Feedback"}
+              </button>
+            </div>
+          </form>
+        </>
+      )}
+    </Modal>
   );
 };
 

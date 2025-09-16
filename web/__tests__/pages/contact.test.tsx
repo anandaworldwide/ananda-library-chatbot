@@ -93,6 +93,8 @@ describe("Contact Page", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (global.fetch as jest.Mock).mockClear();
+    (global.fetch as jest.Mock).mockReset();
+    (tokenManager.getToken as jest.Mock).mockReset();
   });
 
   describe("Contact Mode", () => {
@@ -134,49 +136,6 @@ describe("Contact Page", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Thanks, message sent!")).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe("Feedback Mode", () => {
-    beforeEach(() => {
-      // Set router to feedback mode
-      mockQuery.mode = "feedback";
-    });
-
-    it("renders feedback form with correct title", () => {
-      render(<Contact siteConfig={mockSiteConfig} />);
-
-      expect(screen.getByText("Feedback")).toBeInTheDocument();
-      expect(screen.getByText(/constantly striving to improve/i)).toBeInTheDocument();
-    });
-
-    it("shows correct form labels for feedback mode", () => {
-      render(<Contact siteConfig={mockSiteConfig} />);
-
-      expect(screen.getByText("Your Feedback")).toBeInTheDocument();
-      expect(screen.getByText("Send Feedback")).toBeInTheDocument();
-    });
-
-    it("shows success message for feedback mode", async () => {
-      // Mock successful form submission
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ message: "Message sent successfully" }),
-      });
-
-      render(<Contact siteConfig={mockSiteConfig} />);
-
-      // Fill out form
-      fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Test User" } });
-      fireEvent.change(screen.getByLabelText("Email"), { target: { value: "test@example.com" } });
-      fireEvent.change(screen.getByLabelText("Your Feedback"), { target: { value: "Test feedback" } });
-
-      // Submit form
-      fireEvent.click(screen.getByText("Send Feedback"));
-
-      await waitFor(() => {
-        expect(screen.getByText("Thanks for your feedback!")).toBeInTheDocument();
       });
     });
   });

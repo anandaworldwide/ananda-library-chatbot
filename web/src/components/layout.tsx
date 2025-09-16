@@ -8,6 +8,7 @@ import CrystalHeader from "./Header/CrystalHeader";
 import Footer from "./Footer";
 import NPSSurvey from "./NPSSurvey";
 import FeedbackButton from "./FeedbackButton";
+import FeedbackModal from "./FeedbackModal";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useSudo } from "@/contexts/SudoContext";
 import Link from "next/link";
@@ -36,6 +37,7 @@ export default function Layout({
   const [, setVisitCount] = useLocalStorage("visitCount", 0);
   const { errorMessage } = useSudo();
   const [showErrorPopup, setShowErrorPopup] = useState(false);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
 
   // Set isClient to true and increment visit count on component mount
   useEffect(() => {
@@ -93,7 +95,13 @@ export default function Layout({
       </div>
       <Footer siteConfig={siteConfig} />
       {/* Feedback button */}
-      {siteConfig && <FeedbackButton siteConfig={siteConfig} />}
+      {siteConfig && <FeedbackButton siteConfig={siteConfig} onClick={() => setIsFeedbackModalOpen(true)} />}
+      {/* Feedback modal */}
+      <FeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onClose={() => setIsFeedbackModalOpen(false)}
+        siteConfig={siteConfig}
+      />
       {/* Error popup */}
       {showErrorPopup && errorMessage && (
         <div className="fixed bottom-4 right-4 bg-red-100 text-red-700 py-2 px-4 rounded-lg shadow-md flex items-center justify-between text-sm z-50 max-w-md">

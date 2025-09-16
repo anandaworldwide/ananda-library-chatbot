@@ -1,10 +1,10 @@
 // Floating feedback button component that appears in the bottom right corner
 import React from "react";
-import Link from "next/link";
 import { SiteConfig } from "@/types/siteConfig";
 
 interface FeedbackButtonProps {
   siteConfig: SiteConfig | null;
+  onClick: () => void;
 }
 
 // Get feedback icon based on site configuration
@@ -13,14 +13,14 @@ const getFeedbackIcon = (siteConfig: SiteConfig | null): string => {
   return `/${siteConfig.feedbackIcon}`;
 };
 
-const FeedbackButton: React.FC<FeedbackButtonProps> = ({ siteConfig }) => {
+const FeedbackButton: React.FC<FeedbackButtonProps> = ({ siteConfig, onClick }) => {
   const feedbackIcon = getFeedbackIcon(siteConfig);
 
   return (
     <div className="fixed bottom-6 right-6 z-40">
-      <Link
-        href="/contact?mode=feedback"
-        className="flex items-center bg-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out px-4 py-2 space-x-3"
+      <button
+        onClick={onClick}
+        className="flex items-center bg-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out px-4 py-2 space-x-3 cursor-pointer"
         aria-label="Give feedback"
       >
         {/* Profile photo on the left */}
@@ -39,7 +39,7 @@ const FeedbackButton: React.FC<FeedbackButtonProps> = ({ siteConfig }) => {
 
         {/* Feedback text on the right */}
         <span className="text-gray-800 text-sm font-medium whitespace-nowrap pr-1">Feedback</span>
-      </Link>
+      </button>
     </div>
   );
 };

@@ -6,7 +6,6 @@ import React, { useState, useEffect } from "react";
 import Head from "next/head";
 import Layout from "@/components/layout";
 import Link from "next/link";
-import { useRouter } from "next/router";
 import validator from "validator";
 import { getToken } from "@/utils/client/tokenManager";
 import { getSiteName } from "@/utils/client/siteConfig";
@@ -16,12 +15,6 @@ interface ContactProps {
 }
 
 const Contact = ({ siteConfig }: ContactProps) => {
-  const router = useRouter();
-  const { mode } = router.query;
-
-  // Determine if we're in feedback mode
-  const isFeedbackMode = mode === "feedback";
-
   // State for form fields and submission status
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -101,7 +94,7 @@ const Contact = ({ siteConfig }: ContactProps) => {
       // Get a token first
       const token = await getToken();
 
-      const apiUrl = isFeedbackMode ? "/api/contact?mode=feedback" : "/api/contact";
+      const apiUrl = "/api/contact";
       const res = await fetch(apiUrl, {
         method: "POST",
         headers: {
@@ -128,23 +121,11 @@ const Contact = ({ siteConfig }: ContactProps) => {
   return (
     <>
       <Head>
-        <title>
-          {isFeedbackMode ? "Feedback" : "Contact"} - {getSiteName(siteConfig)}
-        </title>
+        <title>Contact - {getSiteName(siteConfig)}</title>
       </Head>
       <Layout siteConfig={siteConfig}>
         <div className="container mx-auto p-4">
-          <h1 className="text-2xl mb-4">{isFeedbackMode ? "Feedback" : "Contact Us"}</h1>
-
-          {/* Feedback mode introduction text */}
-          {isFeedbackMode && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-blue-800">
-                We are constantly striving to improve the site and provide the best experience possible. Please send us
-                your candid feedback - we appreciate all comments, suggestions, and insights!
-              </p>
-            </div>
-          )}
+          <h1 className="text-2xl mb-4">Contact Us</h1>
           {/* Display error message if any */}
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
@@ -203,7 +184,7 @@ const Contact = ({ siteConfig }: ContactProps) => {
             {/* Message textarea */}
             <div>
               <label htmlFor="message-input" className="block text-sm font-medium text-gray-700">
-                {isFeedbackMode ? "Your Feedback" : "Message"}
+                Message
               </label>
               <textarea
                 id="message-input"
@@ -221,21 +202,13 @@ const Contact = ({ siteConfig }: ContactProps) => {
               className="bg-blue-500 text-white px-4 py-2 rounded-md disabled:bg-blue-300"
               disabled={isSubmitted || isSubmitting}
             >
-              {isSubmitting
-                ? isFeedbackMode
-                  ? "Sending Feedback..."
-                  : "Sending..."
-                : isFeedbackMode
-                  ? "Send Feedback"
-                  : "Send"}
+              {isSubmitting ? "Sending..." : "Send"}
             </button>
           </form>
           {/* Success message and homepage link */}
           {isSubmitted && (
             <div className="mt-8 text-center">
-              <h2 className="text-xl font-semibold text-green-600 mb-4">
-                {isFeedbackMode ? "Thanks for your feedback!" : "Thanks, message sent!"}
-              </h2>
+              <h2 className="text-xl font-semibold text-green-600 mb-4">Thanks, message sent!</h2>
               <Link
                 href="/"
                 className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
