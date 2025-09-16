@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { toast } from "react-toastify";
+import { logEvent } from "@/utils/client/analytics";
 
 export interface StarButtonProps {
   convId: string;
@@ -30,10 +31,26 @@ const StarButton: React.FC<StarButtonProps> = ({ convId, isStarred, onStarChange
 
     try {
       await onStarChange(convId, newStarState);
+
+      // Track successful star/unstar action
+      logEvent(
+        newStarState ? "star_conversation" : "unstar_conversation",
+        "Conversation Management",
+        `${newStarState ? "Star" : "Unstar"} - ${size}`,
+        1
+      );
     } catch (error) {
       // Rollback on error
       setOptimisticStarred(!newStarState);
       toast.error("Failed to update star status. Please try again.");
+
+      // Track failed star action
+      logEvent(
+        "star_action_failed",
+        "Conversation Management",
+        `Failed ${newStarState ? "Star" : "Unstar"} - ${size}`,
+        1
+      );
     } finally {
       setIsLoading(false);
     }

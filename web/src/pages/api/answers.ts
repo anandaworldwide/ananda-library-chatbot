@@ -82,6 +82,7 @@ async function getAnswers(page: number, limit: number): Promise<{ answers: Answe
       feedbackReason: data.feedbackReason,
       feedbackComment: data.feedbackComment,
       feedbackTimestamp: data.feedbackTimestamp,
+      isStarred: data.isStarred || false,
     } as Answer;
   });
 

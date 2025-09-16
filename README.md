@@ -91,6 +91,7 @@ Transform every interaction into a persistent, shareable knowledge session:
 - **AI-Generated Titles** - Automatic 4-5 word conversation summaries for easy identification
 - **Cross-Device Sync** - Conversation history syncs seamlessly across all your devices
 - **Smart Sharing** - Share specific conversation points with view-only access up to that moment
+- **Star Favorites** - Star important conversations for quick access with dedicated starred conversations view
 - **Flexible Privacy** - Choose between public (shared with community) or temporary (not saved) conversations, with
   private (saved but not shared) coming soon
 - **Seamless Continuation** - Resume any conversation exactly where you left off

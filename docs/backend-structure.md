@@ -197,6 +197,23 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
   - **Logic:** Fetches document metadata including `convId` and ownership information.
   - **Response:** Document metadata with `convId`, `uuid`, and basic conversation info.
 
+**Star Functionality:**
+
+- **`POST /api/conversations/star`** (`pages/api/conversations/star.ts`)
+  - **Purpose:** Stars or unstars entire conversations for quick access.
+  - **Auth:** Requires JWT authentication (owner verification).
+  - **Logic:** Batch updates all documents in a conversation with `isStarred` field, validates conversation ownership.
+  - **Request:** `{ convId: string, action: "star" | "unstar" }`
+  - **Response:** Success confirmation with documents updated count.
+- **`GET /api/conversations/starred`** (`pages/api/conversations/starred.ts`)
+
+  - **Purpose:** Retrieves user's starred conversations with pagination.
+  - **Auth:** Requires JWT authentication.
+  - **Logic:** Queries Firestore for conversations with `isStarred: true`, groups by `convId`, supports cursor-based
+    pagination.
+  - **Query Params:** `limit` (max 100), `cursor` (timestamp for pagination)
+  - **Response:** Array of starred conversations with pagination metadata (`hasMore`, `nextCursor`).
+
 - **`POST /api/contact`** (`pages/api/contact.ts`)
   - **Purpose:** Handles contact form submissions.
   - **Auth:** Likely open or uses basic CSRF protection.
@@ -248,6 +265,8 @@ Data is stored across multiple services:
     - **`title`**: AI-generated conversation title (~4-5 words) stored only on the first message of each conversation.
       Follow-up messages reference the initial title.
     - **`uuid`**: User identifier for cross-device conversation sync and ownership verification.
+    - **`isStarred`**: Boolean indicating if the conversation is starred by the user. Applied to all documents in a
+      conversation for consistent querying and filtering.
     - (Other potential fields: feedback, model used, etc.)
   - **`answers` (Collection):** Possibly stores standalone answers or references chat logs for voting/retrieval. Schema
     likely overlaps significantly with `chatLogs`.

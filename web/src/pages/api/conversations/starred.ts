@@ -11,6 +11,7 @@ interface StarredConversation {
   title: string;
   lastMessageAt: any;
   messageCount: number;
+  isStarred: boolean; // Always true for starred conversations
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

@@ -100,6 +100,14 @@ export default function ChatHistorySidebar({
     (newMode: "all" | "starred") => {
       setFilterMode(newMode);
 
+      // Track filter toggle usage
+      logEvent(
+        "conversation_filter_toggle",
+        "Conversation Management",
+        `Switch to ${newMode}`,
+        newMode === "starred" ? 1 : 0
+      );
+
       // Refresh data when switching modes to ensure star states are current
       // Use silent mode to avoid showing loading spinners for quick toggles
       if (newMode === "all") {

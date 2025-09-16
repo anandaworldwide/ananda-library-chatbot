@@ -38,6 +38,8 @@ export type Answer = {
   feedbackTimestamp?: Timestamp;
   // Optional AI-generated restated question used for embeddings
   restatedQuestion?: string;
+  // Optional star state for the conversation this answer belongs to
+  isStarred?: boolean;
 };
 
 // Structure for timestamp data
