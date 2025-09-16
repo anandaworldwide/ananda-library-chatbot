@@ -4,7 +4,6 @@ import { getParentSiteUrl, getParentSiteName } from "@/utils/client/siteConfig";
 
 interface AnandaHeaderProps {
   siteConfig: SiteConfig;
-  constrainWidth?: boolean;
   onNewChat?: () => void;
   temporarySession?: boolean;
   onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -13,7 +12,6 @@ interface AnandaHeaderProps {
 
 export default function AnandaHeader({
   siteConfig,
-  constrainWidth,
   onNewChat,
   temporarySession,
   onTemporarySessionChange,
@@ -29,7 +27,6 @@ export default function AnandaHeader({
         parentSiteUrl={parentSiteUrl}
         parentSiteName={parentSiteName}
         requireLogin={siteConfig.requireLogin}
-        constrainWidth={constrainWidth}
         onNewChat={onNewChat}
         temporarySession={temporarySession}
         onTemporarySessionChange={onTemporarySessionChange}

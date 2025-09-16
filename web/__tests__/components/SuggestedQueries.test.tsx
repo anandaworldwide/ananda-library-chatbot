@@ -78,7 +78,7 @@ describe("SuggestedQueries", () => {
     render(<SuggestedQueries {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("AI Suggested Prompts:")).toBeInTheDocument();
+      expect(screen.getByText("AI Suggested Prompts")).toBeInTheDocument();
     });
   });
 
@@ -86,7 +86,7 @@ describe("SuggestedQueries", () => {
     render(<SuggestedQueries {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("AI Suggested Prompts:")).toBeInTheDocument();
+      expect(screen.getByText("AI Suggested Prompts")).toBeInTheDocument();
     });
 
     // Click edit button for first suggestion
@@ -101,7 +101,7 @@ describe("SuggestedQueries", () => {
     render(<SuggestedQueries {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("AI Suggested Prompts:")).toBeInTheDocument();
+      expect(screen.getByText("AI Suggested Prompts")).toBeInTheDocument();
     });
 
     // Click edit button for first suggestion
@@ -123,7 +123,7 @@ describe("SuggestedQueries", () => {
     render(<SuggestedQueries {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("AI Suggested Prompts:")).toBeInTheDocument();
+      expect(screen.getByText("AI Suggested Prompts")).toBeInTheDocument();
     });
 
     // Click edit button for first suggestion
@@ -145,7 +145,7 @@ describe("SuggestedQueries", () => {
     render(<SuggestedQueries {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("AI Suggested Prompts:")).toBeInTheDocument();
+      expect(screen.getByText("AI Suggested Prompts")).toBeInTheDocument();
     });
 
     // Click edit button for first suggestion
@@ -168,7 +168,7 @@ describe("SuggestedQueries", () => {
     render(<SuggestedQueries {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText("AI Suggested Prompts:")).toBeInTheDocument();
+      expect(screen.getByText("AI Suggested Prompts")).toBeInTheDocument();
     });
 
     // Click edit button for first suggestion

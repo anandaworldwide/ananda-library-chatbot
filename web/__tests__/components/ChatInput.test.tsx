@@ -214,7 +214,7 @@ describe("ChatInput", () => {
     render(<ChatInput {...props} />);
 
     // Find send button by its icon text
-    const sendButton = screen.getByText("send");
+    const sendButton = screen.getByText("arrow_upward");
     fireEvent.click(sendButton);
 
     // Empty input should not trigger error, but should call handleSubmit

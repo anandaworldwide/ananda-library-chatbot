@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import Cookies from "js-cookie";
@@ -14,7 +15,6 @@ interface BaseHeaderProps {
   className?: string;
   logoComponent?: React.ReactNode;
   requireLogin: boolean;
-  constrainWidth?: boolean;
   onNewChat?: () => void;
   // Temporary session props
   temporarySession?: boolean;
@@ -29,7 +29,6 @@ export default function BaseHeader({
   parentSiteName,
   logoComponent,
   requireLogin,
-  constrainWidth = false,
   onNewChat,
   temporarySession = false,
   onTemporarySessionChange,
@@ -103,11 +102,8 @@ export default function BaseHeader({
       {isDevelopment() && (
         <div className="bg-blue-500 text-white text-center py-1 w-full">Dev server (site: {process.env.SITE_ID})</div>
       )}
-      <div
-        className={`h-16 border-b border-b-slate-200 py-4 ${constrainWidth ? "lg:grid lg:grid-cols-[288px_1fr] lg:px-0" : "px-4"}`}
-      >
-        {constrainWidth && <div className="hidden lg:block"></div>}
-        <div className={`flex justify-between items-center ${constrainWidth ? "mx-auto w-full max-w-4xl px-4" : ""}`}>
+      <div className={`h-16 border-b border-b-slate-200 py-4 px-4`}>
+        <div className="flex justify-between items-center">
           <div className="flex items-center">
             {logoComponent ? <Link href="/">{logoComponent}</Link> : null}
             <nav className={`${logoComponent ? "ml-2 pl-1" : ""}`}>
@@ -141,12 +137,11 @@ export default function BaseHeader({
             {isChatEmpty && allowTemporarySessions && !temporarySession && onTemporarySessionChange && (
               <button
                 onClick={onTemporarySessionChange}
-                aria-label="Start Temporary Session"
-                className="text-gray-600 hover:text-slate-800 p-1 rounded-md hover:bg-gray-100 transition-colors flex items-center space-x-1"
-                title="Start Temporary Session"
+                aria-label="Start Temporary Chat"
+                className="text-gray-600 hover:text-slate-800 p-1 rounded-md hover:bg-gray-100 transition-colors"
+                title="Start temporary chat. It will not be logged, saved, or shareable."
               >
-                <span className="material-icons text-xl">hourglass_empty</span>
-                <span className="text-sm font-medium">Temporary</span>
+                <span className="text-sm font-medium">Start temporary chat</span>
               </button>
             )}
             {/* Show new chat button when chat is not empty OR when temporary session is active */}
@@ -157,7 +152,7 @@ export default function BaseHeader({
                 className="text-gray-600 hover:text-slate-800 p-1 rounded-md hover:bg-gray-100 transition-colors"
                 title="Start New Chat"
               >
-                <span className="material-icons text-xl">edit</span>
+                <span className="material-icons text-xl">create</span>
               </button>
             )}
             {requireLogin && authReady && (

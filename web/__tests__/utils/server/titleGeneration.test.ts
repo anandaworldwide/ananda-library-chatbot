@@ -25,7 +25,7 @@ describe("titleGeneration", () => {
   describe("generateTitle", () => {
     it("should generate AI title when model succeeds", async () => {
       const mockInvoke = jest.fn().mockResolvedValue({
-        content: "Meditation Technique Guide",
+        content: "How to start and sustain a simple meditation practice",
       });
 
       mockChatOpenAI.mockImplementation(
@@ -35,11 +35,11 @@ describe("titleGeneration", () => {
           }) as any
       );
 
-      // Use a question longer than 5 words to trigger AI generation
-      const result = await generateTitle("How do I meditate properly for better results?");
+      // Use a question longer than 9 words to trigger AI generation
+      const result = await generateTitle("How do I meditate properly for better results and spiritual growth?");
 
-      expect(result).toBe("Meditation Technique Guide");
-      expect(mockInvoke).toHaveBeenCalledWith(expect.stringContaining("Generate a concise four-word title"));
+      expect(result).toBe("How to start and sustain a simple meditation practice");
+      expect(mockInvoke).toHaveBeenCalledWith(expect.stringContaining("Generate a concise summary (8–9 words)"));
     });
 
     it("should fall back to truncated question when AI fails", async () => {
@@ -52,12 +52,12 @@ describe("titleGeneration", () => {
           }) as any
       );
 
-      const result = await generateTitle("How do I meditate properly for better health?");
+      const result = await generateTitle("How do I meditate properly for better health and wellness?");
 
-      expect(result).toBe("How do I meditate...");
+      expect(result).toBe("How do I meditate properly for better health and...");
     });
 
-    it("should use full question when 5 words or less", async () => {
+    it("should use full question when 9 words or less", async () => {
       const mockInvoke = jest.fn().mockRejectedValue(new Error("AI failed"));
 
       mockChatOpenAI.mockImplementation(
@@ -67,14 +67,14 @@ describe("titleGeneration", () => {
           }) as any
       );
 
-      const result = await generateTitle("What is meditation?");
+      const result = await generateTitle("How do I meditate properly for better results?");
 
-      expect(result).toBe("What is meditation?");
+      expect(result).toBe("How do I meditate properly for better results?");
       // Should not call AI for short questions
       expect(mockInvoke).not.toHaveBeenCalled();
     });
 
-    it("should use full question for exactly 5 words", async () => {
+    it("should use full question for exactly 9 words", async () => {
       const mockInvoke = jest.fn().mockRejectedValue(new Error("AI failed"));
 
       mockChatOpenAI.mockImplementation(
@@ -84,10 +84,10 @@ describe("titleGeneration", () => {
           }) as any
       );
 
-      const result = await generateTitle("How do I meditate properly?");
+      const result = await generateTitle("How do I meditate properly for better health today?");
 
-      expect(result).toBe("How do I meditate properly?");
-      // Should not call AI for 5-word questions
+      expect(result).toBe("How do I meditate properly for better health today?");
+      // Should not call AI for 9-word questions
       expect(mockInvoke).not.toHaveBeenCalled();
     });
 
@@ -105,7 +105,7 @@ describe("titleGeneration", () => {
 
       const result = await generateTitle("How do I meditate properly for better health and wellness?");
 
-      expect(result).toBe("How do I meditate...");
+      expect(result).toBe("This is a very long title that exceeds the");
     });
 
     it("should handle empty AI response", async () => {
@@ -122,12 +122,12 @@ describe("titleGeneration", () => {
 
       const result = await generateTitle("How do I meditate properly for better health and wellness?");
 
-      expect(result).toBe("How do I meditate...");
+      expect(result).toBe("How do I meditate properly for better health and...");
     });
 
     it("should generate title in same language as question", async () => {
       const mockInvoke = jest.fn().mockResolvedValue({
-        content: "Principios Básicos Meditación Espiritual",
+        content: "Principios básicos para realizar a Dios mediante la meditación espiritual",
       });
 
       mockChatOpenAI.mockImplementation(
@@ -137,9 +137,11 @@ describe("titleGeneration", () => {
           }) as any
       );
 
-      const result = await generateTitle("¿Cuáles son los principios más importantes para realizar a Dios?");
+      const result = await generateTitle(
+        "¿Cuáles son los principios más importantes para realizar a Dios mediante la práctica espiritual?"
+      );
 
-      expect(result).toBe("Principios Básicos Meditación Espiritual");
+      expect(result).toBe("Principios básicos para realizar a Dios mediante la meditación");
       expect(mockInvoke).toHaveBeenCalledWith(expect.stringContaining("SAME LANGUAGE as the original question"));
     });
   });
@@ -157,7 +159,7 @@ describe("titleGeneration", () => {
 
     it("should generate title and update document successfully", async () => {
       const mockInvoke = jest.fn().mockResolvedValue({
-        content: "Meditation Technique Guide",
+        content: "How to start and sustain a simple meditation practice",
       });
 
       mockChatOpenAI.mockImplementation(
@@ -169,12 +171,12 @@ describe("titleGeneration", () => {
 
       mockFirestoreUpdate.mockResolvedValue(undefined);
 
-      // Use a question longer than 5 words to trigger AI generation
-      await generateAndUpdateTitle("doc123", "How do I meditate properly for better results?");
+      // Use a question longer than 9 words to trigger AI generation
+      await generateAndUpdateTitle("doc123", "How do I meditate properly for better results and spiritual growth?");
 
       expect(mockFirestoreUpdate).toHaveBeenCalledWith(
         mockDocRef,
-        { title: "Meditation Technique Guide" },
+        { title: "How to start and sustain a simple meditation practice" },
         "title generation update",
         expect.stringContaining("doc123")
       );
@@ -196,7 +198,7 @@ describe("titleGeneration", () => {
 
       expect(mockFirestoreUpdate).toHaveBeenCalledWith(
         mockDocRef,
-        { title: "How do I meditate..." },
+        { title: "How do I meditate properly for better health and..." },
         "title generation update",
         expect.stringContaining("doc123")
       );
@@ -237,7 +239,7 @@ describe("titleGeneration", () => {
       expect(mockFirestoreUpdate).toHaveBeenCalledTimes(2);
       expect(mockFirestoreUpdate).toHaveBeenLastCalledWith(
         mockDocRef,
-        { title: "How do I meditate..." },
+        { title: "How do I meditate properly for better health and..." },
         "fallback title update",
         expect.stringContaining("doc123")
       );

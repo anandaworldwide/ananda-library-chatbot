@@ -101,9 +101,9 @@ export function useChatHistory(limit: number = 20) {
             // Use AI-generated title from first message if available, otherwise generate fallback title
             let title = firstMessage.title;
             if (!title) {
-              // Fallback: use full question if < 5 words, otherwise truncate to 4 words (using first message)
+              // Fallback: use full question if <= 9 words, otherwise truncate to 9 words
               const questionWords = firstMessage.question.trim().split(/\s+/);
-              title = questionWords.length <= 5 ? firstMessage.question : questionWords.slice(0, 4).join(" ") + "...";
+              title = questionWords.length <= 9 ? firstMessage.question : questionWords.slice(0, 9).join(" ") + "...";
             }
 
             return {

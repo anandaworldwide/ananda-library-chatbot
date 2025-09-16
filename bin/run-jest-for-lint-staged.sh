@@ -23,8 +23,19 @@ fi
 needs_server_tests() {
     local files=("$@")
     for file in "${files[@]}"; do
-        case "$file" in
-            */pages/api/*|*/utils/server/*|*/services/*)
+        # Normalize paths - handle both absolute and relative paths
+        if [[ "$file" == /* ]]; then
+            # Absolute path - strip workspace root and web/ prefix
+            workspace_root="/Users/Michael/Documents/development/ananda-library-chatbot"
+            normalized_file="${file#$workspace_root/}"
+            normalized_file="${normalized_file#web/}"
+        else
+            # Relative path - just strip web/ prefix if present
+            normalized_file="${file#web/}"
+        fi
+        
+        case "$normalized_file" in
+            pages/api/*|utils/server/*|services/*|__tests__/utils/server/*|__tests__/api/*)
                 return 0
                 ;;
         esac
@@ -67,16 +78,35 @@ done
 
 # Build client command based on file types
 if [ "$has_test_files" = true ] && [ "$has_source_files" = false ]; then
-    # Only test files - run them directly
+    # Only test files - run them directly, but exclude server tests
     client_cmd="npx jest --bail --passWithNoTests --no-coverage --config=src/config/jest.pre-commit.cjs"
 else
     # Source files or mixed - use findRelatedTests
     client_cmd="npx jest --bail --passWithNoTests --no-coverage --config=src/config/jest.pre-commit.cjs --findRelatedTests"
 fi
 
-# Add all files to client test command
+# Add files to client test command, but exclude server test files and server source files
 for file in "$@"; do
-    client_cmd="$client_cmd \"$file\""
+    # Normalize paths - handle both absolute and relative paths
+    if [[ "$file" == /* ]]; then
+        # Absolute path - strip workspace root and web/ prefix
+        workspace_root="/Users/Michael/Documents/development/ananda-library-chatbot"
+        normalized_file="${file#$workspace_root/}"
+        normalized_file="${normalized_file#web/}"
+    else
+        # Relative path - just strip web/ prefix if present
+        normalized_file="${file#web/}"
+    fi
+    
+    case "$normalized_file" in
+        __tests__/utils/server/*|__tests__/api/*|utils/server/*|services/*|pages/api/*)
+            # Skip server tests and server source files for client test run
+            echo "Excluding server file from client tests: $normalized_file"
+            ;;
+        *)
+            client_cmd="$client_cmd \"$normalized_file\""
+            ;;
+    esac
 done
 
 # Run client tests (allow failures but capture exit code)
@@ -97,9 +127,21 @@ if [ "$run_server_tests" = true ]; then
     
     # Add server-related files to server test command
     for file in "$@"; do
-        case "$file" in
-            */pages/api/*|*/utils/server/*|*/services/*)
-                server_cmd="$server_cmd \"$file\""
+        # Normalize paths - handle both absolute and relative paths
+        if [[ "$file" == /* ]]; then
+            # Absolute path - strip workspace root and web/ prefix
+            workspace_root="/Users/Michael/Documents/development/ananda-library-chatbot"
+            normalized_file="${file#$workspace_root/}"
+            normalized_file="${normalized_file#web/}"
+        else
+            # Relative path - just strip web/ prefix if present
+            normalized_file="${file#web/}"
+        fi
+        
+        case "$normalized_file" in
+            pages/api/*|utils/server/*|services/*|__tests__/utils/server/*|__tests__/api/*)
+                server_cmd="$server_cmd \"$normalized_file\""
+                echo "Including server file in server tests: $normalized_file"
                 ;;
         esac
     done

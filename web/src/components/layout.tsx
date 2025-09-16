@@ -58,7 +58,6 @@ export default function Layout({
 
     const headerProps = {
       siteConfig,
-      constrainWidth: useWideLayout,
       onNewChat,
       temporarySession,
       onTemporarySessionChange,

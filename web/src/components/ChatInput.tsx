@@ -336,7 +336,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               {loading ? (
                 <span className="material-icons text-2xl leading-none">stop</span>
               ) : (
-                <span className="material-icons text-xl leading-none">send</span>
+                <span className="material-icons text-xl leading-none">arrow_upward</span>
               )}
             </button>
           </div>

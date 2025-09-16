@@ -4,7 +4,6 @@ import { getParentSiteUrl, getParentSiteName } from "@/utils/client/siteConfig";
 
 interface JairamHeaderProps {
   siteConfig: SiteConfig;
-  constrainWidth?: boolean;
   onNewChat?: () => void;
   temporarySession?: boolean;
   onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -13,7 +12,6 @@ interface JairamHeaderProps {
 
 export default function JairamHeader({
   siteConfig,
-  constrainWidth,
   onNewChat,
   temporarySession,
   onTemporarySessionChange,
@@ -28,7 +26,6 @@ export default function JairamHeader({
       parentSiteUrl={parentSiteUrl}
       parentSiteName={parentSiteName}
       requireLogin={siteConfig.requireLogin}
-      constrainWidth={constrainWidth}
       onNewChat={onNewChat}
       temporarySession={temporarySession}
       onTemporarySessionChange={onTemporarySessionChange}

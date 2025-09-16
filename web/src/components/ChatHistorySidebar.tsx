@@ -322,45 +322,48 @@ export default function ChatHistorySidebar({
                         : "lg:hover:bg-white lg:hover:bg-opacity-60"
                     }`}
                   >
-                    <button
-                      onClick={() => handleConversationClick(conversation)}
-                      className="w-full text-left p-2 pr-16 rounded-lg"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`text-sm font-medium truncate ${
-                            isCurrentConversation ? "text-blue-700" : "text-gray-900 lg:group-hover:text-blue-600"
-                          }`}
-                        >
-                          {conversation.title}
-                        </p>
+                    <div className="flex items-center gap-2 p-2">
+                      {/* Star button on the left */}
+                      <div className="flex-shrink-0">
+                        <StarButton
+                          convId={conversation.convId}
+                          isStarred={conversation.isStarred || false}
+                          onStarChange={async (convId, isStarred) => {
+                            if (isStarred) {
+                              await starConversation(convId);
+                            } else {
+                              await unstarConversation(convId);
+                            }
+                          }}
+                          size="sm"
+                        />
                       </div>
-                    </button>
 
-                    {/* Star button */}
-                    <div className="absolute right-10 top-2 z-10">
-                      <StarButton
-                        convId={conversation.convId}
-                        isStarred={conversation.isStarred || false}
-                        onStarChange={async (convId, isStarred) => {
-                          if (isStarred) {
-                            await starConversation(convId);
-                          } else {
-                            await unstarConversation(convId);
-                          }
-                        }}
-                        size="sm"
-                      />
-                    </div>
+                      {/* Title area (clickable) */}
+                      <button
+                        onClick={() => handleConversationClick(conversation)}
+                        className="flex-1 text-left rounded-lg"
+                      >
+                        <div className="min-w-0">
+                          <p
+                            className={`text-[13px] font-normal ${
+                              isCurrentConversation ? "text-blue-700" : "text-gray-900 lg:group-hover:text-blue-600"
+                            }`}
+                          >
+                            {conversation.title}
+                          </p>
+                        </div>
+                      </button>
 
-                    {/* Three-dot menu */}
-                    <div className="absolute right-3 top-2 z-10">
-                      <ConversationMenu
-                        isVisible={true}
-                        isRowSelected={isCurrentConversation}
-                        onRename={() => handleRename(conversation)}
-                        onDelete={() => handleDelete(conversation)}
-                      />
+                      {/* Three-dot menu on the right */}
+                      <div className="flex-shrink-0">
+                        <ConversationMenu
+                          isVisible={true}
+                          isRowSelected={isCurrentConversation}
+                          onRename={() => handleRename(conversation)}
+                          onDelete={() => handleDelete(conversation)}
+                        />
+                      </div>
                     </div>
                   </div>
                 );

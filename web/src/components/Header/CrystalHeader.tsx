@@ -6,7 +6,6 @@ import { getParentSiteUrl } from "@/utils/client/siteConfig";
 
 interface CrystalHeaderProps {
   siteConfig: SiteConfig;
-  constrainWidth?: boolean;
   onNewChat?: () => void;
   temporarySession?: boolean;
   onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -15,7 +14,6 @@ interface CrystalHeaderProps {
 
 export default function CrystalHeader({
   siteConfig,
-  constrainWidth,
   onNewChat,
   temporarySession,
   onTemporarySessionChange,
@@ -25,9 +23,8 @@ export default function CrystalHeader({
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0092e3] text-white">
-      <div className={`h-24 ${constrainWidth ? "lg:grid lg:grid-cols-[288px_1fr] lg:px-0" : "px-4"}`}>
-        {constrainWidth && <div className="hidden lg:block"></div>}
-        <div className={`flex justify-between items-center ${constrainWidth ? "mx-auto w-full max-w-4xl px-4" : ""}`}>
+      <div className="h-24 px-4">
+        <div className="flex justify-between items-center">
           <div className="flex items-center">
             <Link href="/">
               <Image

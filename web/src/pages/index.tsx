@@ -748,10 +748,10 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           }
 
           if (siteConfig?.requireLogin && sidebarFunctionsRef.current && questionForSidebar) {
-            // Create a temporary title from the question
+            // Create a temporary title from the question (target ~12 words)
             const questionWords = questionForSidebar.trim().split(/\s+/);
             const tempTitle =
-              questionWords.length <= 5 ? questionForSidebar : questionWords.slice(0, 4).join(" ") + "...";
+              questionWords.length <= 9 ? questionForSidebar : questionWords.slice(0, 9).join(" ") + "...";
 
             sidebarFunctionsRef.current.addNewConversation(data.convId, tempTitle, questionForSidebar);
 
@@ -1496,7 +1496,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                 <div className="flex items-center justify-center mb-3 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
                   <span className="material-icons text-purple-600 text-lg mr-2">lock</span>
                   <span className="text-purple-800 text-sm font-medium">
-                    Temporary Session Active
+                    Temporary Session Active. It will not be logged, saved, or shareable.
                     <button
                       onClick={handleTemporarySessionChange}
                       className="ml-2 px-2 py-1 text-xs bg-purple-200 hover:bg-purple-300 text-purple-800 rounded border border-purple-300 transition-colors"

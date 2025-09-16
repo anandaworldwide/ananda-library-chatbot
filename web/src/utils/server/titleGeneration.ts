@@ -1,7 +1,7 @@
 /**
  * Title Generation Utility
  *
- * Generates concise 4-word titles for chat conversations using AI.
+ * Generates concise 8–9 word summaries for chat conversations using AI.
  * Falls back to truncated questions if AI generation fails.
  */
 
@@ -11,15 +11,15 @@ import { getAnswersCollectionName } from "@/utils/server/firestoreUtils";
 import { db } from "@/services/firebase";
 
 /**
- * Generates a concise 4-word title for a question using AI
- * Only generates titles for questions longer than 5 words
+ * Generates a concise 8–9 word summary for a question using AI
+ * Only generates summaries for questions longer than 9 words
  */
 async function generateAITitle(question: string): Promise<string | null> {
   try {
     const words = question.trim().split(/\s+/);
 
-    // If question is 5 words or less, don't generate AI title - use exact text
-    if (words.length <= 5) {
+    // If question is 9 words or less, don't generate AI summary - use exact text
+    if (words.length <= 9) {
       return null; // This will cause fallback to exact question text
     }
 
@@ -27,40 +27,60 @@ async function generateAITitle(question: string): Promise<string | null> {
     const model = new ChatOpenAI({
       modelName: "gpt-3.5-turbo",
       temperature: 0.1,
-      maxTokens: 20, // Keep it short
+      maxTokens: 40, // Allow up to ~9 words comfortably
       timeout: 10000, // 10 second timeout
     });
 
-    const prompt = `Generate a concise four-word title for this question: "${question}"
+    const prompt = `Generate a concise summary (8–9 words) for this question: "${question}"
 
 Requirements:
-- Exactly 4 words
-- Capture the main topic
-- No punctuation
-- Title case
+- 8 to 9 words only
+- Capture the main topic clearly
+- Avoid trailing punctuation
+- Sentence case (not all-caps, not Title Case)
 - IMPORTANT: Generate the title in the SAME LANGUAGE as the original question
 
 Examples:
 Question: "How do I meditate properly?"
-Title: "Proper Meditation Technique Guide"
+Title: "How to start and sustain a simple meditation practice"
 
 Question: "What are Yogananda's teachings about love?"
-Title: "Yogananda Love Teaching Wisdom"
+Title: "Yogananda's guidance on divine love and relationships"
 
 Question: "¿Cuáles son los principios de meditación?"
-Title: "Principios Básicos Meditación Espiritual"
+Title: "Principios esenciales para iniciar la meditación consciente"
 
 Question: "Comment méditer correctement selon Yogananda?"
-Title: "Méditation Correcte Selon Yogananda"
+Title: "Conseils de Yogananda pour démarrer la méditation quotidienne"
 
 Title:`;
 
     const response = await model.invoke(prompt);
-    const title = response.content?.toString()?.trim();
+    // Simplified extraction: expect content to be a string; otherwise, skip to fallback
+    let title = (response as any)?.content as string | undefined;
+    if (typeof title !== "string") {
+      return null;
+    }
+    title = title.trim();
 
-    if (title && title.split(" ").length <= 6) {
-      // Allow some flexibility
-      return title;
+    if (title) {
+      // Minimal normalization: strip outer quotes and collapse spaces
+      title = title
+        .replace(/^"+|"+$/g, "")
+        .replace(/^'+|'+$/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const parts = title.split(/\s+/);
+      if (parts.length > 9) {
+        // Soft enforce upper bound by truncating to 9 words
+        title = parts.slice(0, 9).join(" ");
+      }
+
+      const count = title.split(/\s+/).length;
+      if (count >= 8 && count <= 9) {
+        return title;
+      }
     }
 
     return null;
@@ -71,19 +91,12 @@ Title:`;
 }
 
 /**
- * Creates a fallback title by truncating the question
+ * Creates a simple fallback by truncating to 9 words
  */
 function createFallbackTitle(question: string): string {
-  const words = question.trim().split(/\s+/);
-
-  // If question is 5 words or less, use the full question
-  if (words.length <= 5) {
-    return question;
-  }
-
-  // Otherwise, take first 4 words and add ellipsis if needed
-  const truncated = words.slice(0, 4).join(" ");
-  return truncated + (words.length > 4 ? "..." : "");
+  const words = question.replace(/\s+/g, " ").trim().split(/\s+/);
+  if (words.length <= 9) return words.join(" ");
+  return words.slice(0, 9).join(" ") + "...";
 }
 
 /**

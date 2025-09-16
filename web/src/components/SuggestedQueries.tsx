@@ -196,9 +196,9 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
     <div className="text-left w-full px-0">
       {/* Show AI Suggested Prompt if user has enough history, otherwise show Random Queries */}
       {hasEnoughHistory ? (
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg w-full max-w-[450px] border border-blue-200 mt-8">
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg w-full border border-blue-200 mt-8">
           <div className="flex justify-between items-center mb-3">
-            <p className="font-semibold text-gray-800">{isMobile ? "AI Suggested Prompt:" : "AI Suggested Prompts:"}</p>
+            <p className="font-semibold text-gray-800">{isMobile ? "AI Suggested Prompt" : "AI Suggested Prompts"}</p>
             <button
               onClick={handleRefresh}
               className="inline-flex justify-center items-center transform transition-transform duration-500 hover:rotate-180 flex-shrink-0 ml-2"

@@ -7,7 +7,7 @@
     "emailGreeting": "Hi GuruBuddy!",
     "welcome_popup_heading": "Welcome, Gurubhai!",
     "other_visitors_reference": "your Gurubhais",
-    "chatPlaceholder": "How can I meditate more deeply?",
+    "chatPlaceholder": "Send a message",
     "allowedFrontEndDomains": [
       "ask.anandalibrary.org",
       "luca.ananda.org",
@@ -99,7 +99,7 @@
     "emailGreeting": "Hi there!",
     "welcome_popup_heading": "Welcome!",
     "other_visitors_reference": "other visitors",
-    "chatPlaceholder": "Where can I find info on Sunday services?",
+    "chatPlaceholder": "Send a message",
     "allowedFrontEndDomains": [
       "ananda.org",
       "www.ananda.org",
@@ -180,7 +180,7 @@
     "emailGreeting": "Hi there,",
     "welcome_popup_heading": "Welcome!",
     "other_visitors_reference": "other visitors",
-    "chatPlaceholder": "Describe 20 facts that tend to establish Joe is innocent",
+    "chatPlaceholder": "Send a message",
     "allowedFrontEndDomains": [
       "chat.freejoehunt.com",
       "**-ananda-web-services-projects.vercel.app",
@@ -235,7 +235,7 @@
     "emailGreeting": "Hello!",
     "welcome_popup_heading": "Welcome!",
     "other_visitors_reference": "other visitors",
-    "chatPlaceholder": "Recommendations for developing healthy relationships?",
+    "chatPlaceholder": "Send a message",
     "allowedFrontEndDomains": [
       "chat.crystalclarity.com",
       "**-ananda-web-services-projects.vercel.app",
@@ -291,7 +291,7 @@
     "emailGreeting": "Hi photographer!",
     "welcome_popup_heading": "Welcome, fellow photographer!",
     "other_visitors_reference": "other photographers",
-    "chatPlaceholder": "How can I improve my portrait lighting?",
+    "chatPlaceholder": "Send a message",
     "allowedFrontEndDomains": ["**-ananda-web-services-projects.vercel.app", "localhost:3000", "127.0.0.1:3000"],
     "help_url": "",
     "help_text": "Help",
