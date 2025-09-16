@@ -1,4 +1,5 @@
 import { GetServerSideProps } from "next";
+import Head from "next/head";
 import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
@@ -8,6 +9,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 import { NextApiRequest } from "next";
 import { useState } from "react";
+import { getSiteName } from "@/utils/client/siteConfig";
 
 interface ModelComparisonProps {
   siteConfig: SiteConfig | null;
@@ -89,34 +91,39 @@ const ModelComparison: React.FC<ModelComparisonProps> = ({ siteConfig, isSudoAdm
   }
 
   return (
-    <Layout siteConfig={siteConfig}>
-      <div className="flex flex-col h-full">
-        <div className="flex-grow overflow-hidden answers-container">
-          <div className="h-full overflow-y-auto px-4 py-8">
-            <h1 className="text-3xl font-bold mb-6">Compare AI Models {isHidden && "(Admin Only)"}</h1>
-            {!isHidden && (
-              <div className="text-gray-600 mb-6">
-                <p className="inline-block">
-                  Help us improve our service by rating the answers you receive.{" "}
-                  <button onClick={() => setIsModalOpen(true)} className="text-blue-600 hover:underline">
-                    Learn more
-                  </button>
-                </p>
-              </div>
-            )}
-            <InfoModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-            <ModelComparisonChat
-              siteConfig={siteConfig}
-              savedState={{
-                ...savedState,
-                sourceCount: siteConfig?.defaultNumSources || savedState.sourceCount,
-              }}
-              onStateChange={setSavedState}
-            />
+    <>
+      <Head>
+        <title>Compare AI Models - {getSiteName(siteConfig)}</title>
+      </Head>
+      <Layout siteConfig={siteConfig}>
+        <div className="flex flex-col h-full">
+          <div className="flex-grow overflow-hidden answers-container">
+            <div className="h-full overflow-y-auto px-4 py-8">
+              <h1 className="text-3xl font-bold mb-6">Compare AI Models {isHidden && "(Admin Only)"}</h1>
+              {!isHidden && (
+                <div className="text-gray-600 mb-6">
+                  <p className="inline-block">
+                    Help us improve our service by rating the answers you receive.{" "}
+                    <button onClick={() => setIsModalOpen(true)} className="text-blue-600 hover:underline">
+                      Learn more
+                    </button>
+                  </p>
+                </div>
+              )}
+              <InfoModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+              <ModelComparisonChat
+                siteConfig={siteConfig}
+                savedState={{
+                  ...savedState,
+                  sourceCount: siteConfig?.defaultNumSources || savedState.sourceCount,
+                }}
+                onStateChange={setSavedState}
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </Layout>
+      </Layout>
+    </>
   );
 };
 

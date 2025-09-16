@@ -56,10 +56,6 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
               Review Downvotes
               <span className="material-icons text-sm ml-1">thumb_down</span>
             </Link>
-            <Link href="/admin/relatedQuestionsUpdater" className="text-blue-600 underline inline-flex items-center">
-              Related Qs Updater
-              <span className="material-icons text-sm ml-1">update</span>
-            </Link>
           </div>
         </section>
       </div>

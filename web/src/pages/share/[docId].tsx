@@ -6,13 +6,14 @@
 
 import { useRouter } from "next/router";
 import { useEffect, useState, useRef } from "react";
+import Head from "next/head";
 import Layout from "@/components/layout";
 import MessageItem from "@/components/MessageItem";
 import { SiteConfig } from "@/types/siteConfig";
 import { getCommonSiteConfigProps } from "@/utils/server/getCommonSiteConfigProps";
 import { loadConversationByDocId } from "@/utils/client/conversationLoader";
 import { logEvent } from "@/utils/client/analytics";
-import { getGreeting } from "@/utils/client/siteConfig";
+import { getGreeting, getSiteName } from "@/utils/client/siteConfig";
 import { ExtendedAIMessage } from "@/types/ExtendedAIMessage";
 import { DocMetadata } from "@/types/DocMetadata";
 import { Document } from "langchain/document";
@@ -28,6 +29,8 @@ export default function ShareConversation({ siteConfig }: ShareConversationProps
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ExtendedAIMessage[]>([]);
   const [viewOnlyMode, setViewOnlyMode] = useState(false);
+  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
+  const [firstQuestion, setFirstQuestion] = useState<string | null>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,6 +44,15 @@ export default function ShareConversation({ siteConfig }: ShareConversationProps
         setError(null);
 
         const loadedConversation = await loadConversationByDocId(docId);
+
+        // Set title and first question for HTML title
+        setConversationTitle(loadedConversation.title || null);
+
+        // Get first user message for fallback title
+        const firstUserMessage = loadedConversation.messages.find((msg) => msg.type === "userMessage");
+        if (firstUserMessage) {
+          setFirstQuestion(firstUserMessage.message);
+        }
 
         // If owner, redirect to the full conversation URL
         if (loadedConversation.isOwner && loadedConversation.convId) {
@@ -89,69 +101,109 @@ export default function ShareConversation({ siteConfig }: ShareConversationProps
     loadSharedConversation();
   }, [router.isReady, docId, router, siteConfig]);
 
+  // Generate HTML title
+  const generateTitle = () => {
+    const siteName = getSiteName(siteConfig);
+
+    if (conversationTitle) {
+      return `${conversationTitle} - ${siteName}`;
+    }
+
+    if (firstQuestion) {
+      // Truncate question to ~50 characters for title
+      const truncatedQuestion = firstQuestion.length > 50 ? firstQuestion.substring(0, 47) + "..." : firstQuestion;
+      return `${truncatedQuestion} - ${siteName}`;
+    }
+
+    if (loading) {
+      return `Loading... - ${siteName}`;
+    }
+
+    if (error) {
+      return `Error - ${siteName}`;
+    }
+
+    return `Shared Conversation - ${siteName}`;
+  };
+
   if (loading) {
     return (
-      <Layout siteConfig={siteConfig}>
-        <div className="flex justify-center items-center h-screen">
-          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
-          <p className="text-lg text-gray-600 ml-4">Loading shared conversation...</p>
-        </div>
-      </Layout>
+      <>
+        <Head>
+          <title>{generateTitle()}</title>
+        </Head>
+        <Layout siteConfig={siteConfig}>
+          <div className="flex justify-center items-center h-screen">
+            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
+            <p className="text-lg text-gray-600 ml-4">Loading shared conversation...</p>
+          </div>
+        </Layout>
+      </>
     );
   }
 
   if (error) {
     return (
-      <Layout siteConfig={siteConfig}>
-        <div className="flex justify-center items-center h-screen">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4 text-red-600">Error</h1>
-            <p className="text-gray-600">{error}</p>
+      <>
+        <Head>
+          <title>{generateTitle()}</title>
+        </Head>
+        <Layout siteConfig={siteConfig}>
+          <div className="flex justify-center items-center h-screen">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold mb-4 text-red-600">Error</h1>
+              <p className="text-gray-600">{error}</p>
+            </div>
           </div>
-        </div>
-      </Layout>
+        </Layout>
+      </>
     );
   }
 
   return (
-    <Layout siteConfig={siteConfig}>
-      <div className="mx-auto w-full max-w-4xl px-4">
-        {viewOnlyMode && (
-          <div className="bg-blue-100 text-blue-800 text-center py-2 mb-4 rounded-md">
-            <span className="material-icons text-sm mr-2">visibility</span>
-            You are viewing a shared conversation (read-only)
-          </div>
-        )}
+    <>
+      <Head>
+        <title>{generateTitle()}</title>
+      </Head>
+      <Layout siteConfig={siteConfig}>
+        <div className="mx-auto w-full max-w-4xl px-4">
+          {viewOnlyMode && (
+            <div className="bg-blue-100 text-blue-800 text-center py-2 mb-4 rounded-md">
+              <span className="material-icons text-sm mr-2">visibility</span>
+              You are viewing a shared conversation (read-only)
+            </div>
+          )}
 
-        <div className="flex-grow overflow-hidden answers-container">
-          <div className="h-full overflow-y-auto">
-            {messages.map((message, index) => (
-              <MessageItem
-                key={`sharedMessage-${index}`}
-                messageKey={`sharedMessage-${index}`}
-                message={message}
-                previousMessage={index > 0 ? messages[index - 1] : undefined}
-                index={index}
-                isLastMessage={index === messages.length - 1}
-                loading={false}
-                temporarySession={false}
-                collectionChanged={false}
-                hasMultipleCollections={false}
-                linkCopied={null}
-                votes={{}}
-                siteConfig={siteConfig}
-                handleVote={() => {}}
-                handleCopyLink={() => {}}
-                lastMessageRef={index === messages.length - 1 ? lastMessageRef : null}
-                voteError={null}
-                allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
-              />
-            ))}
-            <div ref={lastMessageRef} />
+          <div className="flex-grow overflow-hidden answers-container">
+            <div className="h-full overflow-y-auto">
+              {messages.map((message, index) => (
+                <MessageItem
+                  key={`sharedMessage-${index}`}
+                  messageKey={`sharedMessage-${index}`}
+                  message={message}
+                  previousMessage={index > 0 ? messages[index - 1] : undefined}
+                  index={index}
+                  isLastMessage={index === messages.length - 1}
+                  loading={false}
+                  temporarySession={false}
+                  collectionChanged={false}
+                  hasMultipleCollections={false}
+                  linkCopied={null}
+                  votes={{}}
+                  siteConfig={siteConfig}
+                  handleVote={() => {}}
+                  handleCopyLink={() => {}}
+                  lastMessageRef={index === messages.length - 1 ? lastMessageRef : null}
+                  voteError={null}
+                  allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
+                />
+              ))}
+              <div ref={lastMessageRef} />
+            </div>
           </div>
         </div>
-      </div>
-    </Layout>
+      </Layout>
+    </>
   );
 }
 

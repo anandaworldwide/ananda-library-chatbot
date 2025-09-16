@@ -3,11 +3,13 @@
 
 import { SiteConfig } from "@/types/siteConfig";
 import React, { useState, useEffect } from "react";
+import Head from "next/head";
 import Layout from "@/components/layout";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import validator from "validator";
 import { getToken } from "@/utils/client/tokenManager";
+import { getSiteName } from "@/utils/client/siteConfig";
 
 interface ContactProps {
   siteConfig: SiteConfig | null;
@@ -124,117 +126,127 @@ const Contact = ({ siteConfig }: ContactProps) => {
   };
 
   return (
-    <Layout siteConfig={siteConfig}>
-      <div className="container mx-auto p-4">
-        <h1 className="text-2xl mb-4">{isFeedbackMode ? "Feedback" : "Contact Us"}</h1>
+    <>
+      <Head>
+        <title>
+          {isFeedbackMode ? "Feedback" : "Contact"} - {getSiteName(siteConfig)}
+        </title>
+      </Head>
+      <Layout siteConfig={siteConfig}>
+        <div className="container mx-auto p-4">
+          <h1 className="text-2xl mb-4">{isFeedbackMode ? "Feedback" : "Contact Us"}</h1>
 
-        {/* Feedback mode introduction text */}
-        {isFeedbackMode && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <p className="text-blue-800">
-              We are constantly striving to improve the site and provide the best experience possible. Please send us
-              your candid feedback - we appreciate all comments, suggestions, and insights!
-            </p>
-          </div>
-        )}
-        {/* Display error message if any */}
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-            <span className="block sm:inline">{error}</span>
-          </div>
-        )}
-        {/* Contact form */}
-        <form
-          data-testid="contact-form"
-          onSubmit={handleSubmit}
-          className={`space-y-4 ${isSubmitted ? "opacity-50 pointer-events-none" : ""}`}
-        >
-          <div className="flex space-x-4">
-            {/* Name input field */}
-            <div className="w-1/2">
-              <label htmlFor="name-input" className="block text-sm font-medium text-gray-700">
-                Name
-              </label>
-              <input
-                id="name-input"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={`mt-1 block w-full border rounded-md shadow-sm ${
-                  isLoggedIn && siteConfig?.requireLogin
-                    ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
-                    : "border-gray-300"
-                }`}
-                required
-                readOnly={isLoggedIn && siteConfig?.requireLogin}
-                disabled={isSubmitted || isSubmitting}
-                maxLength={100}
-              />
+          {/* Feedback mode introduction text */}
+          {isFeedbackMode && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-blue-800">
+                We are constantly striving to improve the site and provide the best experience possible. Please send us
+                your candid feedback - we appreciate all comments, suggestions, and insights!
+              </p>
             </div>
-            {/* Email input field */}
-            <div className="w-1/2">
-              <label htmlFor="email-input" className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <input
-                id="email-input"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={`mt-1 block w-full border rounded-md shadow-sm ${
-                  isLoggedIn && siteConfig?.requireLogin
-                    ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
-                    : "border-gray-300"
-                }`}
-                required
-                readOnly={isLoggedIn && siteConfig?.requireLogin}
-                disabled={isSubmitted || isSubmitting}
-              />
+          )}
+          {/* Display error message if any */}
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+              <span className="block sm:inline">{error}</span>
             </div>
-          </div>
-          {/* Message textarea */}
-          <div>
-            <label htmlFor="message-input" className="block text-sm font-medium text-gray-700">
-              {isFeedbackMode ? "Your Feedback" : "Message"}
-            </label>
-            <textarea
-              id="message-input"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm h-48"
-              required
-              disabled={isSubmitted || isSubmitting}
-              maxLength={1000}
-            />
-          </div>
-          {/* Submit button */}
-          <button
-            type="submit"
-            className="bg-blue-500 text-white px-4 py-2 rounded-md disabled:bg-blue-300"
-            disabled={isSubmitted || isSubmitting}
+          )}
+          {/* Contact form */}
+          <form
+            data-testid="contact-form"
+            onSubmit={handleSubmit}
+            className={`space-y-4 ${isSubmitted ? "opacity-50 pointer-events-none" : ""}`}
           >
-            {isSubmitting
-              ? isFeedbackMode
-                ? "Sending Feedback..."
-                : "Sending..."
-              : isFeedbackMode
-                ? "Send Feedback"
-                : "Send"}
-          </button>
-        </form>
-        {/* Success message and homepage link */}
-        {isSubmitted && (
-          <div className="mt-8 text-center">
-            <h2 className="text-xl font-semibold text-green-600 mb-4">
-              {isFeedbackMode ? "Thanks for your feedback!" : "Thanks, message sent!"}
-            </h2>
-            <Link href="/" className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors">
-              Go to Homepage
-            </Link>
-          </div>
-        )}
-      </div>
-    </Layout>
+            <div className="flex space-x-4">
+              {/* Name input field */}
+              <div className="w-1/2">
+                <label htmlFor="name-input" className="block text-sm font-medium text-gray-700">
+                  Name
+                </label>
+                <input
+                  id="name-input"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={`mt-1 block w-full border rounded-md shadow-sm ${
+                    isLoggedIn && siteConfig?.requireLogin
+                      ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
+                      : "border-gray-300"
+                  }`}
+                  required
+                  readOnly={isLoggedIn && siteConfig?.requireLogin}
+                  disabled={isSubmitted || isSubmitting}
+                  maxLength={100}
+                />
+              </div>
+              {/* Email input field */}
+              <div className="w-1/2">
+                <label htmlFor="email-input" className="block text-sm font-medium text-gray-700">
+                  Email
+                </label>
+                <input
+                  id="email-input"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`mt-1 block w-full border rounded-md shadow-sm ${
+                    isLoggedIn && siteConfig?.requireLogin
+                      ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
+                      : "border-gray-300"
+                  }`}
+                  required
+                  readOnly={isLoggedIn && siteConfig?.requireLogin}
+                  disabled={isSubmitted || isSubmitting}
+                />
+              </div>
+            </div>
+            {/* Message textarea */}
+            <div>
+              <label htmlFor="message-input" className="block text-sm font-medium text-gray-700">
+                {isFeedbackMode ? "Your Feedback" : "Message"}
+              </label>
+              <textarea
+                id="message-input"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm h-48"
+                required
+                disabled={isSubmitted || isSubmitting}
+                maxLength={1000}
+              />
+            </div>
+            {/* Submit button */}
+            <button
+              type="submit"
+              className="bg-blue-500 text-white px-4 py-2 rounded-md disabled:bg-blue-300"
+              disabled={isSubmitted || isSubmitting}
+            >
+              {isSubmitting
+                ? isFeedbackMode
+                  ? "Sending Feedback..."
+                  : "Sending..."
+                : isFeedbackMode
+                  ? "Send Feedback"
+                  : "Send"}
+            </button>
+          </form>
+          {/* Success message and homepage link */}
+          {isSubmitted && (
+            <div className="mt-8 text-center">
+              <h2 className="text-xl font-semibold text-green-600 mb-4">
+                {isFeedbackMode ? "Thanks for your feedback!" : "Thanks, message sent!"}
+              </h2>
+              <Link
+                href="/"
+                className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
+              >
+                Go to Homepage
+              </Link>
+            </div>
+          )}
+        </div>
+      </Layout>
+    </>
   );
 };
 

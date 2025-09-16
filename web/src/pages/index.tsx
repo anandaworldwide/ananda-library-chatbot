@@ -9,6 +9,7 @@
 // React and Next.js imports
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/router";
+import Head from "next/head";
 
 // Component imports
 import Layout from "@/components/layout";
@@ -32,6 +33,7 @@ import { getCollectionQueries } from "@/utils/client/collectionQueries";
 import { handleVote as handleVoteUtil } from "@/utils/client/voteHandler";
 import { SiteConfig } from "@/types/siteConfig";
 import {
+  getSiteName,
   getCollectionsConfig,
   getEnableMediaTypeSelection,
   getEnableAuthorSelection,
@@ -151,6 +153,21 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   const [currentConvId, setCurrentConvId] = useState<string | null>(null);
   const currentConvIdRef = useRef<string | null>(null);
 
+  // Track conversation title for HTML page title
+  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
+
+  // Generate page title based on conversation state
+  const generatePageTitle = useCallback(() => {
+    const siteName = getSiteName(siteConfig);
+
+    if (conversationTitle) {
+      return `${conversationTitle} - ${siteName}`;
+    }
+
+    // Default title for home page
+    return siteName;
+  }, [conversationTitle, siteConfig]);
+
   // Keep ref in sync with state
   useEffect(() => {
     currentConvIdRef.current = currentConvId;
@@ -242,6 +259,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         // Set the current conversation ID for follow-up messages
         setCurrentConvId(convId);
 
+        // Set conversation title for page title
+        if (loadedConversation.title) {
+          setConversationTitle(loadedConversation.title);
+        }
+
         // Log analytics event
         logEvent("chat_history_conversation_loaded", "Chat History", convId, loadedConversation.messages.length);
       } catch (error) {
@@ -295,6 +317,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         currentConvIdRef.current = null;
         setCurrentConvId(null);
         setCurrentQuestion("");
+        setConversationTitle(null); // Clear conversation title
         setMessageState({
           messages: [
             {
@@ -742,6 +765,10 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       // Handle AI-generated title updates
       if (data.title && data.convId && sidebarFunctionsRef.current) {
         sidebarFunctionsRef.current.updateConversationTitle(data.convId, data.title);
+        // Update page title if this is the current conversation
+        if (data.convId === currentConvIdRef.current) {
+          setConversationTitle(data.title);
+        }
       }
 
       // Handle follow-up question suggestions
@@ -1403,6 +1430,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Main component render
   return (
     <SudoProvider disableChecks={!!siteConfig && !!siteConfig.requireLogin}>
+      <Head>
+        <title>{generatePageTitle()}</title>
+      </Head>
       <Layout
         siteConfig={siteConfig}
         useWideLayout={siteConfig?.requireLogin}
