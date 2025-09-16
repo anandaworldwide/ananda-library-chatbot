@@ -325,6 +325,54 @@ class DaemonManager:
             print("\n📄 Combined Log Output:")
             subprocess.run(["tail", "-50", str(log_file)])
 
+    def health_check(self) -> bool:
+        """Perform health check and auto-recover if needed."""
+        print(f"Performing health check for crawler daemon '{self.service_name}'...")
+
+        # Check if plist exists
+        if not self.plist_file.exists():
+            print("❌ Daemon not installed")
+            return False
+
+        # Check if service is loaded and running using tabular format
+        returncode, stdout, stderr = self._run_command(["launchctl", "list"])
+
+        if returncode != 0:
+            print("❌ Unable to get launchctl status - restarting...")
+            return self.start()
+
+        # Parse tabular format: PID\tLastExitCode\tLabel
+        lines = stdout.strip().split("\n")
+        service_line = None
+        for line in lines:
+            if self.service_name in line:
+                service_line = line
+                break
+
+        if not service_line:
+            print("❌ Service not found in launchctl - restarting...")
+            return self.start()
+
+        parts = service_line.split("\t")
+        if len(parts) >= 3:
+            pid = parts[0].strip()
+            last_exit_code = parts[1].strip()
+
+            if pid == "-":
+                print("🟡 Service loaded but not running - restarting...")
+                return self.restart()
+            elif last_exit_code != "0":
+                print(
+                    f"⚠️  Service previously exited with code: {last_exit_code} - restarting..."
+                )
+                return self.restart()
+            else:
+                print("✅ Service is healthy and running")
+                return True
+
+        print("⚠️  Unable to parse service status - assuming healthy")
+        return True
+
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
@@ -335,6 +383,7 @@ def parse_arguments() -> argparse.Namespace:
 Examples:
     python daemon_manager.py --site ananda-public install
     python daemon_manager.py --site ananda-public status
+    python daemon_manager.py --site ananda-public health-check
     python daemon_manager.py --site ananda-public logs --follow
     python daemon_manager.py --site ananda-public uninstall
         """,
@@ -344,7 +393,16 @@ Examples:
 
     parser.add_argument(
         "action",
-        choices=["install", "uninstall", "status", "start", "stop", "restart", "logs"],
+        choices=[
+            "install",
+            "uninstall",
+            "status",
+            "start",
+            "stop",
+            "restart",
+            "logs",
+            "health-check",
+        ],
         help="Action to perform",
     )
 
@@ -374,6 +432,8 @@ def _execute_action(manager: DaemonManager, action: str, follow: bool = False) -
     elif action == "logs":
         manager.logs(follow=follow)
         return True
+    elif action == "health-check":
+        return manager.health_check()
     else:
         print(f"❌ Unknown action: {action}")
         return False

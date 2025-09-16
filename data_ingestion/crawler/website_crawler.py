@@ -34,6 +34,7 @@ import random
 import re
 import signal
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -59,6 +60,7 @@ except ImportError:
     psutil = None
 
 # Additional imports for specific functionality
+import threading
 from contextlib import suppress
 
 from langchain_openai import OpenAIEmbeddings
@@ -97,6 +99,87 @@ USER_AGENT = "Ananda Chatbot Crawler"
 # Constants
 MAX_PLAYWRIGHT_FIREFOX_PROCS = 3  # Soft cap before we start force-cleaning
 CLEANUP_AGE_SECONDS = 600  # 10 minutes
+
+# Health monitoring constants
+HEALTH_CHECK_INTERVAL = 300  # 5 minutes
+HEALTH_WEDGE_TIMEOUT = 600  # 10 minutes of no progress
+
+
+class HealthMonitor:
+    """Monitors crawler health and triggers restarts if wedged."""
+
+    def __init__(self, crawler):
+        self.crawler = crawler
+        self.last_progress_time = time.time()
+        self.browser = None
+        self.page = None
+
+    def update_progress(self):
+        """Update the last progress timestamp."""
+        self.last_progress_time = time.time()
+
+    def set_browser(self, browser, page):
+        """Set the current browser and page for health checks."""
+        self.browser = browser
+        self.page = page
+
+    def check_health(self):
+        """Perform health check and return True if healthy, False if wedged."""
+        try:
+            # Check if we've made progress recently
+            time_since_progress = time.time() - self.last_progress_time
+            if time_since_progress > HEALTH_WEDGE_TIMEOUT:
+                logging.warning(
+                    f"No progress in {time_since_progress:.0f} seconds, crawler may be wedged"
+                )
+                return False
+
+            # Check browser responsiveness
+            if self.page and not self.page.is_closed():
+                try:
+                    # Simple JS evaluation to test responsiveness
+                    result = self.page.evaluate("() => 'healthy'")
+                    if result != "healthy":
+                        logging.warning("Browser page not responsive")
+                        return False
+                except Exception as e:
+                    logging.warning(f"Browser health check failed: {e}")
+                    return False
+            else:
+                logging.warning("Browser page is closed or unavailable")
+                return False
+
+            # Check system resources
+            if psutil:
+                memory = psutil.virtual_memory()
+                if memory.percent > 95:
+                    logging.warning(f"High memory usage: {memory.percent:.1f}%")
+                    return False
+
+                cpu_percent = psutil.cpu_percent(interval=1)
+                if cpu_percent > 90:
+                    logging.warning(f"High CPU usage: {cpu_percent}%")
+                    return False
+
+            return True
+
+        except Exception as e:
+            logging.error(f"Health check error: {e}")
+            return False
+
+    def start_monitoring(self):
+        """Start the health monitoring thread."""
+
+        def monitor_loop():
+            while True:
+                time.sleep(HEALTH_CHECK_INTERVAL)
+                if not self.check_health():
+                    logging.error("Health check failed - triggering restart by exiting")
+                    os._exit(2)  # Exit with code 2 to signal daemon restart
+
+        thread = threading.Thread(target=monitor_loop, daemon=True)
+        thread.start()
+        logging.info("Health monitoring started")
 
 
 # --- Configuration Loading ---
@@ -202,6 +285,9 @@ class WebsiteCrawler:
         # Initialize embeddings lazily to avoid API calls in tests
         self._embeddings = None
         self._embedding_model_name = None
+
+        # Initialize health monitor
+        self.health_monitor = HealthMonitor(self)
 
         # Set up SQLite database for crawl queue (skip for tests)
         self.conn = None
@@ -866,7 +952,21 @@ class WebsiteCrawler:
 
     def should_skip_url(self, url: str) -> bool:
         """Check if URL should be skipped based on patterns"""
-        return any(re.search(pattern, url) for pattern in self.skip_patterns)
+        # Check standard skip patterns
+        if any(re.search(pattern, url) for pattern in self.skip_patterns):
+            return True
+
+        # Check for calendar/export URLs that serve non-HTML content
+        parsed = urlparse(url)
+        query_params = parsed.query.lower()
+
+        # Skip URLs with calendar/export parameters
+        calendar_params = ["ical", "ical=1", "export", "format=ical", "format=ics"]
+        if any(param in query_params for param in calendar_params):
+            logging.debug(f"Skipping calendar/export URL: {url}")
+            return True
+
+        return False
 
     def is_valid_url(self, url: str) -> bool:
         """Check if URL should be crawled."""
@@ -1224,6 +1324,16 @@ class WebsiteCrawler:
         try:
             page.wait_for_selector("body", timeout=15000)
             logging.debug(f"Body selector found for {url}")
+
+            # Check if the body has meaningful content
+            body_text = page.evaluate(
+                "() => document.body ? document.body.textContent.trim() : ''"
+            )
+            if not body_text or len(body_text) < 10:  # Very minimal content
+                logging.info(f"Skipping page with empty/minimal body content: {url}")
+                self.mark_url_status(url, "visited", content_hash="empty_content")
+                return None, []
+
         except Exception as e:
             # If body selector fails, check if this is actually an image or other non-HTML content
             # Try to get the content type from the page (with error suppression)
@@ -3111,14 +3221,14 @@ def _handle_browser_restart(
         if page and not page.is_closed():
             logging.debug("Closing page...")
             try:
-                page.close(timeout=5000)  # 5 second timeout for page close
+                page.close()
             except Exception as page_close_err:
                 logging.warning(f"Page close failed, proceeding: {page_close_err}")
 
         if browser and browser.is_connected():
             logging.debug("Closing browser...")
             try:
-                browser.close(timeout=10000)  # 10 second timeout for browser close
+                browser.close()
             except Exception as browser_close_err:
                 logging.warning(
                     f"Browser close failed, proceeding: {browser_close_err}"
@@ -3698,6 +3808,10 @@ def _handle_crawl_loop_iteration(
         url, crawler, browser, page, pinecone_index, index_name
     )
 
+    # Update health monitor progress if we processed a page
+    if pages_inc > 0:
+        crawler.health_monitor.update_progress()
+
     # Check if rate limit was hit (separate from should_exit)
     rate_limit_exit = getattr(crawler, "_rate_limit_exit", False)
     if rate_limit_exit:
@@ -3797,6 +3911,8 @@ def run_crawl_loop(
 
     with sync_playwright() as p:
         browser, page = _setup_browser(p)
+        crawler.health_monitor.set_browser(browser, page)
+        crawler.health_monitor.start_monitoring()
 
         try:
             while not is_exiting():
@@ -4206,15 +4322,52 @@ def main():
     setup_signal_handlers()
     _perform_system_health_check(args)
 
-    # Initialization phase
-    crawler, pinecone_index, domain = _initialize_crawler_and_services(
-        args, site_config, env_file_str
-    )
+    # File locking to prevent multiple instances
+    lock_file = f"/tmp/crawler_{args.site}.lock"
+    if os.path.exists(lock_file):
+        try:
+            with open(lock_file) as f:
+                old_pid = int(f.read().strip())
+            # Check if the PID is still running
+            result = subprocess.run(
+                ["ps", "-p", str(old_pid)], capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                print(
+                    f"Crawler for site '{args.site}' already running (PID {old_pid}), exiting"
+                )
+                logging.info(
+                    f"Crawler for site '{args.site}' already running (PID {old_pid}), exiting"
+                )
+                sys.exit(1)
+            else:
+                print(f"Removing stale lock file from dead process (PID {old_pid})")
+                logging.info(
+                    f"Removing stale lock file from dead process (PID {old_pid})"
+                )
+                os.remove(lock_file)
+        except (ValueError, OSError) as e:
+            print(f"Error reading lock file, removing it: {e}")
+            logging.warning(f"Error reading lock file, removing it: {e}")
+            with suppress(OSError):
+                os.remove(lock_file)
 
-    # Execution phase
     try:
+        with open(lock_file, "w") as f:
+            f.write(str(os.getpid()))
+
+        # Initialization phase
+        crawler, pinecone_index, domain = _initialize_crawler_and_services(
+            args, site_config, env_file_str
+        )
+
+        # Execution phase
         _execute_crawler(crawler, pinecone_index, args, start_url)
+
     finally:
+        # Remove lock file
+        if os.path.exists(lock_file):
+            os.remove(lock_file)
         cleanup_and_exit(crawler)
 
 
