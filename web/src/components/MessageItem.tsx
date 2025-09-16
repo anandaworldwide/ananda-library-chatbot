@@ -86,18 +86,30 @@ const MessageItem: React.FC<MessageItemProps> = ({
     return null;
   };
 
-  const renderDownvoteButton = (docId: string) => {
+  const renderVoteButtons = (docId: string) => {
     if (!docId) return null;
 
     const vote = votes[docId] || 0;
 
     if (!handleVote) {
-      console.warn("MessageItem: handleVote prop is missing for downvote button.");
+      console.warn("MessageItem: handleVote prop is missing for vote buttons.");
       return null;
     }
 
     return (
-      <div className="flex items-center">
+      <div className="flex items-center space-x-1">
+        {/* Upvote Button */}
+        <button
+          onClick={() => handleVote(docId, true)}
+          className={`${styles.voteButton} ${
+            vote === 1 ? styles.voteButtonActive : ""
+          } hover:bg-gray-200 flex items-center`}
+          title={vote === 1 ? "Clear upvote" : "Upvote this answer"}
+        >
+          <span className="material-icons text-black">{vote === 1 ? "thumb_up" : "thumb_up_off_alt"}</span>
+        </button>
+
+        {/* Downvote Button */}
         <button
           onClick={() => handleVote(docId, false)}
           className={`${styles.voteButton} ${
@@ -184,9 +196,16 @@ const MessageItem: React.FC<MessageItemProps> = ({
                       </button>
 
                       {message.docId ? (
-                        renderDownvoteButton(message.docId)
+                        renderVoteButtons(message.docId)
                       ) : (
-                        <div className="flex items-center">
+                        <div className="flex items-center space-x-1">
+                          <button
+                            disabled
+                            className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"
+                            title="Waiting for document ID..."
+                          >
+                            <span className="material-icons text-black">thumb_up_off_alt</span>
+                          </button>
                           <button
                             disabled
                             className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"

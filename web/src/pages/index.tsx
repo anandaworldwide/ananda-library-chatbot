@@ -1225,7 +1225,11 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     const currentVote = votes[docId] || 0; // Get current vote status
 
     if (isUpvote) {
-      // Upvote logic remains the same: uses handleVoteUtil which handles toggling 1 <-> 0
+      // Upvote logic: uses handleVoteUtil which handles toggling 1 <-> 0
+      if (currentVote === 1) {
+        // If already upvoted, clicking again should clear the vote (set to 0)
+        logEvent("clear_upvote", "Engagement", docId, 0);
+      }
       handleVoteUtil(docId, isUpvote, votes, setVotes, setVoteError);
     } else {
       // Downvote logic:
