@@ -8,6 +8,7 @@ import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreGet } from "@/utils/server/firestoreRetryUtils";
 import { verifyToken } from "@/utils/server/jwtUtils";
 import { writeAuditLog } from "@/utils/server/auditLog";
+import { sendWelcomeEmail } from "@/utils/server/userInviteUtils";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Rate limit
@@ -94,11 +95,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       updates.updatedAt = firebase.firestore.Timestamp.now();
       await db.collection(usersCol).doc(email).set(updates, { merge: true });
 
-      // Log activation completion for digest tracking
+      // Log activation completion for digest tracking and send welcome email
       if (isCompletingActivation) {
         await writeAuditLog(req, "user_activation_completed", email, {
           outcome: "activation_completed",
         });
+
+        // Send welcome email after successful activation completion
+        try {
+          await sendWelcomeEmail(email, req);
+        } catch (emailError) {
+          // Log email error but don't fail the profile update
+          console.error("Failed to send welcome email:", emailError);
+        }
       }
 
       return res.status(200).json({ success: true });

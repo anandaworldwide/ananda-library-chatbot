@@ -218,6 +218,24 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
   - **Purpose:** Handles contact form submissions.
   - **Auth:** Likely open or uses basic CSRF protection.
   - **Logic:** Sends email or stores contact message.
+
+**User Profile Management:**
+
+- **`GET /api/profile`** (`pages/api/profile.ts`)
+  - **Purpose:** Retrieves current user's profile information.
+  - **Auth:** Requires JWT authentication.
+  - **Logic:** Returns user's email, UUID, role, first name, last name, and email change status.
+  - **Response:** User profile data including pending email changes.
+- **`PATCH /api/profile`** (`pages/api/profile.ts`)
+  - **Purpose:** Updates user profile information and handles activation completion.
+  - **Auth:** Requires JWT authentication.
+  - **Logic:** Updates first name, last name, or cancels email changes. When a user with `activated_pending_profile`
+    status completes their profile, automatically transitions them to `accepted` status, logs activation completion, and
+    sends welcome email.
+  - **Welcome Email:** Automatically sent when user completes activation (transitions from `activated_pending_profile`
+    to `accepted`). Email includes site-specific branding and a button to access the chatbot homepage.
+  - **Request:** `{ firstName?: string, lastName?: string, cancelEmailChange?: boolean }`
+  - **Response:** Success confirmation.
 - **`POST /api/submitNpsSurvey`** (`pages/api/submitNpsSurvey.ts`)
   - **Purpose:** Stores Net Promoter Score survey results.
   - **Auth:** Requires JWT authentication.
@@ -562,6 +580,17 @@ if (siteConfig?.requireLogin) {
   - For each request, increments the counter and checks if it exceeds the defined limit.
   - If the limit is exceeded, returns a 429 Too Many Requests error.
   - Expired keys are periodically pruned via the `/api/pruneRateLimits` cron job.
+- **Email System (`userInviteUtils.ts`, `emailTemplates.ts`):**
+  - **AWS SES Integration:** Uses AWS SES for reliable email delivery with proper credentials management.
+  - **Activation Emails:** `sendActivationEmail()` sends branded activation links with 14-day expiry.
+  - **Welcome Emails:** `sendWelcomeEmail()` automatically sent when users complete profile activation, includes
+    site-specific branding and prominent button to access chatbot homepage.
+  - **Email Templates:** `generateEmailContent()` creates both HTML and plain text versions with responsive design, site
+    logos, and proper action buttons.
+  - **Domain Detection:** Automatically uses request domain for email links (supports localhost, production, and Vercel
+    preview deployments).
+  - **Error Handling:** Email failures are logged but don't block user operations (e.g., profile updates continue even
+    if welcome email fails).
 - **Configuration Management:**
   - Server loads configuration details from `site-config/config.json`.
   - Prompts specific to different namespaces/personas are loaded from JSON files within `site-config/prompts/`.

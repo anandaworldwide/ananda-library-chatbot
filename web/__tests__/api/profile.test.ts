@@ -48,6 +48,16 @@ jest.mock("@/utils/server/jwtUtils", () => ({
   getTokenFromRequest: jest.fn(() => ({ email: "test@example.com", role: "user" })),
 }));
 
+// Mock audit log
+jest.mock("@/utils/server/auditLog", () => ({
+  writeAuditLog: jest.fn().mockResolvedValue({}),
+}));
+
+// Mock welcome email
+jest.mock("@/utils/server/userInviteUtils", () => ({
+  sendWelcomeEmail: jest.fn().mockResolvedValue({}),
+}));
+
 describe("/api/profile", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -97,9 +107,61 @@ describe("/api/profile", () => {
     // The core functionality of transitioning from activated_pending_profile to accepted is implemented
   });
 
+  it("should send welcome email when user completes activation", async () => {
+    const firestoreRetryUtils = await import("@/utils/server/firestoreRetryUtils");
+    const jwtUtils = await import("@/utils/server/jwtUtils");
+    const userInviteUtils = await import("@/utils/server/userInviteUtils");
+    const auditLog = await import("@/utils/server/auditLog");
+
+    // Mock JWT verification
+    (jwtUtils.verifyToken as jest.MockedFunction<any>).mockReturnValueOnce({
+      email: "test@example.com",
+      role: "user",
+    });
+
+    // Mock user exists with activated_pending_profile status
+    (firestoreRetryUtils.firestoreGet as jest.MockedFunction<any>).mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        email: "test@example.com",
+        inviteStatus: "activated_pending_profile",
+        role: "user",
+        entitlements: { basic: true },
+      }),
+    });
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "PATCH",
+      headers: {
+        cookie: "auth=valid-jwt-token",
+      },
+      body: {
+        firstName: "John",
+        lastName: "Doe",
+      },
+    });
+
+    // Set up cookies object for req
+    req.cookies = { auth: "valid-jwt-token" };
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res._getJSONData()).toEqual({ success: true });
+
+    // Verify welcome email was sent
+    expect(userInviteUtils.sendWelcomeEmail).toHaveBeenCalledWith("test@example.com", req);
+
+    // Verify audit log was written
+    expect(auditLog.writeAuditLog).toHaveBeenCalledWith(req, "user_activation_completed", "test@example.com", {
+      outcome: "activation_completed",
+    });
+  });
+
   it("should not change status if user is already accepted", async () => {
     const firestoreRetryUtils = await import("@/utils/server/firestoreRetryUtils");
     const jwtUtils = await import("@/utils/server/jwtUtils");
+    const userInviteUtils = await import("@/utils/server/userInviteUtils");
 
     // Mock JWT verification
     (jwtUtils.verifyToken as jest.MockedFunction<any>).mockReturnValueOnce({
@@ -138,6 +200,9 @@ describe("/api/profile", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({ success: true });
+
+    // Verify welcome email was NOT sent for already accepted user
+    expect(userInviteUtils.sendWelcomeEmail).not.toHaveBeenCalled();
 
     // Test passes if we get 200 - the profile update functionality is working
     // The status transition logic is implemented correctly in the API
@@ -189,5 +254,64 @@ describe("/api/profile", () => {
     expect(res._getJSONData()).toEqual({
       error: "Invalid first name",
     });
+  });
+
+  it("should continue profile update even if welcome email fails", async () => {
+    const firestoreRetryUtils = await import("@/utils/server/firestoreRetryUtils");
+    const jwtUtils = await import("@/utils/server/jwtUtils");
+    const userInviteUtils = await import("@/utils/server/userInviteUtils");
+
+    // Mock JWT verification
+    (jwtUtils.verifyToken as jest.MockedFunction<any>).mockReturnValueOnce({
+      email: "test@example.com",
+      role: "user",
+    });
+
+    // Mock user exists with activated_pending_profile status
+    (firestoreRetryUtils.firestoreGet as jest.MockedFunction<any>).mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        email: "test@example.com",
+        inviteStatus: "activated_pending_profile",
+        role: "user",
+        entitlements: { basic: true },
+      }),
+    });
+
+    // Mock welcome email to fail
+    (userInviteUtils.sendWelcomeEmail as jest.MockedFunction<any>).mockRejectedValueOnce(
+      new Error("Email service unavailable")
+    );
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "PATCH",
+      headers: {
+        cookie: "auth=valid-jwt-token",
+      },
+      body: {
+        firstName: "John",
+        lastName: "Doe",
+      },
+    });
+
+    // Set up cookies object for req
+    req.cookies = { auth: "valid-jwt-token" };
+
+    // Spy on console.error to verify error logging
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    await handler(req, res);
+
+    // Profile update should still succeed
+    expect(res.statusCode).toBe(200);
+    expect(res._getJSONData()).toEqual({ success: true });
+
+    // Verify welcome email was attempted
+    expect(userInviteUtils.sendWelcomeEmail).toHaveBeenCalledWith("test@example.com", req);
+
+    // Verify error was logged
+    expect(consoleSpy).toHaveBeenCalledWith("Failed to send welcome email:", expect.any(Error));
+
+    consoleSpy.mockRestore();
   });
 });

@@ -79,3 +79,44 @@ This link expires in 14 days.`;
 
   await ses.send(new SendEmailCommand(params));
 }
+
+export async function sendWelcomeEmail(email: string, req?: any) {
+  // Use request domain if available, otherwise fall back to configured domain
+  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_BASE_URL environment variable is required for email generation");
+  }
+
+  if (req && req.headers) {
+    const host = req.headers.host;
+    const protocol = req.headers["x-forwarded-proto"] || (host?.includes("localhost") ? "http" : "https");
+    if (host) {
+      baseUrl = `${protocol}://${host}`;
+    }
+  }
+
+  const siteConfig = loadSiteConfigSync();
+  const brand = siteConfig?.name || siteConfig?.shortname || process.env.SITE_ID || "your";
+  const chatbotUrl = baseUrl;
+
+  // Create welcome message with site-specific branding
+  const message = `Welcome to ${brand}! Your account has been successfully activated.
+
+You can now start exploring our spiritual teachings and resources by chatting with ${brand}.
+
+Go to ${brand}
+
+(Or visit ${chatbotUrl})
+
+We're excited to have you join our community!`;
+
+  const params = createEmailParams(process.env.CONTACT_EMAIL || "noreply@ananda.org", email, `Welcome to ${brand}!`, {
+    message,
+    baseUrl,
+    siteId: process.env.SITE_ID,
+    actionUrl: chatbotUrl,
+    actionText: `Go to ${brand}`,
+  });
+
+  await ses.send(new SendEmailCommand(params));
+}
