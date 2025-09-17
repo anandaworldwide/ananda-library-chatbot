@@ -10,4 +10,5 @@ export type DocMetadata = {
   album?: string;
   library: string;
   pdf_s3_key?: string; // S3 key for PDF downloads
+  author?: string; // Document author
 };

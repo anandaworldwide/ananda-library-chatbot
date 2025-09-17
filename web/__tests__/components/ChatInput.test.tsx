@@ -180,11 +180,11 @@ describe("ChatInput", () => {
     expect(defaultProps.handleEnter).not.toHaveBeenCalled();
   });
 
-  it("shows search options dropdown when options are available", () => {
+  it("shows query options dropdown when options are available", () => {
     render(<ChatInput {...defaultProps} />);
 
-    // Check if the search options dropdown button is present
-    const dropdownButton = screen.getByText("Search Options");
+    // Check if the query options dropdown button is present
+    const dropdownButton = screen.getByText("Query Options");
     expect(dropdownButton).toBeInTheDocument();
   });
 
@@ -211,7 +211,7 @@ describe("ChatInput", () => {
     render(<ChatInput {...defaultProps} />);
 
     // Click the dropdown button to open it
-    const dropdownButton = screen.getByText("Search Options");
+    const dropdownButton = screen.getByText("Query Options");
     fireEvent.click(dropdownButton);
 
     // Check if media type options are visible in the dropdown
@@ -223,7 +223,7 @@ describe("ChatInput", () => {
     render(<ChatInput {...defaultProps} />);
 
     // Open the dropdown
-    const dropdownButton = screen.getByText("Search Options");
+    const dropdownButton = screen.getByText("Query Options");
     fireEvent.click(dropdownButton);
 
     // Verify dropdown is open

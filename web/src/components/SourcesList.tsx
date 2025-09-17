@@ -349,6 +349,15 @@ const SourcesList: React.FC<SourcesListProps> = ({
     );
   };
 
+  // Render author name if available
+  const renderAuthorName = (doc: Document<DocMetadata>) => {
+    if (!doc.metadata.author || doc.metadata.author === "Unknown") {
+      return null;
+    }
+
+    return <div className="text-sm text-gray-500 mb-2 italic">by {doc.metadata.author}</div>;
+  };
+
   // Render a "Go to source" button for text sources
   const renderGoToSourceButton = (doc: Document<DocMetadata>) => {
     const linkUrl = doc.metadata.source;
@@ -457,6 +466,10 @@ const SourcesList: React.FC<SourcesListProps> = ({
                     </div>
                     {doc.metadata.type === "audio" && renderAudioPlayer(doc, index, true)}
                     {doc.metadata.type === "youtube" && renderYouTubePlayer(doc)}
+                    {/* Render author name if available */}
+                    {renderAuthorName(doc)}
+                    {/* Render source content as markdown with matching passage label */}
+                    <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Matching Passage</div>
                     <ReactMarkdown
                       remarkPlugins={[gfm]}
                       components={{
@@ -568,9 +581,12 @@ const SourcesList: React.FC<SourcesListProps> = ({
                       {/* Render audio or YouTube player if applicable */}
                       {doc.metadata && doc.metadata.type === "audio" && renderAudioPlayer(doc, index, isExpanded)}
                       {doc.metadata && doc.metadata.type === "youtube" && renderYouTubePlayer(doc)}
+                      {/* Render author name if available */}
+                      {renderAuthorName(doc)}
                     </>
                   )}
-                  {/* Render source content as markdown */}
+                  {/* Render source content as markdown with matching passage label */}
+                  <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Matching Passage</div>
                   <ReactMarkdown
                     remarkPlugins={[gfm]}
                     components={{

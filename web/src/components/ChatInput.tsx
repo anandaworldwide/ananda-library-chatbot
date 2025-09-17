@@ -329,7 +329,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </button>
           </div>
 
-          {/* Search Options Dropdown */}
+          {/* Query Options Dropdown */}
           <div className="mb-4">
             <SearchOptionsDropdown
               siteConfig={siteConfig}

@@ -1,7 +1,7 @@
 /**
  * SearchOptionsDropdown Component
  *
- * This component renders a dropdown menu with grouped search options:
+ * This component renders a dropdown menu with grouped query options:
  * - Media type checkboxes (text, audio, video) if enabled
  * - Author/collection radio buttons (Master Swami, All) if enabled
  * - Extra sources checkbox if enabled
@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { SiteConfig } from "@/types/siteConfig";
 import {
   getEnableMediaTypeSelection,
@@ -41,6 +42,7 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showControlsInfo, setShowControlsInfo] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const dropdownMenuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -59,6 +61,11 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
 
+      // Don't close if the info modal is open - let the modal handle its own closing
+      if (showControlsInfo) {
+        return;
+      }
+
       // Don't close if clicking on the button or inside the dropdown menu
       const isClickOnButton = buttonRef.current && buttonRef.current.contains(target);
       const isClickInDropdown = dropdownMenuRef.current && dropdownMenuRef.current.contains(target);
@@ -75,14 +82,21 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isOpen]);
+  }, [isOpen, showControlsInfo]);
 
   // Close dropdown on Escape key
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && isOpen) {
-        setIsOpen(false);
-        buttonRef.current?.focus();
+      if (event.key === "Escape") {
+        if (showControlsInfo) {
+          // If info modal is open, close it but keep dropdown open
+          setShowControlsInfo(false);
+          logEvent("dismiss_controls_info", "UI", "escape_key");
+        } else if (isOpen) {
+          // If only dropdown is open, close it
+          setIsOpen(false);
+          buttonRef.current?.focus();
+        }
       }
     };
 
@@ -92,6 +106,49 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
 
     return () => {
       document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, showControlsInfo]);
+
+  // Calculate dropdown position based on button position (viewport coords)
+  const calculateDropdownPosition = () => {
+    if (!buttonRef.current) return;
+
+    const rect = buttonRef.current.getBoundingClientRect();
+    const gap = 4;
+    const dropdownWidth = 320; // w-80
+
+    // Start below button
+    let top = rect.bottom + gap;
+    const left = Math.min(rect.left, window.innerWidth - dropdownWidth - 10);
+
+    setDropdownPosition({ top: Math.max(10, top), left: Math.max(10, left) });
+
+    // After first paint, if dropdown height causes overflow, move above
+    requestAnimationFrame(() => {
+      const height = dropdownMenuRef.current?.offsetHeight || 0;
+      const bottom = top + height;
+      if (bottom > window.innerHeight - 10) {
+        top = Math.max(10, rect.top - height - gap);
+        setDropdownPosition({ top, left });
+      }
+    });
+  };
+
+  // Recalculate position on open/resize/scroll
+  useEffect(() => {
+    const handleUpdate = () => {
+      if (isOpen) calculateDropdownPosition();
+    };
+
+    if (isOpen) {
+      calculateDropdownPosition();
+      window.addEventListener("resize", handleUpdate);
+      window.addEventListener("scroll", handleUpdate, true);
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleUpdate);
+      window.removeEventListener("scroll", handleUpdate, true);
     };
   }, [isOpen]);
 
@@ -147,118 +204,122 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
         aria-haspopup="true"
       >
         <span className="material-icons text-base mr-2">tune</span>
-        Search Options
+        Query Options
         <span className={`material-icons text-base ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`}>
           expand_more
         </span>
       </button>
 
-      {/* Dropdown Menu */}
-      {isOpen && (
-        <div
-          ref={dropdownMenuRef}
-          className="absolute top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-md shadow-lg z-50"
-        >
-          <div className="p-4 space-y-4">
-            {/* Header with info button */}
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-sm font-medium text-gray-900">Search Options</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowControlsInfo(true);
-                  logEvent("show_controls_info", "UI", "info_button");
-                }}
-                className="px-2 py-1 text-xs rounded-full border border-gray-300 w-6 h-6 flex items-center justify-center hover:bg-gray-100"
-                aria-label="Controls information"
-              >
-                <span className="material-icons text-base">info</span>
-              </button>
+      {/* Dropdown Menu (portal, fixed to viewport to avoid clipping) */}
+      {isOpen &&
+        typeof window !== "undefined" &&
+        createPortal(
+          <div
+            ref={dropdownMenuRef}
+            className="fixed w-80 bg-white border border-gray-200 rounded-md shadow-lg z-[90]"
+            style={{ top: `${dropdownPosition.top}px`, left: `${dropdownPosition.left}px` }}
+          >
+            <div className="p-4 space-y-4">
+              {/* Header with info button */}
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-medium text-gray-900">Query Options</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowControlsInfo(true);
+                    logEvent("show_controls_info", "UI", "info_button");
+                  }}
+                  className="px-2 py-1 text-xs rounded-full border border-gray-300 w-6 h-6 flex items-center justify-center hover:bg-gray-100"
+                  aria-label="Controls information"
+                >
+                  <span className="material-icons text-base">info</span>
+                </button>
+              </div>
+              {/* Media Type Selection Group */}
+              {showMediaTypeSelection && enabledMediaTypes.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Media Types</h4>
+                  <div className="space-y-2">
+                    {enabledMediaTypes.includes("text") && (
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={mediaTypes.text}
+                          onChange={() => handleMediaTypeToggle("text")}
+                          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm text-gray-700">Writings</span>
+                      </label>
+                    )}
+                    {enabledMediaTypes.includes("audio") && (
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={mediaTypes.audio}
+                          onChange={() => handleMediaTypeToggle("audio")}
+                          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm text-gray-700">Audio</span>
+                      </label>
+                    )}
+                    {enabledMediaTypes.includes("youtube") && (
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={mediaTypes.youtube}
+                          onChange={() => handleMediaTypeToggle("youtube")}
+                          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm text-gray-700">Video</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Author/Collection Selection Group */}
+              {showAuthorSelection && Object.keys(collectionsConfig).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Authors</h4>
+                  <div className="space-y-2">
+                    {Object.entries(collectionsConfig).map(([key, value]) => (
+                      <label key={key} className="flex items-center">
+                        <input
+                          type="radio"
+                          name="collection"
+                          value={key}
+                          checked={collection === key}
+                          onChange={() => handleCollectionSelect(key)}
+                          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        />
+                        <span className="text-sm text-gray-700">{value}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Extra Sources Option */}
+              {showSourceCountSelector && (
+                <div>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={sourceCount === 10}
+                      onChange={(e) => handleSourceCountToggle(e.target.checked)}
+                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Use extra sources</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">
+                    Use 10 sources instead of {siteConfig?.defaultNumSources || 4} for more comprehensive responses
+                  </p>
+                </div>
+              )}
             </div>
-            {/* Media Type Selection Group */}
-            {showMediaTypeSelection && enabledMediaTypes.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-gray-900 mb-2">Media Types</h4>
-                <div className="space-y-2">
-                  {enabledMediaTypes.includes("text") && (
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={mediaTypes.text}
-                        onChange={() => handleMediaTypeToggle("text")}
-                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="text-sm text-gray-700">Writings</span>
-                    </label>
-                  )}
-                  {enabledMediaTypes.includes("audio") && (
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={mediaTypes.audio}
-                        onChange={() => handleMediaTypeToggle("audio")}
-                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="text-sm text-gray-700">Audio</span>
-                    </label>
-                  )}
-                  {enabledMediaTypes.includes("youtube") && (
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={mediaTypes.youtube}
-                        onChange={() => handleMediaTypeToggle("youtube")}
-                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="text-sm text-gray-700">Video</span>
-                    </label>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Author/Collection Selection Group */}
-            {showAuthorSelection && Object.keys(collectionsConfig).length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-gray-900 mb-2">Authors</h4>
-                <div className="space-y-2">
-                  {Object.entries(collectionsConfig).map(([key, value]) => (
-                    <label key={key} className="flex items-center">
-                      <input
-                        type="radio"
-                        name="collection"
-                        value={key}
-                        checked={collection === key}
-                        onChange={() => handleCollectionSelect(key)}
-                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                      />
-                      <span className="text-sm text-gray-700">{value}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Extra Sources Option */}
-            {showSourceCountSelector && (
-              <div>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={sourceCount === 10}
-                    onChange={(e) => handleSourceCountToggle(e.target.checked)}
-                    className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="text-sm text-gray-700">Use extra sources</span>
-                </label>
-                <p className="text-xs text-gray-500 mt-1 ml-6">
-                  Use 10 sources instead of {siteConfig?.defaultNumSources || 4} for more comprehensive responses
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* Controls Info Modal */}
       {showControlsInfo && (
