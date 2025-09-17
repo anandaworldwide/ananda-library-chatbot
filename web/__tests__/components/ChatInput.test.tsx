@@ -13,16 +13,28 @@ jest.mock("@/components/CollectionSelector", () =>
 );
 
 jest.mock("@/components/SuggestedQueries", () =>
-  jest.fn().mockImplementation(({ queries, onQueryClick, onShuffleClick }) => (
+  jest.fn().mockImplementation(({ queries, onQueryClick, onShuffleClick, isExpanded, onToggleExpanded }) => (
     <div data-testid="random-queries">
-      {queries.map((query: string, index: number) => (
-        <button key={index} onClick={() => onQueryClick(query)}>
-          {query}
-        </button>
-      ))}
-      <button data-testid="shuffle-button" onClick={onShuffleClick}>
-        Shuffle
-      </button>
+      <div className="flex justify-between items-center mb-3">
+        <p>Suggested Queries</p>
+        {onToggleExpanded && (
+          <button onClick={onToggleExpanded} aria-label={isExpanded ? "Minimize suggestions" : "Expand suggestions"}>
+            {isExpanded ? "minimize" : "expand_more"}
+          </button>
+        )}
+      </div>
+      {isExpanded && (
+        <>
+          {queries.map((query: string, index: number) => (
+            <button key={index} onClick={() => onQueryClick(query)}>
+              {query}
+            </button>
+          ))}
+          <button data-testid="shuffle-button" onClick={onShuffleClick}>
+            Shuffle
+          </button>
+        </>
+      )}
     </div>
   ))
 );
@@ -168,12 +180,12 @@ describe("ChatInput", () => {
     expect(defaultProps.handleEnter).not.toHaveBeenCalled();
   });
 
-  it("toggles collection correctly", () => {
+  it("shows search options dropdown when options are available", () => {
     render(<ChatInput {...defaultProps} />);
 
-    // Check if the collection selector renders with the correct data-testid
-    const selector = screen.getByTestId("collection-selector");
-    expect(selector).toBeInTheDocument();
+    // Check if the search options dropdown button is present
+    const dropdownButton = screen.getByText("Search Options");
+    expect(dropdownButton).toBeInTheDocument();
   });
 
   it("handles query shuffling", () => {
@@ -195,14 +207,33 @@ describe("ChatInput", () => {
     expect(screen.getByText("hourglass_empty")).toBeInTheDocument();
   });
 
-  it("toggles media types correctly", () => {
+  it("opens dropdown and shows media type options", () => {
     render(<ChatInput {...defaultProps} />);
 
-    // Find the Audio button by its text content
-    const audioButton = screen.getByText("Audio");
-    fireEvent.click(audioButton);
+    // Click the dropdown button to open it
+    const dropdownButton = screen.getByText("Search Options");
+    fireEvent.click(dropdownButton);
 
-    expect(defaultProps.handleMediaTypeChange).toHaveBeenCalledWith("audio");
+    // Check if media type options are visible in the dropdown
+    expect(screen.getByText("Media Types")).toBeInTheDocument();
+    expect(screen.getByText("Audio")).toBeInTheDocument();
+  });
+
+  it("closes dropdown when clicking outside", () => {
+    render(<ChatInput {...defaultProps} />);
+
+    // Open the dropdown
+    const dropdownButton = screen.getByText("Search Options");
+    fireEvent.click(dropdownButton);
+
+    // Verify dropdown is open
+    expect(screen.getByText("Media Types")).toBeInTheDocument();
+
+    // Click outside the dropdown (on document body)
+    fireEvent.mouseDown(document.body);
+
+    // Verify dropdown is closed
+    expect(screen.queryByText("Media Types")).not.toBeInTheDocument();
   });
 
   it("handles empty input gracefully by passing to parent", () => {
@@ -234,9 +265,10 @@ describe("ChatInput", () => {
 
     render(<ChatInput {...defaultProps} />);
 
-    // Use the actual text from the component
-    const toggleButton = screen.getByText("Hide suggestions");
-    fireEvent.click(toggleButton);
+    // The minimize button is now inside the SuggestedQueries component
+    // Look for the minimize icon in the suggestions header
+    const minimizeButton = screen.getByLabelText("Minimize suggestions");
+    fireEvent.click(minimizeButton);
 
     expect(window.localStorage.setItem).toHaveBeenCalledWith("suggestionsExpanded", "false");
   });

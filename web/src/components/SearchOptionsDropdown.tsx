@@ -1,0 +1,324 @@
+/**
+ * SearchOptionsDropdown Component
+ *
+ * This component renders a dropdown menu with grouped search options:
+ * - Media type checkboxes (text, audio, video) if enabled
+ * - Author/collection radio buttons (Master Swami, All) if enabled
+ * - Extra sources checkbox if enabled
+ *
+ * The component uses a dropdown pattern with proper accessibility
+ * and responsive design for mobile and desktop.
+ */
+
+import React, { useState, useRef, useEffect } from "react";
+import { SiteConfig } from "@/types/siteConfig";
+import {
+  getEnableMediaTypeSelection,
+  getEnableAuthorSelection,
+  getEnabledMediaTypes,
+  getCollectionsConfig,
+} from "@/utils/client/siteConfig";
+import { logEvent } from "@/utils/client/analytics";
+
+interface SearchOptionsDropdownProps {
+  siteConfig: SiteConfig | null;
+  mediaTypes: { text: boolean; audio: boolean; youtube: boolean };
+  handleMediaTypeChange: (type: "text" | "audio" | "youtube") => void;
+  collection: string;
+  handleCollectionChange: (newCollection: string) => void;
+  sourceCount: number;
+  setSourceCount: (count: number) => void;
+}
+
+export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
+  siteConfig,
+  mediaTypes,
+  handleMediaTypeChange,
+  collection,
+  handleCollectionChange,
+  sourceCount,
+  setSourceCount,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [showControlsInfo, setShowControlsInfo] = useState(false);
+  const dropdownMenuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Get configuration options from siteConfig
+  const showMediaTypeSelection = getEnableMediaTypeSelection(siteConfig);
+  const showAuthorSelection = getEnableAuthorSelection(siteConfig);
+  const showSourceCountSelector = siteConfig?.showSourceCountSelector ?? false;
+  const enabledMediaTypes = getEnabledMediaTypes(siteConfig);
+  const collectionsConfig = getCollectionsConfig(siteConfig);
+
+  // Check if any options are available
+  const hasAnyOptions = showMediaTypeSelection || showAuthorSelection || showSourceCountSelector;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      // Don't close if clicking on the button or inside the dropdown menu
+      const isClickOnButton = buttonRef.current && buttonRef.current.contains(target);
+      const isClickInDropdown = dropdownMenuRef.current && dropdownMenuRef.current.contains(target);
+
+      if (!isClickOnButton && !isClickInDropdown) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  // Close dropdown on Escape key
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isOpen) {
+        setIsOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen]);
+
+  const toggleDropdown = () => {
+    setIsOpen(!isOpen);
+    logEvent(isOpen ? "close_search_options" : "open_search_options", "UI", "dropdown_toggle");
+  };
+
+  const handleMediaTypeToggle = (type: "text" | "audio" | "youtube") => {
+    handleMediaTypeChange(type);
+
+    // Save media type preferences to localStorage
+    const newMediaTypes = { ...mediaTypes, [type]: !mediaTypes[type] };
+    localStorage.setItem("searchMediaTypes", JSON.stringify(newMediaTypes));
+
+    logEvent(`toggle_media_type_${type}`, "Settings", mediaTypes[type] ? "disabled" : "enabled");
+  };
+
+  const handleCollectionSelect = (newCollection: string) => {
+    if (newCollection !== collection) {
+      handleCollectionChange(newCollection);
+      logEvent("change_collection", "Settings", newCollection);
+    }
+  };
+
+  const handleSourceCountToggle = (checked: boolean) => {
+    const defaultSources = siteConfig?.defaultNumSources || 4;
+    const extraSources = 10;
+    const newSourceCount = checked ? extraSources : defaultSources;
+
+    setSourceCount(newSourceCount);
+
+    // Save extra sources preference to localStorage
+    localStorage.setItem("useExtraSources", checked.toString());
+
+    logEvent("toggle_extra_sources", "Settings", checked ? "enabled" : "disabled");
+  };
+
+  // Don't render if no options are available
+  if (!hasAnyOptions) {
+    return null;
+  }
+
+  return (
+    <div className="relative">
+      {/* Dropdown Button */}
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={toggleDropdown}
+        className="flex items-center px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+      >
+        <span className="material-icons text-base mr-2">tune</span>
+        Search Options
+        <span className={`material-icons text-base ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`}>
+          expand_more
+        </span>
+      </button>
+
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div
+          ref={dropdownMenuRef}
+          className="absolute top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-md shadow-lg z-50"
+        >
+          <div className="p-4 space-y-4">
+            {/* Header with info button */}
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-medium text-gray-900">Search Options</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowControlsInfo(true);
+                  logEvent("show_controls_info", "UI", "info_button");
+                }}
+                className="px-2 py-1 text-xs rounded-full border border-gray-300 w-6 h-6 flex items-center justify-center hover:bg-gray-100"
+                aria-label="Controls information"
+              >
+                <span className="material-icons text-base">info</span>
+              </button>
+            </div>
+            {/* Media Type Selection Group */}
+            {showMediaTypeSelection && enabledMediaTypes.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Media Types</h4>
+                <div className="space-y-2">
+                  {enabledMediaTypes.includes("text") && (
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={mediaTypes.text}
+                        onChange={() => handleMediaTypeToggle("text")}
+                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700">Writings</span>
+                    </label>
+                  )}
+                  {enabledMediaTypes.includes("audio") && (
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={mediaTypes.audio}
+                        onChange={() => handleMediaTypeToggle("audio")}
+                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700">Audio</span>
+                    </label>
+                  )}
+                  {enabledMediaTypes.includes("youtube") && (
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={mediaTypes.youtube}
+                        onChange={() => handleMediaTypeToggle("youtube")}
+                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700">Video</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Author/Collection Selection Group */}
+            {showAuthorSelection && Object.keys(collectionsConfig).length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Authors</h4>
+                <div className="space-y-2">
+                  {Object.entries(collectionsConfig).map(([key, value]) => (
+                    <label key={key} className="flex items-center">
+                      <input
+                        type="radio"
+                        name="collection"
+                        value={key}
+                        checked={collection === key}
+                        onChange={() => handleCollectionSelect(key)}
+                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="text-sm text-gray-700">{value}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Extra Sources Option */}
+            {showSourceCountSelector && (
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={sourceCount === 10}
+                    onChange={(e) => handleSourceCountToggle(e.target.checked)}
+                    className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">Use extra sources</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1 ml-6">
+                  Use 10 sources instead of {siteConfig?.defaultNumSources || 4} for more comprehensive responses
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Controls Info Modal */}
+      {showControlsInfo && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100]"
+            onClick={() => {
+              setShowControlsInfo(false);
+              logEvent("dismiss_controls_info", "UI", "backdrop_click");
+            }}
+            aria-hidden="true"
+          />
+          <div className="fixed z-[101] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-lg font-semibold">Available Controls</h3>
+              <button
+                onClick={() => {
+                  setShowControlsInfo(false);
+                  logEvent("dismiss_controls_info", "UI", "close_button");
+                }}
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Close"
+              >
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {showMediaTypeSelection && (
+                <div>
+                  <h4 className="font-medium mb-1">Media Type Selection</h4>
+                  <p className="text-sm text-gray-600">
+                    Choose which media types (
+                    {enabledMediaTypes.map((type) => (type === "youtube" ? "video" : type)).join(", ")}) to include for
+                    your query.
+                  </p>
+                </div>
+              )}
+
+              {showAuthorSelection && (
+                <div>
+                  <h4 className="font-medium mb-1">Collection Selection</h4>
+                  <p className="text-sm text-gray-600">Select specific collections or authors to focus your search.</p>
+                </div>
+              )}
+
+              {showSourceCountSelector && (
+                <div>
+                  <h4 className="font-medium mb-1">Use Extra Sources</h4>
+                  <p className="text-sm text-gray-600">
+                    Enable to use more sources (10 instead of {siteConfig?.defaultNumSources || 4}) for potentially more
+                    comprehensive responses. Relevant text passages are retrieved based on similarity to your query and
+                    used as context for generating answers.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};

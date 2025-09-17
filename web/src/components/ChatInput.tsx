@@ -24,15 +24,9 @@ import DOMPurify from "dompurify";
 import validator from "validator";
 import styles from "@/styles/Home.module.css";
 import SuggestedQueries from "@/components/SuggestedQueries";
-import CollectionSelector from "@/components/CollectionSelector";
+import { SearchOptionsDropdown } from "@/components/SearchOptionsDropdown";
 import { SiteConfig } from "@/types/siteConfig";
-import {
-  getEnableSuggestedQueries,
-  getEnableMediaTypeSelection,
-  getEnableAuthorSelection,
-  getChatPlaceholder,
-  getEnabledMediaTypes,
-} from "@/utils/client/siteConfig";
+import { getEnableSuggestedQueries, getChatPlaceholder } from "@/utils/client/siteConfig";
 import { logEvent } from "@/utils/client/analytics";
 import { getOrCreateUUID } from "@/utils/client/uuid";
 import { FirestoreIndexError, useFirestoreIndexError } from "@/components/FirestoreIndexError";
@@ -105,9 +99,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [hasInteracted, setHasInteracted] = useState<boolean>(false);
   const [isFirstQuery, setIsFirstQuery] = useState<boolean>(true);
   const [isMobile, setIsMobile] = useState<boolean>(false);
-  const [showOptions, setShowOptions] = useState(false);
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(false);
-  const [showControlsInfo, setShowControlsInfo] = useState(false);
   //const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Analyze error to determine if it's a Firestore index error
@@ -142,9 +134,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const handleResize = () => {
       const newIsMobile = window.innerWidth < 768;
       setIsMobile(newIsMobile);
-      if (!newIsMobile) {
-        setShowOptions(true);
-      }
     };
 
     handleResize(); // Set initial value
@@ -251,13 +240,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   // Get configuration options from siteConfig
   const showSuggestedQueries = getEnableSuggestedQueries(siteConfig);
-  const showMediaTypeSelection = getEnableMediaTypeSelection(siteConfig);
-  const showAuthorSelection = getEnableAuthorSelection(siteConfig);
-  const enabledMediaTypes = getEnabledMediaTypes(siteConfig);
 
   // Function to toggle suggestions visibility
-  const toggleSuggestions = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const toggleSuggestions = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
     const newState = !suggestionsExpanded;
     setSuggestionsExpanded(newState);
     localStorage.setItem("suggestionsExpanded", newState.toString());
@@ -341,162 +329,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </button>
           </div>
 
-          {/* Mobile options toggle - only show if there are options available */}
-          {isMobile && (showMediaTypeSelection || showAuthorSelection || siteConfig?.showSourceCountSelector) && (
-            <div className="mb-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOptions(!showOptions);
-                  logEvent(showOptions ? "hide_mobile_options" : "show_mobile_options", "UI", "mobile_toggle");
-                }}
-                className="text-blue-500 hover:underline mb-2"
-              >
-                {showOptions ? "Hide options" : "Show options"}
-              </button>
-            </div>
-          )}
-
-          {/* Options section (media type, collection selector, private session) */}
-          {(!isMobile || showOptions) && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              {showMediaTypeSelection && (
-                <>
-                  {enabledMediaTypes.includes("text") && (
-                    <button
-                      type="button"
-                      onClick={() => handleMediaTypeChange("text")}
-                      className={`px-2 py-1 text-xs sm:text-sm rounded ${
-                        mediaTypes.text ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-700"
-                      }`}
-                    >
-                      Writings
-                    </button>
-                  )}
-                  {enabledMediaTypes.includes("audio") && (
-                    <button
-                      type="button"
-                      onClick={() => handleMediaTypeChange("audio")}
-                      className={`px-2 py-1 text-xs sm:text-sm rounded ${
-                        mediaTypes.audio ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-700"
-                      }`}
-                    >
-                      Audio
-                    </button>
-                  )}
-                  {enabledMediaTypes.includes("youtube") && (
-                    <button
-                      type="button"
-                      onClick={() => handleMediaTypeChange("youtube")}
-                      className={`px-2 py-1 text-xs sm:text-sm rounded ${
-                        mediaTypes.youtube ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-700"
-                      }`}
-                    >
-                      Video
-                    </button>
-                  )}
-                </>
-              )}
-              {showAuthorSelection && (
-                <div className="flex-grow sm:flex-grow-0 sm:min-w-[160px]">
-                  <CollectionSelector onCollectionChange={handleCollectionChange} currentCollection={collection} />
-                </div>
-              )}
-              {siteConfig?.showSourceCountSelector && (
-                <div className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    id="extraSources"
-                    checked={sourceCount === 10}
-                    onChange={(e) => {
-                      setSourceCount(e.target.checked ? 10 : 4);
-                      logEvent("toggle_extra_sources", "Settings", e.target.checked ? "enabled" : "disabled");
-                    }}
-                    className="mr-1"
-                  />
-                  <label htmlFor="extraSources" className="text-sm text-gray-700 cursor-pointer">
-                    Use extra sources
-                  </label>
-                </div>
-              )}
-
-              {(showMediaTypeSelection || showAuthorSelection || siteConfig?.showSourceCountSelector) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowControlsInfo(true);
-                    logEvent("show_controls_info", "UI", "info_button");
-                  }}
-                  className="px-2 py-1 text-xs sm:text-sm rounded-full border border-gray-300 w-6 h-6 flex items-center justify-center hover:bg-gray-100 self-center"
-                  aria-label="Controls information"
-                >
-                  <span className="material-icons text-base">info</span>
-                </button>
-              )}
-
-              {/* Controls Info Popup */}
-              {showControlsInfo && (
-                <>
-                  <div
-                    className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100]"
-                    onClick={() => {
-                      setShowControlsInfo(false);
-                      logEvent("dismiss_controls_info", "UI", "backdrop_click");
-                    }}
-                    aria-hidden="true"
-                  />
-                  <div className="fixed z-[101] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-lg font-semibold">Available Controls</h3>
-                      <button
-                        onClick={() => {
-                          setShowControlsInfo(false);
-                          logEvent("dismiss_controls_info", "UI", "close_button");
-                        }}
-                        className="text-gray-500 hover:text-gray-700"
-                        aria-label="Close"
-                      >
-                        <span className="material-icons">close</span>
-                      </button>
-                    </div>
-
-                    <div className="space-y-4">
-                      {showMediaTypeSelection && (
-                        <div>
-                          <h4 className="font-medium mb-1">Media Type Selection</h4>
-                          <p className="text-sm text-gray-600">
-                            Choose which media types (
-                            {enabledMediaTypes.map((type) => (type === "youtube" ? "video" : type)).join(", ")}) to
-                            include for your query.
-                          </p>
-                        </div>
-                      )}
-
-                      {showAuthorSelection && (
-                        <div>
-                          <h4 className="font-medium mb-1">Collection Selection</h4>
-                          <p className="text-sm text-gray-600">
-                            Select specific collections or authors to focus your search.
-                          </p>
-                        </div>
-                      )}
-
-                      {siteConfig?.showSourceCountSelector && (
-                        <div>
-                          <h4 className="font-medium mb-1">Use Extra Sources</h4>
-                          <p className="text-sm text-gray-600">
-                            Enable to use more sources (10 instead of 4) for potentially more comprehensive responses.
-                            Relevant text passages are retrieved based on similarity to your query and used as context
-                            for generating answers.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          {/* Search Options Dropdown */}
+          <div className="mb-4">
+            <SearchOptionsDropdown
+              siteConfig={siteConfig}
+              mediaTypes={mediaTypes}
+              handleMediaTypeChange={handleMediaTypeChange}
+              collection={collection}
+              handleCollectionChange={handleCollectionChange}
+              sourceCount={sourceCount}
+              setSourceCount={setSourceCount}
+            />
+          </div>
 
           {/* Error display */}
           {error &&
@@ -513,22 +357,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         {/* Suggested queries section - only show when chat is empty */}
         {!isLoadingQueries && showSuggestedQueries && suggestedQueries.length > 0 && isChatEmpty && (
           <div className="w-full mb-4">
-            {suggestionsExpanded && (
-              <>
-                <SuggestedQueries
-                  queries={suggestedQueries}
-                  onQueryClick={onQueryClick}
-                  isLoading={loading}
-                  shuffleQueries={shuffleQueries}
-                  isMobile={isMobile}
-                  siteConfig={siteConfig}
-                  onRefreshFunctionReady={onAISuggestionsRefreshReady}
-                />
-              </>
-            )}
-            <button type="button" onClick={toggleSuggestions} className="text-blue-500 hover:underline mb-2">
-              {suggestionsExpanded ? "Hide suggestions" : "Show suggestions"}
-            </button>
+            <SuggestedQueries
+              queries={suggestedQueries}
+              onQueryClick={onQueryClick}
+              isLoading={loading}
+              shuffleQueries={shuffleQueries}
+              isMobile={isMobile}
+              siteConfig={siteConfig}
+              onRefreshFunctionReady={onAISuggestionsRefreshReady}
+              isExpanded={suggestionsExpanded}
+              onToggleExpanded={() => toggleSuggestions()}
+            />
           </div>
         )}
       </div>

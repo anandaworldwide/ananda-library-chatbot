@@ -498,6 +498,52 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   const [, setAiSuggestionsRefresh] = useState<(() => void) | null>(null);
   const aiSuggestionsRefreshRef = useRef<(() => void) | null>(null);
 
+  // Load saved search preferences from localStorage
+  useEffect(() => {
+    try {
+      let preferencesLoaded = false;
+
+      // Load media type preferences
+      const savedMediaTypes = localStorage.getItem("searchMediaTypes");
+      if (savedMediaTypes) {
+        const parsedMediaTypes = JSON.parse(savedMediaTypes);
+        setMediaTypes(parsedMediaTypes);
+        preferencesLoaded = true;
+
+        // Analytics for loaded media type preferences
+        const enabledCount = Object.values(parsedMediaTypes).filter(Boolean).length;
+        logEvent(
+          "search_preferences_loaded",
+          "Settings",
+          `media_types_restored|text_${parsedMediaTypes.text}|audio_${parsedMediaTypes.audio}|youtube_${parsedMediaTypes.youtube}`,
+          enabledCount
+        );
+      }
+
+      // Load extra sources preference
+      const savedUseExtraSources = localStorage.getItem("useExtraSources");
+      if (savedUseExtraSources !== null) {
+        const useExtra = savedUseExtraSources === "true";
+        const defaultSources = siteConfig?.defaultNumSources || 4;
+        setSourceCount(useExtra ? 10 : defaultSources);
+        preferencesLoaded = true;
+
+        // Analytics for loaded source count preference
+        logEvent("search_preferences_loaded", "Settings", "extra_sources_restored", useExtra ? 10 : defaultSources);
+      }
+
+      // Track if any preferences were loaded
+      if (preferencesLoaded) {
+        logEvent("search_preferences_loaded", "Settings", "preferences_restored_on_load");
+      }
+    } catch (error) {
+      console.error("Error loading search preferences from localStorage:", error);
+
+      // Analytics for localStorage errors
+      logEvent("search_preferences_error", "Settings", "localStorage_parse_error");
+    }
+  }, [siteConfig?.defaultNumSources]);
+
   const handleAISuggestionsRefreshReady = useCallback((fn: () => void) => {
     aiSuggestionsRefreshRef.current = fn;
     setAiSuggestionsRefresh(() => fn);
