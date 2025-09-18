@@ -262,6 +262,10 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         // Set conversation title for page title
         if (loadedConversation.title) {
           setConversationTitle(loadedConversation.title);
+        } else {
+          // Clear any previous title so the page <title> resets correctly when switching to a
+          // conversation that does not yet have an AI-generated title.
+          setConversationTitle(null);
         }
 
         // Log analytics event

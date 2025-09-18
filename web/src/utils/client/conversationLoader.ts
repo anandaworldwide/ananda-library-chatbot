@@ -150,15 +150,11 @@ export async function loadConversationByConvId(
       history.push(...createChatMessages(chat.question, chat.answer));
     });
 
-    // Get title from the first chat chronologically (which should have the AI-generated title)
-    // Sort by timestamp (oldest first) to get the actual first message
-    const firstChat = sortedChats.sort((a, b) => {
-      const timeA = a.timestamp?.seconds || a.timestamp?._seconds || 0;
-      const timeB = b.timestamp?.seconds || b.timestamp?._seconds || 0;
-      return timeA - timeB;
-    })[0];
+    // Prefer the earliest chat *with* a title (it may be on the assistant answer rather than the
+    // user question). Fall back to the very first chat document if none contain a title.
+    const titleChat = sortedChats.find((c) => !!c.title) ?? sortedChats[0];
 
-    const title = firstChat?.title;
+    const title = titleChat?.title;
 
     return {
       messages,
