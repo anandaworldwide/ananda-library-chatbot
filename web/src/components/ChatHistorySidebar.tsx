@@ -248,9 +248,9 @@ export default function ChatHistorySidebar({
       {/* Sidebar */}
       <div
         className={`
-        fixed top-0 left-0 h-full w-72 shadow-lg transform transition-transform duration-300 ease-in-out z-50
+        fixed top-[68px] left-0 h-[calc(100vh-68px)] w-72 shadow-lg transform transition-transform duration-300 ease-in-out z-30
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
-        lg:relative lg:translate-x-0 lg:shadow-none
+        lg:relative lg:top-0 lg:h-full lg:translate-x-0 lg:shadow-none
       `}
         style={{ backgroundColor: "#fffbee" }}
       >
@@ -284,7 +284,7 @@ export default function ChatHistorySidebar({
         </div>
 
         {/* Content - Fixed height with independent scrolling */}
-        <div className="h-[calc(100vh-4rem)] overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
           {loading && conversations.length === 0 ? (
             <div className="p-4 text-center text-gray-500">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>

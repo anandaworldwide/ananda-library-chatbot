@@ -95,7 +95,9 @@ const MessageItem: React.FC<MessageItemProps> = ({
           } hover:bg-gray-200 flex items-center`}
           title={vote === 1 ? "Clear upvote" : "Upvote this answer"}
         >
-          <span className="material-icons text-black">{vote === 1 ? "thumb_up" : "thumb_up_off_alt"}</span>
+          <span className={`material-icons ${vote === 1 ? "text-green-600" : "text-gray-500"}`}>
+            {vote === 1 ? "thumb_up" : "thumb_up_off_alt"}
+          </span>
         </button>
 
         {/* Downvote Button */}
@@ -106,7 +108,9 @@ const MessageItem: React.FC<MessageItemProps> = ({
           } hover:bg-gray-200 flex items-center`}
           title={vote === -1 ? "Clear downvote" : "Downvote (provide feedback)"}
         >
-          <span className="material-icons text-black">{vote === -1 ? "thumb_down" : "thumb_down_off_alt"}</span>
+          <span className={`material-icons ${vote === -1 ? "text-red-600" : "text-gray-500"}`}>
+            {vote === -1 ? "thumb_down" : "thumb_down_off_alt"}
+          </span>
         </button>
       </div>
     );
@@ -184,13 +188,15 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   <>
                     <button
                       onClick={() => message.docId && handleCopyLink(message.docId)}
-                      className={`text-black-600 hover:underline flex items-center ${
-                        !message.docId ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
+                      className={`flex items-center hover:bg-gray-200 p-1 rounded ${!message.docId ? "opacity-50 cursor-not-allowed" : ""}`}
                       title={message.docId ? "Copy link to clipboard" : "Waiting for link..."}
                       disabled={!message.docId}
                     >
-                      <span className="material-icons">{linkCopied === message.docId ? "check" : "link"}</span>
+                      <span
+                        className={`material-icons ${linkCopied === message.docId ? "text-black" : "text-gray-500"}`}
+                      >
+                        {linkCopied === message.docId ? "check" : "link"}
+                      </span>
                     </button>
 
                     {message.docId ? (
@@ -202,14 +208,14 @@ const MessageItem: React.FC<MessageItemProps> = ({
                           className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"
                           title="Waiting for document ID..."
                         >
-                          <span className="material-icons text-black">thumb_up_off_alt</span>
+                          <span className="material-icons text-gray-500">thumb_up_off_alt</span>
                         </button>
                         <button
                           disabled
                           className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"
                           title="Waiting for document ID..."
                         >
-                          <span className="material-icons text-black">thumb_down_off_alt</span>
+                          <span className="material-icons text-gray-500">thumb_down_off_alt</span>
                         </button>
                       </div>
                     )}
