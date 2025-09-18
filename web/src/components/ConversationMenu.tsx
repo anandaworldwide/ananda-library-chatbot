@@ -153,9 +153,18 @@ export default function ConversationMenu({ onRename, onDelete, isVisible, isRowS
       <button
         ref={buttonRef}
         onClick={handleMenuClick}
-        className={`p-1 rounded-md text-gray-500 hover:bg-gray-200 hover:bg-opacity-60 transition-colors duration-150 ${
+        className={`p-1 rounded-md text-gray-500 transition-colors duration-150 ${
           isRowSelected ? "opacity-100" : "opacity-0"
-        } group-hover:[@media(hover:hover)]:opacity-100 ${isRowSelected ? "bg-gray-100" : ""}`}
+        } group-hover:[@media(hover:hover)]:opacity-100`}
+        style={{
+          backgroundColor: isRowSelected ? "#fffbee" : "transparent",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "#fffbee";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = isRowSelected ? "#fffbee" : "transparent";
+        }}
         aria-label="Conversation options"
         title="More options"
       >

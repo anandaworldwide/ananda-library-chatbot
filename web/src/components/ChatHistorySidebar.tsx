@@ -252,12 +252,17 @@ export default function ChatHistorySidebar({
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
         lg:relative lg:translate-x-0 lg:shadow-none
       `}
-        style={{ backgroundColor: "#f8f7f6" }}
+        style={{ backgroundColor: "#fffbee" }}
       >
         {/* Header */}
-        <div className="relative p-4 border-b border-gray-200">
+        <div className="relative px-[35px] pt-4 pb-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-400">Chats</h2>
+            <h2
+              className="text-[18px] font-bold text-black text-opacity-70"
+              style={{ fontFamily: "'Open Sans', sans-serif" }}
+            >
+              Chats
+            </h2>
             <button onClick={onClose} className="lg:hidden p-1 rounded-md hover:bg-gray-100" aria-label="Close sidebar">
               <span className="material-icons text-gray-500">close</span>
             </button>
@@ -310,20 +315,21 @@ export default function ChatHistorySidebar({
               </div>
             )
           ) : (
-            <div className="p-2">
+            <div className="px-[35px] py-2">
               {displayConversations.map((conversation) => {
                 const isCurrentConversation = currentConvId === conversation.convId;
                 return (
                   <div
                     key={conversation.convId}
                     className={`relative rounded-lg transition-colors duration-150 mb-1 group ${
-                      isCurrentConversation
-                        ? "bg-white bg-opacity-80 shadow-sm"
-                        : "lg:hover:bg-white lg:hover:bg-opacity-60"
+                      isCurrentConversation ? "shadow-sm" : "lg:hover:bg-white lg:hover:bg-opacity-60"
                     }`}
+                    style={{
+                      backgroundColor: isCurrentConversation ? "#fff1c2" : "transparent",
+                    }}
                   >
-                    <div className="flex items-center gap-2 p-2">
-                      {/* Star button on the left */}
+                    <div className="flex items-center justify-between p-2">
+                      {/* Star button on the far left */}
                       <div className="flex-shrink-0">
                         <StarButton
                           convId={conversation.convId}
@@ -339,23 +345,26 @@ export default function ChatHistorySidebar({
                         />
                       </div>
 
-                      {/* Title area (clickable) */}
+                      {/* Title area (clickable) - takes up remaining space */}
                       <button
                         onClick={() => handleConversationClick(conversation)}
-                        className="flex-1 text-left rounded-lg"
+                        className="flex-1 text-left rounded-lg mx-2"
                       >
                         <div className="min-w-0">
                           <p
-                            className={`text-[13px] font-normal ${
-                              isCurrentConversation ? "text-blue-700" : "text-gray-900 lg:group-hover:text-blue-600"
+                            className={`text-[14px] font-normal ${
+                              isCurrentConversation
+                                ? "text-black text-opacity-70"
+                                : "text-black text-opacity-70 lg:group-hover:text-blue-600"
                             }`}
+                            style={{ fontFamily: "'Open Sans', sans-serif" }}
                           >
                             {conversation.title}
                           </p>
                         </div>
                       </button>
 
-                      {/* Three-dot menu on the right */}
+                      {/* Three-dot menu on the far right */}
                       <div className="flex-shrink-0">
                         <ConversationMenu
                           isVisible={true}

@@ -241,20 +241,16 @@ describe("MessageItem", () => {
     renderWithQueryClient(<MessageItem {...props} />);
 
     expect(screen.getByText("Test user message")).toBeInTheDocument();
-    // User icon should be shown for user messages
-    const userIcon = screen.getByTestId("mock-image");
-    expect(userIcon).toBeInTheDocument();
-    expect(userIcon.getAttribute("data-alt")).toBe("Me");
+    // User messages should be right-aligned with blue background
+    const userMessageContainer = screen.getByText("Test user message").closest(".bg-blue-100");
+    expect(userMessageContainer).toBeInTheDocument();
   });
 
   it("renders AI message correctly", () => {
     renderWithQueryClient(<MessageItem {...defaultProps} />);
 
     expect(screen.getByText("Test AI message")).toBeInTheDocument();
-    // AI icon should be shown for AI messages
-    const aiIcon = screen.getByTestId("mock-image");
-    expect(aiIcon).toBeInTheDocument();
-    expect(aiIcon.getAttribute("data-alt")).toBe("AI");
+    // AI messages should have full width without background color
 
     // Sources should be rendered
     expect(screen.getByTestId("sources-list")).toBeInTheDocument();

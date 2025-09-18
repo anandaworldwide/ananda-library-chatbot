@@ -98,21 +98,28 @@ export default function BaseHeader({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white w-full">
+    <header className="sticky top-0 z-40 w-full">
       {isDevelopment() && (
         <div className="bg-blue-500 text-white text-center py-1 w-full">Dev server (site: {process.env.SITE_ID})</div>
       )}
-      <div className={`h-16 border-b border-b-slate-200 py-4 px-4`}>
-        <div className="flex justify-between items-center">
-          <div className="flex items-center">
+      <div
+        className="bg-[#0092e3] relative h-[68px]"
+        style={{
+          backgroundImage:
+            "url('data:image/svg+xml;utf8,<svg viewBox=\\\'0 0 1512 68\\\' xmlns=\\\'http://www.w3.org/2000/svg\\\' preserveAspectRatio=\\\'none\\\'><rect x=\\\'0\\\' y=\\\'0\\\' height=\\\'100%\\\' width=\\\'100%\\\' fill=\\\'url(%23grad)\\\' opacity=\\\'0.20000000298023224\\\'/><defs><radialGradient id=\\\'grad\\\' gradientUnits=\\\'userSpaceOnUse\\\' cx=\\\'0\\\' cy=\\\'0\\\' r=\\\'10\\\' gradientTransform=\\\'matrix(62.9 2.8609e-7 -7.2655e-8 15.974 756 34)\\\'><stop stop-color=\\\'rgba(255,255,255,0.2)\\\' offset=\\\'0\\\'/><stop stop-color=\\\'rgba(128,201,241,0.2)\\\' offset=\\\'0.5\\\'/><stop stop-color=\\\'rgba(64,173,234,0.2)\\\' offset=\\\'0.75\\\'/><stop stop-color=\\\'rgba(0,146,227,0.2)\\\' offset=\\\'1\\\'/></radialGradient></defs></svg>')",
+        }}
+      >
+        <div className="flex justify-between items-center h-full px-[35px]">
+          <div className="flex items-center gap-[35px] pt-[5px]">
             {logoComponent ? <Link href="/">{logoComponent}</Link> : null}
-            <nav className={`${logoComponent ? "ml-2 pl-1" : ""}`}>
-              <div className="space-x-10">
+            <nav>
+              <div className="flex items-center gap-[35px]">
                 {parentSiteUrl && (
                   <Link
                     href={parentSiteUrl}
-                    className="text-sm text-gray-500 hover:text-slate-600 cursor-pointer"
+                    className="font-['Open_Sans'] font-bold text-[18px] text-white hover:text-gray-200 cursor-pointer"
                     onClick={handleBackToLibrary}
+                    style={{ fontVariationSettings: "'wdth' 100" }}
                   >
                     ← {parentSiteName}
                   </Link>
@@ -122,9 +129,10 @@ export default function BaseHeader({
                     key={item.path}
                     href={item.path}
                     onClick={item.path === "/" && onNewChat ? () => onNewChat() : undefined}
-                    className={`hover:text-slate-600 cursor-pointer ${
-                      isActive(item.path) ? "text-slate-800 font-bold" : ""
+                    className={`font-['Open_Sans'] font-bold text-[18px] text-white hover:text-gray-200 cursor-pointer ${
+                      isActive(item.path) ? "text-white" : ""
                     }`}
+                    style={{ fontVariationSettings: "'wdth' 100" }}
                   >
                     <span dangerouslySetInnerHTML={{ __html: item.label }} />
                   </Link>
@@ -138,10 +146,11 @@ export default function BaseHeader({
               <button
                 onClick={onTemporarySessionChange}
                 aria-label="Start Temporary Chat"
-                className="text-gray-600 hover:text-slate-800 p-1 rounded-md hover:bg-gray-100 transition-colors"
+                className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors flex items-center space-x-1"
                 title="Start temporary chat. It will not be logged, saved, or shareable."
               >
-                <span className="text-sm font-medium">Start temporary chat</span>
+                <span className="material-icons text-xl">hourglass_empty</span>
+                <span className="text-sm font-medium">Temporary</span>
               </button>
             )}
             {/* Show new chat button when chat is not empty OR when temporary session is active */}
@@ -149,22 +158,27 @@ export default function BaseHeader({
               <button
                 onClick={onNewChat}
                 aria-label="New Chat"
-                className="text-gray-600 hover:text-slate-800 p-1 rounded-md hover:bg-gray-100 transition-colors"
+                className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors"
                 title="Start New Chat"
               >
-                <span className="material-icons text-xl">create</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
+                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                </svg>
               </button>
             )}
             {requireLogin && authReady && (
-              <nav className="mr-4 pr-6 flex space-x-4">
+              <nav className="flex space-x-4">
                 {isLoggedIn ? (
-                  <Link href="/settings" aria-label="User settings" className="text-gray-600 hover:text-slate-800">
+                  <Link href="/settings" aria-label="User settings" className="text-white hover:text-gray-200">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
                       <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 3.134-7 7h2a5 5 0 0 1 10 0h2c0-3.866-3.134-7-7-7z" />
                     </svg>
                   </Link>
                 ) : (
-                  <Link href="/login" className="text-sm text-gray-500 hover:text-slate-600 cursor-pointer">
+                  <Link
+                    href="/login"
+                    className="font-['Open_Sans'] font-bold text-[18px] text-white hover:text-gray-200 cursor-pointer"
+                  >
                     Login
                   </Link>
                 )}
