@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { db } from "@/services/firebase";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreGet, firestoreSet } from "@/utils/server/firestoreRetryUtils";
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import firebase from "firebase-admin";
 
 interface UnsubscribeToken {
@@ -75,6 +76,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "unsubscribe from newsletter"
     );
 
+    // Load site configuration to get detailed site name
+    const siteConfig = await loadSiteConfig();
+    const siteName = siteConfig?.name || "Newsletter";
+
     // Return success page
     const successHtml = `
 <!DOCTYPE html>
@@ -126,18 +131,130 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             padding-top: 20px;
             border-top: 1px solid #eee;
         }
+        .button {
+            border: none;
+            border-radius: 6px;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            margin: 10px;
+            transition: background-color 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        .primary-button {
+            background-color: #0092e3;
+            color: white;
+        }
+        .primary-button:hover {
+            background-color: #007acc;
+        }
+        .primary-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .secondary-button {
+            background-color: #f8f9fa;
+            color: #333;
+            border: 1px solid #dee2e6;
+        }
+        .secondary-button:hover {
+            background-color: #e9ecef;
+        }
+        .button-group {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        @media (min-width: 480px) {
+            .button-group {
+                flex-direction: row;
+                justify-content: center;
+            }
+        }
+        .message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="success-icon">✓</div>
         <h1>Successfully Unsubscribed</h1>
-        <p>The email address <span class="email">${email}</span> has been unsubscribed from newsletter updates.</p>
+        <p>The email address <span class="email">${email}</span> has been unsubscribed from <strong>${siteName}</strong> newsletter updates.</p>
         <p>You will no longer receive newsletter emails from us.</p>
+        
         <div class="note">
-            If you change your mind, you can re-subscribe by logging into your account and updating your preferences in settings.
+            Changed your mind? You can instantly re-subscribe below or log into your account to update your preferences.
         </div>
+        
+        <div class="button-group">
+            <a href="/" class="button secondary-button">Go to Home Page</a>
+            <button class="button primary-button" onclick="resubscribe()">
+                Re-subscribe to Newsletter
+            </button>
+        </div>
+        
+        <div id="message" class="message" style="display: none;"></div>
     </div>
+    
+    <script>
+        async function resubscribe() {
+            const button = document.querySelector('.primary-button');
+            const messageDiv = document.getElementById('message');
+            
+            button.disabled = true;
+            button.textContent = 'Re-subscribing...';
+            messageDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/resubscribe', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        token: '${token}'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.className = 'message success-message';
+                    messageDiv.textContent = 'Successfully re-subscribed! You will now receive newsletter updates.';
+                    messageDiv.style.display = 'block';
+                    button.textContent = 'Re-subscribed ✓';
+                    button.style.backgroundColor = '#28a745';
+                } else {
+                    throw new Error(data.error || 'Failed to re-subscribe');
+                }
+            } catch (error) {
+                messageDiv.className = 'message error-message';
+                messageDiv.textContent = 'Failed to re-subscribe: ' + error.message;
+                messageDiv.style.display = 'block';
+                button.disabled = false;
+                button.textContent = 'Re-subscribe to Newsletter';
+            }
+        }
+    </script>
 </body>
 </html>`;
 

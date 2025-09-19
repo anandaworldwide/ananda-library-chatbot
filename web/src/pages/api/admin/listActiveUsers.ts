@@ -41,15 +41,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       if (firstName && lastName) return `${firstName} ${lastName}`;
       if (firstName) return firstName;
       if (lastName) return lastName;
-      return user.id; // Use document ID as email source of truth
+      return user.email || ""; // Use email field (which contains document ID)
     };
 
     // Helper function to check if user matches search query
     const matchesSearch = (user: any, query: string) => {
       if (!query) return true;
       const searchLower = query.toLowerCase();
-      const displayName = getDisplayName(user).toLowerCase();
-      const email = (user.id || "").toLowerCase(); // Use document ID as email source of truth
+      const displayName = (getDisplayName(user) || "").toLowerCase();
+      const email = (user.email || "").toLowerCase(); // Email is stored in user.email field
       return displayName.includes(searchLower) || email.includes(searchLower);
     };
 

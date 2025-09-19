@@ -3,6 +3,7 @@ import handler from "@/pages/api/unsubscribe";
 import jwt from "jsonwebtoken";
 import * as firestoreRetryUtils from "@/utils/server/firestoreRetryUtils";
 import * as firestoreUtils from "@/utils/server/firestoreUtils";
+import * as loadSiteConfig from "@/utils/server/loadSiteConfig";
 
 // Mock dependencies
 jest.mock("@/services/firebase", () => ({
@@ -17,6 +18,7 @@ jest.mock("@/services/firebase", () => ({
 
 jest.mock("@/utils/server/firestoreRetryUtils");
 jest.mock("@/utils/server/firestoreUtils");
+jest.mock("@/utils/server/loadSiteConfig");
 jest.mock("@/utils/server/corsMiddleware", () => ({
   createErrorCorsHeaders: jest.fn(() => ({})),
 }));
@@ -38,12 +40,17 @@ const mockFirestoreSet = firestoreRetryUtils.firestoreSet as jest.MockedFunction
 const mockGetUsersCollectionName = firestoreUtils.getUsersCollectionName as jest.MockedFunction<
   typeof firestoreUtils.getUsersCollectionName
 >;
+const mockLoadSiteConfig = loadSiteConfig.loadSiteConfig as jest.MockedFunction<typeof loadSiteConfig.loadSiteConfig>;
 
 describe("/api/unsubscribe", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.SECURE_TOKEN = "test-jwt-secret";
     mockGetUsersCollectionName.mockReturnValue("test_users");
+    mockLoadSiteConfig.mockResolvedValue({
+      name: "Test Site Newsletter",
+      siteId: "test",
+    } as any);
   });
 
   afterEach(() => {
@@ -170,6 +177,10 @@ describe("/api/unsubscribe", () => {
     expect(res.getHeader("Content-Type")).toBe("text/html");
     expect(res._getData()).toContain("Unsubscribed Successfully");
     expect(res._getData()).toContain("test@example.com");
+    expect(res._getData()).toContain("Test Site Newsletter");
+    expect(res._getData()).toContain("Re-subscribe to Newsletter");
+    expect(res._getData()).toContain("Go to Home Page");
+    expect(res._getData()).toContain('href="/"');
 
     // Verify Firestore update was called
     expect(mockFirestoreSet).toHaveBeenCalledWith(
@@ -199,6 +210,32 @@ describe("/api/unsubscribe", () => {
 
     expect(res._getStatusCode()).toBe(400);
     expect(JSON.parse(res._getData())).toEqual({ error: "Unsubscribe link has expired" });
+  });
+
+  it("should use fallback site name when config is null", async () => {
+    const token = jwt.sign({ email: "test@example.com", purpose: "newsletter_unsubscribe" }, "test-jwt-secret", {
+      expiresIn: "1h",
+    });
+
+    mockFirestoreGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ email: "test@example.com", newsletterSubscribed: true }),
+    } as any);
+
+    mockFirestoreSet.mockResolvedValue(undefined);
+    mockLoadSiteConfig.mockResolvedValue(null);
+
+    const { req, res } = createMocks({
+      method: "GET",
+      query: { token },
+    });
+
+    await handler(req as any, res as any);
+
+    expect(res._getStatusCode()).toBe(200);
+    expect(res._getData()).toContain("Newsletter");
+    expect(res._getData()).toContain("Re-subscribe to Newsletter");
+    expect(res._getData()).toContain("Go to Home Page");
   });
 
   it("should handle Firestore errors gracefully", async () => {
