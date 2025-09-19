@@ -6,7 +6,7 @@ import { getTokenFromRequest } from "@/utils/server/jwtUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { writeAuditLog } from "@/utils/server/auditLog";
 import { sendEmailChangeVerificationEmail } from "@/utils/server/userEmailChangeUtils";
-import { firestoreSet } from "@/utils/server/firestoreRetryUtils";
+import { firestoreGet, firestoreSet } from "@/utils/server/firestoreRetryUtils";
 
 // Mock all dependencies
 jest.mock("@/utils/server/apiMiddleware", () => ({
@@ -26,6 +26,7 @@ jest.mock("@/services/firebase", () => ({
 }));
 
 jest.mock("@/utils/server/firestoreRetryUtils", () => ({
+  firestoreGet: jest.fn(),
   firestoreSet: jest.fn(),
 }));
 
@@ -78,11 +79,19 @@ describe("/api/requestEmailChange", () => {
     mockSendEmailChangeVerificationEmail.mockResolvedValue(undefined);
     mockGetTokenFromRequest.mockReturnValue({ email: "user@example.com", role: "user", client: "web" } as any);
 
+    const mockFirestoreGet = firestoreGet as jest.MockedFunction<typeof firestoreGet>;
     const mockFirestoreSet = firestoreSet as jest.MockedFunction<typeof firestoreSet>;
+
+    // Mock user document exists
+    mockFirestoreGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ role: "user" }),
+    } as any);
+
     mockFirestoreSet.mockResolvedValue();
 
     // Mock Firestore
-    (mockDb.collection as jest.Mock).mockReturnValue({
+    (mockDb!.collection as jest.Mock).mockReturnValue({
       where: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
           get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
@@ -124,7 +133,7 @@ describe("/api/requestEmailChange", () => {
       await handler(req as unknown as NextApiRequest, res as unknown as NextApiResponse);
     } catch (error) {
       // The error is expected, middleware would normally handle this
-      expect(error.message).toBe("No token provided");
+      expect((error as Error).message).toBe("No token provided");
     }
   });
 
@@ -202,7 +211,7 @@ describe("/api/requestEmailChange", () => {
 
   it("should reject when new email is already in use", async () => {
     // Mock existing user with the new email
-    (mockDb.collection as jest.Mock).mockReturnValue({
+    (mockDb!.collection as jest.Mock).mockReturnValue({
       where: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
           get: jest.fn().mockResolvedValue({
@@ -249,7 +258,7 @@ describe("/api/requestEmailChange", () => {
         ],
       });
 
-    (mockDb.collection as jest.Mock).mockReturnValue({
+    (mockDb!.collection as jest.Mock).mockReturnValue({
       where: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
           get: mockGet,
@@ -305,7 +314,7 @@ describe("/api/requestEmailChange", () => {
         ],
       });
 
-    (mockDb.collection as jest.Mock).mockReturnValue({
+    (mockDb!.collection as jest.Mock).mockReturnValue({
       where: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
           get: mockGet,
@@ -316,8 +325,9 @@ describe("/api/requestEmailChange", () => {
       }),
     });
 
-    const mockFirestoreSet = firestoreSet as jest.MockedFunction<typeof firestoreSet>;
-    mockFirestoreSet.mockRejectedValue(new Error("Database error"));
+    // Mock firestoreGet to throw an error when getting user document
+    const mockFirestoreGet = firestoreGet as jest.MockedFunction<typeof firestoreGet>;
+    mockFirestoreGet.mockRejectedValue(new Error("Database error"));
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",

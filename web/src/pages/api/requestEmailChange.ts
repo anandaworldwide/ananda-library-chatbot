@@ -4,7 +4,7 @@ import { db } from "@/services/firebase";
 import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { withJwtAuth, getTokenFromRequest } from "@/utils/server/jwtUtils";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
-import { firestoreSet } from "@/utils/server/firestoreRetryUtils";
+import { firestoreGet, firestoreSet } from "@/utils/server/firestoreRetryUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { writeAuditLog } from "@/utils/server/auditLog";
 import {
@@ -69,13 +69,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ error: "Email address is already in use" });
     }
 
-    // Get current user document
-    const userQuery = await db.collection(usersCol).where("email", "==", currentEmailLower).limit(1).get();
-    if (userQuery.empty) {
+    // Get current user document (email is stored as document ID)
+    const userDocRef = db.collection(usersCol).doc(currentEmailLower);
+    const userDoc = await firestoreGet(userDocRef, "get user for email change", currentEmailLower);
+    if (!userDoc.exists) {
       return res.status(404).json({ error: "User not found" });
     }
-
-    const userDoc = userQuery.docs[0];
 
     // Generate verification token
     const token = generateEmailChangeToken();
@@ -84,7 +83,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // Update user document with pending email change
     await firestoreSet(
-      userDoc.ref,
+      userDocRef,
       {
         pendingEmail: newEmailLower,
         emailChangeTokenHash: tokenHash,

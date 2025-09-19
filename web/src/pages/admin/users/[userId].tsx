@@ -19,6 +19,7 @@ interface UserDetail {
   firstName?: string | null;
   lastName?: string | null;
   conversationCount?: number;
+  newsletterSubscribed?: boolean;
 }
 
 interface PageProps {
@@ -37,7 +38,7 @@ function getDisplayName(user: UserDetail): string {
   } else if (lastName) {
     return lastName;
   } else {
-    return user.email; // Fallback to email if no name
+    return user.email; // Email comes from API response mapping (doc.id)
   }
 }
 
@@ -53,6 +54,7 @@ export default function EditUserPage({ siteConfig }: PageProps) {
   const [role, setRole] = useState<string>("user");
   const [firstName, setFirstName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState<boolean>(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -84,6 +86,7 @@ export default function EditUserPage({ siteConfig }: PageProps) {
         setRole(u.role || "user");
         setFirstName(typeof u.firstName === "string" ? u.firstName : "");
         setLastName(typeof u.lastName === "string" ? u.lastName : "");
+        setNewsletterSubscribed(typeof u.newsletterSubscribed === "boolean" ? u.newsletterSubscribed : true);
       } catch (e: any) {
         setError(e?.message || "Failed to load user");
       } finally {
@@ -105,7 +108,13 @@ export default function EditUserPage({ siteConfig }: PageProps) {
           "Content-Type": "application/json",
           ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
         },
-        body: JSON.stringify({ email, role, firstName: firstName.trim(), lastName: lastName.trim() }),
+        body: JSON.stringify({
+          email,
+          role,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          newsletterSubscribed,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to save");
@@ -254,6 +263,17 @@ export default function EditUserPage({ siteConfig }: PageProps) {
                   <option value="superuser">superuser</option>
                 </select>
                 <p className="mt-1 text-xs text-gray-600">Only superusers can change roles.</p>
+              </div>
+              <div>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newsletterSubscribed}
+                    onChange={(e) => setNewsletterSubscribed(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium">Newsletter subscription</span>
+                </label>
               </div>
               <div className="flex justify-between">
                 <div className="flex gap-3">

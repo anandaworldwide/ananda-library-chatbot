@@ -9,3 +9,8 @@ export const getUsersCollectionName = () => {
   const env = getEnvName();
   return `${env}_users`;
 };
+
+export const getNewslettersCollectionName = () => {
+  const env = getEnvName();
+  return `${env}_newsletters`;
+};

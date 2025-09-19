@@ -334,7 +334,7 @@ async function main() {
       }
 
       let userData = {
-        email: user.email.toLowerCase(),
+        // Note: email is stored as document ID, not as a field
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,

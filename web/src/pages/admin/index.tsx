@@ -56,6 +56,12 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
               Review Downvotes
               <span className="material-icons text-sm ml-1">thumb_down</span>
             </Link>
+            {loginRequired && (
+              <Link href="/admin/newsletters" className="text-blue-600 underline inline-flex items-center">
+                Newsletter Management
+                <span className="material-icons text-sm ml-1">email</span>
+              </Link>
+            )}
           </div>
         </section>
       </div>

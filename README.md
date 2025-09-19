@@ -34,6 +34,7 @@ accurate, contextual answers with complete source attribution.
 - **Streaming Responses** - Real-time answer generation with source attribution
 - **Dynamic Follow-up Questions** - AI-generated contextual questions to guide deeper exploration
 - **Smart Sharing** - Share specific conversation points with view-only access for recipients
+- **Newsletter System** - Engage users with beautiful HTML newsletters featuring one-click unsubscribe
 
 ### 🔧 **Developer-Friendly Architecture**
 

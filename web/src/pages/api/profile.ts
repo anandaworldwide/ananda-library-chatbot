@@ -53,11 +53,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         lastName: typeof data?.lastName === "string" ? data.lastName : null,
         pendingEmail: typeof data?.pendingEmail === "string" ? data.pendingEmail : null,
         emailChangeExpiresAt: data?.emailChangeExpiresAt || null,
+        newsletterSubscribed: typeof data?.newsletterSubscribed === "boolean" ? data.newsletterSubscribed : true, // Default to true for existing users
       });
     }
 
     if (req.method === "PATCH") {
-      const body = (req.body || {}) as { firstName?: string; lastName?: string; cancelEmailChange?: boolean };
+      const body = (req.body || {}) as {
+        firstName?: string;
+        lastName?: string;
+        cancelEmailChange?: boolean;
+        newsletterSubscribed?: boolean;
+      };
       const updates: Record<string, any> = {};
 
       if (body.firstName !== undefined) {
@@ -76,6 +82,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         updates.pendingEmail = firebase.firestore.FieldValue.delete();
         updates.emailChangeTokenHash = firebase.firestore.FieldValue.delete();
         updates.emailChangeExpiresAt = firebase.firestore.FieldValue.delete();
+      }
+      if (body.newsletterSubscribed !== undefined) {
+        if (typeof body.newsletterSubscribed !== "boolean") {
+          return res.status(400).json({ error: "Invalid newsletter subscription value" });
+        }
+        updates.newsletterSubscribed = body.newsletterSubscribed;
       }
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No updates provided" });

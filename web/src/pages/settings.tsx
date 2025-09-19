@@ -13,6 +13,7 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
   const [email, setEmail] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState<boolean>(true);
 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
@@ -47,6 +48,9 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
             setRole(typeof profile?.role === "string" ? profile.role : "user");
             setFirstName(typeof profile?.firstName === "string" ? profile.firstName : "");
             setLastName(typeof profile?.lastName === "string" ? profile.lastName : "");
+            setNewsletterSubscribed(
+              typeof profile?.newsletterSubscribed === "boolean" ? profile.newsletterSubscribed : true
+            );
             setPendingEmail(typeof profile?.pendingEmail === "string" ? profile.pendingEmail : null);
           } else {
             setEmail(null);
@@ -82,7 +86,11 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim() }),
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          newsletterSubscribed: newsletterSubscribed,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Failed to save profile");
@@ -185,6 +193,18 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
                         placeholder="Last name"
                       />
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="newsletterSubscribed"
+                      type="checkbox"
+                      checked={newsletterSubscribed}
+                      onChange={(e) => setNewsletterSubscribed(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="newsletterSubscribed" className="text-sm font-medium">
+                      Subscribe to periodic newsletter updates
+                    </label>
                   </div>
                   <button
                     type="submit"

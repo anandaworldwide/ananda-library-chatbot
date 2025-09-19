@@ -82,7 +82,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(200).json({
         user: {
           id: currentId,
-          email: data.email || currentId,
+          email: currentId, // Email is stored as document ID
           uuid: data.uuid || null,
           role: data.role || "user",
           inviteStatus: data.inviteStatus || null,
@@ -91,6 +91,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           entitlements: data.entitlements || {},
           firstName: typeof (data as any)?.firstName === "string" ? (data as any).firstName : null,
           lastName: typeof (data as any)?.lastName === "string" ? (data as any).lastName : null,
+          newsletterSubscribed:
+            typeof (data as any)?.newsletterSubscribed === "boolean" ? (data as any).newsletterSubscribed : false,
           conversationCount,
         },
       });
@@ -101,7 +103,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (req.method === "PATCH") {
     try {
-      const body = (req.body || {}) as { email?: string; role?: string; firstName?: string; lastName?: string };
+      const body = (req.body || {}) as {
+        email?: string;
+        role?: string;
+        firstName?: string;
+        lastName?: string;
+        newsletterSubscribed?: boolean;
+      };
       const updates: Record<string, any> = {};
       const now = firebase.firestore.Timestamp.now();
       const siteConfig = loadSiteConfigSync();
@@ -131,6 +139,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           return res.status(400).json({ error: "Invalid last name" });
         }
         updates.lastName = body.lastName.trim();
+      }
+
+      // Newsletter subscription update
+      if (body.newsletterSubscribed !== undefined) {
+        if (typeof body.newsletterSubscribed !== "boolean") {
+          return res.status(400).json({ error: "Invalid newsletter subscription value" });
+        }
+        updates.newsletterSubscribed = body.newsletterSubscribed;
       }
 
       // If only role/name update (no email change)
@@ -172,7 +188,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(200).json({
           user: {
             id: currentId,
-            email: data.email || currentId,
+            email: currentId, // Email is stored as document ID
             uuid: data.uuid || null,
             role: data.role || "user",
             inviteStatus: data.inviteStatus || null,
@@ -181,6 +197,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             entitlements: data.entitlements || {},
             firstName: typeof (data as any)?.firstName === "string" ? (data as any).firstName : null,
             lastName: typeof (data as any)?.lastName === "string" ? (data as any).lastName : null,
+            newsletterSubscribed:
+              typeof (data as any)?.newsletterSubscribed === "boolean" ? (data as any).newsletterSubscribed : false,
             conversationCount,
           },
         });
@@ -204,10 +222,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         const data = currentSnap.data() || {};
         const newData = {
           ...data,
-          email: newEmail,
+          // Note: email is stored as document ID, not as a field
           ...(updates.role ? { role: updates.role } : {}),
           updatedAt: now,
         };
+
+        // Remove any existing email field - document ID is source of truth
+        delete (newData as any).email;
 
         tx.set(newRef, newData, { merge: true });
         tx.delete(currentRef);
@@ -302,7 +323,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(200).json({
         user: {
           id: newEmail,
-          email: out.email || newEmail,
+          email: newEmail, // Email is stored as document ID
           uuid: out.uuid || null,
           role: out.role || "user",
           inviteStatus: out.inviteStatus || null,
@@ -311,6 +332,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           entitlements: out.entitlements || {},
           firstName: typeof (out as any)?.firstName === "string" ? (out as any).firstName : null,
           lastName: typeof (out as any)?.lastName === "string" ? (out as any).lastName : null,
+          newsletterSubscribed:
+            typeof (out as any)?.newsletterSubscribed === "boolean" ? (out as any).newsletterSubscribed : false,
           conversationCount,
         },
       });
@@ -363,7 +386,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       // Log the deletion with comprehensive audit info
       await writeAuditLog(req, "admin_delete_user", currentId, {
         deletedUser: {
-          email: userData.email || currentId,
+          email: currentId, // Email is stored as document ID
           role: userData.role || "user",
           inviteStatus: userData.inviteStatus || null,
           firstName: userData.firstName || null,

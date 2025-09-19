@@ -1,0 +1,202 @@
+doctype html
+html(lang="en")
+  head
+    meta(charset="utf-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1")
+    meta(http-equiv="X-UA-Compatible", content="IE=edge")
+    title= subject
+    style.
+      /* Reset styles */
+      body, table, td, p, a, li, blockquote {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
+      table, td {
+        mso-table-lspace: 0pt;
+        mso-table-rspace: 0pt;
+      }
+      img {
+        -ms-interpolation-mode: bicubic;
+        border: 0;
+        height: auto;
+        line-height: 100%;
+        outline: none;
+        text-decoration: none;
+      }
+      
+      /* Main styles */
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background-color: #f4f4f4;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        color: #333333;
+      }
+      
+      .email-container {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+      }
+      
+      .header {
+        background: linear-gradient(135deg, #0092e3 0%, #006bb3 100%);
+        padding: 30px 20px;
+        text-align: center;
+      }
+      
+      .header h1 {
+        color: #ffffff;
+        font-size: 28px;
+        font-weight: bold;
+        margin: 0;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      }
+      
+      .content {
+        padding: 40px 30px;
+      }
+      
+      .greeting {
+        font-size: 18px;
+        margin-bottom: 20px;
+        color: #333333;
+      }
+      
+      .newsletter-content {
+        margin: 30px 0;
+      }
+      
+      .newsletter-content h2 {
+        color: #0092e3;
+        font-size: 22px;
+        font-weight: bold;
+        margin: 30px 0 15px 0;
+        border-bottom: 2px solid #e8f4fd;
+        padding-bottom: 10px;
+      }
+      
+      .newsletter-content h3 {
+        color: #333333;
+        font-size: 18px;
+        font-weight: bold;
+        margin: 25px 0 10px 0;
+      }
+      
+      .newsletter-content p {
+        margin: 15px 0;
+        line-height: 1.7;
+      }
+      
+      .newsletter-content strong {
+        color: #0092e3;
+        font-weight: bold;
+      }
+      
+      .newsletter-content em {
+        font-style: italic;
+        color: #666666;
+      }
+      
+      .newsletter-image {
+        max-width: 100%;
+        height: auto;
+        margin: 20px 0;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+      
+      .cta-button {
+        display: inline-block;
+        background-color: #0092e3;
+        color: #ffffff !important;
+        text-decoration: none;
+        padding: 12px 30px;
+        border-radius: 6px;
+        font-weight: bold;
+        margin: 20px 0;
+        text-align: center;
+        transition: background-color 0.3s ease;
+      }
+      
+      .cta-button:hover {
+        background-color: #006bb3;
+      }
+      
+      .footer {
+        background-color: #f8f9fa;
+        padding: 30px 20px;
+        text-align: center;
+        border-top: 1px solid #e9ecef;
+      }
+      
+      .footer p {
+        margin: 10px 0;
+        font-size: 14px;
+        color: #666666;
+      }
+      
+      .unsubscribe-link {
+        color: #0092e3 !important;
+        text-decoration: underline;
+        font-size: 14px;
+      }
+      
+      .unsubscribe-link:hover {
+        color: #006bb3 !important;
+      }
+      
+      /* Mobile responsive */
+      @media only screen and (max-width: 600px) {
+        .email-container {
+          width: 100% !important;
+        }
+        .content {
+          padding: 20px 15px !important;
+        }
+        .header {
+          padding: 20px 15px !important;
+        }
+        .header h1 {
+          font-size: 24px !important;
+        }
+        .newsletter-content h2 {
+          font-size: 20px !important;
+        }
+      }
+
+  body
+    table(role="presentation", cellspacing="0", cellpadding="0", border="0", width="100%")
+      tr
+        td
+          .email-container
+            // Header
+            .header
+              h1= siteName + " Newsletter"
+            
+            // Main Content
+            .content
+              .greeting
+                | Hello #{userName || 'Friend'},
+              
+              .newsletter-content
+                // Dynamic content will be inserted here
+                != content
+              
+              // Call-to-action button (if provided)
+              if ctaUrl && ctaText
+                p(style="text-align: center; margin: 30px 0;")
+                  a.cta-button(href=ctaUrl)= ctaText
+            
+            // Footer
+            .footer
+              p
+                | You're receiving this newsletter because you're subscribed to #{siteName} updates.
+              p
+                | If you no longer wish to receive these emails, you can 
+                a.unsubscribe-link(href=unsubscribeUrl) unsubscribe instantly
+                | .
+              p(style="margin-top: 20px; font-size: 12px; color: #999999;")
+                | © #{new Date().getFullYear()} #{siteName}. All rights reserved.

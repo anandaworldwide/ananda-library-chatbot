@@ -41,7 +41,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       if (firstName && lastName) return `${firstName} ${lastName}`;
       if (firstName) return firstName;
       if (lastName) return lastName;
-      return user.email;
+      return user.id; // Use document ID as email source of truth
     };
 
     // Helper function to check if user matches search query
@@ -49,7 +49,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       if (!query) return true;
       const searchLower = query.toLowerCase();
       const displayName = getDisplayName(user).toLowerCase();
-      const email = (user.email || "").toLowerCase();
+      const email = (user.id || "").toLowerCase(); // Use document ID as email source of truth
       return displayName.includes(searchLower) || email.includes(searchLower);
     };
 
@@ -64,7 +64,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       allUsers = allSnapshot.docs.map((d: any) => {
         const data = d.data() || {};
         return {
-          email: data.email,
+          email: d.id, // Email is stored as document ID
           firstName: data.firstName || null,
           lastName: data.lastName || null,
           uuid: data.uuid || null,
@@ -105,7 +105,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       filteredUsers = snapshot.docs.map((d: any) => {
         const data = d.data() || {};
         return {
-          email: data.email,
+          email: d.id, // Email is stored as document ID
           firstName: data.firstName || null,
           lastName: data.lastName || null,
           uuid: data.uuid || null,

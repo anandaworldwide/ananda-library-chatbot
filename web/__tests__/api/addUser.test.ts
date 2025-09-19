@@ -122,7 +122,7 @@ describe("/api/admin/addUser", () => {
     expect(firestoreRetryUtils.firestoreSet).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        email: "test@example.com",
+        // Note: email is now stored as document ID, not as a field
         role: "user",
         entitlements: { basic: true },
         inviteStatus: "pending",

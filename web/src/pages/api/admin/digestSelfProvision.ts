@@ -138,19 +138,21 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (emailsToLookup.length > 0) {
       try {
         const userCollection = process.env.NODE_ENV === "production" ? "prod_users" : "dev_users";
-        const userQueries = emailsToLookup.map((email) =>
-          db!.collection(userCollection).where("email", "==", email).limit(1).get()
+        const userQueries = emailsToLookup.map(
+          (email) => db!.collection(userCollection).doc(email).get() // Email is stored as document ID
         );
 
         const userResults = await Promise.all(userQueries);
         userResults.forEach((userSnap, index) => {
-          if (!userSnap.empty) {
-            const userData = userSnap.docs[0].data();
-            userDataMap.set(emailsToLookup[index], {
-              firstName: userData.firstName,
-              lastName: userData.lastName,
-              // Don't include inviteStatus - use audit entry outcome instead
-            });
+          if (userSnap.exists) {
+            const userData = userSnap.data();
+            if (userData) {
+              userDataMap.set(emailsToLookup[index], {
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                // Don't include inviteStatus - use audit entry outcome instead
+              });
+            }
           }
         });
       } catch (userFetchError) {

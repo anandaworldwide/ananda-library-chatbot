@@ -58,7 +58,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const items = snapshot.docs.map((d: any) => {
       const data = d.data() || {};
       return {
-        email: data.email,
+        email: d.id, // Email is stored as document ID
         invitedAt: data.createdAt?.toDate?.() ? data.createdAt.toDate().toLocaleString() : null,
         expiresAt: data.inviteExpiresAt?.toDate?.() ? data.inviteExpiresAt.toDate().toLocaleString() : null,
       };

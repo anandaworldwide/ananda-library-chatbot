@@ -59,7 +59,7 @@ function getDisplayName(user: ActiveUser): string {
   } else if (lastName) {
     return lastName;
   } else {
-    return user.email; // Fallback to email if no name
+    return user.email; // Email comes from API response mapping (doc.id)
   }
 }
 

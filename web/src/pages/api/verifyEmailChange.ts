@@ -45,7 +45,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const userDoc = userQuery.docs[0];
     const userDocData = userDoc.data();
-    const currentEmail = userDocData.email;
+    const currentEmail = userDoc.id; // Email is stored as document ID
 
     // Verify token
     if (!userDocData.emailChangeTokenHash) {
@@ -81,17 +81,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const oldDocRef = userDoc.ref;
     const newDocRef = usersColRef.doc(newEmailLower);
 
-    // Create new document with updated email and cleared pending fields
+    // Create new document with cleared pending fields (email is stored as document ID)
     const updatedUserData = {
       ...userDocData,
-      email: newEmailLower,
       updatedAt: firebase.firestore.Timestamp.now(),
     } as any;
 
-    // Remove pending email change fields
+    // Remove pending email change fields and any existing email field
     delete updatedUserData.pendingEmail;
     delete updatedUserData.emailChangeTokenHash;
     delete updatedUserData.emailChangeExpiresAt;
+    delete updatedUserData.email; // Remove email field - document ID is source of truth
 
     // Use a batch to atomically create new document and delete old one
     const batch = db.batch();

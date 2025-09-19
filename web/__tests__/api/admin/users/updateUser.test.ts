@@ -307,7 +307,8 @@ describe("/api/admin/users/[userId] update user", () => {
     // Verify the user document was moved to new email
     expect(mockDb.__docMap["admin@example.com"]).toBeUndefined();
     expect(mockDb.__docMap["newadmin@example.com"]).toBeDefined();
-    expect(mockDb.__docMap["newadmin@example.com"].email).toBe("newadmin@example.com");
+    // Note: email is now stored as document ID, not as a field
+    expect(mockDb.__docMap["newadmin@example.com"].email).toBeUndefined();
 
     // Verify JWT cookie was updated
     const setCookieHeaders = res.getHeaders()["set-cookie"] as string[];

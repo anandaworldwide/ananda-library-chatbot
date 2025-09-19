@@ -61,7 +61,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         await firestoreSet(
           userDocRef,
           {
-            email: email.toLowerCase(),
+            // Note: email is stored as document ID, not as a field
             inviteStatus: "pending",
             inviteTokenHash: tokenHash,
             inviteExpiresAt,
@@ -85,12 +85,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     await firestoreSet(
       userDocRef,
       {
-        email: email.toLowerCase(),
+        // Note: email is stored as document ID, not as a field
         role: "user",
         entitlements: { basic: true },
         inviteStatus: "pending",
         inviteTokenHash: tokenHash,
         inviteExpiresAt,
+        newsletterSubscribed: true, // Default opt-in for newsletter
         createdAt: now,
         updatedAt: now,
       },

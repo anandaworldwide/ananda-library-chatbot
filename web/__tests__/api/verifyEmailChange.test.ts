@@ -104,8 +104,8 @@ describe("/api/verifyEmailChange", () => {
 
   it("should reject when no token hash exists", async () => {
     const mockUserDoc = {
+      id: "user@example.com", // Email is stored as document ID
       data: () => ({
-        email: "user@example.com",
         pendingEmail: "new@example.com",
         // Missing emailChangeTokenHash
       }),
@@ -138,8 +138,8 @@ describe("/api/verifyEmailChange", () => {
     (mockBcryptCompare as any).mockResolvedValue(false);
 
     const mockUserDoc = {
+      id: "user@example.com", // Email is stored as document ID
       data: () => ({
-        email: "user@example.com",
         pendingEmail: "new@example.com",
         emailChangeTokenHash: "hashed-token",
         emailChangeExpiresAt: { toMillis: () => Date.now() + 60000 },
@@ -171,8 +171,8 @@ describe("/api/verifyEmailChange", () => {
 
   it("should reject expired tokens", async () => {
     const mockUserDoc = {
+      id: "user@example.com", // Email is stored as document ID
       data: () => ({
-        email: "user@example.com",
         pendingEmail: "new@example.com",
         emailChangeTokenHash: "hashed-token",
         emailChangeExpiresAt: { toMillis: () => Date.now() - 60000 }, // Expired
@@ -204,9 +204,9 @@ describe("/api/verifyEmailChange", () => {
 
   it("should successfully verify and update email", async () => {
     const mockUserDoc = {
+      id: "user@example.com", // Email is stored as document ID
       ref: { id: "user-doc-ref" },
       data: () => ({
-        email: "user@example.com",
         pendingEmail: "new@example.com",
         emailChangeTokenHash: "hashed-token",
         emailChangeExpiresAt: { toMillis: () => Date.now() + 60000 },
