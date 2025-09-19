@@ -76,9 +76,7 @@ export default function CrystalHeader({
                 className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors"
                 title="Start New Chat"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
-                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-                </svg>
+                <span className="material-icons text-xl">edit_square</span>
               </button>
             )}
             <Link
