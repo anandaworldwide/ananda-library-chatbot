@@ -243,12 +243,12 @@ export default function ChatHistorySidebar({
   return (
     <>
       {/* Mobile backdrop */}
-      {isOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={onClose} />}
+      {isOpen && <div className="fixed inset-0 bg-black bg-opacity-25 z-30 lg:hidden" onClick={onClose} />}
 
       {/* Sidebar */}
       <div
         className={`
-        fixed top-[68px] left-0 h-[calc(100vh-68px)] w-72 shadow-lg transform transition-transform duration-300 ease-in-out z-30
+        fixed top-[68px] left-0 h-[calc(100vh-68px)] w-72 shadow-lg transform transition-transform duration-300 ease-in-out z-40
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
         lg:relative lg:top-0 lg:h-full lg:translate-x-0 lg:shadow-none
       `}

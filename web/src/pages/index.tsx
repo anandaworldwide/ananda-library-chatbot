@@ -1535,7 +1535,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                     className="p-2 rounded-md hover:bg-gray-100"
                     aria-label="Open chat history"
                   >
-                    <span className="material-icons text-gray-600">menu</span>
+                    <span className="material-icons text-gray-600">history</span>
                   </button>
                   <h1 className="text-lg font-semibold text-gray-900">Chat</h1>
                   <div className="w-10"></div> {/* Spacer for centering */}
