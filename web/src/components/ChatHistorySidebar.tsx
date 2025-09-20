@@ -315,16 +315,16 @@ export default function ChatHistorySidebar({
               </div>
             )
           ) : (
-            <div className="px-[35px] py-2">
+            <div className="py-2">
               {displayConversations.map((conversation) => {
                 const isCurrentConversation = currentConvId === conversation.convId;
                 return (
                   <div
                     key={conversation.convId}
-                    className={`relative rounded-lg transition-colors duration-150 mb-1 group cursor-pointer ${
+                    className={`relative transition-colors duration-150 mb-1 group cursor-pointer px-[35px] ${
                       isCurrentConversation ? "shadow-sm" : "lg:hover:bg-yellow-100 lg:hover:bg-opacity-80"
                     }`}
-                    style={isCurrentConversation ? { backgroundColor: "#fff1c2" } : undefined}
+                    style={undefined}
                   >
                     <div className="flex items-center py-2 relative">
                       {/* Star button positioned in left margin */}
@@ -350,8 +350,10 @@ export default function ChatHistorySidebar({
                       >
                         <div className="min-w-0">
                           <p
-                            className={`text-[14px] font-normal ${
-                              isCurrentConversation ? "text-black text-opacity-70" : "text-black text-opacity-70"
+                            className={`text-[14px] ${
+                              isCurrentConversation
+                                ? "font-bold text-black text-opacity-70"
+                                : "font-normal text-black text-opacity-70"
                             }`}
                             style={{ fontFamily: "'Open Sans', sans-serif" }}
                           >
