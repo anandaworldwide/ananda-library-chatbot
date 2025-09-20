@@ -249,6 +249,16 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
 - **`POST /api/pruneRateLimits`** (`pages/api/pruneRateLimits.ts`)
   - **Purpose:** Scheduled task endpoint to clean up expired rate limit entries in Redis.
   - **Auth:** Requires Cron Secret.
+- **`POST /api/admin/digestSelfProvision`** (`pages/api/admin/digestSelfProvision.ts`)
+  - **Purpose:** Daily digest of user activation attempts and completions.
+  - **Auth:** Requires Cron Secret or JWT authentication.
+  - **Schedule:** Daily at 1:00 PM UTC (configured in `vercel.json`).
+- **`POST /api/admin/cleanupExpiredInvitations`** (`pages/api/admin/cleanupExpiredInvitations.ts`)
+  - **Purpose:** Daily cleanup of expired pending account invitations (older than 14 days).
+  - **Auth:** Requires Cron Secret or JWT authentication.
+  - **Schedule:** Daily at 2:00 AM UTC (configured in `vercel.json`).
+  - **Logic:** Queries Firestore for pending invitations with `inviteExpiresAt <= now`, deletes expired documents,
+    writes audit logs, and sends ops alerts with cleanup summary.
 - **`GET /api/stats`**, **`GET /api/downvotedAnswers`**, **`POST /api/adminAction`**
   - **Purpose:** Various endpoints for administrative tasks like viewing statistics, managing content.
   - **Auth:** Requires admin-level privileges (JWT validation).
@@ -488,7 +498,8 @@ capabilities:
   4. The client might use this token to call `POST /api/get-token`.
   5. `POST /api/get-token` validates the token and issues a standard JWT cookie.
 - **Cron Job Authentication:**
-  1. Scheduled jobs call specific endpoints (`/api/firestoreCron`, `/api/pruneRateLimits`).
+  1. Scheduled jobs call specific endpoints (`/api/firestoreCron`, `/api/pruneRateLimits`,
+     `/api/admin/digestSelfProvision`, `/api/admin/cleanupExpiredInvitations`).
   2. The request must include an `Authorization: Bearer <CRON_SECRET>` header.
   3. The endpoint validates the secret using `cronAuthUtils.ts`.
 - **Admin Sudo Mode:**

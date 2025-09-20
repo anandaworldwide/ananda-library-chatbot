@@ -5,6 +5,7 @@ import { withApiMiddleware } from "@/utils/server/apiMiddleware";
 import { withJwtAuth } from "@/utils/server/jwtUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
 import { sendOpsAlert } from "@/utils/server/emailOps";
+import { createIndexErrorResponse } from "@/utils/server/firestoreIndexErrorHandler";
 
 /**
  * Middleware that allows either JWT authentication or Vercel cron requests
@@ -58,39 +59,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           .get(),
       ]);
     } catch (firestoreError: any) {
-      // Handle missing Firestore index error
-      if (
-        firestoreError?.message?.includes("query requires an index") ||
-        firestoreError?.message?.includes("index is currently building")
-      ) {
-        // Extract the Firebase Console URL from the error message if available
-        const urlMatch = firestoreError.message.match(/https:\/\/console\.firebase\.google\.com[^\s]*/);
-        const indexUrl = urlMatch ? urlMatch[0] : null;
+      const errorResponse = createIndexErrorResponse(firestoreError, {
+        endpoint: "/api/admin/digestSelfProvision",
+        collection: collection,
+        fields: ["action", "createdAt", "__name__"],
+        query: "self_provision_attempt and user_activation_completed audit entries",
+      });
 
-        console.error("Missing Firestore index for digestSelfProvision query", {
-          indexUrl: indexUrl || "Check Firebase Console > Firestore > Indexes",
-          collection: collection,
-          fields: ["action", "createdAt", "__name__"],
-          originalError: firestoreError.message,
-        });
-
-        const isBuilding = firestoreError?.message?.includes("index is currently building");
-
-        return res.status(500).json({
-          error: "Database configuration error",
-          message: isBuilding
-            ? "Firestore index is currently building for digest audit queries"
-            : "Missing required Firestore index for digest audit queries",
-          action: isBuilding
-            ? "Wait for index to finish building (usually takes a few minutes)"
-            : "Create composite indexes: collection=admin_audit, fields=[action,createdAt,__name__] for both self_provision_attempt and user_activation_completed",
-          indexUrl: indexUrl || "Check Firebase Console > Firestore > Indexes",
-          details: isBuilding
-            ? "Index creation is in progress - the cron job will work once building completes"
-            : "This is a one-time setup required for the daily digest functionality",
-          originalError: firestoreError.message,
-        });
+      if (errorResponse.type === "firestore_index_error") {
+        return res.status(500).json(errorResponse);
       }
+
       // Re-throw other Firestore errors
       throw firestoreError;
     }

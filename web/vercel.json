@@ -3,6 +3,10 @@
     {
       "path": "/api/admin/digestSelfProvision",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/admin/cleanupExpiredInvitations",
+      "schedule": "0 2 * * *"
     }
   ],
   "buildCommand": "npm install dotenv && npm install --include=dev && npm run build-with-api-tests",

@@ -665,14 +665,17 @@ describe("/api/admin/digestSelfProvision", () => {
 
       expect(res.statusCode).toBe(500);
       const responseData = res._getJSONData();
-      expect(responseData.error).toBe("Database configuration error");
-      expect(responseData.message).toBe("Missing required Firestore index for digest audit queries");
-      expect(responseData.action).toContain("Create composite indexes");
+      expect(responseData.error).toBe(
+        "This feature requires database configuration. Please contact the site administrator to enable this functionality."
+      );
+      expect(responseData.type).toBe("firestore_index_error");
+      expect(responseData.isBuilding).toBe(false);
+      expect(responseData.adminMessage).toBe(
+        "Firestore index is missing and needs to be created. Check the Firebase Console to create the required index."
+      );
       expect(responseData.indexUrl).toBe(
         "https://console.firebase.google.com/v1/r/project/test-project/firestore/indexes?create_composite=ABC123"
       );
-      expect(responseData.details).toContain("one-time setup");
-      expect(responseData.originalError).toContain("query requires an index");
     });
   });
 });

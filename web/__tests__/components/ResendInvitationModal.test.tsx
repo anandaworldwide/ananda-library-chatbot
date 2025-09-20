@@ -56,8 +56,10 @@ describe("ResendInvitationModal", () => {
     await user.clear(textarea);
     await user.type(textarea, "Custom test message");
 
-    // Verify the textarea has the expected value
-    expect(textarea).toHaveValue("Custom test message");
+    // Wait for any async updates to complete before checking the value
+    await waitFor(() => {
+      expect(textarea).toHaveValue("Custom test message");
+    });
 
     const submitButton = screen.getByRole("button", { name: /resend invitation/i });
     await user.click(submitButton);
