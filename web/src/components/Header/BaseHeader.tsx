@@ -146,11 +146,10 @@ export default function BaseHeader({
               <button
                 onClick={onTemporarySessionChange}
                 aria-label="Start Temporary Chat"
-                className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors flex items-center space-x-1"
+                className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors flex items-center"
                 title="Start temporary chat. It will not be logged, saved, or shareable."
               >
-                <span className="material-icons text-xl">hourglass_empty</span>
-                <span className="text-sm font-medium">Temporary</span>
+                <span className="text-sm font-medium">Start Temporary Chat</span>
               </button>
             )}
             {/* Show new chat button when chat is not empty OR when temporary session is active */}

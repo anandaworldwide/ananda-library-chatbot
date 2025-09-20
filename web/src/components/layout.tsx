@@ -64,15 +64,20 @@ export default function Layout({
       isChatEmpty,
     };
 
+    const headerPropsNoTempSessions = {
+      siteConfig,
+      onNewChat,
+    };
+
     switch (siteConfig.siteId) {
       case "ananda":
         return <AnandaHeader {...headerProps} />;
       case "ananda-public":
-        return <AnandaPublicHeader {...headerProps} />;
+        return <AnandaPublicHeader {...headerPropsNoTempSessions} />;
       case "jairam":
-        return <JairamHeader {...headerProps} />;
+        return <JairamHeader {...headerPropsNoTempSessions} />;
       case "crystal":
-        return <CrystalHeader {...headerProps} />;
+        return <CrystalHeader {...headerPropsNoTempSessions} />;
       default:
         return null;
     }

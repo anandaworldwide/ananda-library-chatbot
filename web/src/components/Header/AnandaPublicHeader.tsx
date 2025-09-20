@@ -5,18 +5,9 @@ import { getParentSiteUrl, getParentSiteName } from "@/utils/client/siteConfig";
 interface AnandaHeaderProps {
   siteConfig: SiteConfig;
   onNewChat?: () => void;
-  temporarySession?: boolean;
-  onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  isChatEmpty?: boolean;
 }
 
-export default function AnandaHeader({
-  siteConfig,
-  onNewChat,
-  temporarySession,
-  onTemporarySessionChange,
-  isChatEmpty,
-}: AnandaHeaderProps) {
+export default function AnandaHeader({ siteConfig, onNewChat }: AnandaHeaderProps) {
   const parentSiteUrl = getParentSiteUrl(siteConfig);
   const parentSiteName = getParentSiteName(siteConfig);
 
@@ -28,10 +19,10 @@ export default function AnandaHeader({
         parentSiteName={parentSiteName}
         requireLogin={siteConfig.requireLogin}
         onNewChat={onNewChat}
-        temporarySession={temporarySession}
-        onTemporarySessionChange={onTemporarySessionChange}
-        isChatEmpty={isChatEmpty}
-        allowTemporarySessions={siteConfig.allowTemporarySessions}
+        temporarySession={false}
+        onTemporarySessionChange={undefined}
+        isChatEmpty={true}
+        allowTemporarySessions={false}
       />
     </>
   );

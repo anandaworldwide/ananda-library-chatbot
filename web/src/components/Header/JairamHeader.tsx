@@ -5,18 +5,9 @@ import { getParentSiteUrl, getParentSiteName } from "@/utils/client/siteConfig";
 interface JairamHeaderProps {
   siteConfig: SiteConfig;
   onNewChat?: () => void;
-  temporarySession?: boolean;
-  onTemporarySessionChange?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  isChatEmpty?: boolean;
 }
 
-export default function JairamHeader({
-  siteConfig,
-  onNewChat,
-  temporarySession,
-  onTemporarySessionChange,
-  isChatEmpty,
-}: JairamHeaderProps) {
+export default function JairamHeader({ siteConfig, onNewChat }: JairamHeaderProps) {
   const parentSiteUrl = getParentSiteUrl(siteConfig);
   const parentSiteName = getParentSiteName(siteConfig);
 
@@ -27,10 +18,10 @@ export default function JairamHeader({
       parentSiteName={parentSiteName}
       requireLogin={siteConfig.requireLogin}
       onNewChat={onNewChat}
-      temporarySession={temporarySession}
-      onTemporarySessionChange={onTemporarySessionChange}
-      isChatEmpty={isChatEmpty}
-      allowTemporarySessions={siteConfig.allowTemporarySessions}
+      temporarySession={false}
+      onTemporarySessionChange={undefined}
+      isChatEmpty={true}
+      allowTemporarySessions={false}
     />
   );
 }
