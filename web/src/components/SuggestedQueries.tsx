@@ -310,7 +310,7 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
                   aria-label={isExpanded ? "Minimize suggestions" : "Expand suggestions"}
                 >
                   <span className="material-icons text-gray-600 hover:text-gray-800">
-                    {isExpanded ? "minimize" : "expand_more"}
+                    {isExpanded ? "keyboard_arrow_up" : "expand_more"}
                   </span>
                 </button>
               )}
@@ -448,7 +448,7 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
                   aria-label={isExpanded ? "Minimize suggestions" : "Expand suggestions"}
                 >
                   <span className="material-icons text-gray-600 hover:text-gray-800">
-                    {isExpanded ? "minimize" : "expand_more"}
+                    {isExpanded ? "keyboard_arrow_up" : "expand_more"}
                   </span>
                 </button>
               )}

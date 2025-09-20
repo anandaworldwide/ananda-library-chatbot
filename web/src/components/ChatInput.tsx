@@ -293,7 +293,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
 
           {/* Input textarea and submit button */}
-          <div className="flex items-center space-x-2 mb-4">
+          <div className="relative mb-4">
             <textarea
               onKeyDown={onEnter}
               onChange={(e) => {
@@ -309,7 +309,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               name="userInput"
               placeholder={disabled ? "View-only mode" : hasInteracted ? "" : placeholderText}
               disabled={disabled}
-              className={`flex-grow p-2 border border-gray-300 rounded-md resize-none focus:outline-none min-h-[40px] overflow-hidden ${
+              className={`w-full p-3 pr-12 border border-gray-300 rounded-md resize-none focus:outline-none min-h-[48px] overflow-hidden ${
                 disabled ? "bg-gray-100 cursor-not-allowed" : ""
               }`}
               style={{ height: "auto" }}
@@ -317,7 +317,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <button
               type="submit"
               disabled={disabled}
-              className={`p-2 rounded-full flex-shrink-0 w-10 h-10 flex items-center justify-center ${
+              className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-full flex items-center justify-center w-10 h-10 ${
                 disabled ? "bg-gray-400 text-gray-600 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600"
               }`}
             >
@@ -329,7 +329,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </button>
           </div>
 
-          {/* Query Options Dropdown */}
+          {/* Chat Options Dropdown */}
           <div className="mb-4">
             <SearchOptionsDropdown
               siteConfig={siteConfig}

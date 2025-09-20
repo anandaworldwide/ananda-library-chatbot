@@ -267,8 +267,8 @@ export default function ChatHistorySidebar({
               <span className="material-icons text-gray-500">close</span>
             </button>
           </div>
-          {/* Filter toggle positioned to align with three-dot menus */}
-          <div className="absolute right-3 top-4">
+          {/* Filter toggle positioned further right to avoid three-dot menu overlap */}
+          <div className="absolute right-8 top-4">
             <button
               onClick={() => handleFilterModeChange(filterMode === "all" ? "starred" : "all")}
               className={`px-2 py-1 text-xs rounded-md transition-colors duration-200 ${
@@ -321,16 +321,14 @@ export default function ChatHistorySidebar({
                 return (
                   <div
                     key={conversation.convId}
-                    className={`relative rounded-lg transition-colors duration-150 mb-1 group ${
-                      isCurrentConversation ? "shadow-sm" : "lg:hover:bg-white lg:hover:bg-opacity-60"
+                    className={`relative rounded-lg transition-colors duration-150 mb-1 group cursor-pointer ${
+                      isCurrentConversation ? "shadow-sm" : "lg:hover:bg-yellow-100 lg:hover:bg-opacity-80"
                     }`}
-                    style={{
-                      backgroundColor: isCurrentConversation ? "#fff1c2" : "transparent",
-                    }}
+                    style={isCurrentConversation ? { backgroundColor: "#fff1c2" } : undefined}
                   >
-                    <div className="flex items-center justify-between p-2">
-                      {/* Star button on the far left */}
-                      <div className="flex-shrink-0">
+                    <div className="flex items-center py-2 relative">
+                      {/* Star button positioned in left margin */}
+                      <div className="absolute -left-6 flex-shrink-0">
                         <StarButton
                           convId={conversation.convId}
                           isStarred={conversation.isStarred || false}
@@ -345,17 +343,15 @@ export default function ChatHistorySidebar({
                         />
                       </div>
 
-                      {/* Title area (clickable) - takes up remaining space */}
+                      {/* Title area (clickable) - aligned exactly with "Chats" header */}
                       <button
                         onClick={() => handleConversationClick(conversation)}
-                        className="flex-1 text-left rounded-lg mx-2"
+                        className="flex-1 text-left rounded-lg pr-3"
                       >
                         <div className="min-w-0">
                           <p
                             className={`text-[14px] font-normal ${
-                              isCurrentConversation
-                                ? "text-black text-opacity-70"
-                                : "text-black text-opacity-70 lg:group-hover:text-blue-600"
+                              isCurrentConversation ? "text-black text-opacity-70" : "text-black text-opacity-70"
                             }`}
                             style={{ fontFamily: "'Open Sans', sans-serif" }}
                           >
@@ -364,8 +360,8 @@ export default function ChatHistorySidebar({
                         </div>
                       </button>
 
-                      {/* Three-dot menu on the far right */}
-                      <div className="flex-shrink-0">
+                      {/* Three-dot menu positioned in right margin */}
+                      <div className="absolute -right-4 flex-shrink-0">
                         <ConversationMenu
                           isVisible={true}
                           isRowSelected={isCurrentConversation}

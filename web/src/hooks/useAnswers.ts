@@ -28,7 +28,7 @@ type AnswersQueryKey = ReturnType<typeof queryKeys.answers>;
  * Hook for fetching paginated answers (sorted by most recent)
  *
  * @param page - Current page number
- * @param options - Additional React Query options
+ * @param options - Additional React Chat options
  */
 export const useAnswers = (
   page: number = 1,

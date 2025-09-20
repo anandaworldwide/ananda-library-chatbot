@@ -1,7 +1,7 @@
 /**
  * SearchOptionsDropdown Component
  *
- * This component renders a dropdown menu with grouped query options:
+ * This component renders a dropdown menu with grouped chat options:
  * - Media type checkboxes (text, audio, video) if enabled
  * - Author/collection radio buttons (Master Swami, All) if enabled
  * - Extra sources checkbox if enabled
@@ -204,7 +204,7 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
         aria-haspopup="true"
       >
         <span className="material-icons text-base mr-2">tune</span>
-        Query Options
+        Chat Options
         <span className={`material-icons text-base ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`}>
           expand_more
         </span>
@@ -222,7 +222,7 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
             <div className="p-4 space-y-4">
               {/* Header with info button */}
               <div className="flex justify-between items-center mb-2">
-                <h3 className="text-sm font-medium text-gray-900">Query Options</h3>
+                <h3 className="text-sm font-medium text-gray-900">Chat Options</h3>
                 <button
                   type="button"
                   onClick={() => {
@@ -302,6 +302,7 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
               {/* Extra Sources Option */}
               {showSourceCountSelector && (
                 <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Use Extra Sources</h4>
                   <label className="flex items-center">
                     <input
                       type="checkbox"
@@ -309,11 +310,10 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
                       onChange={(e) => handleSourceCountToggle(e.target.checked)}
                       className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
-                    <span className="text-sm text-gray-700">Use extra sources</span>
+                    <span className="text-sm text-gray-700">
+                      Use 10 sources instead of 4 for more comprehensive responses
+                    </span>
                   </label>
-                  <p className="text-xs text-gray-500 mt-1 ml-6">
-                    Use 10 sources instead of {siteConfig?.defaultNumSources || 4} for more comprehensive responses
-                  </p>
                 </div>
               )}
             </div>
