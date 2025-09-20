@@ -169,7 +169,7 @@ python process_word_docs.py \
 python analyze_manual_evaluation_results.py \
   --session-file 3large_vs_3small/step3_evaluation_session.json \
   --output-report 3large_vs_3small/step4_final_report.md \
-  --output-summary 3large_vs_3small/step4_results_summary.json
+  --output-json 3large_vs_3small/step4_results_summary.json
 ```
 
 **Example Output**:
@@ -257,7 +257,7 @@ python process_word_docs.py \
 python analyze_manual_evaluation_results.py \
   --session-file evaluation_session.json \
   --output-report final_report.md \
-  --output-summary results_summary.json
+  --output-json results_summary.json
 ```
 
 ## File Outputs
