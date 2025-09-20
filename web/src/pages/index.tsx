@@ -473,6 +473,54 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     logEvent("new_chat_started", "Chat", "header_button");
   };
 
+  // Function to handle when a conversation is deleted from sidebar
+  const handleConversationDeleted = (deletedConvId: string) => {
+    // Stop any ongoing streaming before resetting
+    if (loading) {
+      handleStop();
+    }
+
+    // End temporary session if one is active
+    if (temporarySession) {
+      setTemporarySession(false);
+      logEvent("end_temporary_session", "UI", "conversation_deleted");
+    }
+
+    // Immediately reset local chat state BEFORE navigation to prevent race condition
+    setCurrentConvId(null);
+    setCurrentQuestion("");
+    setConversationTitle(null);
+    setMessageState({
+      messages: [
+        {
+          message: getGreeting(siteConfig),
+          type: "apiMessage",
+        },
+      ],
+      history: [],
+    });
+    setError(null);
+    setViewOnlyMode(false);
+
+    // Update path refs before navigation to prevent handleUrlBasedLoading race
+    pathRef.current = "/";
+    previousPathRef.current = "/";
+
+    // Navigate to home page AFTER clearing state
+    router.push("/");
+
+    // Focus on the input field if not on mobile
+    if (window.innerWidth >= 768 && textAreaRef.current) {
+      textAreaRef.current.focus();
+    }
+
+    // Reload sidebar to clear any stale state
+    sidebarRefetchRef.current();
+
+    // Log analytics event
+    logEvent("conversation_deleted_reset_chat", "Chat History", deletedConvId);
+  };
+
   // State for managing collection queries
   const [collectionQueries, setCollectionQueries] = useState({});
   const [isLoadingQueries, setIsLoadingQueries] = useState(true);
@@ -1518,6 +1566,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                   logEvent("chat_history_sidebar_refetch", "Chat History", "sidebar_refetch");
                 });
               }}
+              onConversationDeleted={handleConversationDeleted}
             />
           )}
 

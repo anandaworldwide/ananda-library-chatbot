@@ -20,6 +20,7 @@ interface ChatHistorySidebarProps {
   onLoadConversation?: (convId: string) => void;
   currentConvId?: string | null;
   onGetSidebarFunctions?: (functions: SidebarFunctions, refetch: () => void) => void;
+  onConversationDeleted?: (deletedConvId: string) => void;
 }
 
 export default function ChatHistorySidebar({
@@ -28,6 +29,7 @@ export default function ChatHistorySidebar({
   onLoadConversation,
   currentConvId,
   onGetSidebarFunctions,
+  onConversationDeleted,
 }: ChatHistorySidebarProps) {
   const {
     loading,
@@ -226,6 +228,12 @@ export default function ChatHistorySidebar({
 
       // Track delete event
       logEvent("chat_history_conversation_delete", "Chat History", deleteModal.convId, 1);
+
+      // If the deleted conversation is currently being viewed, notify parent to clear chat
+      if (deleteModal.convId === currentConvId && onConversationDeleted) {
+        onConversationDeleted(deleteModal.convId);
+        onClose(); // Close sidebar on mobile after navigation
+      }
     } catch (error) {
       console.error("Failed to delete conversation:", error);
       throw error; // Re-throw to let modal handle the error display
