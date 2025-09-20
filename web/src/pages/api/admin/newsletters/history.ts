@@ -3,7 +3,7 @@ import { db } from "@/services/firebase";
 import { getNewslettersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreQueryGet } from "@/utils/server/firestoreRetryUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
-import { requireAdminRole } from "@/utils/server/authz";
+import { requireSuperuserRole } from "@/utils/server/authz";
 import { withJwtAuth } from "@/utils/server/jwtUtils";
 import firebase from "firebase-admin";
 
@@ -25,8 +25,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    // Validate admin role
-    requireAdminRole(req);
+    // Validate superuser role
+    requireSuperuserRole(req);
 
     // Get newsletter history (most recent first)
     const newslettersCol = getNewslettersCollectionName();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Head from "next/head";
 import type { GetServerSideProps, NextApiRequest } from "next";
-import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
+import { isSuperuserPageAllowed } from "@/utils/server/adminPageGate";
 import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
@@ -557,7 +557,7 @@ For external images: ![Alt text](https://external-site.com/image.jpg)
 export const getServerSideProps: GetServerSideProps<NewsletterPageProps> = async ({ req }) => {
   try {
     const siteConfig = await loadSiteConfig();
-    const isAllowed = await isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
+    const isAllowed = await isSuperuserPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
 
     if (!isAllowed) {
       return { notFound: true };

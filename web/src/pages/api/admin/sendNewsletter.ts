@@ -7,7 +7,7 @@ import { db } from "@/services/firebase";
 import { getUsersCollectionName, getNewslettersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreQueryGet, firestoreSet } from "@/utils/server/firestoreRetryUtils";
 import { genericRateLimiter } from "@/utils/server/genericRateLimiter";
-import { requireAdminRole } from "@/utils/server/authz";
+import { requireSuperuserRole } from "@/utils/server/authz";
 import { withJwtAuth, getTokenFromRequest } from "@/utils/server/jwtUtils";
 import { sendEmail } from "@/utils/server/emailUtils";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
@@ -61,8 +61,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    // Validate admin role
-    requireAdminRole(req);
+    // Validate superuser role
+    requireSuperuserRole(req);
 
     // Get user info from JWT token
     const tokenPayload = getTokenFromRequest(req);

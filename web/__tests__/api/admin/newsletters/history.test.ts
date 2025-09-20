@@ -36,7 +36,7 @@ const mockFirestoreQueryGet = firestoreRetryUtils.firestoreQueryGet as jest.Mock
 const mockGetNewslettersCollectionName = firestoreUtils.getNewslettersCollectionName as jest.MockedFunction<
   typeof firestoreUtils.getNewslettersCollectionName
 >;
-const mockRequireAdminRole = authz.requireAdminRole as jest.MockedFunction<typeof authz.requireAdminRole>;
+const mockRequireSuperuserRole = authz.requireSuperuserRole as jest.MockedFunction<typeof authz.requireSuperuserRole>;
 const mockGenericRateLimiter = genericRateLimiter.genericRateLimiter as jest.MockedFunction<
   typeof genericRateLimiter.genericRateLimiter
 >;
@@ -47,7 +47,7 @@ describe("/api/admin/newsletters/history", () => {
 
     // Default mocks
     mockGenericRateLimiter.mockResolvedValue(true);
-    mockRequireAdminRole.mockImplementation(() => true);
+    mockRequireSuperuserRole.mockImplementation(() => true);
     mockGetNewslettersCollectionName.mockReturnValue("test_newsletters");
   });
 
@@ -79,8 +79,8 @@ describe("/api/admin/newsletters/history", () => {
     });
   });
 
-  it("should validate admin role", async () => {
-    mockRequireAdminRole.mockImplementation(() => {
+  it("should validate superuser role", async () => {
+    mockRequireSuperuserRole.mockImplementation(() => {
       throw new Error("Unauthorized");
     });
 
