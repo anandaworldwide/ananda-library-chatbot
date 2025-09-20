@@ -1,6 +1,7 @@
 // Admin Users page: Add Users modal and Pending Users list with Resend
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
+import Link from "next/link";
 import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import type { GetServerSideProps, NextApiRequest } from "next";
@@ -427,14 +428,22 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       <div className="mx-auto max-w-3xl p-6">
         <Breadcrumb items={[{ label: "Admin Dashboard", href: "/admin" }, { label: "Users" }]} />
 
-        <div className="mb-8">
+        <div className="mb-8 flex gap-3">
           <button
             onClick={() => setIsModalOpen(true)}
             disabled={submitting}
             className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
+            <span className="material-icons text-sm mr-2">person_add</span>
             Add Users
           </button>
+          <Link
+            href="/admin/leaderboard"
+            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          >
+            <span className="material-icons text-sm mr-2">leaderboard</span>
+            Leaderboard
+          </Link>
         </div>
 
         <AddUsersModal
