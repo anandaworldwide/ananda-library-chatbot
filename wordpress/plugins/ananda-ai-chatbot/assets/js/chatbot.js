@@ -17,6 +17,7 @@
  * - Close on Escape key or clicking outside
  * - Full page chat option for expanded experience
  * - Dynamic Intercom integration via special [any text](GETHUMAN) links
+ * - AI suggestion chips for follow-up questions
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -29,6 +30,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Default base URL
   const DEFAULT_BASE_URL = "https://vivek.ananda.org";
+
+  // Store user votes (docId -> 1 | -1)
+  let votes = {};
 
   // Clean the base URL by removing trailing slashes
   function getBaseUrl() {
@@ -105,7 +109,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Track current session exchanges - using chatHistory length
     // This variable needs to be incremented only once we've completed a full Q&A exchange
-    const currentSessionExchanges = chatHistory.filter((pair) => pair[0] && pair[1]).length;
+    const currentSessionExchanges = chatHistory.filter((item) => {
+      if (Array.isArray(item)) return item[0] && item[1];
+      return item.userMessage && item.botMessage;
+    }).length;
 
     // Don't show NPS survey if there are no completed exchanges in the current session
     if (currentSessionExchanges < 1) {
@@ -208,7 +215,7 @@ document.addEventListener("DOMContentLoaded", () => {
   fullPageButton.id = "aichatbot-fullpage";
   fullPageButton.innerHTML = `<i class="fas fa-expand-alt"></i>Full page chat`;
 
-  // Initialize chat history
+  // Initialize chat history - now stores objects with metadata
   let chatHistory = [];
 
   // --- Google Analytics Integration Start ---
@@ -216,6 +223,85 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize Google Analytics settings from WordPress
   if (typeof aichatbotData !== "undefined" && aichatbotData.googleAnalyticsId) {
     googleAnalyticsId = aichatbotData.googleAnalyticsId;
+  }
+
+  /**
+   * Create and display follow-up suggestion chips
+   * @param {Array} suggestions - Array of suggestion strings
+   * @param {Element} botMessage - The bot message element to append chips to
+   */
+  function createSuggestionChips(suggestions, botMessage) {
+    if (!suggestions || suggestions.length === 0) {
+      return;
+    }
+
+    if (!botMessage) {
+      return;
+    }
+
+    // Remove any existing chips
+    const existingChips = botMessage.querySelector(".aichatbot-suggestion-chips");
+    if (existingChips) {
+      existingChips.remove();
+    }
+
+    // Create chips container
+    const chipsContainer = document.createElement("div");
+    chipsContainer.className = "aichatbot-suggestion-chips";
+
+    // Create chips for up to 2 suggestions as requested
+    const maxChips = Math.min(suggestions.length, 2);
+
+    for (let i = 0; i < maxChips; i++) {
+      const suggestion = suggestions[i];
+      if (!suggestion || suggestion.length === 0) {
+        continue;
+      }
+
+      const chip = document.createElement("button");
+      chip.className = "aichatbot-suggestion-chip";
+      chip.textContent = suggestion;
+      chip.title = suggestion; // Full text on hover
+
+      // Add click handler
+      chip.addEventListener("click", () => {
+        handleSuggestionClick(suggestion, i);
+      });
+
+      chipsContainer.appendChild(chip);
+    }
+
+    // Only add container if we have chips
+    if (chipsContainer.children.length > 0) {
+      botMessage.appendChild(chipsContainer);
+    }
+  }
+
+  /**
+   * Handle suggestion chip click
+   * @param {string} suggestion - The suggestion text
+   * @param {number} index - The index of the clicked suggestion
+   */
+  function handleSuggestionClick(suggestion, index) {
+    // Track analytics
+    sendGoogleAnalyticsEvent("chatbot_vivek_suggestion_click", {
+      event_category: "chatbot_engagement",
+      suggestion_text: suggestion.substring(0, 100), // First 100 chars for analysis
+      suggestion_index: index,
+      session_questions_total: sessionQuestionCount,
+    });
+
+    // Set the suggestion as input value
+    input.value = suggestion;
+
+    // Auto-resize textarea to fit the suggestion
+    autoResizeTextarea();
+
+    // Focus the input
+    input.focus();
+
+    // Optionally auto-submit (uncomment if desired)
+    // sendMessage();
   }
 
   /**
@@ -602,7 +688,6 @@ document.addEventListener("DOMContentLoaded", () => {
           // Add a class to the body for CSS targeting when Intercom is active
           document.body.classList.add("intercom-enabled");
           document.body.classList.add("hide-intercom");
-          console.log("Added CSS class to body to hide Intercom container.");
 
           // Add listener for when Intercom messenger is hidden by the user
           window.Intercom("onHide", function () {
@@ -611,7 +696,6 @@ document.addEventListener("DOMContentLoaded", () => {
             // Re-hide the Intercom container/launcher using our CSS rule
             if (!document.body.classList.contains("hide-intercom")) {
               document.body.classList.add("hide-intercom");
-              console.log("Re-added CSS class to body to hide Intercom container.");
             }
 
             // Show the chatbot bubble (if it exists)
@@ -731,6 +815,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Track accumulated response for streaming
   let accumulatedResponse = "";
   let currentBotMessage = null;
+  let currentSuggestions = []; // Store current follow-up suggestions
 
   /**
    * Renders markdown text into HTML with support for:
@@ -970,8 +1055,9 @@ document.addEventListener("DOMContentLoaded", () => {
     sessionQuestionCount++;
     trackQuestionSubmit(sessionQuestionCount, message);
 
-    // Reset accumulated response
+    // Reset accumulated response and suggestions
     accumulatedResponse = "";
+    currentSuggestions = [];
 
     // Show user message
     const userMessage = document.createElement("div");
@@ -1002,8 +1088,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     isStreaming = true;
 
-    // Update chat history with user message
-    chatHistory.push([message, ""]);
+    // Update chat history with user message - store as object with metadata
+    chatHistory.push({
+      userMessage: message,
+      botMessage: "",
+      suggestions: [],
+      docId: null,
+    });
 
     try {
       // Get token for API call
@@ -1025,10 +1116,15 @@ document.addEventListener("DOMContentLoaded", () => {
           question: message,
           history: chatHistory
             .slice(0, -1)
-            .map(([userMsg, botMsg]) => [
-              { role: "user", content: userMsg },
-              { role: "assistant", content: botMsg },
-            ])
+            .map((item) => {
+              // Handle both old array format and new object format
+              const userMsg = Array.isArray(item) ? item[0] : item.userMessage;
+              const botMsg = Array.isArray(item) ? item[1] : item.botMessage;
+              return [
+                { role: "user", content: userMsg },
+                { role: "assistant", content: botMsg },
+              ];
+            })
             .flat(),
           collection: defaultCollection,
           temporarySession: temporarySession,
@@ -1086,15 +1182,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     "Expected: ananda-public"
                   );
                 }
-                if (jsonData.sourceDocs && jsonData.sourceDocs.length < sourceCount) {
-                  console.error(
-                    "[Ananda-AI-Chatbot]: Received",
-                    jsonData.sourceDocs.length,
-                    "sources, but",
-                    sourceCount,
-                    "were requested."
-                  );
-                }
 
                 // Handle token updates
                 if (jsonData.token) {
@@ -1122,19 +1209,42 @@ document.addEventListener("DOMContentLoaded", () => {
                   messageContent.innerHTML = renderMarkdown(accumulatedResponse);
 
                   // Update the last history item with the current accumulated response
-                  if (chatHistory.length > 0) {
-                    chatHistory[chatHistory.length - 1][1] = accumulatedResponse;
-                    // Save state periodically as content streams in
-                    if (chatHistory[chatHistory.length - 1][1].length % 100 === 0) {
-                      saveChatState();
-                    }
+                  const lastItem = chatHistory[chatHistory.length - 1];
+                  if (Array.isArray(lastItem)) {
+                    // Back-compat: old array format [userMsg, botMsg]
+                    lastItem[1] = accumulatedResponse;
+                    if (lastItem[1].length % 100 === 0) saveChatState();
+                  } else {
+                    // New object format { userMessage, botMessage, … }
+                    lastItem.botMessage = accumulatedResponse;
+                    if (lastItem.botMessage.length % 100 === 0) saveChatState();
                   }
+                }
+
+                // Handle suggestions
+                if (jsonData.suggestions && Array.isArray(jsonData.suggestions)) {
+                  currentSuggestions = jsonData.suggestions;
+
+                  // Store suggestions in chat history
+                  if (chatHistory.length > 0) {
+                    chatHistory[chatHistory.length - 1].suggestions = currentSuggestions;
+                  }
+
+                  // Ensure bot message is in DOM when we receive suggestions
+                  if (!messages.contains(currentBotMessage)) {
+                    messages.appendChild(currentBotMessage);
+                    if (messages.contains(typingIndicator)) {
+                      messages.removeChild(typingIndicator);
+                    }
+                    firstTokenReceived = true;
+                  }
+
+                  // Display suggestion chips immediately when received (like main web frontend)
+                  createSuggestionChips(currentSuggestions, currentBotMessage);
                 }
 
                 // Handle completion
                 if (jsonData.done) {
-                  console.log('STREAM COMPLETE: "done" message received');
-
                   // Make sure typing indicator is removed when done
                   if (messages.contains(typingIndicator)) {
                     messages.removeChild(typingIndicator);
@@ -1162,20 +1272,9 @@ document.addEventListener("DOMContentLoaded", () => {
                   // Update clear history button
                   updateClearHistoryButton();
 
-                  // Now that streaming is COMPLETELY done, show the vote buttons immediately
-                  if (currentBotMessage.hasAttribute("data-doc-id")) {
-                    const voteButtons = currentBotMessage.querySelector(".aichatbot-vote-buttons");
-                    if (voteButtons) {
-                      voteButtons.style.visibility = "visible";
-                      console.log("Making preemptively added vote buttons visible");
-                    } else {
-                      // As a fallback, create vote buttons if they don't exist
-                      const docId = currentBotMessage.getAttribute("data-doc-id");
-                      console.log(`Adding vote buttons for docId: ${docId} now that ALL streaming is DONE`);
-                      addVoteButtons(currentBotMessage, docId);
-                    }
-                  } else {
-                    console.error("No docId available when stream completed");
+                  // Ensure bot message is in DOM before adding chips/buttons
+                  if (!messages.contains(currentBotMessage)) {
+                    messages.appendChild(currentBotMessage);
                   }
                 }
 
@@ -1187,18 +1286,25 @@ document.addEventListener("DOMContentLoaded", () => {
                   throw new Error(jsonData.error);
                 }
 
-                // Handle docId - ONLY store it, don't add vote buttons yet
+                // Handle docId - Store it and make vote buttons visible immediately
                 if (jsonData.docId) {
-                  console.log(`Received valid docId from server: ${jsonData.docId}`);
                   currentBotMessage.setAttribute("data-doc-id", jsonData.docId);
 
-                  // Preemptively add vote buttons but keep them hidden
-                  // This eliminates the delay between streaming completion and button display
-                  const voteButtons = currentBotMessage.querySelector(".aichatbot-vote-buttons");
-                  if (!voteButtons) {
+                  // Store docId in chat history
+                  if (chatHistory.length > 0) {
+                    chatHistory[chatHistory.length - 1].docId = jsonData.docId;
+                  }
+
+                  // Check if vote buttons already exist (from preemptive creation)
+                  let voteButtons = currentBotMessage.querySelector(".aichatbot-vote-buttons");
+
+                  if (voteButtons) {
+                    // Make existing hidden buttons visible
+                    voteButtons.style.visibility = "visible";
+                  } else {
+                    // Create and add vote buttons immediately
                     const docId = jsonData.docId;
-                    addVoteButtons(currentBotMessage, docId, true); // true = hidden initially
-                    console.log("Vote buttons preemptively added but hidden until streaming completes");
+                    addVoteButtons(currentBotMessage, docId, false); // false = visible immediately
                   }
                 }
               } catch (parseError) {
@@ -1234,7 +1340,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Update chat history with the complete response
         if (chatHistory.length > 0) {
-          chatHistory[chatHistory.length - 1][1] = data.reply || "";
+          const lastItem = chatHistory[chatHistory.length - 1];
+          if (Array.isArray(lastItem)) {
+            lastItem[1] = data.reply || "";
+          } else {
+            lastItem.botMessage = data.reply || "";
+          }
           // Save state after receiving complete response
           saveChatState();
 
@@ -1318,25 +1429,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
       messages.appendChild(errorMessage);
 
-      // Send error email to administrators for all errors
-      try {
-        await sendErrorEmail(
-          error,
-          "Chatbot Error",
-          chatHistory.length > 0 ? chatHistory[chatHistory.length - 1][0] : "No user message"
-        );
-      } catch (emailError) {
-        console.error("Failed to send error email:", emailError);
+      // Send error email to administrators for all errors except AbortError (user clicked stop button)
+      if (error.name !== "AbortError") {
+        try {
+          await sendErrorEmail(
+            error,
+            "Chatbot Error",
+            chatHistory.length > 0 ? chatHistory[chatHistory.length - 1][0] : "No user message"
+          );
+        } catch (emailError) {
+          console.error("Failed to send error email:", emailError);
+        }
       }
 
-      // Additional error logging for site administrators
-      console.error("Chatbot error details:", {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-        chatHistory: chatHistory.length, // Just the count for privacy
-        vercelUrl: aichatbotData.vercelUrl,
-      });
+      // Additional error logging for site administrators (exclude AbortError - user clicked stop button)
+      if (error.name !== "AbortError") {
+        console.error("Chatbot error details:", {
+          message: error.message,
+          name: error.name,
+          stack: error.stack,
+          chatHistory: chatHistory.length, // Just the count for privacy
+          vercelUrl: aichatbotData.vercelUrl,
+        });
+      }
     } finally {
       // Reset UI state
       sendButton.style.display = "inline-block";
@@ -1443,7 +1558,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Store current window state
     const wasWindowOpen = chatWindow.style.display === "flex";
 
-    // Clear history array
+    // Clear history array - reset to new object format
     chatHistory = [];
 
     // Clear the UI
@@ -1480,10 +1595,45 @@ document.addEventListener("DOMContentLoaded", () => {
       // Load chat history
       const savedHistory = sessionStorage.getItem("aichatbot_history");
       if (savedHistory) {
-        chatHistory = JSON.parse(savedHistory);
+        const rawHistory = JSON.parse(savedHistory);
 
-        // Rebuild chat messages from history
-        chatHistory.forEach(([userMsg, botMsg]) => {
+        // Convert any legacy array items to the new object format
+        const normalizeHistory = (historyArr) =>
+          historyArr.map((item) =>
+            Array.isArray(item)
+              ? {
+                  userMessage: item[0] || "",
+                  botMessage: item[1] || "",
+                  suggestions: [],
+                  docId: null,
+                }
+              : item
+          );
+
+        chatHistory = normalizeHistory(rawHistory);
+
+        // If we transformed anything, write back the clean version so future loads are uniform
+        if (JSON.stringify(chatHistory) !== JSON.stringify(rawHistory)) {
+          sessionStorage.setItem("aichatbot_history", JSON.stringify(chatHistory));
+        }
+
+        // Rebuild chat messages from history - handle both old array format and new object format
+        chatHistory.forEach((item) => {
+          let userMsg, botMsg, suggestions, docId;
+
+          // Handle backward compatibility with old array format
+          if (Array.isArray(item)) {
+            [userMsg, botMsg] = item;
+            suggestions = [];
+            docId = null;
+          } else {
+            // New object format
+            userMsg = item.userMessage || item[0] || item["0"] || "";
+            botMsg = item.botMessage || item[1] || item["1"] || "";
+            suggestions = item.suggestions || [];
+            docId = item.docId || null;
+          }
+
           // Add user message
           if (userMsg) {
             const userMessage = document.createElement("div");
@@ -1495,6 +1645,18 @@ document.addEventListener("DOMContentLoaded", () => {
           // Add bot message
           if (botMsg) {
             const botMessage = createBotMessage(botMsg);
+
+            // Restore suggestions if available
+            if (suggestions && suggestions.length > 0) {
+              createSuggestionChips(suggestions, botMessage);
+            }
+
+            // Restore vote buttons if docId available
+            if (docId) {
+              botMessage.setAttribute("data-doc-id", docId);
+              addVoteButtons(botMessage, docId, false); // false = visible immediately
+            }
+
             messages.appendChild(botMessage);
           }
         });
@@ -1548,9 +1710,6 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Error saving chat state:", e);
     }
   }
-
-  // Load chat state on page load
-  loadChatState();
 
   // Add initial welcome message if chat is empty
   function addWelcomeMessage() {
@@ -1905,12 +2064,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- NPS Survey Logic: Modal Creation Call End ---
 
   // Track votes
-  let votes = {};
+  // let votes = {}; // moved to top of file
 
   // Add vote buttons to bot message
   function addVoteButtons(botMessage, messageId, hidden = false) {
-    console.log(`addVoteButtons called with messageId: ${messageId}`);
-
     const voteButtons = document.createElement("div");
     voteButtons.className = "aichatbot-vote-buttons";
 

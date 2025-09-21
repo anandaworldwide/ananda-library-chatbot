@@ -278,6 +278,46 @@
   position: relative;
 }
 
+/* Suggestion chips */
+.aichatbot-suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.aichatbot-suggestion-chip {
+  background-color: #f0f8ff;
+  border: 1px solid #4a90e2;
+  border-radius: 16px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #4a90e2;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: normal;
+  word-wrap: break-word;
+  text-align: center;
+  font-weight: 500;
+  line-height: 1.4;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(50% - 4px);
+}
+
+.aichatbot-suggestion-chip:hover {
+  background-color: #4a90e2;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
+}
+
+.aichatbot-suggestion-chip:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(74, 144, 226, 0.3);
+}
+
 /* Vote buttons */
 .aichatbot-vote-buttons {
   display: flex;
@@ -604,6 +644,21 @@
 
   .intercom-enabled #aichatbot-bubble {
     right: 20px; /* Keep consistent positioning on mobile */
+  }
+
+  /* Mobile adjustments for suggestion chips */
+  .aichatbot-suggestion-chips {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .aichatbot-suggestion-chip {
+    font-size: 12px;
+    padding: 6px 12px;
+    max-width: none;
+    width: auto;
+    min-width: 180px;
+    flex: none;
   }
 }
 
@@ -1045,10 +1100,9 @@ div.aichatbot-search-bubble .aichatbot-search-bubble-arrow {
   }
 }
 
-
 #aichatbot-bubble.pulse-animation {
   animation: chatbot-bubble-pulse 2s infinite !important;
-  box-shadow: 0 0 0 0 rgba(232, 182, 58,1);
+  box-shadow: 0 0 0 0 rgba(232, 182, 58, 1);
 }
 
 #aichatbot-bubble.pulse-animation:before {
@@ -1057,17 +1111,17 @@ div.aichatbot-search-bubble .aichatbot-search-bubble-arrow {
 
 @keyframes chatbot-bubble-pulse {
   0% {
-      transform: scale(0.95);
-      box-shadow: 0 0 0 0 rgba(232, 182, 58,0.6);
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(232, 182, 58, 0.6);
   }
 
   70% {
-      transform: scale(1.2);
-      box-shadow: 0 0 0 25px rgba(232, 182, 58,0);
+    transform: scale(1.2);
+    box-shadow: 0 0 0 25px rgba(232, 182, 58, 0);
   }
 
   100% {
-      transform: scale(0.95);
-      box-shadow: 0 0 0 0 rgba(232, 182, 58,0);
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(232, 182, 58, 0);
   }
-} 
+}
