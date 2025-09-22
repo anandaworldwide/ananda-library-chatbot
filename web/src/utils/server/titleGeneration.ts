@@ -31,10 +31,10 @@ async function generateAITitle(question: string): Promise<string | null> {
       timeout: 10000, // 10 second timeout
     });
 
-    const prompt = `Generate a concise summary (8–9 words) for this question: "${question}"
+    const prompt = `Generate a concise summary (4–9 words) for this question: "${question}"
 
 Requirements:
-- 8 to 9 words only
+- 4 to 9 words (be concise but clear)
 - Capture the main topic clearly
 - Avoid trailing punctuation
 - Sentence case (not all-caps, not Title Case)
@@ -42,16 +42,16 @@ Requirements:
 
 Examples:
 Question: "How do I meditate properly?"
-Title: "How to start and sustain a simple meditation practice"
+Title: "How to meditate properly and effectively"
 
 Question: "What are Yogananda's teachings about love?"
-Title: "Yogananda's guidance on divine love and relationships"
+Title: "Yogananda's teachings on divine love"
 
 Question: "¿Cuáles son los principios de meditación?"
-Title: "Principios esenciales para iniciar la meditación consciente"
+Title: "Principios básicos de la meditación"
 
 Question: "Comment méditer correctement selon Yogananda?"
-Title: "Conseils de Yogananda pour démarrer la méditation quotidienne"
+Title: "Méditation selon les enseignements de Yogananda"
 
 Title:`;
 
@@ -72,13 +72,12 @@ Title:`;
         .trim();
 
       const parts = title.split(/\s+/);
-      if (parts.length > 9) {
-        // Soft enforce upper bound by truncating to 9 words
-        title = parts.slice(0, 9).join(" ");
-      }
-
-      const count = title.split(/\s+/).length;
-      if (count >= 8 && count <= 9) {
+      // Accept titles between 4-12 words (more flexible than the strict 8-9 requirement)
+      if (parts.length >= 4 && parts.length <= 12) {
+        // If it's longer than 9 words, truncate to 9 for consistency
+        if (parts.length > 9) {
+          title = parts.slice(0, 9).join(" ");
+        }
         return title;
       }
     }

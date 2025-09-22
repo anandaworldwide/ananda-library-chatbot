@@ -70,6 +70,8 @@ import { firestoreSet, firestoreAdd } from "@/utils/server/firestoreRetryUtils";
 import { sendOpsAlert } from "@/utils/server/emailOps";
 import { analyzeFirestoreError, notifyOpsOfIndexError } from "@/utils/server/firestoreIndexErrorHandler";
 import { v4 as uuidv4 } from "uuid";
+import { generateTitle } from "@/utils/server/titleGeneration";
+import { firestoreUpdate } from "@/utils/server/firestoreRetryUtils";
 
 export const runtime = "nodejs";
 export const maxDuration = 240;
@@ -940,7 +942,6 @@ async function handleChatRequest(req: NextRequest) {
             // This runs concurrently with LLM chain execution for better performance
             titleGenerationPromise = (async () => {
               try {
-                const { generateTitle } = await import("@/utils/server/titleGeneration");
                 const title = await generateTitle(originalQuestion);
                 if (title) {
                   sendData({ convId: conversationId, title });
@@ -1032,8 +1033,17 @@ async function handleChatRequest(req: NextRequest) {
                   .then(async (generatedTitle) => {
                     if (generatedTitle && savedDocId) {
                       try {
-                        const { generateAndUpdateTitle } = await import("@/utils/server/titleGeneration");
-                        await generateAndUpdateTitle(savedDocId, originalQuestion);
+                        // Use the already-generated title instead of generating it again
+                        if (db) {
+                          const docRef = db.collection(getAnswersCollectionName()).doc(savedDocId);
+                          await firestoreUpdate(
+                            docRef,
+                            { title: generatedTitle },
+                            "title generation update",
+                            `docId: ${savedDocId}, title: ${generatedTitle}`
+                          );
+                          console.log(`Updated document ${savedDocId} with generated title: "${generatedTitle}"`);
+                        }
                       } catch (titleUpdateError) {
                         console.error("Failed to update document with generated title:", titleUpdateError);
                         // Continue without title update - it's not critical for functionality

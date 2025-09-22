@@ -39,7 +39,7 @@ describe("titleGeneration", () => {
       const result = await generateTitle("How do I meditate properly for better results and spiritual growth?");
 
       expect(result).toBe("How to start and sustain a simple meditation practice");
-      expect(mockInvoke).toHaveBeenCalledWith(expect.stringContaining("Generate a concise summary (8–9 words)"));
+      expect(mockInvoke).toHaveBeenCalledWith(expect.stringContaining("Generate a concise summary (4–9 words)"));
     });
 
     it("should fall back to truncated question when AI fails", async () => {
