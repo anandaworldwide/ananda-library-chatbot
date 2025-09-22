@@ -53,6 +53,62 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
   const enabledMediaTypes = getEnabledMediaTypes(siteConfig);
   const collectionsConfig = getCollectionsConfig(siteConfig);
 
+  // Helper function to determine if options have been changed from defaults
+  const areOptionsModified = () => {
+    // Get default media types from site config (defaults to all enabled if not specified)
+    const siteEnabledMediaTypes = getEnabledMediaTypes(siteConfig);
+    const defaultMediaTypes = {
+      text: siteEnabledMediaTypes.includes("text"),
+      audio: siteEnabledMediaTypes.includes("audio"),
+      youtube: siteEnabledMediaTypes.includes("youtube"),
+    };
+
+    // Default collection (first key from collections config)
+    const defaultCollection = Object.keys(collectionsConfig)[0] || "";
+
+    // Default source count from site config
+    const defaultSourceCount = siteConfig?.defaultNumSources || 4;
+
+    // Check if media types have been changed from defaults (only if feature is enabled)
+    // Note: No media types checked is equivalent to all media types checked (searches all content)
+    const mediaTypesChanged =
+      showMediaTypeSelection &&
+      (() => {
+        // Helper function to normalize media types: treat "none checked" as "all enabled checked"
+        const normalizeMediaTypes = (types: { text: boolean; audio: boolean; youtube: boolean }) => {
+          const checkedCount = Object.values(types).filter(Boolean).length;
+          if (checkedCount === 0) {
+            // No types checked = all enabled types checked
+            return {
+              text: siteEnabledMediaTypes.includes("text"),
+              audio: siteEnabledMediaTypes.includes("audio"),
+              youtube: siteEnabledMediaTypes.includes("youtube"),
+            };
+          }
+          return types;
+        };
+
+        const normalizedCurrent = normalizeMediaTypes(mediaTypes);
+        const normalizedDefault = normalizeMediaTypes(defaultMediaTypes);
+
+        return (
+          normalizedCurrent.text !== normalizedDefault.text ||
+          normalizedCurrent.audio !== normalizedDefault.audio ||
+          normalizedCurrent.youtube !== normalizedDefault.youtube
+        );
+      })();
+
+    // Check if collection has been changed from default (only if feature is enabled)
+    const collectionChanged = showAuthorSelection && collection !== defaultCollection;
+
+    // Check if source count has been changed from default (only if feature is enabled)
+    const sourceCountChanged = showSourceCountSelector && sourceCount !== defaultSourceCount;
+
+    return mediaTypesChanged || collectionChanged || sourceCountChanged;
+  };
+
+  const isModified = areOptionsModified();
+
   // Check if any options are available
   const hasAnyOptions = showMediaTypeSelection || showAuthorSelection || showSourceCountSelector;
 
@@ -199,7 +255,7 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
         ref={buttonRef}
         type="button"
         onClick={toggleDropdown}
-        className="flex items-center px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        className="relative flex items-center px-3 py-2 text-sm bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
@@ -208,6 +264,10 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
         <span className={`material-icons text-base ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`}>
           expand_more
         </span>
+        {/* Blue dot indicator when options are modified */}
+        {isModified && (
+          <span className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-blue-500 border-2 border-white" />
+        )}
       </button>
 
       {/* Dropdown Menu (portal, fixed to viewport to avoid clipping) */}
