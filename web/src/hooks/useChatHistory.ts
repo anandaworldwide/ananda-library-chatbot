@@ -25,7 +25,7 @@ export interface ConversationGroup {
   isStarred?: boolean; // Star state for this conversation
 }
 
-export function useChatHistory(limit: number = 20) {
+export function useChatHistory(limit: number = 20, enabled: boolean = true) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationGroup[]>([]);
@@ -41,7 +41,7 @@ export function useChatHistory(limit: number = 20) {
   // Fetch conversations grouped by convId
   const fetchConversations = useCallback(
     async (loadMore: boolean = false) => {
-      if (loading) return;
+      if (loading || !enabled) return;
 
       setLoading(true);
       setError(null);
@@ -164,18 +164,20 @@ export function useChatHistory(limit: number = 20) {
         setLoading(false);
       }
     },
-    [loading, limit, lastTimestamp]
+    [loading, limit, lastTimestamp, enabled]
   );
 
   // Load conversations on mount (after main content loads)
   useEffect(() => {
+    if (!enabled) return;
+
     // Delay initial load to ensure main content loads first
     const timer = setTimeout(() => {
       fetchConversations();
     }, 500);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [enabled, fetchConversations]);
 
   // Function to add a new conversation to the top of the list
   const addNewConversation = useCallback((convId: string, title: string, question: string) => {
@@ -252,6 +254,8 @@ export function useChatHistory(limit: number = 20) {
   // Fetch starred conversations with pagination
   const fetchStarredConversations = useCallback(
     async (loadMore: boolean = false) => {
+      if (!enabled) return;
+
       try {
         setStarredLoading(true);
 
@@ -370,7 +374,7 @@ export function useChatHistory(limit: number = 20) {
         setStarredLoading(false);
       }
     },
-    [limit, starredNextCursor]
+    [limit, starredNextCursor, enabled]
   );
 
   const refetch = useCallback(() => fetchConversations(false), [fetchConversations]);

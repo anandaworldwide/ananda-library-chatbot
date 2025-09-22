@@ -21,6 +21,7 @@ interface ChatHistorySidebarProps {
   currentConvId?: string | null;
   onGetSidebarFunctions?: (functions: SidebarFunctions, refetch: () => void) => void;
   onConversationDeleted?: (deletedConvId: string) => void;
+  enabled?: boolean; // Control whether to fetch chat history
 }
 
 export default function ChatHistorySidebar({
@@ -30,6 +31,7 @@ export default function ChatHistorySidebar({
   currentConvId,
   onGetSidebarFunctions,
   onConversationDeleted,
+  enabled = true,
 }: ChatHistorySidebarProps) {
   const {
     loading,
@@ -50,7 +52,7 @@ export default function ChatHistorySidebar({
     starredLoading,
     fetchStarredConversations,
     loadMoreStarred,
-  } = useChatHistory(20);
+  } = useChatHistory(20, enabled);
   const router = useRouter();
 
   // Filter state

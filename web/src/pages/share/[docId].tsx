@@ -5,7 +5,7 @@
  */
 
 import { useRouter } from "next/router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Head from "next/head";
 import Layout from "@/components/layout";
 import MessageItem from "@/components/MessageItem";
@@ -31,7 +31,27 @@ export default function ShareConversation({ siteConfig }: ShareConversationProps
   const [viewOnlyMode, setViewOnlyMode] = useState(false);
   const [conversationTitle, setConversationTitle] = useState<string | null>(null);
   const [firstQuestion, setFirstQuestion] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState<string | null>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
+
+  // Function to copy the share link to clipboard
+  const handleCopyLink = useCallback(
+    async (answerId: string) => {
+      try {
+        const shareUrl = `${window.location.origin}/share/${docId}`;
+        await navigator.clipboard.writeText(shareUrl);
+        setLinkCopied(answerId);
+
+        // Clear the copied state after 2 seconds
+        setTimeout(() => {
+          setLinkCopied(null);
+        }, 2000);
+      } catch (error) {
+        console.error("Failed to copy link:", error);
+      }
+    },
+    [docId]
+  );
 
   useEffect(() => {
     if (!router.isReady || !docId || typeof docId !== "string") {
@@ -42,6 +62,80 @@ export default function ShareConversation({ siteConfig }: ShareConversationProps
       try {
         setLoading(true);
         setError(null);
+
+        // For sites without conversation history support, load document directly
+        if (!siteConfig?.requireLogin) {
+          // Get document data directly without using conversation loading
+          const docResponse = await fetch(`/api/document/${docId}`);
+          if (!docResponse.ok) {
+            if (docResponse.status === 404) {
+              throw new Error("Document not found");
+            }
+            throw new Error(`Failed to fetch document: ${docResponse.statusText}`);
+          }
+
+          const docData = await docResponse.json();
+
+          // Set title and first question for HTML title
+          setConversationTitle(docData.title || null);
+          if (docData.question) {
+            setFirstQuestion(docData.question);
+          }
+
+          // Create conversation from document history
+          const history = docData.history || [];
+          const messages = [];
+
+          // Add greeting message
+          messages.push({
+            type: "apiMessage" as const,
+            message: getGreeting(siteConfig),
+          });
+
+          // Convert history to messages format
+          for (const historyItem of history) {
+            if (historyItem.role === "user") {
+              messages.push({
+                type: "userMessage" as const,
+                message: historyItem.content,
+              });
+            } else if (historyItem.role === "assistant") {
+              messages.push({
+                type: "apiMessage" as const,
+                message: historyItem.content,
+              });
+            }
+          }
+
+          // Add the final question and answer
+          messages.push({
+            type: "userMessage" as const,
+            message: docData.question,
+          });
+
+          // Parse sources if they exist
+          let parsedSources: Document<DocMetadata>[] = [];
+          if (docData.sources) {
+            try {
+              parsedSources = JSON.parse(docData.sources);
+            } catch (e) {
+              console.error("Error parsing sources:", e);
+            }
+          }
+
+          messages.push({
+            type: "apiMessage" as const,
+            message: docData.answer,
+            sourceDocs: parsedSources,
+            docId: docData.id,
+            collection: docData.collection,
+            suggestions: docData.suggestions || [],
+          });
+
+          // Set the messages for display
+          setMessages(messages);
+          return;
+        }
 
         const loadedConversation = await loadConversationByDocId(docId);
 
@@ -188,14 +282,15 @@ export default function ShareConversation({ siteConfig }: ShareConversationProps
                   temporarySession={false}
                   collectionChanged={false}
                   hasMultipleCollections={false}
-                  linkCopied={null}
+                  linkCopied={linkCopied}
                   votes={{}}
                   siteConfig={siteConfig}
                   handleVote={() => {}}
-                  handleCopyLink={() => {}}
+                  handleCopyLink={handleCopyLink}
                   lastMessageRef={index === messages.length - 1 ? lastMessageRef : null}
                   voteError={null}
                   allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
+                  readOnly={true}
                 />
               ))}
               <div ref={lastMessageRef} />

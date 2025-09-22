@@ -238,6 +238,12 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Helper function to load conversation content without URL updates
   const loadConversationDirectly = useCallback(
     async (convId: string) => {
+      // Only load conversations for sites that support conversation history
+      if (!siteConfig?.requireLogin) {
+        console.warn("Conversation loading not supported for sites without login requirement");
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
@@ -298,9 +304,12 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     // Load the conversation content
     await loadConversationDirectly(convId);
 
-    // Update URL without triggering a full Next.js navigation to prevent flash.
-    window.history.pushState(null, "", `/chat/${convId}`);
-    pathRef.current = `/chat/${convId}`;
+    // Only update URL for sites that support conversation history
+    if (siteConfig?.requireLogin) {
+      // Update URL without triggering a full Next.js navigation to prevent flash.
+      window.history.pushState(null, "", `/chat/${convId}`);
+      pathRef.current = `/chat/${convId}`;
+    }
 
     // Close sidebar after loading
     setSidebarOpen(false);
@@ -827,9 +836,12 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
 
         // For new conversations, update URL and sidebar
         if (isNewConversation) {
-          // Use pushState so the browser back button will return to '/'.
-          window.history.pushState(null, "", `/chat/${data.convId}`);
-          pathRef.current = `/chat/${data.convId}`;
+          // Only update URL for sites that support conversation history
+          if (siteConfig?.requireLogin) {
+            // Use pushState so the browser back button will return to '/'.
+            window.history.pushState(null, "", `/chat/${data.convId}`);
+            pathRef.current = `/chat/${data.convId}`;
+          }
 
           // Add new conversation to sidebar (only for first question in conversation)
           // Only attempt if sidebar is enabled (requireLogin sites) and functions are available

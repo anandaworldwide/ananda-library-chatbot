@@ -35,6 +35,7 @@ interface MessageItemProps {
   allowAllAnswersPage: boolean;
   showSourcesBelow?: boolean;
   onSuggestionClick?: (suggestion: string) => void;
+  readOnly?: boolean; // New prop to disable interactive elements
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({
@@ -55,6 +56,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
   messageKey,
   showSourcesBelow = false,
   onSuggestionClick,
+  readOnly = false,
 }) => {
   const { isSudoUser } = useSudo();
 
@@ -163,7 +165,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
             {showSourcesBelow && renderSources()}
 
             {/* Follow-up question suggestions - only for AI messages */}
-            {message.type === "apiMessage" && message.suggestions && message.suggestions.length > 0 && (
+            {!readOnly && message.type === "apiMessage" && message.suggestions && message.suggestions.length > 0 && (
               <SuggestionPills
                 suggestions={message.suggestions}
                 onSuggestionClick={onSuggestionClick || (() => {})}
@@ -199,26 +201,27 @@ const MessageItem: React.FC<MessageItemProps> = ({
                       </span>
                     </button>
 
-                    {message.docId ? (
-                      renderVoteButtons(message.docId)
-                    ) : (
-                      <div className="flex items-center space-x-1">
-                        <button
-                          disabled
-                          className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"
-                          title="Waiting for document ID..."
-                        >
-                          <span className="material-icons text-gray-500">thumb_up_off_alt</span>
-                        </button>
-                        <button
-                          disabled
-                          className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"
-                          title="Waiting for document ID..."
-                        >
-                          <span className="material-icons text-gray-500">thumb_down_off_alt</span>
-                        </button>
-                      </div>
-                    )}
+                    {!readOnly &&
+                      (message.docId ? (
+                        renderVoteButtons(message.docId)
+                      ) : (
+                        <div className="flex items-center space-x-1">
+                          <button
+                            disabled
+                            className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"
+                            title="Waiting for document ID..."
+                          >
+                            <span className="material-icons text-gray-500">thumb_up_off_alt</span>
+                          </button>
+                          <button
+                            disabled
+                            className="opacity-50 cursor-not-allowed hover:bg-gray-200 flex items-center"
+                            title="Waiting for document ID..."
+                          >
+                            <span className="material-icons text-gray-500">thumb_down_off_alt</span>
+                          </button>
+                        </div>
+                      ))}
                   </>
                 )}
               </div>
