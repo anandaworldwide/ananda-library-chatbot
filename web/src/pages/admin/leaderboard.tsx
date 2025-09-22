@@ -27,33 +27,25 @@ export default function AdminLeaderboardPage({ siteConfig }: AdminLeaderboardPag
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [jwt, setJwt] = useState<string | null>(null);
 
-  // Initialize JWT token
+  /*
+   * Fetch JWT and leaderboard in a single effect to avoid chained effect
+   * timing issues that caused intermittent test instability.
+   */
   useEffect(() => {
-    const initToken = async () => {
-      try {
-        const token = await getToken();
-        setJwt(token);
-      } catch (error) {
-        console.error("Failed to get JWT token:", error);
-      }
-    };
-    initToken();
-  }, []);
-
-  // Fetch leaderboard data
-  useEffect(() => {
-    if (!jwt) return;
-
-    const fetchLeaderboard = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
 
+        // 1. Retrieve JWT
+        const token = await getToken();
+        if (!token) throw new Error("Missing authentication token");
+
+        // 2. Fetch leaderboard
         const response = await fetch("/api/admin/leaderboard", {
           headers: {
-            Authorization: `Bearer ${jwt}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
@@ -67,15 +59,15 @@ export default function AdminLeaderboardPage({ siteConfig }: AdminLeaderboardPag
         const data = await response.json();
         setUsers(data.users || []);
       } catch (err) {
-        console.error("Error fetching leaderboard:", err);
+        console.error("Error loading leaderboard:", err);
         setError(err instanceof Error ? err.message : "Failed to load leaderboard");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchLeaderboard();
-  }, [jwt]);
+    fetchData();
+  }, []);
 
   return (
     <Layout siteConfig={siteConfig}>
