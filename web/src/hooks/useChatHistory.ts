@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
 import { getOrCreateUUID } from "@/utils/client/uuid";
 
@@ -34,9 +34,11 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
   // Separate state for starred conversations
   const [starredConversations, setStarredConversations] = useState<ConversationGroup[]>([]);
   const [starredHasMore, setStarredHasMore] = useState<boolean>(false);
-  const [starredNextCursor, setStarredNextCursor] = useState<string | null>(null);
   const [starredLoading, setStarredLoading] = useState<boolean>(false);
-  const [lastTimestamp, setLastTimestamp] = useState<string | null>(null);
+
+  // Use refs for pagination cursors to avoid triggering re-renders
+  const lastTimestampRef = useRef<string | null>(null);
+  const starredNextCursorRef = useRef<string | null>(null);
 
   // Fetch conversations grouped by convId
   const fetchConversations = useCallback(
@@ -53,8 +55,8 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
         // Use a higher limit to ensure we get enough messages to group into the desired number of conversations
         const messageLimit = Math.max(limit * 3, 50); // Fetch at least 3x the conversation limit or 50, whichever is higher
         let url = `/api/chats?uuid=${uuid}&limit=${messageLimit}`;
-        if (loadMore && lastTimestamp) {
-          url += `&startAfter=${encodeURIComponent(lastTimestamp)}`;
+        if (loadMore && lastTimestampRef.current) {
+          url += `&startAfter=${encodeURIComponent(lastTimestampRef.current)}`;
         }
 
         const response = await fetchWithAuth(url, {
@@ -128,7 +130,7 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
         } else {
           setConversations(groupedConversations);
           // Reset pagination cursor on initial load
-          setLastTimestamp(null);
+          lastTimestampRef.current = null;
         }
 
         // Update pagination cursor with the timestamp of the last chat
@@ -150,7 +152,7 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
             timestampString = new Date(timestamp).toISOString();
           }
 
-          setLastTimestamp(timestampString);
+          lastTimestampRef.current = timestampString;
         }
 
         // Check if there are more conversations to load
@@ -164,7 +166,7 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
         setLoading(false);
       }
     },
-    [loading, limit, lastTimestamp, enabled]
+    [enabled]
   );
 
   // Load conversations on mount (after main content loads)
@@ -268,8 +270,8 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
           starred: "true", // Use existing /api/chats endpoint with starred filter
         });
 
-        if (loadMore && starredNextCursor) {
-          params.append("startAfter", starredNextCursor);
+        if (loadMore && starredNextCursorRef.current) {
+          params.append("startAfter", starredNextCursorRef.current);
         }
 
         const response = await fetchWithAuth(`/api/chats?${params.toString()}`);
@@ -360,7 +362,7 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
             timestampString = new Date(timestamp).toISOString();
           }
 
-          setStarredNextCursor(timestampString);
+          starredNextCursorRef.current = timestampString;
         }
 
         // Check if there are more conversations to load
@@ -374,7 +376,7 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
         setStarredLoading(false);
       }
     },
-    [limit, starredNextCursor, enabled]
+    [enabled]
   );
 
   const refetch = useCallback(() => fetchConversations(false), [fetchConversations]);

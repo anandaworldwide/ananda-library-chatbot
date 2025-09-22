@@ -13,7 +13,7 @@ export default function CrystalHeader({ siteConfig, onNewChat }: CrystalHeaderPr
   const parentSiteUrl = getParentSiteUrl(siteConfig);
 
   return (
-    <header className="sticky top-0 z-40 w-full">
+    <header className="sticky top-0 z-50 w-full">
       <div
         className="bg-[#0092e3] relative h-[68px]"
         style={{

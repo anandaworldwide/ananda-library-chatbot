@@ -98,7 +98,7 @@ export default function BaseHeader({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full">
+    <header className="sticky top-0 z-50 w-full">
       {isDevelopment() && (
         <div className="bg-blue-500 text-white text-center py-1 w-full">Dev server (site: {process.env.SITE_ID})</div>
       )}
