@@ -565,6 +565,39 @@ describe("/api/admin/digestSelfProvision", () => {
       expect(emailBody).toContain("1. user1 (user1@example.com) - Account activated");
       expect(emailBody).toContain("2. user2 (user2@example.com) - Account activated");
     });
+
+    it("does not send email when there is no activity", async () => {
+      // Mock empty data for both self-provision and activation attempts
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn(() => ({
+          where: jest.fn(() => ({
+            get: jest.fn(() => Promise.resolve({ forEach: jest.fn() })), // Empty results
+          })),
+        })),
+      }));
+
+      const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+        method: "POST",
+        headers: {
+          "user-agent": "vercel-cron/1.0",
+          authorization: "Bearer test-cron-secret",
+        },
+      });
+
+      await handler(req, res);
+
+      // Verify response is successful
+      expect(res.statusCode).toBe(200);
+      const responseData = res._getJSONData();
+      expect(responseData.counts).toEqual({
+        activationsCompleted: 0,
+        activationEmailsSent: 0,
+        errors: 0,
+      });
+
+      // Verify no email was sent
+      expect(sendOpsAlert).not.toHaveBeenCalled();
+    });
   });
 
   describe("Error Handling", () => {
@@ -595,6 +628,35 @@ describe("/api/admin/digestSelfProvision", () => {
     });
 
     it("returns 500 when email sending fails", async () => {
+      // Mock some activity so email sending is attempted
+      const mockActivationDocs = [
+        {
+          data: () => ({
+            details: { outcome: "activation_completed" },
+            target: "user1@example.com",
+          }),
+        },
+      ];
+
+      const mockActivationForEach = jest.fn((callback) => {
+        mockActivationDocs.forEach(callback);
+      });
+
+      mockDbValue.collection = jest.fn(() => ({
+        where: jest.fn((field, op, value) => ({
+          where: jest.fn(() => ({
+            get: jest.fn(() => {
+              if (value === "self_provision_attempt") {
+                return Promise.resolve({ forEach: jest.fn() }); // Empty self_provision_attempt data
+              } else if (value === "user_activation_completed") {
+                return Promise.resolve({ forEach: mockActivationForEach }); // Activation data
+              }
+              return Promise.resolve({ forEach: jest.fn() });
+            }),
+          })),
+        })),
+      }));
+
       (sendOpsAlert as jest.Mock).mockRejectedValue(new Error("Email error"));
 
       const { req, res } = createMocks<NextApiRequest, NextApiResponse>({

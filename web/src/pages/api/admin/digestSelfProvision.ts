@@ -211,7 +211,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const subject = `User activation digest: ${activationsCompleted} activated, ${errors} errors`;
 
-    await sendOpsAlert(subject, body);
+    // Only send email if there's actual activity to report
+    if (activationsCompleted > 0 || activationEmailsSent > 0 || errors > 0) {
+      await sendOpsAlert(subject, body);
+    }
     return res.status(200).json({ ok: true, counts: { activationsCompleted, activationEmailsSent, errors }, samples });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Failed to build digest" });
