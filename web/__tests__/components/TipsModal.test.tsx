@@ -105,7 +105,7 @@ Click on sources to see excerpts.`,
     });
 
     expect(mockOnVersionLoaded).toHaveBeenCalledWith(2);
-    expect(mockLogEvent).toHaveBeenCalledWith("tips_content_loaded", "UI", "ananda");
+    expect(mockLogEvent).toHaveBeenCalledWith("tips_content_loaded", "Tips", "ananda", 2);
   });
 
   it("should display error message when loading fails", async () => {
@@ -117,7 +117,7 @@ Click on sources to see excerpts.`,
       expect(screen.getByText("Failed to load tips content")).toBeInTheDocument();
     });
 
-    expect(mockLogEvent).toHaveBeenCalledWith("tips_load_error", "UI", "ananda");
+    expect(mockLogEvent).toHaveBeenCalledWith("tips_load_error", "Tips", "ananda");
   });
 
   it("should display no tips message when content is null", async () => {
@@ -147,7 +147,7 @@ Click on sources to see excerpts.`,
     fireEvent.click(closeButton);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
-    expect(mockLogEvent).toHaveBeenCalledWith("tips_modal_close", "UI", "close_button");
+    expect(mockLogEvent).toHaveBeenCalledWith("tips_modal_close", "Tips", "close_button");
   });
 
   it("should close modal when backdrop is clicked", async () => {
@@ -170,7 +170,7 @@ Click on sources to see excerpts.`,
     fireEvent.click(backdrop!);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
-    expect(mockLogEvent).toHaveBeenCalledWith("tips_modal_close", "UI", "backdrop_click");
+    expect(mockLogEvent).toHaveBeenCalledWith("tips_modal_close", "Tips", "backdrop_click");
   });
 
   it("should close modal when Escape key is pressed", async () => {

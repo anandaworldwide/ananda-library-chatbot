@@ -43,7 +43,7 @@ export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfi
             const parsedTips = parseTipsContent(tipsData.content);
             setTips(parsedTips);
             onVersionLoaded?.(tipsData.version);
-            logEvent("tips_content_loaded", "UI", siteConfig.siteId || "unknown");
+            logEvent("tips_content_loaded", "Tips", siteConfig.siteId || "unknown", parsedTips.length);
           } else {
             setTips([]);
           }
@@ -51,7 +51,7 @@ export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfi
         .catch((err) => {
           console.error("Failed to load tips:", err);
           setError("Failed to load tips content");
-          logEvent("tips_load_error", "UI", siteConfig.siteId || "unknown");
+          logEvent("tips_load_error", "Tips", siteConfig.siteId || "unknown");
         })
         .finally(() => {
           setIsLoading(false);
@@ -81,14 +81,14 @@ export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfi
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       onClose();
-      logEvent("tips_modal_close", "UI", "backdrop_click");
+      logEvent("tips_modal_close", "Tips", "backdrop_click");
     }
   };
 
   // Handle close button click
   const handleCloseClick = () => {
+    logEvent("tips_modal_close", "Tips", "close_button");
     onClose();
-    logEvent("tips_modal_close", "UI", "close_button");
   };
 
   // Don't render if not open

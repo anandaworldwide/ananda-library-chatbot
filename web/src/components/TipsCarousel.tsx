@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useRef } from "react";
+import { logEvent } from "@/utils/client/analytics";
 
 interface Tip {
   title: string;
@@ -21,17 +22,22 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
 
-  const goToNext = () => {
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % tips.length);
+  const goToNext = (method = "unknown") => {
+    const newIndex = (currentIndex + 1) % tips.length;
+    setCurrentIndex(newIndex);
+    logEvent("tips_navigate_next", "Tips", method, newIndex + 1);
   };
 
-  const goToPrevious = () => {
-    setCurrentIndex((prevIndex) => (prevIndex - 1 + tips.length) % tips.length);
+  const goToPrevious = (method = "unknown") => {
+    const newIndex = (currentIndex - 1 + tips.length) % tips.length;
+    setCurrentIndex(newIndex);
+    logEvent("tips_navigate_previous", "Tips", method, newIndex + 1);
   };
 
-  const goToIndex = (index: number) => {
+  const goToIndex = (index: number, method = "unknown") => {
     if (index === currentIndex) return;
     setCurrentIndex(index);
+    logEvent("tips_navigate_direct", "Tips", method, index + 1);
   };
 
   // Handle swipe gestures
@@ -51,10 +57,10 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
     const isRightSwipe = distance < -50;
 
     if (isLeftSwipe && tips.length > 1) {
-      goToNext();
+      goToNext("swipe");
     }
     if (isRightSwipe && tips.length > 1) {
-      goToPrevious();
+      goToPrevious("swipe");
     }
   };
 
@@ -64,11 +70,11 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         event.stopPropagation();
-        goToPrevious();
+        goToPrevious("keyboard");
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
         event.stopPropagation();
-        goToNext();
+        goToNext("keyboard");
       }
       // Note: Escape key is handled by the parent TipsModal component
     };
@@ -99,8 +105,8 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
       <div className="flex items-center justify-between">
         {/* Previous Button */}
         <button
-          onClick={goToPrevious}
-          disabled={false} // Removed isAnimating check
+          onClick={() => goToPrevious("button")}
+          disabled={tips.length <= 1}
           className="flex items-center justify-center w-10 h-10 rounded-full border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           aria-label="Previous tip"
         >
@@ -112,8 +118,8 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
           {tips.map((_, index) => (
             <button
               key={index}
-              onClick={() => goToIndex(index)}
-              disabled={false} // Removed isAnimating check
+              onClick={() => goToIndex(index, "dot")}
+              disabled={tips.length <= 1}
               className={`w-2 h-2 rounded-full transition-all duration-200 ${
                 index === currentIndex ? "bg-blue-500 scale-125" : "bg-gray-300 hover:bg-gray-400"
               }`}
@@ -124,8 +130,8 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
 
         {/* Next Button */}
         <button
-          onClick={goToNext}
-          disabled={false} // Removed isAnimating check
+          onClick={() => goToNext("button")}
+          disabled={tips.length <= 1}
           className="flex items-center justify-center w-10 h-10 rounded-full border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           aria-label="Next tip"
         >

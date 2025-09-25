@@ -332,12 +332,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   // Function to handle tips button click
   const handleTipsClick = () => {
     setShowTipsModal(true);
-    logEvent("tips_modal_open", "UI", "tips_button");
+    logEvent("tips_modal_open", "Tips", "button_click");
   };
 
   // Function to handle tips modal close
   const handleTipsClose = () => {
     setShowTipsModal(false);
+    logEvent("tips_modal_close", "Tips", "modal_close");
 
     // Mark tips as seen by updating the user's lastSeenTipVersion
     if (currentTipsVersion && hasNewTips && siteConfig?.requireLogin) {
@@ -360,6 +361,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           })
           .then(() => {
             setHasNewTips(false);
+            logEvent("tips_version_updated", "Tips", "api_success");
           })
           .catch(() => {
             // Don't show error to user, just log it
@@ -368,6 +370,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         // Use localStorage for non-authenticated users
         localStorage.setItem("lastSeenTipVersion", currentTipsVersion.toString());
         setHasNewTips(false);
+        logEvent("tips_version_updated", "Tips", "localStorage");
       }
     }
 
