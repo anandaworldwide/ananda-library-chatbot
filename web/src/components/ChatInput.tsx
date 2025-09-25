@@ -25,11 +25,13 @@ import validator from "validator";
 import styles from "@/styles/Home.module.css";
 import SuggestedQueries from "@/components/SuggestedQueries";
 import { SearchOptionsDropdown } from "@/components/SearchOptionsDropdown";
+import { TipsModal } from "@/components/TipsModal";
 import { SiteConfig } from "@/types/siteConfig";
 import { getEnableSuggestedQueries, getChatPlaceholder } from "@/utils/client/siteConfig";
 import { logEvent } from "@/utils/client/analytics";
 import { getOrCreateUUID } from "@/utils/client/uuid";
 import { FirestoreIndexError, useFirestoreIndexError } from "@/components/FirestoreIndexError";
+import { areTipsAvailable } from "@/utils/client/loadTips";
 
 // Define the props interface for the ChatInput component
 interface ChatInputProps {
@@ -100,6 +102,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isFirstQuery, setIsFirstQuery] = useState<boolean>(true);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(false);
+  const [showTipsModal, setShowTipsModal] = useState(false);
+  const [tipsAvailable, setTipsAvailable] = useState(false);
   //const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Analyze error to determine if it's a Firestore index error
@@ -115,6 +119,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const savedPreference = localStorage.getItem("suggestionsExpanded");
     setSuggestionsExpanded(savedPreference === null ? true : savedPreference === "true");
   }, [setSuggestionsExpanded]);
+
+  // Effect to check if tips are available for this site
+  useEffect(() => {
+    if (siteConfig) {
+      areTipsAvailable(siteConfig).then(setTipsAvailable);
+    }
+  }, [siteConfig]);
 
   // Effect to reset input after submission
   useEffect(() => {
@@ -258,6 +269,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     handleClick(q);
   };
 
+  // Function to handle tips button click
+  const handleTipsClick = () => {
+    setShowTipsModal(true);
+    logEvent("tips_modal_open", "UI", "tips_button");
+  };
+
+  // Function to handle tips modal close
+  const handleTipsClose = () => {
+    setShowTipsModal(false);
+  };
+
   const placeholderText = getChatPlaceholder(siteConfig) || "Ask a question...";
 
   // Function to adjust textarea height
@@ -329,8 +351,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </button>
           </div>
 
-          {/* Chat Options Dropdown */}
-          <div className="mb-4">
+          {/* Chat Options and Tips */}
+          <div className="mb-4 flex gap-2 items-start">
             <SearchOptionsDropdown
               siteConfig={siteConfig}
               mediaTypes={mediaTypes}
@@ -340,6 +362,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               sourceCount={sourceCount}
               setSourceCount={setSourceCount}
             />
+
+            {/* Tips Button - only show if tips are available for this site */}
+            {tipsAvailable && (
+              <button
+                type="button"
+                onClick={handleTipsClick}
+                className="flex items-center px-3 py-2 text-sm bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                aria-label="View tips and tricks"
+              >
+                <span className="material-icons text-base mr-2">lightbulb</span>
+                Tips
+              </button>
+            )}
           </div>
 
           {/* Error display */}
@@ -370,6 +405,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             />
           </div>
         )}
+
+        {/* Tips Modal */}
+        <TipsModal isOpen={showTipsModal} onClose={handleTipsClose} siteConfig={siteConfig} />
       </div>
     </div>
   );
