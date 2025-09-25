@@ -1,3 +1,24 @@
+VERSION: 4
+
+
+Better Questions
+
+Ask complete questions rather than just search terms. Instead of "meditation techniques," try "What are some effective meditation techniques for beginners?" for more helpful and detailed responses.
+
+---
+
+Saving Favorite Conversations
+
+Bookmark meaningful conversations by clicking the star icon next to them in your chat history. This creates a dedicated "Starred" section at the top of your sidebar, making it easy to revisit profound insights or guidance from previous sessions.
+
+---
+
+Exploring Source Content
+
+Click on any of the numbered sources at the top of an answer to see the exact excerpt that matched your question. If the source has associated video or audio content, you'll see a media player that's automatically queued up to the moment of the match, so you can hear or watch the relevant portion directly.
+
+---
+
 Getting Better Answers from Luca
 
 If you're getting unclear or rambling answers that seem murky, try turning off audio and video sources in the Chat Options. Since these are transcriptions of talks, they may not be as crisp and focused as the written sources.
@@ -6,6 +27,9 @@ The written materials in our library have been carefully edited and structured, 
 
 You can access Chat Options by clicking the "Chat Options" button below the text input area, then uncheck "Audio" and "Video" to focus on written sources only.
 
-Exploring Source Content:
+---
 
-Click on any of the numbered sources at the top of an answer to see the exact excerpt that matched your question. If the source has associated video or audio content, you'll see a media player that's automatically queued up to the moment of the match, so you can hear or watch the relevant portion directly.
+Multilingual Support
+
+You can ask questions in different languages - Luca understands and can respond in multiple languages to help make spiritual teachings accessible to everyone.
+

@@ -9,8 +9,11 @@ import { SiteConfig } from "@/types/siteConfig";
 import * as loadTipsModule from "@/utils/client/loadTips";
 import * as analyticsModule from "@/utils/client/analytics";
 
-// Mock the loadTips module
-jest.mock("@/utils/client/loadTips");
+// Mock the loadTips module - only mock loadSiteTips, not parseTipsContent
+jest.mock("@/utils/client/loadTips", () => ({
+  ...jest.requireActual("@/utils/client/loadTips"),
+  loadSiteTips: jest.fn(),
+}));
 const mockLoadSiteTips = loadTipsModule.loadSiteTips as jest.MockedFunction<typeof loadTipsModule.loadSiteTips>;
 
 // Mock analytics
@@ -68,18 +71,40 @@ describe("TipsModal", () => {
     expect(screen.getByText("Loading tips...")).toBeInTheDocument();
   });
 
-  it("should display tips content when loaded successfully", async () => {
-    const mockTipsContent =
-      "Getting Better Answers from Luca\n\nIf you're getting unclear answers, try turning off audio and video sources.";
-    mockLoadSiteTips.mockResolvedValueOnce(mockTipsContent);
+  it("should display tips carousel when loaded successfully", async () => {
+    const mockTipsData = {
+      version: 2,
+      content: `Getting Better Answers from Luca
 
-    render(<TipsModal isOpen={true} onClose={mockOnClose} siteConfig={mockSiteConfig} />);
+If you're getting unclear answers, try turning off audio and video sources.
+
+---
+
+Exploring Source Content
+
+Click on sources to see excerpts.`,
+    };
+    mockLoadSiteTips.mockResolvedValueOnce(mockTipsData);
+
+    const mockOnVersionLoaded = jest.fn();
+    render(
+      <TipsModal
+        isOpen={true}
+        onClose={mockOnClose}
+        siteConfig={mockSiteConfig}
+        onVersionLoaded={mockOnVersionLoaded}
+      />
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Getting Better Answers from Luca")).toBeInTheDocument();
-      expect(screen.getByText(/If you're getting unclear answers/)).toBeInTheDocument();
+      expect(
+        screen.getByText("If you're getting unclear answers, try turning off audio and video sources.")
+      ).toBeInTheDocument();
+      expect(screen.getByText("1 of 2")).toBeInTheDocument();
     });
 
+    expect(mockOnVersionLoaded).toHaveBeenCalledWith(2);
     expect(mockLogEvent).toHaveBeenCalledWith("tips_content_loaded", "UI", "ananda");
   });
 
@@ -106,7 +131,11 @@ describe("TipsModal", () => {
   });
 
   it("should close modal when close button is clicked", async () => {
-    mockLoadSiteTips.mockResolvedValueOnce("Test tips content");
+    const mockTipsData = {
+      version: 1,
+      content: "Test tips content",
+    };
+    mockLoadSiteTips.mockResolvedValueOnce(mockTipsData);
 
     render(<TipsModal isOpen={true} onClose={mockOnClose} siteConfig={mockSiteConfig} />);
 
@@ -122,7 +151,11 @@ describe("TipsModal", () => {
   });
 
   it("should close modal when backdrop is clicked", async () => {
-    mockLoadSiteTips.mockResolvedValueOnce("Test tips content");
+    const mockTipsData = {
+      version: 1,
+      content: "Test tips content",
+    };
+    mockLoadSiteTips.mockResolvedValueOnce(mockTipsData);
 
     render(<TipsModal isOpen={true} onClose={mockOnClose} siteConfig={mockSiteConfig} />);
 
@@ -141,7 +174,11 @@ describe("TipsModal", () => {
   });
 
   it("should close modal when Escape key is pressed", async () => {
-    mockLoadSiteTips.mockResolvedValueOnce("Test tips content");
+    const mockTipsData = {
+      version: 1,
+      content: "Test tips content",
+    };
+    mockLoadSiteTips.mockResolvedValueOnce(mockTipsData);
 
     render(<TipsModal isOpen={true} onClose={mockOnClose} siteConfig={mockSiteConfig} />);
 
@@ -156,7 +193,11 @@ describe("TipsModal", () => {
   });
 
   it("should not close modal when clicking inside the modal content", async () => {
-    mockLoadSiteTips.mockResolvedValueOnce("Test tips content");
+    const mockTipsData = {
+      version: 1,
+      content: "Test tips content",
+    };
+    mockLoadSiteTips.mockResolvedValueOnce(mockTipsData);
 
     render(<TipsModal isOpen={true} onClose={mockOnClose} siteConfig={mockSiteConfig} />);
 
@@ -172,9 +213,12 @@ describe("TipsModal", () => {
   });
 
   it("should format content with headings and paragraphs correctly", async () => {
-    const mockTipsContent =
-      "Getting Better Answers\n\nThis is the first paragraph with some helpful information.\n\nThis is the second paragraph with more details.";
-    mockLoadSiteTips.mockResolvedValueOnce(mockTipsContent);
+    const mockTipsData = {
+      version: 1,
+      content:
+        "Getting Better Answers\n\nThis is the first paragraph with some helpful information.\n\nThis is the second paragraph with more details.",
+    };
+    mockLoadSiteTips.mockResolvedValueOnce(mockTipsData);
 
     render(<TipsModal isOpen={true} onClose={mockOnClose} siteConfig={mockSiteConfig} />);
 
@@ -189,12 +233,18 @@ describe("TipsModal", () => {
   });
 
   it("should display footer message when tips are loaded", async () => {
-    mockLoadSiteTips.mockResolvedValueOnce("Test tips content");
+    const mockTipsData = {
+      version: 1,
+      content: `Test Tip Title
+
+Test tips content.`,
+    };
+    mockLoadSiteTips.mockResolvedValueOnce(mockTipsData);
 
     render(<TipsModal isOpen={true} onClose={mockOnClose} siteConfig={mockSiteConfig} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Test tips content")).toBeInTheDocument();
+      expect(screen.getByText("Test tips content.")).toBeInTheDocument();
       expect(screen.getByText(/Have suggestions for more tips/)).toBeInTheDocument();
     });
   });

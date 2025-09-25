@@ -1,11 +1,12 @@
 /**
  * TipsModal Component
  *
- * This component displays site-specific tips and tricks in a modal dialog.
- * It loads content from site-specific files and presents them in a user-friendly format.
+ * This component displays site-specific tips and tricks in a modal dialog with carousel navigation.
+ * It loads content from site-specific files and presents them in an interactive carousel format.
  *
  * Key features:
  * - Site-specific content loading from /data/[siteId]/tips.txt
+ * - Carousel navigation with dots and arrow keys
  * - Modal overlay with backdrop click to close
  * - Keyboard accessibility (Escape key to close)
  * - Loading and error states
@@ -14,17 +15,19 @@
 
 import React, { useState, useEffect } from "react";
 import { SiteConfig } from "@/types/siteConfig";
-import { loadSiteTips } from "@/utils/client/loadTips";
+import { loadSiteTips, parseTipsContent, Tip, TipsData } from "@/utils/client/loadTips";
+import { TipsCarousel } from "@/components/TipsCarousel";
 import { logEvent } from "@/utils/client/analytics";
 
 interface TipsModalProps {
   isOpen: boolean;
   onClose: () => void;
   siteConfig: SiteConfig | null;
+  onVersionLoaded?: (version: number) => void;
 }
 
-export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfig }) => {
-  const [tipsContent, setTipsContent] = useState<string | null>(null);
+export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfig, onVersionLoaded }) => {
+  const [tips, setTips] = useState<Tip[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,10 +38,14 @@ export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfi
       setError(null);
 
       loadSiteTips(siteConfig)
-        .then((content) => {
-          setTipsContent(content);
-          if (content) {
+        .then((tipsData: TipsData | null) => {
+          if (tipsData) {
+            const parsedTips = parseTipsContent(tipsData.content);
+            setTips(parsedTips);
+            onVersionLoaded?.(tipsData.version);
             logEvent("tips_content_loaded", "UI", siteConfig.siteId || "unknown");
+          } else {
+            setTips([]);
           }
         })
         .catch((err) => {
@@ -50,7 +57,7 @@ export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfi
           setIsLoading(false);
         });
     }
-  }, [isOpen, siteConfig]);
+  }, [isOpen, siteConfig, onVersionLoaded]);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -130,40 +137,18 @@ export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfi
             </div>
           )}
 
-          {!isLoading && !error && !tipsContent && (
+          {!isLoading && !error && Array.isArray(tips) && tips.length === 0 && (
             <div className="text-center py-8 text-gray-600">
               <span className="material-icons text-4xl mb-2 block text-gray-400">info</span>
               No tips available for this site yet.
             </div>
           )}
 
-          {!isLoading && !error && tipsContent && (
-            <div className="prose prose-sm max-w-none">
-              {/* Split content by double newlines to create paragraphs */}
-              {tipsContent.split("\n\n").map((paragraph, index) => {
-                // Check if this paragraph looks like a heading (short line, often first paragraph)
-                const isHeading = index === 0 && paragraph.length < 100 && !paragraph.includes(".");
-
-                if (isHeading) {
-                  return (
-                    <h4 key={index} className="text-lg font-semibold text-gray-900 mb-3">
-                      {paragraph}
-                    </h4>
-                  );
-                } else {
-                  return (
-                    <p key={index} className="text-gray-700 leading-relaxed mb-4">
-                      {paragraph}
-                    </p>
-                  );
-                }
-              })}
-            </div>
-          )}
+          {!isLoading && !error && Array.isArray(tips) && tips.length > 0 && <TipsCarousel tips={tips} />}
         </div>
 
         {/* Footer */}
-        {!isLoading && !error && tipsContent && (
+        {!isLoading && !error && Array.isArray(tips) && tips.length > 0 && (
           <div className="mt-6 pt-4 border-t border-gray-200">
             <p className="text-xs text-gray-500 text-center">
               Have suggestions for more tips? Use the feedback button to let us know!

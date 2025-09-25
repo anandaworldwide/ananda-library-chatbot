@@ -32,6 +32,8 @@ import { logEvent } from "@/utils/client/analytics";
 import { getOrCreateUUID } from "@/utils/client/uuid";
 import { FirestoreIndexError, useFirestoreIndexError } from "@/components/FirestoreIndexError";
 import { areTipsAvailable } from "@/utils/client/loadTips";
+import { loadSiteTips, TipsData } from "@/utils/client/loadTips";
+import { isAuthenticated, getToken } from "@/utils/client/tokenManager";
 
 // Define the props interface for the ChatInput component
 interface ChatInputProps {
@@ -104,6 +106,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(false);
   const [showTipsModal, setShowTipsModal] = useState(false);
   const [tipsAvailable, setTipsAvailable] = useState(false);
+  const [hasNewTips, setHasNewTips] = useState(false);
+  const [currentTipsVersion, setCurrentTipsVersion] = useState<number | null>(null);
   //const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Analyze error to determine if it's a Firestore index error
@@ -126,6 +130,62 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       areTipsAvailable(siteConfig).then(setTipsAvailable);
     }
   }, [siteConfig]);
+
+  // Effect to check if there are new tips the user hasn't seen
+  useEffect(() => {
+    if (tipsAvailable && currentTipsVersion !== null && siteConfig?.requireLogin) {
+      const authStatus = isAuthenticated();
+
+      if (siteConfig?.requireLogin && authStatus) {
+        // Get JWT token and make authenticated API call
+        getToken()
+          .then((token) => {
+            return fetch("/api/user/tips", {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+          })
+          .then((response) => {
+            if (response.ok) {
+              return response.json();
+            } else {
+              throw new Error(`API returned ${response.status}`);
+            }
+          })
+          .then((data) => {
+            const lastSeenVersion = data.lastSeenTipVersion || 0;
+            setHasNewTips(lastSeenVersion < currentTipsVersion);
+          })
+          .catch(() => {
+            // Fallback to localStorage if API fails
+            const localLastSeenVersion = parseInt(localStorage.getItem("lastSeenTipVersion") || "0", 10);
+            setHasNewTips(localLastSeenVersion < currentTipsVersion);
+          });
+      } else {
+        // Use localStorage for non-authenticated or non-login sites
+        const localLastSeenVersion = parseInt(localStorage.getItem("lastSeenTipVersion") || "0", 10);
+        setHasNewTips(localLastSeenVersion < currentTipsVersion);
+      }
+    } else {
+      setHasNewTips(false);
+    }
+  }, [tipsAvailable, currentTipsVersion, siteConfig]);
+
+  // Effect to fetch current site tips version once we know tips exist
+  useEffect(() => {
+    if (tipsAvailable && currentTipsVersion === null && siteConfig) {
+      loadSiteTips(siteConfig)
+        .then((data: TipsData | null) => {
+          if (data) setCurrentTipsVersion(data.version);
+        })
+        .catch(() => {
+          /* ignore */
+        });
+    }
+  }, [tipsAvailable, currentTipsVersion, siteConfig]);
 
   // Effect to reset input after submission
   useEffect(() => {
@@ -278,6 +338,44 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   // Function to handle tips modal close
   const handleTipsClose = () => {
     setShowTipsModal(false);
+
+    // Mark tips as seen by updating the user's lastSeenTipVersion
+    if (currentTipsVersion && hasNewTips && siteConfig?.requireLogin) {
+      const authStatus = isAuthenticated();
+
+      if (authStatus) {
+        // Get JWT token and make authenticated API call
+        getToken()
+          .then((token) => {
+            return fetch("/api/user/tips", {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                lastSeenTipVersion: currentTipsVersion,
+              }),
+            });
+          })
+          .then(() => {
+            setHasNewTips(false);
+          })
+          .catch(() => {
+            // Don't show error to user, just log it
+          });
+      } else {
+        // Use localStorage for non-authenticated users
+        localStorage.setItem("lastSeenTipVersion", currentTipsVersion.toString());
+        setHasNewTips(false);
+      }
+    }
+
+    // Always save to localStorage as backup
+    if (currentTipsVersion && hasNewTips) {
+      localStorage.setItem("lastSeenTipVersion", currentTipsVersion.toString());
+      setHasNewTips(false);
+    }
   };
 
   const placeholderText = getChatPlaceholder(siteConfig) || "Ask a question...";
@@ -368,11 +466,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <button
                 type="button"
                 onClick={handleTipsClick}
-                className="flex items-center px-3 py-2 text-sm bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="relative flex items-center px-3 py-2 text-sm bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 aria-label="View tips and tricks"
               >
                 <span className="material-icons text-base mr-2">lightbulb</span>
                 Tips
+                {/* Blue dot indicator when there are new tips */}
+                {hasNewTips && (
+                  <span className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-blue-500 border-2 border-white" />
+                )}
               </button>
             )}
           </div>
@@ -407,7 +509,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         )}
 
         {/* Tips Modal */}
-        <TipsModal isOpen={showTipsModal} onClose={handleTipsClose} siteConfig={siteConfig} />
+        <TipsModal
+          isOpen={showTipsModal}
+          onClose={handleTipsClose}
+          siteConfig={siteConfig}
+          onVersionLoaded={setCurrentTipsVersion}
+        />
       </div>
     </div>
   );
