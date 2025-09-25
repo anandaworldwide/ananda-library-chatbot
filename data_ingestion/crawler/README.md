@@ -20,8 +20,8 @@ retrieval-augmented generation (RAG) systems.
 - **Database-Driven Queue**: SQLite-based crawl queue with retry logic and exponential backoff
 - **Health Check Server**: Flask-based monitoring endpoint with detailed statistics
 - **Email Alerts**: Automatic email notifications for critical issues (process down, wedged crawler, database errors)
-- **Daemon Support**: macOS LaunchAgent integration for automatic startup and restart
-- **Log Rotation**: Uses macOS newsyslog for automatic log management with compression
+- **Supervisor Service**: macOS launchd integration with bounded execution (45-minute cycles)
+- **Log Rotation**: Python-based log rotation with compression and automatic cleanup
 - **Graceful Shutdown**: Proper signal handling and state preservation
 
 ### Advanced Features
@@ -112,45 +112,44 @@ python health_daily_report.py --site ananda-public
 
 See [HEALTH_CRON_README.md](HEALTH_CRON_README.md) for detailed setup instructions.
 
-### Daemon Management
+### Supervisor Service Management
+
+The crawler now uses a bounded execution supervisor managed by macOS launchd:
 
 ```bash
-# Install crawler as a daemon (auto-starts on login)
-python daemon/daemon_manager.py --site ananda-public install
+# Check service status
+launchctl list com.ananda.crawler
 
-# Check daemon status
-python daemon/daemon_manager.py --site ananda-public status
+# Start service
+launchctl start com.ananda.crawler
+
+# Stop service
+launchctl stop com.ananda.crawler
 
 # View logs
-python daemon/daemon_manager.py --site ananda-public logs
+tail -f ~/Library/Logs/AnandaCrawler/supervisor_ananda-public.log
 
-# Follow logs in real-time
-python daemon/daemon_manager.py --site ananda-public logs --follow
+# Follow crawler activity logs
+tail -f ~/Library/Logs/AnandaCrawler/crawler_ananda-public.log
 
-# Control daemon
-python daemon/daemon_manager.py --site ananda-public start
-python daemon/daemon_manager.py --site ananda-public stop
-python daemon/daemon_manager.py --site ananda-public restart
-
-# Uninstall daemon
-python daemon/daemon_manager.py --site ananda-public uninstall
+# Follow both logs simultaneously
+tail -f ~/Library/Logs/AnandaCrawler/supervisor_ananda-public.log ~/Library/Logs/AnandaCrawler/crawler_ananda-public.log
 ```
 
 ### Log Management
 
 ```bash
 # Rotate logs manually
-python daemon/logrotate.py --site ananda-public
+python log_rotate.py --log-dir ~/Library/Logs/AnandaCrawler
 
-# Check log statistics
-python daemon/logrotate.py --site ananda-public --stats
+# Check what would be rotated (dry run)
+python log_rotate.py --log-dir ~/Library/Logs/AnandaCrawler --dry-run
 
-# Dry run (see what would be rotated)
-python daemon/logrotate.py --site ananda-public --dry-run
-
-# Custom rotation settings
-python daemon/logrotate.py --site ananda-public --max-size 100MB --keep 10
+# Custom settings
+python log_rotate.py --log-dir ~/Library/Logs/AnandaCrawler --max-age-days 7 --no-compress
 ```
+
+Logs are automatically rotated daily at 2 AM via cron job.
 
 ## Configuration
 
@@ -181,11 +180,12 @@ python daemon/logrotate.py --site ananda-public --max-size 100MB --keep 10
 
 ```text
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Crawler   │    │  Health Server  │    │ Daemon Manager  │
-│                 │    │                 │    │                 │
-│ • Content fetch │    │ • Status check  │    │ • Install/start │
-│ • Link discovery│    │ • Statistics    │    │ • Log rotation  │
-│ • Queue mgmt    │    │ • Process info  │    │ • Auto-restart  │
+│   Web Crawler   │    │  Health Server  │    │   Supervisor    │
+│   (45-min       │    │                 │    │   Service       │
+│    bounded)     │    │ • Status check  │    │ • Bounded exec  │
+│ • Content fetch │    │ • Statistics    │    │ • Auto-restart  │
+│ • Link discovery│    │ • Process info  │    │ • launchd       │
+│ • Queue mgmt    │    │ • Email alerts  │    │ • Log rotation  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
@@ -279,11 +279,11 @@ CREATE TABLE csv_tracking (
 
 ### Log Files
 
-Daemon logs are stored in `~/Library/Logs/AnandaCrawler/`:
+Service logs are stored in `~/Library/Logs/AnandaCrawler/`:
 
-- `crawler-{site_id}.log` - Standard output
-- `crawler-{site_id}-error.log` - Error output
-- `crawler-{site_id}.log.N.gz` - Rotated logs (compressed)
+- `supervisor-{site_id}.log` - Supervisor service output
+- `crawler_{site_id}.log` - Crawler activity output
+- `*_*.log.gz` - Rotated compressed logs (automatic daily rotation)
 
 ## Development
 
@@ -306,8 +306,8 @@ python -m pytest tests/ --cov=crawler --cov-report=html
 1. Create environment file: `.env.{site_id}`
 2. Create configuration: `crawler_config/{site_id}-config.json`
 3. Test configuration: `python website_crawler.py --site {site_id} --stop-after 5`
-4. Install daemon: `python daemon/daemon_manager.py --site {site_id} install`
-5. Set up log rotation: `./daemon/setup_logrotate.sh {site_id}`
+4. Update launchd plist with new site ID
+5. Load the service: `launchctl load ~/Library/LaunchAgents/com.ananda.crawler.plist`
 
 ### Debugging
 
@@ -334,8 +334,8 @@ This will:
 
 #### Memory Usage
 
-- Configure log rotation via newsyslog (see setup_logrotate.sh)
-- Set resource limits in LaunchAgent plist
+- Automatic log rotation via cron job (daily at 2 AM)
+- Set resource limits in launchd plist
 - Monitor with health check endpoint
 
 #### Storage Optimization
