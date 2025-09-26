@@ -138,18 +138,6 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
           <span className="material-icons text-gray-600">chevron_right</span>
         </button>
       </div>
-
-      {/* Progress Indicator */}
-      <div className="mt-4 text-center">
-        <span className="text-sm text-gray-500">
-          {currentIndex + 1} of {tips.length}
-        </span>
-      </div>
-
-      {/* Keyboard Navigation Hint */}
-      <div className="mt-2 text-center">
-        <p className="text-xs text-gray-400">Use ← → arrow keys or click dots to navigate</p>
-      </div>
     </div>
   );
 };

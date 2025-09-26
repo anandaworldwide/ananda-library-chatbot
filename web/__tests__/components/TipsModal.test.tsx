@@ -101,7 +101,6 @@ Click on sources to see excerpts.`,
       expect(
         screen.getByText("If you're getting unclear answers, try turning off audio and video sources.")
       ).toBeInTheDocument();
-      expect(screen.getByText("1 of 2")).toBeInTheDocument();
     });
 
     expect(mockOnVersionLoaded).toHaveBeenCalledWith(2);

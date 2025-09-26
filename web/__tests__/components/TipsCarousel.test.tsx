@@ -31,7 +31,6 @@ describe("TipsCarousel", () => {
 
     expect(screen.getByText("Getting Better Answers")).toBeInTheDocument();
     expect(screen.getByText("Turn off audio sources for clearer answers.")).toBeInTheDocument();
-    expect(screen.getByText("1 of 3")).toBeInTheDocument();
   });
 
   it("should show navigation dots for each tip", () => {
@@ -59,7 +58,6 @@ describe("TipsCarousel", () => {
 
     expect(screen.getByText("Exploring Sources")).toBeInTheDocument();
     expect(screen.getByText("Click on sources to see excerpts.")).toBeInTheDocument();
-    expect(screen.getByText("2 of 3")).toBeInTheDocument();
   });
 
   it("should navigate to previous tip when clicking previous button", async () => {
@@ -84,7 +82,6 @@ describe("TipsCarousel", () => {
     // Wait for animation and verify we're back on first tip
     await waitFor(() => {
       expect(screen.getByText("Getting Better Answers")).toBeInTheDocument();
-      expect(screen.getByText("1 of 3")).toBeInTheDocument();
     });
   });
 
@@ -96,7 +93,6 @@ describe("TipsCarousel", () => {
 
     expect(screen.getByText("Multilingual Support")).toBeInTheDocument();
     expect(screen.getByText("Ask questions in different languages.")).toBeInTheDocument();
-    expect(screen.getByText("3 of 3")).toBeInTheDocument();
   });
 
   it("should wrap to first tip when going next from last tip", async () => {
@@ -126,7 +122,6 @@ describe("TipsCarousel", () => {
     fireEvent.click(nextButton);
     await waitFor(() => {
       expect(screen.getByText("Getting Better Answers")).toBeInTheDocument();
-      expect(screen.getByText("1 of 3")).toBeInTheDocument();
     });
   });
 
@@ -137,17 +132,9 @@ describe("TipsCarousel", () => {
     fireEvent.click(prevButton); // Should wrap to last tip
 
     expect(screen.getByText("Multilingual Support")).toBeInTheDocument();
-    expect(screen.getByText("3 of 3")).toBeInTheDocument();
   });
 
   // Note: Close functionality is handled by the parent TipsModal component
-
-  it("should show keyboard navigation hint", () => {
-    render(<TipsCarousel tips={sampleTips} />);
-
-    expect(screen.getByText(/Use ← → arrow keys or click dots to navigate/)).toBeInTheDocument();
-    // Note: Escape key handling has been moved to parent TipsModal component
-  });
 
   it("should disable navigation buttons during animation", () => {
     render(<TipsCarousel tips={sampleTips} />);
