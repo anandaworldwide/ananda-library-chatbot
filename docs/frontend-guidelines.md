@@ -131,3 +131,37 @@
 - **Copy to Clipboard:** Implement one-click copy functionality with user feedback (toast notifications)
 - **View-Only Mode:** Clearly indicate when users are viewing shared conversations (disable input, show banner)
 - **Social Sharing:** Optimize share URLs for social media previews and accessibility
+
+### Tips & Tricks System
+
+The tips system provides interactive guidance to help users understand key features through animated demonstrations.
+
+#### Creating Animated GIFs for Tips
+
+- **Recording Software:** Use [LICEcap](https://www.cockos.com/licecap/) to create animated GIF demonstrations
+- **Recommended Dimensions:** Aim for consistent sizing around 400-550px width for optimal display
+- **File Naming:** Use descriptive names like `tips-[feature].gif` (e.g., `tips-sources.gif`, `tips-stars.gif`)
+- **Content Guidelines:** Focus on clear, step-by-step demonstrations of specific features
+- **Visual Separation:** GIFs are automatically styled with card containers and "Demo" badges for clarity
+
+#### Configuration
+
+- **Location:** Store GIFs in `/data/[siteId]/` directory alongside tips content
+- **Config File:** Map GIFs to tips using `/data/[siteId]/tips-config.json`
+- **Multi-site Support:** Each site can have its own set of animated demonstrations
+- **Responsive Design:** GIFs automatically scale and maintain aspect ratios across devices
+
+```json
+{
+  "version": 1,
+  "gifs": {
+    "Tip Title": {
+      "url": "/data/ananda/tips-example.gif",
+      "width": 444,
+      "height": 436,
+      "alt": "Descriptive alt text for accessibility",
+      "position": "above"
+    }
+  }
+}
+```

@@ -148,4 +148,36 @@ describe("TipsCarousel", () => {
     // since the animation timeout is handled internally)
     expect(nextButton).toBeInTheDocument();
   });
+
+  it("should display GIF when tip has gif data", () => {
+    const tipsWithGif = [
+      {
+        title: "Tip with GIF",
+        content: "This tip has a GIF above it.",
+        gif: {
+          url: "/test-gif.gif",
+          width: 300,
+          height: 200,
+          alt: "Test GIF",
+          position: "above" as const,
+        },
+      },
+    ];
+
+    render(<TipsCarousel tips={tipsWithGif} />);
+
+    const gifElement = screen.getByAltText("Test GIF");
+    expect(gifElement).toBeInTheDocument();
+    expect(gifElement).toHaveAttribute("src", "/test-gif.gif");
+    expect(gifElement).toHaveAttribute("width", "300");
+    expect(gifElement).toHaveAttribute("height", "200");
+  });
+
+  it("should not display GIF when tip has no gif data", () => {
+    render(<TipsCarousel tips={sampleTips} />);
+
+    // Should not find any img elements
+    const gifElements = document.querySelectorAll("img");
+    expect(gifElements.length).toBe(0);
+  });
 });

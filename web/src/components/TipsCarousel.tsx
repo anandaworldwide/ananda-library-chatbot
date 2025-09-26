@@ -7,11 +7,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { logEvent } from "@/utils/client/analytics";
-
-interface Tip {
-  title: string;
-  content: string;
-}
+import { Tip } from "@/utils/client/loadTips";
 
 interface TipsCarouselProps {
   tips: Tip[];
@@ -91,6 +87,32 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
       <div className="min-h-[200px] mb-6">
         <div className="opacity-100 transition-opacity duration-300">
           <h4 className="text-lg font-semibold text-gray-900 mb-3">{currentTip.title}</h4>
+
+          {/* GIF Display - positioned above content by default */}
+          {currentTip.gif && currentTip.gif.position !== "below" && (
+            <div className="mb-6 flex justify-center">
+              <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 shadow-lg">
+                <img
+                  src={currentTip.gif.url}
+                  alt={currentTip.gif.alt}
+                  width={currentTip.gif.width}
+                  height={currentTip.gif.height}
+                  className="max-w-full h-auto rounded-lg shadow-md"
+                  style={{
+                    maxWidth: "100%",
+                    height: "auto",
+                    aspectRatio: `${currentTip.gif.width} / ${currentTip.gif.height}`,
+                  }}
+                  loading="lazy"
+                />
+                {/* Optional: Add a small "Demo" label */}
+                <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium shadow-sm">
+                  Demo
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="prose prose-sm max-w-none">
             {currentTip.content.split("\n\n").map((paragraph, index) => (
               <p key={index} className="text-gray-700 leading-relaxed mb-4 last:mb-0">
@@ -98,6 +120,31 @@ export const TipsCarousel: React.FC<TipsCarouselProps> = ({ tips }) => {
               </p>
             ))}
           </div>
+
+          {/* GIF Display - positioned below content */}
+          {currentTip.gif && currentTip.gif.position === "below" && (
+            <div className="mt-6 flex justify-center">
+              <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 shadow-lg">
+                <img
+                  src={currentTip.gif.url}
+                  alt={currentTip.gif.alt}
+                  width={currentTip.gif.width}
+                  height={currentTip.gif.height}
+                  className="max-w-full h-auto rounded-lg shadow-md"
+                  style={{
+                    maxWidth: "100%",
+                    height: "auto",
+                    aspectRatio: `${currentTip.gif.width} / ${currentTip.gif.height}`,
+                  }}
+                  loading="lazy"
+                />
+                {/* Optional: Add a small "Demo" label */}
+                <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium shadow-sm">
+                  Demo
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

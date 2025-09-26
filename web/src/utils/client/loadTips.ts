@@ -7,14 +7,29 @@
 
 import { SiteConfig } from "@/types/siteConfig";
 
+export interface TipGif {
+  url: string;
+  width: number;
+  height: number;
+  alt: string;
+  position?: "above" | "below" | "inline";
+}
+
 export interface Tip {
   title: string;
   content: string;
+  gif?: TipGif;
+}
+
+export interface TipsConfig {
+  version: number;
+  gifs: Record<string, Omit<TipGif, "position"> & { position?: "above" | "below" | "inline" }>;
 }
 
 export interface TipsData {
   version: number;
   content: string;
+  config?: TipsConfig;
 }
 
 /**
@@ -57,9 +72,22 @@ export async function loadSiteTips(siteConfig: SiteConfig | null): Promise<TipsD
 
     const contentWithoutVersion = lines.slice(contentStartIndex).join("\n").trim();
 
+    // Try to load the optional config file
+    let config: TipsConfig | undefined;
+    try {
+      const configResponse = await fetch(`/data/${siteConfig.siteId}/tips-config.json`);
+      if (configResponse.ok) {
+        config = await configResponse.json();
+      }
+    } catch (configError) {
+      // Config file is optional, so we don't fail if it doesn't exist
+      console.debug(`No tips config found for site ${siteConfig.siteId}, using defaults`);
+    }
+
     return {
       version,
       content: contentWithoutVersion,
+      config,
     };
   } catch (error) {
     console.error(`Failed to load tips for site ${siteConfig.siteId}:`, error);
@@ -68,11 +96,12 @@ export async function loadSiteTips(siteConfig: SiteConfig | null): Promise<TipsD
 }
 
 /**
- * Parses tips content into individual tip objects
+ * Parses tips content into individual tip objects with optional GIF data
  * @param content - The raw tips content string
- * @returns Array of Tip objects with title and content
+ * @param config - Optional configuration containing GIF mappings
+ * @returns Array of Tip objects with title, content, and optional GIF data
  */
-export function parseTipsContent(content: string): Tip[] {
+export function parseTipsContent(content: string, config?: TipsConfig): Tip[] {
   if (!content) return [];
 
   // Split by "---" separator
@@ -97,12 +126,25 @@ export function parseTipsContent(content: string): Tip[] {
       }
       const content = lines.slice(contentStartIndex).join("\n");
 
+      // Check if there's a GIF configured for this tip title
+      const gifConfig = config?.gifs[title];
+      const gif = gifConfig
+        ? {
+            url: gifConfig.url,
+            width: gifConfig.width,
+            height: gifConfig.height,
+            alt: gifConfig.alt,
+            position: gifConfig.position || "above",
+          }
+        : undefined;
+
       return {
         title: title.replace(/:$/, ""), // Remove trailing colon if present
         content: content.trim(),
+        gif,
       };
     })
-    .filter((tip): tip is Tip => tip !== null) as Tip[];
+    .filter((tip): tip is NonNullable<typeof tip> => tip !== null);
 
   return tips;
 }

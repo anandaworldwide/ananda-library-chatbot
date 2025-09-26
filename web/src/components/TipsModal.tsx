@@ -40,7 +40,7 @@ export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfi
       loadSiteTips(siteConfig)
         .then((tipsData: TipsData | null) => {
           if (tipsData) {
-            const parsedTips = parseTipsContent(tipsData.content);
+            const parsedTips = parseTipsContent(tipsData.content, tipsData.config);
             setTips(parsedTips);
             onVersionLoaded?.(tipsData.version);
             logEvent("tips_content_loaded", "Tips", siteConfig.siteId || "unknown", parsedTips.length);

@@ -147,7 +147,7 @@ You can access Chat Options by clicking the "Chat Options" button below the text
 
 Exploring Source Content
 
-Click on any of the numbered sources at the top of an answer to see the exact excerpt that matched your question. If the source has associated video or audio content, you'll see a media player that's automatically queued up to the moment of the match, so you can hear or watch the relevant portion directly.
+Click on any of the sources at the top of an answer to see the exact excerpt that matched your question. If the source has associated video or audio content, you'll see a media player that's automatically queued up to the moment of the match, so you can hear or watch the relevant portion directly.
 
 ---
 
@@ -175,7 +175,7 @@ You can access Chat Options by clicking the "Chat Options" button below the text
       expect(result[1]).toEqual({
         title: "Exploring Source Content",
         content:
-          "Click on any of the numbered sources at the top of an answer to see the exact excerpt that matched your question. If the source has associated video or audio content, you'll see a media player that's automatically queued up to the moment of the match, so you can hear or watch the relevant portion directly.",
+          "Click on any of the sources at the top of an answer to see the exact excerpt that matched your question. If the source has associated video or audio content, you'll see a media player that's automatically queued up to the moment of the match, so you can hear or watch the relevant portion directly.",
       });
       expect(result[2]).toEqual({
         title: "Multilingual Support",
