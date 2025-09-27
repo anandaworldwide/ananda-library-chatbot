@@ -146,14 +146,14 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
           <p className="text-gray-600 mb-4">We appreciate your input and will use it to improve the site.</p>
           <button
             onClick={handleClose}
-            className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"
+            className="bg-blue-500 text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors"
           >
             Close
           </button>
         </div>
       ) : (
         <>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
             <p className="text-blue-800 text-sm">
               We are constantly striving to improve the site and provide the best experience possible. Please send us
               your candid feedback - we appreciate all comments, suggestions, and insights!
@@ -179,7 +179,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className={`mt-1 block w-full border rounded-md shadow-sm px-3 py-2 ${
+                  className={`mt-1 block w-full border rounded-xl shadow-sm px-3 py-2 ${
                     isLoggedIn && siteConfig?.requireLogin
                       ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
                       : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
@@ -200,7 +200,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={`mt-1 block w-full border rounded-md shadow-sm px-3 py-2 ${
+                  className={`mt-1 block w-full border rounded-xl shadow-sm px-3 py-2 ${
                     isLoggedIn && siteConfig?.requireLogin
                       ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
                       : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
@@ -220,7 +220,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
                 id="feedback-message-input"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 h-32 focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-xl shadow-sm px-3 py-2 h-32 focus:ring-blue-500 focus:border-blue-500"
                 required
                 disabled={isSubmitting}
                 maxLength={1000}
@@ -234,14 +234,14 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
                 type="button"
                 onClick={handleClose}
                 disabled={isSubmitting}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed"
+                className="bg-blue-500 text-white px-4 py-2 rounded-xl hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? "Sending Feedback..." : "Send Feedback"}
               </button>

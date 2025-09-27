@@ -275,7 +275,7 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
     <div className="text-left w-full px-0">
       {/* Show AI Suggested Prompt if user has enough history, otherwise show Random Queries */}
       {hasEnoughHistory ? (
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg w-full border border-blue-200 mt-8">
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-xl w-full border border-blue-200 mt-8">
           <div className="flex justify-between items-center mb-3">
             <p className="font-semibold text-gray-800">
               {isMobile ? "AI Suggested Question" : "AI Suggested Questions"}
@@ -325,7 +325,7 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
                     value={editedPrompt}
                     onChange={(e) => setEditedPrompt(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     rows={2}
                     placeholder="Edit your question..."
                     disabled={isLoading}
@@ -333,14 +333,14 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
                   <div className="flex space-x-2">
                     <button
                       onClick={handleSaveEdit}
-                      className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="px-3 py-1 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       disabled={isLoading || !editedPrompt.trim()}
                     >
                       Submit
                     </button>
                     <button
                       onClick={handleCancelEdit}
-                      className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                      className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded-xl hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
                       disabled={isLoading}
                     >
                       Cancel
@@ -364,14 +364,14 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
                           <div key={index} className="flex items-center space-x-2">
                             <button
                               onClick={() => handlePromptClick(prompt, index)}
-                              className="flex-1 text-left px-3 py-2 bg-white border border-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-50 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                              className="flex-1 text-left px-3 py-2 bg-white border border-gray-200 text-gray-700 text-sm rounded-xl hover:bg-gray-50 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                               disabled={isLoading}
                             >
                               {prompt}
                             </button>
                             <button
                               onClick={() => handleEditClick(prompt, index)}
-                              className="px-2 py-2 bg-white border border-gray-200 text-gray-500 text-xs rounded-md hover:bg-gray-50 hover:border-blue-300 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                              className="px-2 py-2 bg-white border border-gray-200 text-gray-500 text-xs rounded-xl hover:bg-gray-50 hover:border-blue-300 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                               disabled={isLoading}
                               title="Edit this question"
                             >
@@ -391,14 +391,14 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handlePromptClick(suggestedPrompts[0], 0)}
-                            className="flex-1 px-3 py-2 rounded-md text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                            className="flex-1 px-3 py-2 rounded-xl text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                             disabled={isLoading || suggestedPrompts.length === 0}
                           >
                             Submit Question
                           </button>
                           <button
                             onClick={() => handleEditClick(suggestedPrompts[0], 0)}
-                            className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-sm rounded-md hover:bg-gray-50 hover:border-blue-300 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                            className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-sm rounded-xl hover:bg-gray-50 hover:border-blue-300 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                             disabled={isLoading || suggestedPrompts.length === 0}
                             title="Edit this question"
                           >
@@ -415,7 +415,7 @@ const SuggestedQueries: React.FC<SuggestedQueriesProps> = ({
         </div>
       ) : (
         /* Original Random Queries when not enough history */
-        <div className="bg-gray-100 p-4 rounded-lg w-full max-w-[400px] mt-4">
+        <div className="bg-gray-100 p-4 rounded-xl w-full max-w-[400px] mt-4">
           <div className="flex justify-between items-center mb-3">
             <p className="font-semibold">Suggested Query:</p>
             <div className="flex items-center space-x-2">

@@ -204,7 +204,7 @@ describe("ChatInput", () => {
 
     // Check that the temporary session indicator is displayed
     expect(screen.getByText(/Temporary Session Active/)).toBeInTheDocument();
-    expect(screen.getByText("hourglass_empty")).toBeInTheDocument();
+    expect(screen.getByText("lock")).toBeInTheDocument();
   });
 
   it("opens dropdown and shows media type options", () => {

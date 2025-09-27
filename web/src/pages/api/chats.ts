@@ -19,7 +19,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     name: "chats-api",
   });
   if (!allowed) return;
-
   const { uuid, limit, convId, startAfter, starred } = req.query;
 
   // UUID is required unless convId is provided (for legacy document support)
@@ -29,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  const limitNum = Math.min(Math.max(parseInt(String(limit || 50), 10) || 50, 1), 200);
+  const limitNum = Math.min(Math.max(parseInt(String(limit || 10), 10) || 10, 1), 200);
 
   try {
     if (!db) return res.status(503).json({ error: "Database not available" });

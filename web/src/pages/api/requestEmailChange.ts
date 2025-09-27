@@ -29,11 +29,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   // Rate limiting: 5 requests per day per user
 
-  const rateLimitKey = `email-change-${userEmail}`;
   const allowed = await genericRateLimiter(req, res, {
     windowMs: 24 * 60 * 60 * 1000, // 24 hours
     max: 5, // requests per day
-    name: rateLimitKey,
+    name: "email_change",
   });
   if (!allowed) return;
 

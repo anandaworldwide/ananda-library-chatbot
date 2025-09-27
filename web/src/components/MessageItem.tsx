@@ -141,7 +141,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
         {message.type === "userMessage" ? (
           // User messages: right-aligned with limited width
           <div className="flex justify-end">
-            <div className="max-w-md bg-blue-100 rounded-lg px-4 py-2">
+            <div className="max-w-md bg-blue-100 rounded-xl px-4 py-2">
               <ReactMarkdown
                 remarkPlugins={[gfm]}
                 components={components}

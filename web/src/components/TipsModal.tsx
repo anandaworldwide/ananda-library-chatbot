@@ -106,7 +106,7 @@ export const TipsModal: React.FC<TipsModalProps> = ({ isOpen, onClose, siteConfi
       />
 
       {/* Modal */}
-      <div className="fixed z-[101] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+      <div className="fixed z-[101] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-xl shadow-lg max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-start mb-4">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center">

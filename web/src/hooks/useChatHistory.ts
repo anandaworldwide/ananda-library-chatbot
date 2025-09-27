@@ -53,7 +53,7 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
 
         // Build URL with pagination cursor for "load more"
         // Use a higher limit to ensure we get enough messages to group into the desired number of conversations
-        const messageLimit = Math.max(limit * 3, 50); // Fetch at least 3x the conversation limit or 50, whichever is higher
+        const messageLimit = limit * 2; // Fetch 2x the conversation limit to account for grouping
         let url = `/api/chats?uuid=${uuid}&limit=${messageLimit}`;
         if (loadMore && lastTimestampRef.current) {
           url += `&startAfter=${encodeURIComponent(lastTimestampRef.current)}`;
@@ -263,7 +263,7 @@ export function useChatHistory(limit: number = 20, enabled: boolean = true) {
 
         const uuid = getOrCreateUUID();
         // Use same limit calculation as regular conversations for consistency
-        const messageLimit = Math.max(limit * 3, 50);
+        const messageLimit = limit * 2;
         const params = new URLSearchParams({
           uuid: uuid,
           limit: messageLimit.toString(),

@@ -62,22 +62,34 @@ export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
           const hasAuthCookie = document.cookie.includes("isLoggedIn=true") || document.cookie.includes("siteAuth=");
 
           if (hasAuthCookie) {
-            // User has auth cookies but no in-memory token (mobile browser restoration)
-            console.log("Auth cookies found but no token - attempting token refresh for mobile restoration");
+            // User has auth cookies but no in-memory token (browser session restoration)
+            console.log("Auth cookies found but no token - attempting token refresh for browser restoration");
 
             try {
-              // Force a fresh token fetch
-              await initializeTokenManager();
-              const refreshedAuth = isAuthenticated();
+              // Force a fresh token fetch - try up to 3 times with delay
+              let refreshedAuth = false;
+              for (let attempt = 1; attempt <= 3; attempt++) {
+                console.log(`Token refresh attempt ${attempt}/3`);
+                await initializeTokenManager();
+                refreshedAuth = isAuthenticated();
 
-              if (refreshedAuth) {
-                clearTimeout(loadingTimer);
-                setUserAuthenticated(true);
-                setAuthChecked(true);
-                return;
+                if (refreshedAuth) {
+                  console.log(`Token refresh succeeded on attempt ${attempt}`);
+                  clearTimeout(loadingTimer);
+                  setUserAuthenticated(true);
+                  setAuthChecked(true);
+                  return;
+                }
+
+                // Wait before retrying (except on last attempt)
+                if (attempt < 3) {
+                  await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+                }
               }
+
+              console.error("All token refresh attempts failed during browser restoration");
             } catch (refreshError) {
-              console.error("Token refresh failed during mobile restoration:", refreshError);
+              console.error("Token refresh failed during browser restoration:", refreshError);
             }
           }
 
@@ -111,22 +123,29 @@ export default function AuthGuard({ children, siteConfig }: AuthGuardProps) {
     }
   }, [router, siteConfig]);
 
-  // Add window focus listener to handle mobile browser restoration
+  // Add window focus listener to handle browser session restoration
   useEffect(() => {
     const handleWindowFocus = async () => {
       // Only attempt refresh if we're not authenticated but should be
       if (!userAuthenticated && authChecked && siteConfig?.requireLogin) {
-        const hasAuthCookie = document.cookie.includes("isLoggedIn=true") || document.cookie.includes("siteAuth=");
+        const hasAuthCookie =
+          document.cookie.includes("isLoggedIn=true") ||
+          document.cookie.includes("siteAuth=") ||
+          document.cookie.includes("auth=");
 
         if (hasAuthCookie) {
           console.log("Window focus detected with auth cookies - refreshing token");
           try {
+            // Force fresh token fetch for browser restoration
             await initializeTokenManager();
             const authenticated = isAuthenticated();
             if (authenticated) {
+              console.log("Token refresh successful on window focus");
               setUserAuthenticated(true);
               // Refresh the page to ensure clean state
               window.location.reload();
+            } else {
+              console.log("Token refresh failed on window focus - still not authenticated");
             }
           } catch (error) {
             console.error("Failed to refresh token on window focus:", error);

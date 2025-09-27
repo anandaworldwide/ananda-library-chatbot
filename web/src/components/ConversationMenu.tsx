@@ -182,7 +182,7 @@ export default function ConversationMenu({ onRename, onDelete, isVisible, isRowS
         createPortal(
           <div
             ref={menuRef}
-            className="fixed w-32 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50"
+            className="fixed w-32 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50"
             style={{
               top: `${menuPosition.top}px`,
               left: `${menuPosition.left}px`,

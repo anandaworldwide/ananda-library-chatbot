@@ -39,7 +39,7 @@ export function Modal({ isOpen, onClose, title, children, className = "" }: Moda
 
       {/* Modal */}
       <div
-        className={`relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto ${className}`}
+        className={`relative bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto ${className}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"

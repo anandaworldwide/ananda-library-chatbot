@@ -146,7 +146,7 @@ export default function BaseHeader({
               <button
                 onClick={onTemporarySessionChange}
                 aria-label="Start Temporary Chat"
-                className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors flex items-center"
+                className="text-white hover:text-gray-200 p-1 rounded-xl hover:bg-white/10 transition-colors flex items-center"
                 title="Start temporary chat. It will not be logged, saved, or shareable."
               >
                 <span className="text-sm font-medium">Start Temporary Chat</span>
@@ -157,7 +157,7 @@ export default function BaseHeader({
               <button
                 onClick={onNewChat}
                 aria-label="New Chat"
-                className="text-white hover:text-gray-200 p-1 rounded-md hover:bg-white/10 transition-colors"
+                className="text-white hover:text-gray-200 p-1 rounded-xl hover:bg-white/10 transition-colors"
                 title="Start New Chat"
               >
                 <span className="material-icons text-xl">edit_square</span>

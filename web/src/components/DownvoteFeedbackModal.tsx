@@ -30,6 +30,23 @@ const DownvoteFeedbackModal: React.FC<DownvoteFeedbackModalProps> = ({ isOpen, d
     }
   }, [isOpen, docId]);
 
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isOpen) {
+        onCancel();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleEscapeKey);
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [isOpen, onCancel]);
+
   if (!isOpen || !docId) {
     return null;
   }
@@ -46,7 +63,7 @@ const DownvoteFeedbackModal: React.FC<DownvoteFeedbackModalProps> = ({ isOpen, d
       onClick={onCancel} // Click away to cancel
     >
       <div
-        className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md mx-4"
+        className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md mx-4"
         onClick={(e) => e.stopPropagation()} // Prevent click inside from closing modal
       >
         <h2 className="text-xl font-semibold mb-4">Why the Downvote?</h2>
@@ -80,7 +97,7 @@ const DownvoteFeedbackModal: React.FC<DownvoteFeedbackModalProps> = ({ isOpen, d
             maxLength={1000}
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full p-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500"
           />
         </div>
 

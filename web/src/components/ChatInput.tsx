@@ -401,7 +401,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           {/* Temporary session indicator - now handled in navigation */}
           {temporarySession && (
             <div className="flex items-center justify-center mb-3 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
-              <span className="material-icons text-purple-600 text-lg mr-2">hourglass_empty</span>
+              <span className="material-icons text-purple-600 text-lg mr-2">lock</span>
               <span className="text-purple-800 text-sm font-medium">
                 Temporary Session Active
                 <button
@@ -432,7 +432,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               name="userInput"
               placeholder={disabled ? "View-only mode" : hasInteracted ? "" : placeholderText}
               disabled={disabled}
-              className={`w-full p-3 pr-12 border border-gray-300 rounded-md resize-none focus:outline-none min-h-[48px] overflow-hidden ${
+              className={`w-full p-3 pr-12 border border-gray-300 rounded-xl resize-none focus:outline-none min-h-[48px] overflow-hidden ${
                 disabled ? "bg-gray-100 cursor-not-allowed" : ""
               }`}
               style={{ height: "auto" }}
@@ -440,14 +440,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <button
               type="submit"
               disabled={disabled}
-              className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-full flex items-center justify-center w-10 h-10 ${
+              className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-xl flex items-center justify-center w-8 h-8 ${
                 disabled ? "bg-gray-400 text-gray-600 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600"
               }`}
             >
               {loading ? (
-                <span className="material-icons text-2xl leading-none">stop</span>
+                <span className="material-icons text-lg leading-none">stop</span>
               ) : (
-                <span className="material-icons text-xl leading-none">arrow_upward</span>
+                <span className="material-icons text-lg leading-none">arrow_upward</span>
               )}
             </button>
           </div>

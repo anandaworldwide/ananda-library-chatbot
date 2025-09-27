@@ -20,7 +20,7 @@ const SuggestionPills: React.FC<SuggestionPillsProps> = ({ suggestions, onSugges
             onClick={() => onSuggestionClick(suggestion)}
             disabled={loading}
             className={`
-              inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium
+              inline-flex items-center px-3 py-1.5 rounded-xl text-sm font-medium
               bg-gray-100 text-gray-700 border border-gray-200
               hover:bg-gray-200 hover:border-gray-300 hover:text-gray-900
               active:bg-gray-300 active:border-gray-400

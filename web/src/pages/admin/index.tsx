@@ -1,5 +1,5 @@
 // Admin Dashboard (temporary): gated by sudo cookie (SSR); shows Bootstrap button when enabled
-import React, { useState } from "react";
+import React from "react";
 import Head from "next/head";
 import type { GetServerSideProps, NextApiRequest, NextApiResponse } from "next";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
@@ -15,8 +15,6 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDashboardProps) {
-  const [message] = useState<string | null>(null);
-
   if (!isSudoAdmin) {
     return (
       <Layout siteConfig={siteConfig}>
@@ -37,8 +35,6 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
       </Head>
       <div className="mx-auto max-w-3xl p-6 space-y-6">
         <Breadcrumb items={[{ label: "Admin Dashboard" }]} />
-
-        {message && <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm">{message}</div>}
 
         {loginRequired ? (
           <section className="rounded border p-4">

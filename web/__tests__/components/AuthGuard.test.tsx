@@ -248,4 +248,124 @@ describe("AuthGuard", () => {
     expect(screen.queryByText("Protected Content")).not.toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  describe("Browser Session Restoration", () => {
+    let originalCookie: string;
+
+    beforeEach(() => {
+      // Save original cookie
+      originalCookie = document.cookie;
+    });
+
+    afterEach(() => {
+      // Restore original cookie
+      Object.defineProperty(document, "cookie", {
+        writable: true,
+        value: originalCookie,
+      });
+    });
+
+    it("handles browser session restoration with isLoggedIn cookie", async () => {
+      // Mock successful token refresh after retries
+      (initializeTokenManager as jest.Mock).mockResolvedValue(undefined);
+      (isAuthenticated as jest.Mock).mockReturnValue(false); // Initial check
+      (isAuthenticated as jest.Mock).mockReturnValueOnce(true); // After refresh
+
+      // Set up auth cookies by directly setting document.cookie
+      document.cookie = "isLoggedIn=true";
+
+      render(
+        <AuthGuard siteConfig={mockSiteConfig}>
+          <TestComponent />
+        </AuthGuard>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Protected Content")).toBeInTheDocument();
+      });
+
+      // Should have attempted token refresh multiple times
+      expect(initializeTokenManager).toHaveBeenCalled();
+    });
+
+    it("handles browser session restoration with siteAuth cookie", async () => {
+      (initializeTokenManager as jest.Mock).mockResolvedValue(undefined);
+      (isAuthenticated as jest.Mock).mockReturnValue(false);
+      (isAuthenticated as jest.Mock).mockReturnValueOnce(true);
+
+      document.cookie = "siteAuth=valid-token";
+
+      render(
+        <AuthGuard siteConfig={mockSiteConfig}>
+          <TestComponent />
+        </AuthGuard>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Protected Content")).toBeInTheDocument();
+      });
+
+      expect(initializeTokenManager).toHaveBeenCalled();
+    });
+
+    it("handles browser session restoration with auth cookie", async () => {
+      (initializeTokenManager as jest.Mock).mockResolvedValue(undefined);
+      (isAuthenticated as jest.Mock).mockReturnValue(false);
+      (isAuthenticated as jest.Mock).mockReturnValueOnce(true);
+
+      document.cookie = "auth=jwt-token-here";
+
+      render(
+        <AuthGuard siteConfig={mockSiteConfig}>
+          <TestComponent />
+        </AuthGuard>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Protected Content")).toBeInTheDocument();
+      });
+
+      expect(initializeTokenManager).toHaveBeenCalled();
+    });
+
+    it("does not attempt restoration for public pages", async () => {
+      (isPublicPage as jest.Mock).mockReturnValue(true);
+      (initializeTokenManager as jest.Mock).mockResolvedValue(undefined);
+      (isAuthenticated as jest.Mock).mockReturnValue(true);
+
+      document.cookie = "isLoggedIn=true";
+
+      render(
+        <AuthGuard siteConfig={mockSiteConfig}>
+          <TestComponent />
+        </AuthGuard>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Protected Content")).toBeInTheDocument();
+      });
+
+      // For public pages, initializeTokenManager should not be called
+      expect(initializeTokenManager).not.toHaveBeenCalled();
+    });
+
+    it("does not attempt restoration for sites without login requirement", async () => {
+      const noLoginSiteConfig = { ...mockSiteConfig, requireLogin: false };
+
+      document.cookie = "isLoggedIn=true";
+
+      render(
+        <AuthGuard siteConfig={noLoginSiteConfig}>
+          <TestComponent />
+        </AuthGuard>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Protected Content")).toBeInTheDocument();
+      });
+
+      // For sites without login, initializeTokenManager should not be called
+      expect(initializeTokenManager).not.toHaveBeenCalled();
+    });
+  });
 });

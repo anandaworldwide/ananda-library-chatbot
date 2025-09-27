@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Head from "next/head";
 import type { GetServerSideProps, NextApiRequest } from "next";
 import { isSuperuserPageAllowed } from "@/utils/server/adminPageGate";
@@ -41,10 +41,32 @@ export default function NewslettersPage({ siteConfig }: NewsletterPageProps) {
   const [includeAdmins, setIncludeAdmins] = useState(true);
   const [includeSuperUsers, setIncludeSuperUsers] = useState(true);
 
+  // Newsletter Queue Processor state
+  const [selectedNewsletterId, setSelectedNewsletterId] = useState("");
+  const [progress, setProgress] = useState<{
+    sent: number;
+    failed: number;
+    remaining: number;
+    errors: string[];
+  } | null>(null);
+  const [newsletters, setNewsletters] = useState<any[]>([]);
+
+  // Check if selected newsletter has remaining emails
+  const selectedNewsletterRemainingCount = useMemo(() => {
+    if (!selectedNewsletterId) return 0;
+    const selectedNewsletter = newsletters.find((nl) => nl.id === selectedNewsletterId);
+    return selectedNewsletter
+      ? selectedNewsletter.totalQueued - selectedNewsletter.sentCount - selectedNewsletter.failedCount
+      : 0;
+  }, [selectedNewsletterId, newsletters]);
+
+  const selectedNewsletterHasRemaining = selectedNewsletterRemainingCount > 0;
+
   // Load newsletter history and CTA fields from localStorage
   useEffect(() => {
     loadHistory();
     loadCtaFromLocalStorage();
+    fetchNewsletters();
   }, []);
 
   // Load CTA fields from localStorage
@@ -166,9 +188,7 @@ export default function NewslettersPage({ siteConfig }: NewsletterPageProps) {
 
       if (response.ok) {
         setMessage(
-          `Newsletter sent successfully! ${data.successCount} emails sent to ${data.totalRecipients} subscribers.${
-            data.errorCount > 0 ? ` ${data.errorCount} failed.` : ""
-          }`
+          `Newsletter queued successfully! ${data.totalQueued} emails queued for processing. Use the Newsletter Queue Processor below to send them in batches.`
         );
         setMessageType("success");
 
@@ -181,11 +201,15 @@ export default function NewslettersPage({ siteConfig }: NewsletterPageProps) {
         setIncludeAdmins(true);
         setIncludeSuperUsers(true);
 
-        // Reload history
+        // Reload history and refresh newsletters
         loadHistory();
+        setTimeout(() => {
+          fetchNewsletters();
+          scrollToTop();
+        }, 100);
       } else {
         // Handle API error response
-        let errorMessage = data.error || "Failed to send newsletter";
+        let errorMessage = data.error || "Failed to queue newsletter";
 
         // Add details if available
         if (data.details) {
@@ -200,7 +224,7 @@ export default function NewslettersPage({ siteConfig }: NewsletterPageProps) {
         throw new Error(errorMessage);
       }
     } catch (error: any) {
-      let errorMessage = error.message || "Failed to send newsletter";
+      let errorMessage = error.message || "Failed to queue newsletter";
 
       // Handle network errors
       if (error.name === "TypeError" && error.message.includes("fetch")) {
@@ -213,6 +237,112 @@ export default function NewslettersPage({ siteConfig }: NewsletterPageProps) {
       setSending(false);
     }
   }
+
+  // Newsletter Queue Processor functions
+  const fetchNewsletters = async () => {
+    try {
+      const token = await getToken();
+      if (!token) {
+        console.error("No authentication token available");
+        return;
+      }
+
+      const response = await fetch("/api/admin/newsletters?status=queued", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      setNewsletters(data.newsletters || []);
+    } catch (error) {
+      console.error("Failed to fetch newsletters:", error);
+    }
+  };
+
+  const handleProcessBatch = async () => {
+    if (!selectedNewsletterId) return;
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        console.error("No authentication token available");
+        return;
+      }
+
+      const response = await fetch("/api/admin/processNewsletterBatch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ newsletterId: selectedNewsletterId }),
+      });
+      const data = await response.json();
+      setProgress(data);
+
+      // Refresh newsletters list
+      await fetchNewsletters();
+    } catch (error) {
+      console.error("Failed to process batch:", error);
+    }
+  };
+
+  const handleDeleteQueue = async () => {
+    if (!selectedNewsletterId) return;
+
+    const selectedNewsletter = newsletters.find((nl) => nl.id === selectedNewsletterId);
+    const remainingCount = selectedNewsletter
+      ? selectedNewsletter.totalQueued - selectedNewsletter.sentCount - selectedNewsletter.failedCount
+      : 0;
+
+    if (remainingCount === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${remainingCount} remaining queue items? This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        console.error("No authentication token available");
+        return;
+      }
+
+      const response = await fetch("/api/admin/deleteNewsletterQueue", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ newsletterId: selectedNewsletterId }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMessage(`Successfully deleted ${data.deleted} queue items.`);
+        setMessageType("success");
+        // Refresh newsletters list
+        await fetchNewsletters();
+        scrollToTop();
+      } else {
+        setMessage(`Failed to delete queue: ${data.error}`);
+        setMessageType("error");
+        scrollToTop();
+      }
+    } catch (error) {
+      console.error("Failed to delete queue:", error);
+      setMessage("Failed to delete queue items.");
+      setMessageType("error");
+      scrollToTop();
+    }
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   function generatePreviewContent() {
     if (!content.trim()) {
@@ -244,17 +374,85 @@ export default function NewslettersPage({ siteConfig }: NewsletterPageProps) {
       <div className="mx-auto max-w-4xl p-6">
         <Breadcrumb items={[{ label: "Admin Dashboard", href: "/admin" }, { label: "Newsletters" }]} />
 
+        {/* Status Message */}
+        {message && (
+          <div
+            className={`mb-6 rounded border p-3 text-sm ${
+              messageType === "error"
+                ? "border-red-300 bg-red-50 text-red-800"
+                : "border-green-300 bg-green-50 text-green-800"
+            }`}
+          >
+            {message}
+          </div>
+        )}
+
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Newsletter Management</h1>
-          <p className="text-gray-600">
-            Compose and send newsletters to subscribed users. All subscribers will receive the newsletter with a
-            personalized unsubscribe link.
-          </p>
-          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-sm text-blue-800">
-              <strong>Image Hosting:</strong> Images can be hosted in <code>/public/newsletter</code> within S3 or
-              hosted wherever else you prefer. Use standard Markdown image syntax: <code>![Alt text](image-url)</code>
-            </p>
+        </div>
+
+        {/* Newsletter Queue Processor */}
+        <div className="bg-white rounded-lg border shadow-sm mb-8">
+          <div className="p-6 border-b">
+            <h2 className="text-lg font-semibold">Newsletter Queue Processor</h2>
+            <p className="text-sm text-gray-600 mt-1">Process queued newsletters in batches of 50 emails</p>
+          </div>
+          <div className="p-6">
+            <select
+              value={selectedNewsletterId}
+              onChange={(e) => setSelectedNewsletterId(e.target.value)}
+              className="mb-4 p-2 border rounded w-full"
+            >
+              <option value="">Select a newsletter to process</option>
+              {newsletters.map((nl) => (
+                <option key={nl.id} value={nl.id}>
+                  {nl.subject} ({nl.totalQueued - nl.sentCount - nl.failedCount} remaining)
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-3">
+              <button
+                onClick={handleProcessBatch}
+                disabled={!selectedNewsletterId || !selectedNewsletterHasRemaining}
+                className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50 hover:bg-blue-700"
+              >
+                Process Next 50 Emails
+              </button>
+              <button
+                onClick={handleDeleteQueue}
+                disabled={!selectedNewsletterId || !selectedNewsletterHasRemaining}
+                className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50 hover:bg-red-700"
+              >
+                Delete remaining {selectedNewsletterRemainingCount} messages
+              </button>
+            </div>
+            {progress && (
+              <div className="mt-4 p-3 bg-gray-50 rounded">
+                <p className="text-sm">
+                  Sent: <span className="font-semibold text-green-600">{progress.sent}</span>
+                </p>
+                <p className="text-sm">
+                  Failed: <span className="font-semibold text-red-600">{progress.failed}</span>
+                </p>
+                <p className="text-sm">
+                  Remaining: <span className="font-semibold">{progress.remaining}</span>
+                </p>
+                {progress.errors.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-sm text-red-600">
+                      View Errors ({progress.errors.length})
+                    </summary>
+                    <div className="mt-1 text-xs text-red-600 max-h-32 overflow-y-auto">
+                      {progress.errors.map((error, index) => (
+                        <div key={index} className="mb-1">
+                          {error}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -262,6 +460,16 @@ export default function NewslettersPage({ siteConfig }: NewsletterPageProps) {
         <div className="bg-white rounded-lg border shadow-sm mb-8">
           <div className="p-6 border-b">
             <h2 className="text-lg font-semibold">Compose Newsletter</h2>
+            <p className="text-gray-600 mt-2">
+              Compose and send newsletters to subscribed users. All subscribers will receive the newsletter with a
+              personalized unsubscribe link.
+            </p>
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-sm text-blue-800">
+                <strong>Image Hosting:</strong> Images can be hosted in <code>/public/newsletter</code> within S3 or
+                hosted wherever else you prefer. Use standard Markdown image syntax: <code>![Alt text](image-url)</code>
+              </p>
+            </div>
           </div>
           <div className="p-6 space-y-6">
             {/* Subject */}
@@ -434,19 +642,6 @@ For external images: ![Alt text](https://external-site.com/image.jpg)
 
             {/* Actions */}
             <div className="pt-6 border-t">
-              {/* Error/Success Message */}
-              {message && (
-                <div
-                  className={`mb-4 rounded border p-3 text-sm ${
-                    messageType === "error"
-                      ? "border-red-300 bg-red-50 text-red-800"
-                      : "border-green-300 bg-green-50 text-green-800"
-                  }`}
-                >
-                  <pre className="whitespace-pre-wrap font-sans">{message}</pre>
-                </div>
-              )}
-
               <div className="flex justify-end">
                 <button
                   onClick={handleSend}
@@ -458,7 +653,7 @@ For external images: ![Alt text](https://external-site.com/image.jpg)
                   }
                   className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {sending ? "Sending..." : "Send Newsletter"}
+                  {sending ? "Queueing..." : "Queue Newsletter"}
                 </button>
               </div>
             </div>

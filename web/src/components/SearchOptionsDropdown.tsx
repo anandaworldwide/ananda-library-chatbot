@@ -255,19 +255,29 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
         ref={buttonRef}
         type="button"
         onClick={toggleDropdown}
-        className="relative flex items-center px-3 py-2 text-sm bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+        className="relative flex items-center px-3 py-2 text-sm bg-white text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
-        <span className="material-icons text-base mr-2">tune</span>
+        <span className="relative inline-block mr-2" style={{ width: "20px", height: "20px" }}>
+          {isModified && (
+            <span
+              className="absolute inset-0 rounded-full transition-all duration-200"
+              style={{ backgroundColor: "#fff1c2" }}
+            />
+          )}
+          <span
+            className={`material-icons text-base absolute inset-0 flex items-center justify-center transition-all duration-200 ${
+              isModified ? "text-gray-700" : "text-gray-500"
+            }`}
+          >
+            tune
+          </span>
+        </span>
         Chat Options
         <span className={`material-icons text-base ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`}>
           expand_more
         </span>
-        {/* Blue dot indicator when options are modified */}
-        {isModified && (
-          <span className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-blue-500 border-2 border-white" />
-        )}
       </button>
 
       {/* Dropdown Menu (portal, fixed to viewport to avoid clipping) */}
@@ -276,7 +286,7 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
         createPortal(
           <div
             ref={dropdownMenuRef}
-            className="fixed w-80 bg-white border border-gray-200 rounded-md shadow-lg z-[90]"
+            className="fixed w-80 bg-white border border-gray-200 rounded-xl shadow-lg z-[90]"
             style={{ top: `${dropdownPosition.top}px`, left: `${dropdownPosition.left}px` }}
           >
             <div className="p-4 space-y-4">
@@ -392,7 +402,7 @@ export const SearchOptionsDropdown: React.FC<SearchOptionsDropdownProps> = ({
             }}
             aria-hidden="true"
           />
-          <div className="fixed z-[101] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+          <div className="fixed z-[101] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-xl shadow-lg max-w-md w-full mx-4">
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-lg font-semibold">Available Controls</h3>
               <button

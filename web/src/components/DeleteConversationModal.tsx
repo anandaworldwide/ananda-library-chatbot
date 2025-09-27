@@ -71,7 +71,7 @@ export default function DeleteConversationModal({
             Are you sure you want to delete this conversation? This action cannot be undone.
           </p>
 
-          <div className="bg-gray-50 rounded-md p-3 border-l-4 border-red-400">
+          <div className="bg-gray-50 rounded-xl p-3 border-l-4 border-red-400">
             <p className="text-sm font-medium text-gray-900 mb-1">Conversation to delete:</p>
             <p className="text-sm text-gray-700 italic">"{conversationTitle}"</p>
           </div>
@@ -90,7 +90,7 @@ export default function DeleteConversationModal({
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -98,7 +98,7 @@ export default function DeleteConversationModal({
             type="button"
             onClick={handleConfirm}
             disabled={isLoading}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
             {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>}
             Delete Conversation

@@ -169,7 +169,7 @@ export function AudioPlayer({
   const isDisabled = !secureAudioUrl || !!error || !!audioError || !!urlError || isSeeking || isLoadingUrl;
 
   return (
-    <div className="audio-player bg-gray-100 rounded-lg w-full md:w-1/2">
+    <div className="audio-player bg-gray-100 rounded-xl w-full md:w-1/2">
       <audio
         ref={audioRef}
         preload="metadata"

@@ -166,7 +166,7 @@ describe("/api/requestEmailChange", () => {
     expect(mockGenericRateLimiter).toHaveBeenCalledWith(req, res, {
       windowMs: 24 * 60 * 60 * 1000,
       max: 5,
-      name: "email-change-user@example.com",
+      name: "email_change",
     });
   });
 

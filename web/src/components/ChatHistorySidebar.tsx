@@ -52,7 +52,7 @@ export default function ChatHistorySidebar({
     starredLoading,
     fetchStarredConversations,
     loadMoreStarred,
-  } = useChatHistory(20, enabled);
+  } = useChatHistory(10, enabled);
   const router = useRouter();
 
   // Filter state
@@ -295,7 +295,7 @@ export default function ChatHistorySidebar({
             >
               Chats
             </h2>
-            <button onClick={onClose} className="lg:hidden p-1 rounded-md hover:bg-gray-100" aria-label="Close sidebar">
+            <button onClick={onClose} className="lg:hidden p-1 rounded-xl hover:bg-gray-100" aria-label="Close sidebar">
               <span className="material-icons text-gray-500">close</span>
             </button>
           </div>
@@ -303,7 +303,7 @@ export default function ChatHistorySidebar({
           <div className="absolute right-8 top-4">
             <button
               onClick={() => handleFilterModeChange(filterMode === "all" ? "starred" : "all")}
-              className={`px-2 py-1 text-xs rounded-md transition-colors duration-200 ${
+              className={`px-2 py-1 text-xs rounded-xl transition-colors duration-200 ${
                 filterMode === "starred"
                   ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -378,7 +378,7 @@ export default function ChatHistorySidebar({
                       {/* Title area (clickable) - aligned exactly with "Chats" header */}
                       <button
                         onClick={() => handleConversationClick(conversation)}
-                        className="flex-1 text-left rounded-lg pr-3"
+                        className="flex-1 text-left rounded-xl pr-3"
                       >
                         <div className="min-w-0">
                           <p
@@ -414,7 +414,7 @@ export default function ChatHistorySidebar({
                   <button
                     onClick={displayLoadMore}
                     disabled={displayLoading}
-                    className="w-full p-3 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg border border-blue-200 hover:border-blue-300 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full p-3 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-xl border border-blue-200 hover:border-blue-300 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {displayLoading ? (
                       <div className="flex items-center justify-center">

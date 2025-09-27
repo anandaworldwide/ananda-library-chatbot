@@ -201,7 +201,7 @@ const NPSSurvey: React.FC<NPSSurveyProps> = ({ siteConfig, forceSurvey = false }
             onClick={forceSurvey ? undefined : dismissSurvey}
           >
             {/* Survey form content */}
-            <div className="bg-white p-6 rounded-lg max-w-md w-full relative" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white p-6 rounded-xl max-w-md w-full relative" onClick={(e) => e.stopPropagation()}>
               {/* Close button */}
               <button
                 className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"

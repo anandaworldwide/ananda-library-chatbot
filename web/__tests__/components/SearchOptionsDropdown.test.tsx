@@ -78,11 +78,12 @@ describe("SearchOptionsDropdown", () => {
     const button = screen.getByRole("button", { name: /chat options/i });
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should not show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeNull();
+    // Should show gray tune icon in default state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-500");
   });
 
-  it("shows blue dot indicator when media types are modified", () => {
+  it("shows yellow background tune icon when media types are modified", () => {
     const modifiedProps = {
       ...defaultProps,
       mediaTypes: { text: false, audio: true, youtube: true }, // Changed from default
@@ -93,11 +94,16 @@ describe("SearchOptionsDropdown", () => {
     const button = screen.getByRole("button", { name: /chat options/i });
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeInTheDocument();
+    // Should show yellow background tune icon in modified state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-700");
+    // Check for the background circle
+    const backgroundCircle = button.querySelector(".rounded-full");
+    expect(backgroundCircle).toBeInTheDocument();
+    expect(backgroundCircle).toHaveStyle("background-color: #fff1c2");
   });
 
-  it("shows blue dot indicator when collection is modified", () => {
+  it("shows yellow background tune icon when collection is modified", () => {
     const modifiedProps = {
       ...defaultProps,
       collection: "whole_library", // Changed from default (master_swami)
@@ -108,11 +114,16 @@ describe("SearchOptionsDropdown", () => {
     const button = screen.getByRole("button", { name: /chat options/i });
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeInTheDocument();
+    // Should show yellow background tune icon in modified state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-700");
+    // Check for the background circle
+    const backgroundCircle = button.querySelector(".rounded-full");
+    expect(backgroundCircle).toBeInTheDocument();
+    expect(backgroundCircle).toHaveStyle("background-color: #fff1c2");
   });
 
-  it("shows blue dot indicator when source count is modified", () => {
+  it("shows yellow background tune icon when source count is modified", () => {
     const modifiedProps = {
       ...defaultProps,
       sourceCount: 10, // Changed from default (4)
@@ -123,8 +134,13 @@ describe("SearchOptionsDropdown", () => {
     const button = screen.getByRole("button", { name: /chat options/i });
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeInTheDocument();
+    // Should show yellow background tune icon in modified state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-700");
+    // Check for the background circle
+    const backgroundCircle = button.querySelector(".rounded-full");
+    expect(backgroundCircle).toBeInTheDocument();
+    expect(backgroundCircle).toHaveStyle("background-color: #fff1c2");
   });
 
   it("shows default styling when only disabled features would be modified", () => {
@@ -149,8 +165,9 @@ describe("SearchOptionsDropdown", () => {
     const button = screen.getByRole("button", { name: /chat options/i });
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should not show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeNull();
+    // Should show gray tune icon in default state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-500");
   });
 
   it("opens dropdown when button is clicked", () => {
@@ -200,11 +217,12 @@ describe("SearchOptionsDropdown", () => {
     const button = screen.getByRole("button", { name: /chat options/i });
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should not show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeNull();
+    // Should show gray tune icon in default state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-500");
   });
 
-  it("shows blue dot indicator when youtube is enabled but not in site config defaults", () => {
+  it("shows yellow background tune icon when youtube is enabled but not in site config defaults", () => {
     const customSiteConfig: SiteConfig = {
       ...mockSiteConfig,
       enabledMediaTypes: ["text", "audio"], // No youtube in defaults
@@ -221,8 +239,13 @@ describe("SearchOptionsDropdown", () => {
     const button = screen.getByRole("button", { name: /chat options/i });
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeInTheDocument();
+    // Should show yellow background tune icon in modified state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-700");
+    // Check for the background circle
+    const backgroundCircle = button.querySelector(".rounded-full");
+    expect(backgroundCircle).toBeInTheDocument();
+    expect(backgroundCircle).toHaveStyle("background-color: #fff1c2");
   });
 
   it("shows default styling when no media types are checked (equivalent to all checked)", () => {
@@ -237,8 +260,9 @@ describe("SearchOptionsDropdown", () => {
     // Should show default styling because no types checked = all types checked (default behavior)
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should not show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeNull();
+    // Should show gray tune icon in default state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-500");
   });
 
   it("shows default styling when both current and default have no media types checked", () => {
@@ -259,7 +283,8 @@ describe("SearchOptionsDropdown", () => {
     // Both default and current are "none checked" so they're equivalent
     expect(button).toHaveClass("bg-white", "text-gray-700", "border-gray-300");
 
-    // Should not show the blue dot indicator
-    expect(button.querySelector(".bg-blue-500.rounded-full")).toBeNull();
+    // Should show gray tune icon in default state
+    const tuneIcon = button.querySelector(".material-icons");
+    expect(tuneIcon).toHaveClass("text-gray-500");
   });
 });

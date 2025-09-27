@@ -83,17 +83,35 @@ const SourcesList: React.FC<SourcesListProps> = ({
     }
   }, [sources]);
 
-  // Reset expanded sources state when sources change (e.g., new conversation loaded)
-  React.useEffect(() => {
-    setExpandedSources(new Set());
-  }, [sources]);
-
   // State hooks
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set());
   const [showSourcesPopover, setShowSourcesPopover] = useState<boolean>(false);
   const [showAccessInterstitial, setShowAccessInterstitial] = useState<boolean>(false);
   const [currentSourceUrl, setCurrentSourceUrl] = useState<string>("");
   const [currentSourceDoc, setCurrentSourceDoc] = useState<Document<DocMetadata> | null>(null);
+
+  // Reset expanded sources state when sources change (e.g., new conversation loaded)
+  React.useEffect(() => {
+    setExpandedSources(new Set());
+  }, [sources]);
+
+  // Handle Escape key to close interstitial modal
+  React.useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && showAccessInterstitial) {
+        setShowAccessInterstitial(false);
+        logEvent("dismiss_access_interstitial", "UI", "escape_key");
+      }
+    };
+
+    if (showAccessInterstitial) {
+      document.addEventListener("keydown", handleEscapeKey);
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [showAccessInterstitial]);
 
   // Helper function to check if user has disabled the access interstitial
   const shouldShowAccessInterstitial = useCallback(() => {
@@ -162,7 +180,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
       return (
         <div className="aspect-video mb-7">
           <iframe
-            className="h-full w-full rounded-lg"
+            className="h-full w-full rounded-xl"
             src={embedUrl}
             title={doc.metadata.title}
             style={{ border: "none" }}
@@ -341,7 +359,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
     return (
       <button
         onClick={handlePdfDownload}
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 rounded-md transition-colors"
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 rounded-xl transition-colors"
       >
         <span className="material-icons text-sm">download</span>
         Download PDF
@@ -388,7 +406,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
     return (
       <button
         onClick={handleGoToSource}
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors"
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl transition-colors"
       >
         <span className="material-icons text-sm">open_in_new</span>
         Go to source
@@ -440,7 +458,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
             />
 
             {/* Popover */}
-            <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-50 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 z-50 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">Sources</h3>
                 <button
@@ -620,7 +638,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
           />
 
           {/* Interstitial Modal */}
-          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-50 max-w-md w-full mx-4">
+          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 z-50 max-w-md w-full mx-4">
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Access to Source</h3>
               <button
@@ -646,7 +664,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
                     setShowAccessInterstitial(false);
                     logEvent("access_interstitial_choice", "UI", "has_access");
                   }}
-                  className="w-full flex items-center gap-3 p-3 text-left bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors"
+                  className="w-full flex items-center gap-3 p-3 text-left bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl transition-colors"
                 >
                   <span className="material-icons">library_books</span>
                   <div>
@@ -711,7 +729,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
                         }
                       }
                     }}
-                    className="w-full flex items-center gap-3 p-3 text-left bg-green-50 hover:bg-green-100 text-green-700 rounded-md transition-colors"
+                    className="w-full flex items-center gap-3 p-3 text-left bg-green-50 hover:bg-green-100 text-green-700 rounded-xl transition-colors"
                     disabled={!currentSourceDoc?.metadata.pdf_s3_key}
                   >
                     <span className="material-icons">download</span>
