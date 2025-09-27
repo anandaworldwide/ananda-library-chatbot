@@ -19,6 +19,7 @@
     "nps_dismiss": "chatbot_vivek_nps_dismiss",
     "clear_history": "chatbot_vivek_clear_history",
     "source_link_click": "chatbot_vivek_source_link_click",
-    "ask_experts_click": "chatbot_vivek_ask_experts_link_click"
+    "ask_experts_click": "chatbot_vivek_ask_experts_link_click",
+    "suggestion_click": "chatbot_vivek_suggestion_click"
   }
 }
