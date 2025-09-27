@@ -178,6 +178,96 @@ export const metadata = {
 - **Search functionality**: Accessible search interface
 - **Quick actions**: Keyboard shortcuts for power users
 
+## API Communication Standards
+
+### JWT Bearer Token Authentication
+
+**CRITICAL RULE**: All API calls to protected endpoints MUST include JWT bearer tokens in the Authorization header.
+
+#### Implementation Requirements
+
+- **Token Management**: Use [web/src/utils/client/tokenManager.ts](mdc:web/src/utils/client/tokenManager.ts) for token operations
+- **Automatic Refresh**: Use `fetchWithTokenRefresh()` helper for API calls that handle token expiration
+- **Header Format**: Always use `Authorization: Bearer ${token}` format
+- **Cookie Storage**: Tokens stored in HttpOnly cookies for security
+
+#### Required Pattern for API Calls
+
+```typescript
+import { fetchWithTokenRefresh } from "@/utils/client/tokenManager";
+
+// CORRECT: Use fetchWithTokenRefresh for protected endpoints
+const response = await fetchWithTokenRefresh<ResponseType>("/api/protected-endpoint", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(data),
+});
+
+// WRONG: Direct fetch without token handling
+const response = await fetch("/api/protected-endpoint", {
+  method: "POST",
+  body: JSON.stringify(data),
+});
+```
+
+#### Token Refresh Handling
+
+- **Automatic**: `fetchWithTokenRefresh()` automatically handles 401 responses and refreshes tokens
+- **Manual**: Use `initializeTokenManager()` to force token refresh when needed
+- **Fallback**: Redirect to login on authentication failure
+
+#### Protected Endpoint Categories
+
+- **Admin APIs**: All `/api/admin/*` endpoints require JWT with admin/superuser roles
+- **User APIs**: `/api/chats`, `/api/vote`, `/api/profile` require valid user JWT
+- **Public APIs**: `/api/answers`, `/api/document/*` may not require authentication (check endpoint docs)
+
+#### Error Handling Pattern
+
+```typescript
+try {
+  const response = await fetchWithTokenRefresh<DataType>("/api/endpoint");
+  if (!response.ok) {
+    throw new Error(`API call failed: ${response.status}`);
+  }
+  const data = await response.json();
+  return data;
+} catch (error) {
+  if (error.message.includes("401")) {
+    // Token refresh failed, redirect to login
+    window.location.href = "/login";
+  }
+  throw error;
+}
+```
+
+#### Testing JWT-Protected Components
+
+```typescript
+// Mock tokenManager for tests
+jest.mock("@/utils/client/tokenManager", () => ({
+  fetchWithTokenRefresh: jest.fn(),
+  getToken: jest.fn().mockReturnValue("mock-jwt-token"),
+  initializeTokenManager: jest.fn().mockResolvedValue(undefined),
+  isAuthenticated: jest.fn().mockReturnValue(true),
+}));
+
+// Test protected API calls
+it("calls protected endpoint with proper authentication", async () => {
+  const mockFetch = fetchWithTokenRefresh as jest.MockedFunction<typeof fetchWithTokenRefresh>;
+  mockFetch.mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve({ data: "test" }),
+  } as any);
+
+  await component.callProtectedAPI();
+
+  expect(mockFetch).toHaveBeenCalledWith("/api/protected", expect.any(Object));
+});
+```
+
 ## Testing Standards
 
 ### Component Testing
