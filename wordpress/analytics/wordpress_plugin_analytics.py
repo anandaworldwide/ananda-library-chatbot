@@ -76,6 +76,7 @@ class WordPressPluginAnalytics:
         "clear_history": "chatbot_vivek_clear_history",
         "source_link_click": "chatbot_vivek_source_link_click",
         "ask_experts_click": "chatbot_vivek_ask_experts_link_click",
+        "suggestion_click": "chatbot_vivek_suggestion_click",
     }
 
     def __init__(self, property_id: str, credentials_path: str):
@@ -418,6 +419,7 @@ class WordPressPluginAnalytics:
                     popup_to_question_rate, 2
                 ),
                 "overall_search_to_question_percent": round(search_to_question_rate, 2),
+                "search_to_question_conversion_percent": round(search_to_question_rate, 2),
             },
             "daily_trends": {
                 "search_views": search_pages.groupby("date")["screenPageViews"]
@@ -502,6 +504,13 @@ class WordPressPluginAnalytics:
             reverse=True,
         )
 
+        # Calculate suggestion click rate
+        suggestion_clicks = feature_stats.get("suggestion_click", {}).get("total_events", 0)
+        total_questions = feature_stats.get("question_submit", {}).get("total_events", 0)
+        suggestion_click_rate = (
+            (suggestion_clicks / total_questions * 100) if total_questions > 0 else 0
+        )
+
         return {
             "feature_statistics": feature_stats,
             "feature_ranking": [
@@ -512,6 +521,7 @@ class WordPressPluginAnalytics:
             "least_popular_feature": feature_ranking[-1][0]
             if feature_ranking
             else None,
+            "suggestion_click_rate_percent": round(suggestion_click_rate, 2),
         }
 
     def generate_comprehensive_report(
@@ -586,13 +596,14 @@ class WordPressPluginAnalytics:
 
         # Search promotion insights
         search_data = report["search_promotion"]["summary"]
-        if search_data["search_to_question_conversion_percent"] > 2:
+        search_to_question_rate = search_data.get("search_to_question_conversion_percent", 0)
+        if search_to_question_rate > 2:
             insights["key_findings"].append(
-                f"Effective search promotion: {search_data['search_to_question_conversion_percent']:.1f}% of search page visits convert to questions"
+                f"Effective search promotion: {search_to_question_rate:.1f}% of search page visits convert to questions"
             )
-        elif search_data["search_to_question_conversion_percent"] < 0.5:
+        elif search_to_question_rate < 0.5:
             insights["performance_alerts"].append(
-                f"Low search conversion: Only {search_data['search_to_question_conversion_percent']:.1f}% of search visits convert to questions"
+                f"Low search conversion: Only {search_to_question_rate:.1f}% of search visits convert to questions"
             )
             insights["recommendations"].append(
                 "Review search bubble messaging and positioning for better conversion"
@@ -778,33 +789,32 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic analysis for last 30 days
-  python wordpress_plugin_analytics.py --property-id 123456789 --credentials /path/to/credentials.json
+  # Basic analysis using config.json (recommended)
+  python wordpress_plugin_analytics.py --days 7
 
-  # Analysis for last 7 days with visualizations
-  python wordpress_plugin_analytics.py --property-id 123456789 --credentials /path/to/credentials.json --days 7 --charts
+  # Override config.json values
+  python wordpress_plugin_analytics.py --property-id 123456789 --credentials /path/to/credentials.json --days 7
 
-  # Save detailed report to file
-  python wordpress_plugin_analytics.py --property-id 123456789 --credentials /path/to/credentials.json --output report.json
+  # Generate charts and save report
+  python wordpress_plugin_analytics.py --days 7 --charts --output report.json
 
 Setup Instructions:
   1. Create a Google Cloud Project and enable the Google Analytics Data API
   2. Create a service account and download the JSON credentials file
   3. Add the service account email to your Google Analytics property with Viewer permissions
   4. Install required packages: pip install google-analytics-data pandas matplotlib seaborn
+  5. Copy config.json.example to config.json and update with your settings
         """,
     )
 
-    # Required arguments
+    # Optional arguments (can be overridden by config.json)
     parser.add_argument(
         "--property-id",
-        required=True,
         help='Google Analytics 4 property ID (numeric ID, not the "G-" measurement ID)',
     )
 
     parser.add_argument(
         "--credentials",
-        required=True,
         help="Path to Google service account credentials JSON file",
     )
 
@@ -833,9 +843,44 @@ Setup Instructions:
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Load config.json if it exists and arguments are not provided
+    config_file = "config.json"
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            
+            # Use config values if command line arguments not provided
+            property_id = args.property_id or config.get("google_analytics", {}).get("property_id")
+            credentials_path = args.credentials or config.get("google_analytics", {}).get("credentials_path")
+            
+            if not property_id:
+                logger.error("Property ID not found in config.json or command line arguments")
+                sys.exit(1)
+            
+            if not credentials_path:
+                logger.error("Credentials path not found in config.json or command line arguments")
+                sys.exit(1)
+                
+            logger.info(f"Using config from {config_file}")
+            logger.info(f"Property ID: {property_id}")
+            logger.info(f"Credentials: {credentials_path}")
+            
+        except Exception as e:
+            logger.error(f"Error loading config.json: {e}")
+            sys.exit(1)
+    else:
+        # Fall back to command line arguments only
+        if not args.property_id or not args.credentials:
+            logger.error("config.json not found and required arguments not provided")
+            logger.error("Either create a config.json file or provide --property-id and --credentials")
+            sys.exit(1)
+        property_id = args.property_id
+        credentials_path = args.credentials
+
     try:
         # Initialize analytics client
-        analytics = WordPressPluginAnalytics(args.property_id, args.credentials)
+        analytics = WordPressPluginAnalytics(property_id, credentials_path)
 
         # Generate comprehensive report
         report = analytics.generate_comprehensive_report(
@@ -872,7 +917,7 @@ Setup Instructions:
             f"   Questions from Search: {search_summary['total_questions_submitted']:,}"
         )
         print(
-            f"   Search to Question Rate: {search_summary['overall_search_to_question_percent']:.2f}%"
+            f"   Search to Question Rate: {search_summary.get('overall_search_to_question_percent', 0):.2f}%"
         )
 
         # Feature Usage Summary
@@ -885,6 +930,11 @@ Setup Instructions:
         print("   Top 5 Features:")
         for i, feature in enumerate(top_features, 1):
             print(f"     {i}. {feature['feature']}: {feature['total_events']:,} events")
+
+        # Suggestion click rate
+        suggestion_rate = feature_summary.get("suggestion_click_rate_percent", 0)
+        print(f"\n💡 SUGGESTION ENGAGEMENT")
+        print(f"   Suggestion Click Rate: {suggestion_rate:.2f}% of questions")
 
         # Insights
         insights = report["insights"]

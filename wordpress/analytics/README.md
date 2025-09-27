@@ -130,6 +130,7 @@ Tracks usage of all chatbot features:
 - **NPS Surveys**: User feedback submission and dismissal
 - **Source Links**: Users clicking on reference materials
 - **Ask Experts**: Referrals to human experts
+- **Suggestion Clicks**: AI-generated suggestion chip interactions
 
 ## Sample Output
 
@@ -161,6 +162,9 @@ Report Generated: 2025-09-16T14:30:00
      3. source_link_click: 423 events
      4. popup_close: 1,890 events
      5. fullpage_click: 89 events
+
+💡 SUGGESTION ENGAGEMENT
+   Suggestion Click Rate: 16.89% of questions
 
 💡 KEY FINDINGS
    • High popup engagement: 5.0% of page views result in popup opens
