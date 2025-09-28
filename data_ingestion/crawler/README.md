@@ -100,7 +100,7 @@ python website_crawler.py --site ananda-public --fresh-start
 
 ### Health Monitoring
 
-The crawler includes a comprehensive health monitoring system using cron jobs:
+The crawler includes a comprehensive health monitoring system using macOS LaunchAgents:
 
 ```bash
 # Run hourly health check (sends alerts if issues detected)
@@ -149,7 +149,93 @@ python log_rotate.py --log-dir ~/Library/Logs/AnandaCrawler --dry-run
 python log_rotate.py --log-dir ~/Library/Logs/AnandaCrawler --max-age-days 7 --no-compress
 ```
 
-Logs are automatically rotated daily at 2 AM via cron job.
+Logs are automatically rotated daily at 2 AM via LaunchAgent.
+
+### LaunchAgent Setup (macOS)
+
+The crawler uses macOS LaunchAgents instead of traditional cron jobs for better security compliance and reliability on
+modern macOS systems.
+
+#### Log Rotation LaunchAgent
+
+The log rotation LaunchAgent is automatically configured and runs daily at 2:00 AM:
+
+```bash
+# Check if log rotation LaunchAgent is loaded
+launchctl list | grep com.ananda.log-rotate
+
+# Manually trigger log rotation (for testing)
+launchctl start com.ananda.log-rotate
+
+# View log rotation output
+tail -f ~/Library/Logs/AnandaCrawler/log-rotate.log
+
+# View log rotation errors (if any)
+tail -f ~/Library/Logs/AnandaCrawler/log-rotate-error.log
+```
+
+#### Health Monitoring LaunchAgents
+
+For automated health monitoring, create LaunchAgents for the health check scripts:
+
+```bash
+# Create hourly health check LaunchAgent
+cat > ~/Library/LaunchAgents/com.ananda.health-check.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ananda.health-check</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/$(whoami)/bin/health_cron_check.py</string>
+        <string>--site</string>
+        <string>ananda-public</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/$(whoami)/Library/Logs/AnandaCrawler/health-check.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/$(whoami)/Library/Logs/AnandaCrawler/health-check-error.log</string>
+</dict>
+</plist>
+EOF
+
+# Load the health check LaunchAgent
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ananda.health-check.plist
+```
+
+**Note**: Copy the health check script to `~/bin/` first:
+
+```bash
+cp data_ingestion/crawler/health_cron_check.py ~/bin/
+chmod +x ~/bin/health_cron_check.py
+```
+
+#### LaunchAgent Management Commands
+
+```bash
+# List all Ananda LaunchAgents
+launchctl list | grep com.ananda
+
+# Load a LaunchAgent
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ananda.service-name.plist
+
+# Unload a LaunchAgent
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.ananda.service-name.plist
+
+# Start a LaunchAgent manually
+launchctl start com.ananda.service-name
+
+# Check LaunchAgent status
+launchctl list com.ananda.service-name
+```
 
 ## Configuration
 
@@ -334,7 +420,7 @@ This will:
 
 #### Memory Usage
 
-- Automatic log rotation via cron job (daily at 2 AM)
+- Automatic log rotation via LaunchAgent (daily at 2 AM)
 - Set resource limits in launchd plist
 - Monitor with health check endpoint
 
