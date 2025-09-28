@@ -89,6 +89,30 @@ describe("SourcesList", () => {
     },
   };
 
+  const multiLevelTitleSource: Document<DocMetadata> = {
+    pageContent: "This is a multi-level title source content.",
+    metadata: {
+      title:
+        "Demystifying Patanjali::Samadhi Pada, the first Book::1 – 15. From constant Self-remembrance there comes complete non-attachment to things seen or heard.",
+      type: "text",
+      library: "Test Library",
+      source: "https://test.com/patanjali",
+    },
+  };
+
+  const audioWithAlbumSource: Document<DocMetadata> = {
+    pageContent: "This is an audio with album source content.",
+    metadata: {
+      title: "Track Title",
+      album: "Album Name",
+      type: "audio",
+      library: "Audio Library",
+      file_hash: "def456",
+      filename: "test-album-audio.mp3",
+      start_time: 45,
+    },
+  };
+
   const mockSiteConfig: SiteConfig = {
     siteId: "test",
     name: "Test Site",
@@ -493,5 +517,39 @@ describe("SourcesList", () => {
     // Should not open any new tabs or log source click events
     expect(mockOpen).not.toHaveBeenCalled();
     expect(analyticsModule.logEvent).not.toHaveBeenCalledWith("click_source", "UI", expect.any(String));
+  });
+
+  it("displays multi-level titles with proper visual hierarchy", () => {
+    render(<SourcesList sources={[multiLevelTitleSource]} />);
+
+    // Should display the first level in bold
+    const boldTitle = screen.getByText("Demystifying Patanjali");
+    expect(boldTitle).toBeInTheDocument();
+    expect(boldTitle).toHaveClass("font-bold");
+
+    // Should display subsequent levels in italic
+    const italicSubtitle1 = screen.getByText("Samadhi Pada, the first Book");
+    expect(italicSubtitle1).toBeInTheDocument();
+    expect(italicSubtitle1).toHaveClass("italic", "font-normal", "text-gray-700");
+
+    const italicSubtitle2 = screen.getByText(
+      "1 – 15. From constant Self-remembrance there comes complete non-attachment to things seen or heard."
+    );
+    expect(italicSubtitle2).toBeInTheDocument();
+    expect(italicSubtitle2).toHaveClass("italic", "font-normal", "text-gray-700");
+  });
+
+  it("displays audio sources with album as hierarchical title", () => {
+    render(<SourcesList sources={[audioWithAlbumSource]} />);
+
+    // Should display album name in bold (first level)
+    const boldAlbum = screen.getByText("Album Name");
+    expect(boldAlbum).toBeInTheDocument();
+    expect(boldAlbum).toHaveClass("font-bold");
+
+    // Should display track title in italic (second level)
+    const italicTrack = screen.getByText("Track Title");
+    expect(italicTrack).toBeInTheDocument();
+    expect(italicTrack).toHaveClass("italic", "font-normal", "text-gray-700");
   });
 });

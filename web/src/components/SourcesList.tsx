@@ -202,10 +202,39 @@ const SourcesList: React.FC<SourcesListProps> = ({
     return null;
   }
 
-  // double colon separates parent title from the (child) source title,
-  // e.g., "2009 Summer Clarity Magazine:: Letters of Encouragement". We here
-  // replace double colon with right arrow.
-  const formatTitle = (title: string | undefined) => (title || "").replace(/::/g, " > ");
+  // Enhanced multi-level title formatting
+  // Double colon separates parent title from child source title,
+  // e.g., "2009 Summer Clarity Magazine:: Letters of Encouragement"
+  // We format this with visual hierarchy: bold parent, italic children, line breaks
+  const formatTitle = (title: string | undefined): React.ReactNode => {
+    if (!title) return "";
+
+    // Split on double colons to get hierarchy levels
+    const levels = title.split("::");
+
+    // If no hierarchy, return simple text
+    if (levels.length === 1) {
+      return levels[0].trim();
+    }
+
+    // Create hierarchical display with visual styling
+    return (
+      <span>
+        {levels.map((level, index) => (
+          <span key={index}>
+            {index === 0 ? (
+              // First level: bold
+              <span className="font-bold">{level.trim()}</span>
+            ) : (
+              // Subsequent levels: italic and lighter
+              <span className="italic font-normal text-gray-700">{level.trim()}</span>
+            )}
+            {index < levels.length - 1 && <br />}
+          </span>
+        ))}
+      </span>
+    );
+  };
 
   const displayCollectionName = collectionName ? collectionsConfig[collectionName as CollectionKey] : "";
 
@@ -279,19 +308,23 @@ const SourcesList: React.FC<SourcesListProps> = ({
 
   // Render the title of a source, including a link if available
   const renderSourceTitle = (doc: Document<DocMetadata>) => {
-    // Extract the title using the helper function
-    let sourceTitle = formatTitle(extractTitle(doc.metadata));
+    // Extract the base title
+    const baseTitle = extractTitle(doc.metadata);
 
-    // For audio sources with album metadata, format as "Album > Title"
+    // For audio sources with album metadata, create hierarchical title
+    let titleToFormat = baseTitle;
     if (doc.metadata.type === "audio" && doc.metadata.album) {
-      sourceTitle = `${doc.metadata.album} > ${sourceTitle}`;
+      titleToFormat = `${doc.metadata.album}::${baseTitle}`;
     }
+
+    // Format with enhanced hierarchy
+    const formattedTitle = formatTitle(titleToFormat);
 
     // All source titles should be non-clickable to encourage proper interaction patterns:
     // - Audio: expand to use inline player with download button
     // - YouTube: expand to use inline video player
     // - Text: expand to read content with "Go to source" button
-    return <span className="text-black font-medium">{sourceTitle}</span>;
+    return <span className="text-black font-medium">{formattedTitle}</span>;
   };
 
   // Render a PDF download button if pdf_s3_key exists
