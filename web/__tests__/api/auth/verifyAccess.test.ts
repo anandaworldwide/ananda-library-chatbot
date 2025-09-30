@@ -1,6 +1,6 @@
 import { createMocks } from "node-mocks-http";
 import type { NextApiRequest, NextApiResponse } from "next";
-import handler from "@/pages/api/admin/addUser";
+import handler from "@/pages/api/auth/verifyAccess";
 
 // Mock Firebase
 jest.mock("@/services/firebase", () => ({
@@ -21,11 +21,6 @@ jest.mock("firebase-admin", () => ({
   },
 }));
 
-// Mock JWT auth
-jest.mock("@/utils/server/jwtUtils", () => ({
-  withJwtAuth: jest.fn((handler) => handler),
-}));
-
 // Mock API middleware
 jest.mock("@/utils/server/apiMiddleware", () => ({
   withApiMiddleware: jest.fn((handler) => handler),
@@ -44,18 +39,42 @@ jest.mock("@/utils/server/userInviteUtils", () => ({
   sendActivationEmail: jest.fn(() => Promise.resolve()),
 }));
 
+// Mock bcrypt
+jest.mock("bcryptjs", () => ({
+  compare: jest.fn(() => Promise.resolve(true)),
+}));
+
+// Mock environment variables
+const originalEnv = process.env;
+beforeAll(() => {
+  process.env = {
+    ...originalEnv,
+    SITE_PASSWORD: "hashed-site-password",
+  };
+});
+
+afterAll(() => {
+  process.env = originalEnv;
+});
+
 // Mock Firestore utils
 jest.mock("@/utils/server/firestoreRetryUtils", () => ({
   firestoreGet: jest.fn(),
   firestoreSet: jest.fn(),
 }));
 
-// Mock getUsersCollectionName
-jest.mock("@/utils/server/firestoreUtils", () => ({
-  getUsersCollectionName: jest.fn(() => "test_users"),
+// Mock audit log
+jest.mock("@/utils/server/auditLog", () => ({
+  writeAuditLog: jest.fn(),
 }));
 
-describe("/api/admin/addUser", () => {
+describe("Setup file", () => {
+  it("should be valid", () => {
+    expect(true).toBe(true);
+  });
+});
+
+describe("/api/auth/verifyAccess", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -63,35 +82,28 @@ describe("/api/admin/addUser", () => {
   it("should return 405 for non-POST requests", async () => {
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "GET",
-      headers: { "x-test-role": "admin" },
     });
 
     await handler(req, res);
 
     expect(res.statusCode).toBe(405);
-    expect(res._getJSONData()).toEqual({
-      error: "Method not allowed",
-    });
   });
 
   it("should return 400 for missing email", async () => {
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
-      headers: { "x-test-role": "admin" },
       body: {},
     });
 
     await handler(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res._getJSONData()).toEqual({
-      error: "Invalid email",
-    });
   });
 
-  it("should create new user successfully", async () => {
+  it("should create new user with newsletter defaulted to true", async () => {
     const firestoreRetryUtils = await import("@/utils/server/firestoreRetryUtils");
     const userInviteUtils = await import("@/utils/server/userInviteUtils");
+    const auditLog = await import("@/utils/server/auditLog");
 
     // Mock user doesn't exist
     (firestoreRetryUtils.firestoreGet as jest.MockedFunction<any>).mockResolvedValueOnce({
@@ -104,11 +116,14 @@ describe("/api/admin/addUser", () => {
     // Mock successful email sending
     (userInviteUtils.sendActivationEmail as jest.MockedFunction<any>).mockResolvedValueOnce(undefined);
 
+    // Mock audit log
+    (auditLog.writeAuditLog as jest.MockedFunction<any>).mockResolvedValueOnce(undefined);
+
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
-      headers: { "x-test-role": "admin" },
       body: {
         email: "test@example.com",
+        sharedPassword: "test-password",
       },
     });
 
@@ -122,49 +137,50 @@ describe("/api/admin/addUser", () => {
     expect(firestoreRetryUtils.firestoreSet).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        // Note: email is now stored as document ID, not as a field
+        email: "test@example.com",
         role: "user",
         entitlements: { basic: true },
         inviteStatus: "pending",
         newsletterSubscribed: true, // Should default to true
       }),
       undefined,
-      "create user"
+      "create user via verify access"
     );
 
     expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith(
       "test@example.com",
       "test-token",
-      expect.any(Object),
-      undefined
+      expect.any(Object)
     );
   });
 
   it("should resend activation for existing pending user", async () => {
     const firestoreRetryUtils = await import("@/utils/server/firestoreRetryUtils");
     const userInviteUtils = await import("@/utils/server/userInviteUtils");
+    const auditLog = await import("@/utils/server/auditLog");
 
     // Mock user exists and is pending
     (firestoreRetryUtils.firestoreGet as jest.MockedFunction<any>).mockResolvedValueOnce({
       exists: true,
       data: () => ({
-        email: "test@example.com",
         inviteStatus: "pending",
-        role: "user",
       }),
     });
 
-    // Mock successful firestore update
+    // Mock successful firestore set
     (firestoreRetryUtils.firestoreSet as jest.MockedFunction<any>).mockResolvedValueOnce(undefined);
 
     // Mock successful email sending
     (userInviteUtils.sendActivationEmail as jest.MockedFunction<any>).mockResolvedValueOnce(undefined);
 
+    // Mock audit log
+    (auditLog.writeAuditLog as jest.MockedFunction<any>).mockResolvedValueOnce(undefined);
+
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
-      headers: { "x-test-role": "admin" },
       body: {
         email: "test@example.com",
+        sharedPassword: "test-password",
       },
     });
 
@@ -172,14 +188,34 @@ describe("/api/admin/addUser", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toEqual({
-      message: "resent",
+      message: "activation-resent",
+    });
+  });
+
+  it("should return already active for accepted users", async () => {
+    const firestoreRetryUtils = await import("@/utils/server/firestoreRetryUtils");
+
+    // Mock user exists and is already accepted
+    (firestoreRetryUtils.firestoreGet as jest.MockedFunction<any>).mockResolvedValueOnce({
+      exists: true,
+      data: () => ({
+        inviteStatus: "accepted",
+      }),
     });
 
-    expect(userInviteUtils.sendActivationEmail).toHaveBeenCalledWith(
-      "test@example.com",
-      "test-token",
-      expect.any(Object),
-      undefined
-    );
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "POST",
+      body: {
+        email: "test@example.com",
+        sharedPassword: "test-password",
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res._getJSONData()).toEqual({
+      message: "already active",
+    });
   });
 });

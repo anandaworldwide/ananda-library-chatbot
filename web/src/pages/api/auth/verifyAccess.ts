@@ -80,6 +80,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         inviteStatus: "pending",
         inviteTokenHash: tokenHash,
         inviteExpiresAt,
+        newsletterSubscribed: true, // Default opt-in for newsletter
         createdAt: now,
         updatedAt: now,
       },
