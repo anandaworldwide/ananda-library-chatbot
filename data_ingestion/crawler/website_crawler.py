@@ -1287,13 +1287,8 @@ class WebsiteCrawler:
 
         return True, None
 
-    def _extract_page_content(
-        self, page, url: str
-    ) -> tuple[PageContent | None, list[str]]:
-        """Extract content and links from page."""
-        logging.debug(f"Starting content extraction for {url}")
-
-        # Check if we've been redirected to non-HTML content
+    def _check_for_media_redirect(self, page, url: str) -> tuple[bool, str]:
+        """Check if page was redirected to a media file. Returns (is_redirect, final_url)."""
         final_url = page.url
         if final_url != url:
             logging.debug(f"URL redirected from {url} to {final_url}")
@@ -1318,8 +1313,12 @@ class WebsiteCrawler:
             if any(final_path.endswith(ext) for ext in media_extensions):
                 logging.info(f"Skipping media file redirect: {url} -> {final_url}")
                 self.mark_url_status(url, "visited", content_hash="media_redirect")
-                return None, []
+                return True, final_url
 
+        return False, final_url
+
+    def _wait_for_page_ready(self, page, url: str) -> None:
+        """Wait for page to be ready with appropriate selectors and timeouts."""
         # Progressive timeout strategy for better reliability
         body_timeout = 30000  # Increased from 15s to 30s for slow-loading pages
 
@@ -1361,12 +1360,16 @@ class WebsiteCrawler:
                         self.mark_url_status(
                             url, "visited", content_hash="non_html_content"
                         )
-                        return None, []
+                        raise Exception(
+                            f"Non-HTML content detected: {content_type}"
+                        ) from None
 
                 # Re-raise with more informative message
                 logging.warning(f"Failed to find body or html selector for {url}: {e}")
                 raise Exception(f"Page structure detection failed: {e}") from e
 
+    def _validate_content_presence(self, page, url: str) -> None:
+        """Validate that the page has meaningful content."""
         # Check if the body has meaningful content (only if we got this far)
         try:
             body_text = page.evaluate(
@@ -1375,13 +1378,14 @@ class WebsiteCrawler:
             if not body_text or len(body_text) < 10:  # Very minimal content
                 logging.info(f"Skipping page with empty/minimal body content: {url}")
                 self.mark_url_status(url, "visited", content_hash="empty_content")
-                return None, []
+                raise Exception("Empty or minimal body content")
         except Exception as content_e:
             logging.warning(f"Failed to check body content for {url}: {content_e}")
             # Don't fail the whole crawl for content checking issues
             pass
 
-        # Handle menu expansion
+    def _expand_menus(self, page, url: str) -> None:
+        """Handle menu expansion for better link discovery."""
         try:
             # Count menu items before expansion
             menu_count = page.evaluate(
@@ -1413,7 +1417,8 @@ class WebsiteCrawler:
         except Exception as menu_e:
             logging.debug(f"Non-critical menu handling failed for {url}: {menu_e}")
 
-        # Extract links and content
+    def _extract_links(self, page, url: str) -> list[str]:
+        """Extract and filter valid links from the page."""
         # Debug link extraction step by step
         logging.debug("Starting link extraction...")
         total_links = page.evaluate("() => document.querySelectorAll('a').length")
@@ -1441,6 +1446,10 @@ class WebsiteCrawler:
                 f"Filtered out {len(links) - len(valid_links)} external/invalid links"
             )
 
+        return valid_links
+
+    def _extract_title_and_content(self, page, url: str) -> tuple[str, str]:
+        """Extract title and HTML content from the page."""
         title = page.title() or "No Title Found"
         logging.debug(f"Page title: {title}")
 
@@ -1459,8 +1468,12 @@ class WebsiteCrawler:
             except Exception as screenshot_e:
                 logging.debug(f"Screenshot failed: {screenshot_e}")
 
-        schemed_valid_links = [ensure_scheme(link) for link in valid_links]
+        return title, clean_text
 
+    def _create_page_content(
+        self, url: str, title: str, clean_text: str, schemed_valid_links: list[str]
+    ) -> tuple[PageContent | None, list[str]]:
+        """Create final PageContent object and return with links."""
         if not clean_text.strip() and title == "No Title Found":
             logging.warning(f"No content or title extracted from {url}")
             return None, schemed_valid_links
@@ -1477,6 +1490,38 @@ class WebsiteCrawler:
         )
 
         return page_content, schemed_valid_links
+
+    def _extract_page_content(
+        self, page, url: str
+    ) -> tuple[PageContent | None, list[str]]:
+        """Extract content and links from page."""
+        logging.debug(f"Starting content extraction for {url}")
+
+        # Check for media file redirects
+        is_media_redirect, final_url = self._check_for_media_redirect(page, url)
+        if is_media_redirect:
+            return None, []
+
+        # Wait for page to be ready
+        self._wait_for_page_ready(page, url)
+
+        # Validate content presence
+        self._validate_content_presence(page, url)
+
+        # Handle menu expansion
+        self._expand_menus(page, url)
+
+        # Extract and filter links
+        valid_links = self._extract_links(page, url)
+
+        # Extract title and content
+        title, clean_text = self._extract_title_and_content(page, url)
+
+        # Process links with schemes
+        schemed_valid_links = [ensure_scheme(link) for link in valid_links]
+
+        # Create final page content object
+        return self._create_page_content(url, title, clean_text, schemed_valid_links)
 
     def _handle_crawl_exception(self, e: Exception, url: str) -> tuple[bool, bool]:
         """Handle exceptions during crawling. Returns (restart_needed, should_retry)."""
@@ -3056,7 +3101,7 @@ def _terminate_selected_processes(processes_to_kill: list) -> int:
 
 
 def _is_nodejs_process_eligible_for_cleanup(
-    proc_info, current_pid: int
+    proc_info, current_pid: int, min_age_override: int = None
 ) -> tuple[bool, str]:
     """Check if a Node.js process should be cleaned up.
 
@@ -3070,7 +3115,9 @@ def _is_nodejs_process_eligible_for_cleanup(
 
     # Check if process is old enough (reduced from 10 to 5 minutes for more aggressive cleanup)
     age_seconds = time.time() - proc_info["create_time"]
-    min_age_seconds = 300  # 5 minutes instead of 10
+    min_age_seconds = (
+        min_age_override if min_age_override else 300
+    )  # Use override or default to 5 minutes
     if age_seconds < min_age_seconds:
         return False, ""  # Too young, might be legitimate
 
@@ -3126,10 +3173,23 @@ def _cleanup_orphaned_nodejs_processes(current_pid: int) -> int:
     try:
         orphaned_count = 0
 
+        # First, check if we have too many Playwright processes
+        playwright_procs = _collect_playwright_processes()
+        if len(playwright_procs) > 5:  # Lower threshold for aggressive cleanup
+            logging.warning(
+                f"Found {len(playwright_procs)} Playwright/Node processes - "
+                f"performing aggressive cleanup"
+            )
+            # Be more aggressive with cleanup when we have too many processes
+            # Kill ALL playwright processes except the most recent ones
+            min_age_override = 30  # Kill processes older than 30 seconds
+        else:
+            min_age_override = None
+
         for proc in psutil.process_iter(["pid", "name", "cmdline", "create_time"]):
             try:
                 should_cleanup, cmdline_str = _is_nodejs_process_eligible_for_cleanup(
-                    proc.info, current_pid
+                    proc.info, current_pid, min_age_override
                 )
 
                 if should_cleanup and _terminate_nodejs_process(
@@ -3197,6 +3257,17 @@ def _cleanup_orphaned_processes() -> None:
         logging.debug(f"Error in orphaned process cleanup: {e}")
 
 
+def _setup_browser_with_timeout(p, timeout_seconds: int = 120) -> tuple:
+    """Setup browser with timeout to prevent indefinite hangs.
+
+    Note: We pass a longer timeout to Playwright itself rather than
+    using threading/signals to avoid conflicts with Playwright's greenlets.
+    """
+    # Convert seconds to milliseconds for Playwright
+    timeout_ms = timeout_seconds * 1000
+    return _setup_browser(p, timeout_ms=timeout_ms)
+
+
 def _setup_browser(p, timeout_ms: int = 60000) -> tuple:
     """Setup and return browser and page with retry logic and resource cleanup."""
     max_retries = 3
@@ -3215,8 +3286,24 @@ def _setup_browser(p, timeout_ms: int = 60000) -> tuple:
             # Force garbage collection before browser launch to free memory
             gc.collect()
 
+            # Check memory availability before attempting browser launch
+            if psutil:
+                memory = psutil.virtual_memory()
+                available_gb = memory.available / (1024**3)
+                if available_gb < 1.5:  # Need at least 1.5GB for browser launch
+                    logging.warning(
+                        f"Low memory available ({available_gb:.1f}GB), "
+                        f"performing aggressive cleanup"
+                    )
+                    # More aggressive garbage collection
+                    gc.collect(2)  # Full collection
+                    time.sleep(2)  # Give OS time to reclaim memory
+
             # Kill any orphaned Firefox processes before launching new one
             _cleanup_orphaned_processes()
+
+            # Always add a small delay after cleanup to let ports/resources free up
+            time.sleep(3)
 
             # Add increased delay between attempts to let system recover
             if attempt > 0:
@@ -3235,6 +3322,10 @@ def _setup_browser(p, timeout_ms: int = 60000) -> tuple:
             logging.info(
                 f"Launching Firefox browser (timeout: {timeout_ms / 1000:.0f}s, attempt {attempt + 1}/{max_retries})..."
             )
+
+            # Use a shorter timeout for browser launch to avoid hanging
+            # The timeout_ms is for overall operation, but browser launch should be faster
+            launch_timeout = min(30000, timeout_ms)  # Max 30 seconds for browser launch
 
             # Enhanced browser launch with better arguments
             browser = p.firefox.launch(
@@ -3257,7 +3348,7 @@ def _setup_browser(p, timeout_ms: int = 60000) -> tuple:
                     "--disable-ipc-flooding-protection",
                     "--max_old_space_size=4096",  # Increase Node.js heap size
                 ],
-                timeout=timeout_ms,  # 10 minutes default, configurable
+                timeout=launch_timeout,  # 30 seconds max for browser launch
             )
 
             page = browser.new_page()
@@ -3372,13 +3463,16 @@ def _handle_browser_restart(
     )
 
     stats = crawler.get_queue_stats()
+    completion_pct = round(
+        stats["visited"] / stats["total"] * 100 if stats["total"] > 0 else 0
+    )
     stats_message = (
         f"\n--- Stats at {pages_since_restart} page boundary ---\n"
         f"- Processing {pages_per_minute:.1f} pages/minute (last {pages_since_restart} pages)\n"
-        f"- Total {stats['visited']} visited pages of {stats['total']} total ({round(stats['visited'] / stats['total'] * 100 if stats['total'] > 0 else 0)}% success)\n"
-        f"- Success rate last {batch_attempts} attempts: {round(batch_success_rate)}%\n"
-        f"- Total {stats['pending']} pending, {stats['failed']} failed, {stats['pending_retry']} awaiting retry\n"
-        f"- High priority URLs: {stats['high_priority']}\n"
+        f"- Database: {stats['visited']} visited, {stats['pending']} pending, {stats['failed']} failed ({stats['total']} total URLs)\n"
+        f"- Crawl completion: {completion_pct}% of all URLs processed\n"
+        f"- Session success rate: {round(batch_success_rate)}% (last {batch_attempts} attempts)\n"
+        f"- Queue: {stats['pending_retry']} awaiting retry, {stats['high_priority']} high priority\n"
         f"- Average retries per URL with retries: {stats['avg_retry_count']}\n"
         f"--- End Stats ---"
     )
@@ -3439,9 +3533,9 @@ def _handle_browser_restart(
     _log_system_resources()
     _log_process_diagnostics()
 
-    # Use enhanced browser setup with retry logic
+    # Use enhanced browser setup with retry logic and timeout
     try:
-        browser, page = _setup_browser(p)
+        browser, page = _setup_browser_with_timeout(p, timeout_seconds=120)
         logging.info("Browser restarted successfully.")
         return browser, page, time.time(), []
     except Exception as restart_err:
@@ -3636,7 +3730,8 @@ def _process_crawl_iteration(
     )
 
     if should_skip:
-        return 0, 0, False  # URL was skipped, continue normally
+        # URL was skipped (404, etc) - don't restart browser for this
+        return 0, 1, False  # Increment restart counter but don't process
 
     if restart_needed:
         return 0, 0, False  # Signal restart needed
@@ -4167,7 +4262,7 @@ def _cleanup_browser_resources(browser) -> None:
 
 def _setup_crawler_browser(crawler: WebsiteCrawler, p) -> tuple:
     """Set up browser and health monitoring for crawler."""
-    browser, page = _setup_browser(p)
+    browser, page = _setup_browser_with_timeout(p, timeout_seconds=120)
     crawler.health_monitor.set_browser(browser, page)
     crawler.health_monitor.start_monitoring()
     return browser, page
@@ -4316,7 +4411,10 @@ def _handle_crawler_error(e: Exception) -> None:
 
 
 def run_crawl_loop(
-    crawler: WebsiteCrawler, pinecone_index: pinecone.Index, args: argparse.Namespace
+    crawler: WebsiteCrawler,
+    pinecone_index: pinecone.Index,
+    args: argparse.Namespace,
+    lock_file: str = None,
 ):
     """Run the main crawling loop with graceful exception handling and bounded execution."""
     start_time, max_runtime_seconds = _initialize_crawler_runtime(args)
@@ -4337,6 +4435,12 @@ def run_crawl_loop(
 
     with sync_playwright() as p:
         browser, page = _setup_crawler_browser(crawler, p)
+
+        # Only create lock file after successful browser setup
+        if lock_file:
+            logging.info("Browser setup successful, creating lock file")
+            with open(lock_file, "w") as f:
+                f.write(str(os.getpid()))
 
         try:
             pages_processed = _run_crawler_main_loop(
@@ -4607,6 +4711,7 @@ def _execute_crawler(
     pinecone_index: pinecone.Index,
     args: argparse.Namespace,
     start_url: str,
+    lock_file: str = None,
 ) -> None:
     """Execute the main crawler logic with proper error handling."""
     try:
@@ -4620,7 +4725,7 @@ def _execute_crawler(
             )
         else:
             logging.info("CSV mode disabled - no CSV export URL configured")
-        run_crawl_loop(crawler, pinecone_index, args)
+        run_crawl_loop(crawler, pinecone_index, args, lock_file)
     except SystemExit:
         logging.info("Exiting due to SystemExit signal.")
     except Exception as e:
@@ -4641,7 +4746,7 @@ def main():
     setup_signal_handlers()
     _perform_system_health_check(args)
 
-    # File locking to prevent multiple instances
+    # File locking to prevent multiple instances - check for existing lock first
     lock_file = f"/tmp/crawler_{args.site}.lock"
     if os.path.exists(lock_file):
         try:
@@ -4671,17 +4776,15 @@ def main():
             with suppress(OSError):
                 os.remove(lock_file)
 
+    crawler = None
     try:
-        with open(lock_file, "w") as f:
-            f.write(str(os.getpid()))
-
-        # Initialization phase
+        # Initialization phase - test that everything works before creating lock
         crawler, pinecone_index, domain = _initialize_crawler_and_services(
             args, site_config, env_file_str
         )
 
-        # Execution phase
-        _execute_crawler(crawler, pinecone_index, args, start_url)
+        # Execution phase - pass lock_file to create it only after browser setup
+        _execute_crawler(crawler, pinecone_index, args, start_url, lock_file)
 
     finally:
         # Remove lock file
