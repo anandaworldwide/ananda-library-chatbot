@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { SiteConfig } from "@/types/siteConfig";
 
 interface ResendInvitationModalProps {
   isOpen: boolean;
@@ -7,6 +8,7 @@ interface ResendInvitationModalProps {
   onResend: (email: string, customMessage?: string) => Promise<void>;
   email: string;
   isSubmitting?: boolean;
+  siteConfig: SiteConfig | null;
 }
 
 export function ResendInvitationModal({
@@ -15,6 +17,7 @@ export function ResendInvitationModal({
   onResend,
   email,
   isSubmitting = false,
+  siteConfig,
 }: ResendInvitationModalProps) {
   const [customMessage, setCustomMessage] = useState("");
   const [adminFirstName, setAdminFirstName] = useState<string>("Admin");
@@ -48,10 +51,13 @@ export function ResendInvitationModal({
   // Set default message when admin name is available or modal opens
   useEffect(() => {
     if (isOpen && !messageModified) {
-      const defaultMessage = `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`;
+      // Generate site-specific invitation message
+      const siteName = siteConfig?.shortname || siteConfig?.name || "our chatbot";
+      const siteTagline = siteConfig?.tagline || "explore and discover answers to your questions";
+      const defaultMessage = `Please join us in using ${siteName} to ${siteTagline.toLowerCase()}\n\nAums,\n${adminFirstName}`;
       setCustomMessage(defaultMessage);
     }
-  }, [adminFirstName, isOpen, messageModified]);
+  }, [adminFirstName, isOpen, messageModified, siteConfig]);
 
   // Reset modified flag when modal is closed so next open re-initialises textarea
   useEffect(() => {
@@ -66,8 +72,10 @@ export function ResendInvitationModal({
     try {
       await onResend(email, customMessage.trim() || undefined);
       // Clear the form and close modal on success
+      const siteName = siteConfig?.shortname || siteConfig?.name || "our chatbot";
+      const siteTagline = siteConfig?.tagline || "explore and discover answers to your questions";
       setCustomMessage(
-        `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`
+        `Please join us in using ${siteName} to ${siteTagline.toLowerCase()}\n\nAums,\n${adminFirstName}`
       );
       setMessageModified(false);
       onClose();
@@ -78,8 +86,10 @@ export function ResendInvitationModal({
 
   const handleClose = () => {
     if (!isSubmitting) {
+      const siteName = siteConfig?.shortname || siteConfig?.name || "our chatbot";
+      const siteTagline = siteConfig?.tagline || "explore and discover answers to your questions";
       setCustomMessage(
-        `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`
+        `Please join us in using ${siteName} to ${siteTagline.toLowerCase()}\n\nAums,\n${adminFirstName}`
       );
       setMessageModified(false);
       onClose();

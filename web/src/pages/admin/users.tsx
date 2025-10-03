@@ -451,6 +451,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
           onClose={() => setIsModalOpen(false)}
           onAddUsers={handleAddUsers}
           isSubmitting={submitting}
+          siteConfig={siteConfig}
         />
 
         {message && (

@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { validateEmailInput } from "@/utils/client/emailParser";
+import { SiteConfig } from "@/types/siteConfig";
 
 interface AddUsersModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddUsers: (emails: string[], customMessage?: string) => Promise<void>;
   isSubmitting?: boolean;
+  siteConfig: SiteConfig | null;
 }
 
-export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = false }: AddUsersModalProps) {
+export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = false, siteConfig }: AddUsersModalProps) {
   const [emailInput, setEmailInput] = useState("");
   const [customMessage, setCustomMessage] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -52,11 +54,14 @@ export function AddUsersModal({ isOpen, onClose, onAddUsers, isSubmitting = fals
         setCustomMessage(savedMessage);
       } else {
         // Use default message if no saved message exists
-        const defaultMessage = `Please join us in using Luca to get answers to all kinds of spiritual questions.\n\nAums,\n${adminFirstName}`;
+        // Generate site-specific invitation message
+        const siteName = siteConfig?.shortname || siteConfig?.name || "our chatbot";
+        const siteTagline = siteConfig?.tagline || "explore and discover answers to your questions";
+        const defaultMessage = `Please join us in using ${siteName} to ${siteTagline.toLowerCase()}\n\nAums,\n${adminFirstName}`;
         setCustomMessage(defaultMessage);
       }
     }
-  }, [adminFirstName, isOpen, CUSTOM_MESSAGE_STORAGE_KEY]);
+  }, [adminFirstName, isOpen, CUSTOM_MESSAGE_STORAGE_KEY, siteConfig]);
 
   // Save custom message to local storage when it changes
   const handleCustomMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

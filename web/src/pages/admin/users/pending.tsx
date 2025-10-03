@@ -360,6 +360,7 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
           onResend={onResend}
           email={selectedEmail}
           isSubmitting={resending}
+          siteConfig={siteConfig}
         />
       </div>
     </Layout>

@@ -2,9 +2,41 @@ import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { AddUsersModal } from "@/components/AddUsersModal";
+import { SiteConfig } from "@/types/siteConfig";
 
 // Mock fetch for profile API
 global.fetch = jest.fn();
+
+// Mock site config
+const mockSiteConfig: SiteConfig = {
+  siteId: "test",
+  name: "Test Chatbot",
+  shortname: "TestBot",
+  tagline: "Explore, Discover, Learn",
+  greeting: "Hi! How can I help you?",
+  parent_site_url: "https://test.com",
+  parent_site_name: "Test Site",
+  help_url: "",
+  help_text: "Help",
+  collectionConfig: {},
+  libraryMappings: {},
+  enableSuggestedQueries: true,
+  enableMediaTypeSelection: true,
+  enableAuthorSelection: true,
+  welcome_popup_heading: "Welcome",
+  other_visitors_reference: "other visitors",
+  loginImage: null,
+  chatPlaceholder: "Send a message",
+  header: { logo: "", navItems: [] },
+  footer: { links: [] },
+  requireLogin: false,
+  allowTemporarySessions: false,
+  allowAllAnswersPage: false,
+  npsSurveyFrequencyDays: 0,
+  queriesPerUserPerDay: 100,
+  showSourceContent: true,
+  showVoting: true,
+};
 
 describe("AddUsersModal", () => {
   const defaultProps = {
@@ -12,6 +44,7 @@ describe("AddUsersModal", () => {
     onClose: jest.fn(),
     onAddUsers: jest.fn(),
     isSubmitting: false,
+    siteConfig: mockSiteConfig,
   };
 
   beforeEach(() => {
@@ -88,7 +121,7 @@ describe("AddUsersModal", () => {
     await waitFor(() => {
       expect(mockOnAddUsers).toHaveBeenCalledWith(
         ["user1@example.com", "user2@example.com"],
-        expect.stringContaining("Please join us in using Luca")
+        expect.stringContaining("Please join us in using TestBot")
       );
     });
 
@@ -108,7 +141,7 @@ describe("AddUsersModal", () => {
     await waitFor(() => {
       expect(mockOnAddUsers).toHaveBeenCalledWith(
         ["john@example.com", "jane@example.com"],
-        expect.stringContaining("Please join us in using Luca")
+        expect.stringContaining("Please join us in using TestBot")
       );
     });
   });
@@ -203,7 +236,7 @@ describe("AddUsersModal", () => {
     expect(defaultProps.onClose).not.toHaveBeenCalled();
   });
 
-  it("uses admin first name in default custom message", async () => {
+  it("uses admin first name and site config in default custom message", async () => {
     // Clear localStorage to ensure we get the default message
     localStorage.clear();
 
@@ -212,6 +245,7 @@ describe("AddUsersModal", () => {
     // Wait for the profile fetch and message update
     await waitFor(() => {
       const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
+      expect(textarea.value).toContain("Please join us in using TestBot to explore, discover, learn");
       expect(textarea.value).toContain("Aums,\nMichael");
     });
   });
@@ -224,7 +258,21 @@ describe("AddUsersModal", () => {
     // Should still show default message with "Admin" fallback
     await waitFor(() => {
       const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
+      expect(textarea.value).toContain("Please join us in using TestBot to explore, discover, learn");
       expect(textarea.value).toContain("Aums,\nAdmin");
+    });
+  });
+
+  it("handles null siteConfig gracefully", async () => {
+    render(<AddUsersModal {...defaultProps} siteConfig={null} />);
+
+    await waitFor(() => {
+      const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
+      // Should use fallback values when siteConfig is null
+      expect(textarea.value).toContain(
+        "Please join us in using our chatbot to explore and discover answers to your questions"
+      );
+      expect(textarea.value).toContain("Aums,\nMichael");
     });
   });
 
@@ -279,7 +327,7 @@ describe("AddUsersModal", () => {
     await waitFor(() => {
       expect(defaultProps.onAddUsers).toHaveBeenCalledWith(
         expect.arrayContaining(Array.from({ length: 40 }, (_, i) => `user${i + 1}@example.com`)),
-        expect.stringContaining("Please join us in using Luca")
+        expect.stringContaining("Please join us in using TestBot")
       );
     });
 

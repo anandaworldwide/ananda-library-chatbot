@@ -2,9 +2,41 @@ import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ResendInvitationModal } from "@/components/ResendInvitationModal";
+import { SiteConfig } from "@/types/siteConfig";
 
 // Mock fetch for profile API
 global.fetch = jest.fn();
+
+// Mock site config
+const mockSiteConfig: SiteConfig = {
+  siteId: "test",
+  name: "Test Chatbot",
+  shortname: "TestBot",
+  tagline: "Explore, Discover, Learn",
+  greeting: "Hi! How can I help you?",
+  parent_site_url: "https://test.com",
+  parent_site_name: "Test Site",
+  help_url: "",
+  help_text: "Help",
+  collectionConfig: {},
+  libraryMappings: {},
+  enableSuggestedQueries: true,
+  enableMediaTypeSelection: true,
+  enableAuthorSelection: true,
+  welcome_popup_heading: "Welcome",
+  other_visitors_reference: "other visitors",
+  loginImage: null,
+  chatPlaceholder: "Send a message",
+  header: { logo: "", navItems: [] },
+  footer: { links: [] },
+  requireLogin: false,
+  allowTemporarySessions: false,
+  allowAllAnswersPage: false,
+  npsSurveyFrequencyDays: 0,
+  queriesPerUserPerDay: 100,
+  showSourceContent: true,
+  showVoting: true,
+};
 
 const defaultProps = {
   isOpen: true,
@@ -12,6 +44,7 @@ const defaultProps = {
   onResend: jest.fn(),
   email: "test@example.com",
   isSubmitting: false,
+  siteConfig: mockSiteConfig,
 };
 
 describe("ResendInvitationModal", () => {
@@ -47,7 +80,7 @@ describe("ResendInvitationModal", () => {
 
     // Wait for the default message to load
     await waitFor(() => {
-      expect(screen.getByDisplayValue(/Please join us in using Luca/)).toBeInTheDocument();
+      expect(screen.getByDisplayValue(/Please join us in using TestBot/)).toBeInTheDocument();
     });
 
     const textarea = screen.getByLabelText("Custom Message (Optional)");
@@ -79,7 +112,7 @@ describe("ResendInvitationModal", () => {
     // Wait for the default message to load
     await waitFor(() => {
       const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
-      expect(textarea.value).toContain("Please join us in using Luca");
+      expect(textarea.value).toContain("Please join us in using TestBot");
     });
 
     const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
@@ -146,7 +179,7 @@ describe("ResendInvitationModal", () => {
 
     // Wait for the default message to load
     await waitFor(() => {
-      expect(screen.getByDisplayValue(/Please join us in using Luca/)).toBeInTheDocument();
+      expect(screen.getByDisplayValue(/Please join us in using TestBot/)).toBeInTheDocument();
     });
 
     const textarea = screen.getByLabelText("Custom Message (Optional)");
@@ -158,7 +191,29 @@ describe("ResendInvitationModal", () => {
 
     // Should reset to default message
     await waitFor(() => {
-      expect(screen.getByDisplayValue(/Please join us in using Luca/)).toBeInTheDocument();
+      expect(screen.getByDisplayValue(/Please join us in using TestBot/)).toBeInTheDocument();
+    });
+  });
+
+  it("uses site config tagline in message", async () => {
+    render(<ResendInvitationModal {...defaultProps} />);
+
+    await waitFor(() => {
+      const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
+      expect(textarea.value).toContain("Please join us in using TestBot to explore, discover, learn");
+    });
+  });
+
+  it("handles null siteConfig gracefully", async () => {
+    render(<ResendInvitationModal {...defaultProps} siteConfig={null} />);
+
+    await waitFor(() => {
+      const textarea = screen.getByLabelText("Custom Message (Optional)") as HTMLTextAreaElement;
+      // Should use fallback values when siteConfig is null
+      expect(textarea.value).toContain(
+        "Please join us in using our chatbot to explore and discover answers to your questions"
+      );
+      expect(textarea.value).toContain("Aums,\nJohn");
     });
   });
 });
