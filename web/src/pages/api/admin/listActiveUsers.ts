@@ -32,6 +32,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const offset = (page - 1) * limit;
   const sortBy = (req.query.sortBy as string) || "login-desc";
   const searchQuery = (req.query.search as string) || "";
+  const adminsOnly = req.query.adminsOnly === "true";
 
   try {
     // Helper function to get display name
@@ -53,12 +54,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return displayName.includes(searchLower) || email.includes(searchLower);
     };
 
+    // Helper function to check if user is admin or superuser
+    const isAdminRole = (user: any) => {
+      const role = (user.role || "").toLowerCase();
+      return role === "admin" || role === "superuser";
+    };
+
     let allUsers: any[] = [];
     let filteredUsers: any[] = [];
     let items: any[] = [];
 
-    // Always fetch all users when we have search or name sorting
-    if (searchQuery || sortBy === "name-asc") {
+    // Always fetch all users when we have search, admin filter, or name sorting
+    if (searchQuery || adminsOnly || sortBy === "name-asc") {
       const allSnapshot = await db.collection(usersCol).where("inviteStatus", "==", "accepted").get();
 
       allUsers = allSnapshot.docs.map((d: any) => {
@@ -77,6 +84,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
       // Apply search filter
       filteredUsers = searchQuery ? allUsers.filter((user) => matchesSearch(user, searchQuery)) : allUsers;
+
+      // Apply admin-only filter
+      if (adminsOnly) {
+        filteredUsers = filteredUsers.filter((user) => isAdminRole(user));
+      }
 
       // Apply sorting
       if (sortBy === "name-asc") {

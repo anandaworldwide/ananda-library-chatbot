@@ -83,6 +83,7 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
   const [sortBy, setSortBy] = useState<SortOption>("login-desc");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
+  const [showAdminsOnly, setShowAdminsOnly] = useState<boolean>(false);
   if (!isSudoAdmin) {
     return (
       <Layout siteConfig={siteConfig}>
@@ -159,6 +160,11 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
       // Add search parameter if there's a debounced search query
       if (debouncedSearchQuery.trim()) {
         params.append("search", debouncedSearchQuery.trim());
+      }
+
+      // Add admin-only filter if checkbox is checked
+      if (showAdminsOnly) {
+        params.append("adminsOnly", "true");
       }
 
       const { data, refreshedToken } = await fetchWithTokenRefresh<{
@@ -267,11 +273,11 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch active users when page, sort, or debounced search changes
+  // Fetch active users when page, sort, debounced search, or admin filter changes
   useEffect(() => {
     if (!jwt) return;
     fetchActive(currentPage);
-  }, [currentPage, jwt, sortBy, debouncedSearchQuery]);
+  }, [currentPage, jwt, sortBy, debouncedSearchQuery, showAdminsOnly]);
 
   // Handle sort change
   const handleSortChange = (newSort: SortOption) => {
@@ -283,6 +289,12 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
     setCurrentPage(1); // Reset to first page when searching
+  };
+
+  // Handle admin filter change
+  const handleAdminFilterChange = (checked: boolean) => {
+    setShowAdminsOnly(checked);
+    setCurrentPage(1); // Reset to first page when filter changes
   };
 
   const mainContent = (
@@ -306,7 +318,7 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
                 <>
                   Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
                   {Math.min(pagination.page * pagination.limit, pagination.totalCount)} of {pagination.totalCount} users
-                  {debouncedSearchQuery && <span className="ml-2 text-gray-500">(filtered)</span>}
+                  {(debouncedSearchQuery || showAdminsOnly) && <span className="ml-2 text-gray-500">(filtered)</span>}
                 </>
               ) : (
                 <span className="opacity-0">Showing 1 to 20 of 100 users</span>
@@ -315,24 +327,37 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
           </div>
         </div>
 
-        {/* Search Box */}
+        {/* Search Box and Filters */}
         <div className="px-6 py-4 border-b border-gray-200">
-          <div className="relative max-w-md">
-            <input
-              type="text"
-              placeholder="Search by name or email..."
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => handleSearchChange("")}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <span className="material-icons text-sm">close</span>
-              </button>
-            )}
+          <div className="flex flex-col gap-3">
+            <div className="relative max-w-md">
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => handleSearchChange("")}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <span className="material-icons text-sm">close</span>
+                </button>
+              )}
+            </div>
+            <div className="flex items-center">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAdminsOnly}
+                  onChange={(e) => handleAdminFilterChange(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Show admins and superusers only</span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -342,7 +367,7 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
             <colgroup>
               <col className="w-1/4" />
               <col className="w-1/4" />
-              <col className="w-16" />
+              <col className="w-28" />
               <col className="w-24" />
               <col className="w-auto" />
             </colgroup>
@@ -396,7 +421,13 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
               ) : dataLoaded && active.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-600">
-                    {debouncedSearchQuery ? `No users found matching "${debouncedSearchQuery}"` : "No active users"}
+                    {debouncedSearchQuery && showAdminsOnly
+                      ? `No admins/superusers found matching "${debouncedSearchQuery}"`
+                      : debouncedSearchQuery
+                        ? `No users found matching "${debouncedSearchQuery}"`
+                        : showAdminsOnly
+                          ? "No admins or superusers found"
+                          : "No active users"}
                   </td>
                 </tr>
               ) : dataLoaded && active.length > 0 ? (
