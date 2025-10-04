@@ -36,6 +36,13 @@ export default function VerifyPage() {
             throw new Error(data?.error || "Activation failed");
           }
         } else {
+          // Pre-populate names if available from approval request
+          if (data?.firstName) {
+            setFirstName(data.firstName);
+          }
+          if (data?.lastName) {
+            setLastName(data.lastName);
+          }
           setStatus("collecting");
           setMessage("");
         }

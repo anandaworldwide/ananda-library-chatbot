@@ -158,7 +158,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
       cookies.set("auth", authToken, {
         httpOnly: true,
-        sameSite: "strict",
+        sameSite: "lax",
         secure: isSecure,
         maxAge: 180 * 24 * 60 * 60 * 1000,
         path: "/",
@@ -184,7 +184,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       throw cookieError;
     }
 
-    return res.status(200).json({ message: "ok", uuid: finalUuid });
+    // Return existing name data if available for pre-population
+    return res.status(200).json({
+      message: "ok",
+      uuid: finalUuid,
+      firstName: data?.firstName || undefined,
+      lastName: data?.lastName || undefined,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ error: message });

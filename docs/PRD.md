@@ -191,6 +191,19 @@ authentication, and integration options, including a WordPress plugin.
   - **FR8.1:** Implement rate limiting on API endpoints to prevent abuse (`genericRateLimiter.ts`, likely using Redis
     based on `redisUtils.ts`).
   - **FR8.2:** Provide mechanisms to prune expired rate limit data (`/api/pruneRateLimits`).
+- **FR9: Self-Provisioning & User Registration**
+  - **FR9.1:** Support self-provisioning for users with unrecognized email addresses during login attempts.
+  - **FR9.2:** Provide regional admin approver selection interface when email is not recognized, grouped by continental
+    regions (Americas, Europe, Asia-Pacific).
+  - **FR9.3:** Allow users to select a specific admin approver from their region for account approval.
+  - **FR9.4:** Send approval request emails to selected admins with review links and requester details.
+  - **FR9.5:** Send confirmation emails to requesters acknowledging their approval request submission.
+  - **FR9.6:** Provide admin approval interface (`/admin/approvals`) for reviewing and processing pending requests.
+  - **FR9.7:** Support approve/deny actions on pending requests with optional admin messages.
+  - **FR9.8:** Send activation emails to approved users with account setup links.
+  - **FR9.9:** Send denial notifications to rejected users with admin contact information.
+  - **FR9.10:** Maintain site-specific admin approver lists stored in S3 with automatic environment detection
+    (production vs development prefixes).
 
 ### 5. Non-Functional Requirements
 

@@ -114,7 +114,7 @@ describe("requestLoginLink API", () => {
     expect(res._getJSONData()).toEqual({ message: "activation-resent" });
   });
 
-  it("returns next=verify-access when user is not found", async () => {
+  it("returns next=request-approval when user is not found", async () => {
     (firestoreGet as unknown as jest.Mock).mockResolvedValueOnce({ exists: false, data: () => null });
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
@@ -125,6 +125,6 @@ describe("requestLoginLink API", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(200);
-    expect(res._getJSONData()).toEqual({ next: "verify-access" });
+    expect(res._getJSONData()).toEqual({ next: "request-approval" });
   });
 });

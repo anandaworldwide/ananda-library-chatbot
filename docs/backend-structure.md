@@ -241,6 +241,28 @@ API endpoints are defined in `pages/api/` and `app/api/`. Most endpoints are pro
   - **Auth:** Requires JWT authentication.
   - **Logic:** Writes survey data to Firestore.
 
+**Admin Approver Selection System:**
+
+- **`GET /api/admin/approvers`** (`pages/api/admin/approvers.ts`)
+  - **Purpose:** Retrieves admin approver lists from S3 for self-provisioning flow.
+  - **Auth:** Open (skipAuth: true) for self-provisioning access.
+  - **Logic:** Loads site configuration, fetches approver data from S3 using site-specific keys
+    (`{envPrefix}{siteId}-admin-approvers.json`), caches results for 5 minutes.
+  - **Response:** JSON structure with lastUpdated timestamp and regional admin groupings.
+- **`POST /api/admin/requestApproval`** (`pages/api/admin/requestApproval.ts`)
+  - **Purpose:** Processes self-provisioning approval requests and sends notification emails.
+  - **Auth:** Open for self-provisioning access.
+  - **Logic:** Stores pending request in Firestore collection, sends approval request email to selected admin with
+    review link, sends confirmation email to requester.
+  - **Request:** `{ email: string, name: string, selectedAdmin: { name, email, location } }`
+  - **Response:** Success confirmation with request ID.
+- **`GET /api/admin/pendingRequests`** (`pages/api/admin/pendingRequests.ts`)
+  - **Purpose:** Retrieves pending approval requests for authenticated admin review.
+  - **Auth:** Requires JWT authentication and admin privileges.
+  - **Logic:** Queries Firestore for pending requests assigned to current admin, supports approve/deny actions with
+    optional messages, updates request status and sends notification emails.
+  - **Response:** Array of pending requests with requester details and action capabilities.
+
 **Admin & Maintenance:**
 
 - **`GET /api/firestoreCron`** (`pages/api/firestoreCron.ts`)
