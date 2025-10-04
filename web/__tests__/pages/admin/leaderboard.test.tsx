@@ -15,10 +15,9 @@ jest.mock("@/utils/client/tokenManager", () => ({
   isAuthenticated: jest.fn().mockReturnValue(true),
 }));
 
-// Mock the Layout component to avoid complex dependency issues
-jest.mock("@/components/layout", () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <div data-testid="layout">{children}</div>,
+// Mock the AdminLayout component to avoid complex dependency issues
+jest.mock("@/components/AdminLayout", () => ({
+  AdminLayout: ({ children }: { children: React.ReactNode }) => <div data-testid="admin-layout">{children}</div>,
 }));
 
 // Mock fetch globally
@@ -178,20 +177,6 @@ describe("AdminLeaderboardPage", () => {
 
     // Verify API call was made
     expect(mockFetch).toHaveBeenCalledWith("/api/admin/leaderboard", expect.any(Object));
-  });
-
-  it("should render breadcrumb navigation", async () => {
-    mockGetToken.mockResolvedValue("valid-jwt-token");
-
-    renderWithProviders(<AdminLeaderboardPage siteConfig={mockSiteConfig} isSudoAdmin={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "User Leaderboard" })).toBeInTheDocument();
-    });
-
-    // Check breadcrumb
-    expect(screen.getByRole("link", { name: "Admin Dashboard" })).toHaveAttribute("href", "/admin");
-    expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toBeInTheDocument();
   });
 
   it("should handle empty leaderboard", async () => {

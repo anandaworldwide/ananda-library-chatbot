@@ -1,12 +1,11 @@
 // Admin Pending Users page: Detailed list of pending user invitations
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
-import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import type { GetServerSideProps, NextApiRequest } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
-import { Breadcrumb } from "@/components/Breadcrumb";
+import { AdminLayout } from "@/components/AdminLayout";
 import { ResendInvitationModal } from "@/components/ResendInvitationModal";
 
 interface PendingUser {
@@ -214,156 +213,140 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
     fetchPending(currentPage);
   }, [currentPage, jwt]);
 
+  const mainContent = (
+    <>
+      <div className="mb-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Pending User Invitations</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Manage users who have been invited but haven't completed their activation yet.
+            </p>
+          </div>
+          <div className="text-sm text-gray-600 min-w-0 flex-shrink-0">
+            {pagination && pagination.totalCount > 0 ? (
+              <>
+                Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+                {Math.min(pagination.page * pagination.limit, pagination.totalCount)} of {pagination.totalCount} pending
+                invitations
+              </>
+            ) : (
+              <span className="opacity-0">Showing 1 to 20 of 100 invitations</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {message && (
+        <div
+          className={`mb-4 rounded border p-3 text-sm ${
+            messageType === "error" ? "border-red-300 bg-red-50 text-red-800" : "border-yellow-300 bg-yellow-50"
+          }`}
+        >
+          {message}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="text-gray-600">Loading pending users...</div>
+        </div>
+      ) : pending.length === 0 ? (
+        <div className="text-center py-8">
+          <div className="text-gray-500 text-lg mb-2">No pending invitations</div>
+          <p className="text-gray-400 text-sm">All users have completed their activation.</p>
+        </div>
+      ) : (
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-gray-50">
+              <tr className="border-b">
+                <th className="py-3 px-4 font-medium text-gray-900">Email</th>
+                <th className="py-3 px-4 font-medium text-gray-900">Invited</th>
+                <th className="py-3 px-4 font-medium text-gray-900">Expires</th>
+                <th className="py-3 px-4 font-medium text-gray-900">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {pending.map((u) => (
+                <tr key={u.email} className="hover:bg-gray-50">
+                  <td className="py-3 px-4 font-medium text-gray-900">{u.email}</td>
+                  <td className="py-3 px-4 text-gray-600">{u.invitedAt || "–"}</td>
+                  <td className="py-3 px-4 text-gray-600">{u.expiresAt || "–"}</td>
+                  <td className="py-3 px-4">
+                    <button
+                      className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
+                      onClick={() => handleResendClick(u.email)}
+                    >
+                      Resend
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination Controls - only show when not loading and have data */}
+      {!loading && pagination && pagination.totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 mt-6">
+          <button
+            onClick={() => setCurrentPage(1)}
+            disabled={!pagination.hasPrev}
+            className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            First
+          </button>
+          <button
+            onClick={() => setCurrentPage(currentPage - 1)}
+            disabled={!pagination.hasPrev}
+            className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Previous
+          </button>
+
+          <span className="px-3 py-1 text-sm">
+            Page {pagination.page} of {pagination.totalPages}
+          </span>
+
+          <button
+            onClick={() => setCurrentPage(currentPage + 1)}
+            disabled={!pagination.hasNext}
+            className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Next
+          </button>
+          <button
+            onClick={() => setCurrentPage(pagination.totalPages)}
+            disabled={!pagination.hasNext}
+            className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Last
+          </button>
+        </div>
+      )}
+
+      <ResendInvitationModal
+        isOpen={isResendModalOpen}
+        onClose={() => setIsResendModalOpen(false)}
+        onResend={onResend}
+        email={selectedEmail}
+        isSubmitting={resending}
+        siteConfig={siteConfig}
+      />
+    </>
+  );
+
   return (
-    <Layout siteConfig={siteConfig}>
+    <>
       <Head>
         <title>Admin · Pending Users</title>
       </Head>
-      <div className="mx-auto max-w-4xl p-6">
-        <Breadcrumb
-          items={[
-            { label: "Admin Dashboard", href: "/admin" },
-            { label: "Users", href: "/admin/users" },
-            { label: "Pending Invitations" },
-          ]}
-        />
-
-        <div className="mb-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Pending User Invitations</h1>
-              <p className="text-gray-600 mt-2">
-                Manage users who have been invited but haven't completed their activation yet.
-              </p>
-            </div>
-            <div className="text-sm text-gray-600 min-w-0 flex-shrink-0">
-              {pagination && pagination.totalCount > 0 ? (
-                <>
-                  Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
-                  {Math.min(pagination.page * pagination.limit, pagination.totalCount)} of {pagination.totalCount}{" "}
-                  pending invitations
-                </>
-              ) : (
-                <span className="opacity-0">Showing 1 to 20 of 100 invitations</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {message && (
-          <div
-            className={`mb-4 rounded border p-3 text-sm ${
-              messageType === "error" ? "border-red-300 bg-red-50 text-red-800" : "border-yellow-300 bg-yellow-50"
-            }`}
-          >
-            {message}
-          </div>
-        )}
-
-        <div>
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <div className="text-gray-600">Loading pending users...</div>
-            </div>
-          ) : pending.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="text-gray-500 text-lg mb-2">No pending invitations</div>
-              <p className="text-gray-400 text-sm">All users have completed their activation.</p>
-            </div>
-          ) : (
-            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50">
-                  <tr className="border-b">
-                    <th className="py-3 px-4 font-medium text-gray-900">Email</th>
-                    <th className="py-3 px-4 font-medium text-gray-900">Invited</th>
-                    <th className="py-3 px-4 font-medium text-gray-900">Expires</th>
-                    <th className="py-3 px-4 font-medium text-gray-900">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {pending.map((u) => (
-                    <tr key={u.email} className="hover:bg-gray-50">
-                      <td className="py-3 px-4 font-medium text-gray-900">{u.email}</td>
-                      <td className="py-3 px-4 text-gray-600">{u.invitedAt || "–"}</td>
-                      <td className="py-3 px-4 text-gray-600">{u.expiresAt || "–"}</td>
-                      <td className="py-3 px-4">
-                        <button
-                          className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-                          onClick={() => handleResendClick(u.email)}
-                        >
-                          Resend
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Pagination Controls - only show when not loading and have data */}
-        {!loading && pagination && pagination.totalPages > 1 && (
-          <div className="flex justify-center items-center gap-2 mt-6">
-            <button
-              onClick={() => setCurrentPage(1)}
-              disabled={!pagination.hasPrev}
-              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              First
-            </button>
-            <button
-              onClick={() => setCurrentPage(currentPage - 1)}
-              disabled={!pagination.hasPrev}
-              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Previous
-            </button>
-
-            <span className="px-3 py-1 text-sm">
-              Page {pagination.page} of {pagination.totalPages}
-            </span>
-
-            <button
-              onClick={() => setCurrentPage(currentPage + 1)}
-              disabled={!pagination.hasNext}
-              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Next
-            </button>
-            <button
-              onClick={() => setCurrentPage(pagination.totalPages)}
-              disabled={!pagination.hasNext}
-              className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Last
-            </button>
-          </div>
-        )}
-
-        <div className="mt-6">
-          <a
-            href="/admin/users"
-            className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-md hover:bg-gray-50 transition-colors"
-          >
-            <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Users
-          </a>
-        </div>
-
-        <ResendInvitationModal
-          isOpen={isResendModalOpen}
-          onClose={() => setIsResendModalOpen(false)}
-          onResend={onResend}
-          email={selectedEmail}
-          isSubmitting={resending}
-          siteConfig={siteConfig}
-        />
-      </div>
-    </Layout>
+      <AdminLayout siteConfig={siteConfig} pageTitle="Pending Users">
+        {mainContent}
+      </AdminLayout>
+    </>
   );
 }
 

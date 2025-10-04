@@ -117,15 +117,6 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
                   Admin Dashboard
                   <span className="material-icons text-sm ml-1">dashboard</span>
                 </Link>
-                {siteConfig?.requireLogin && (
-                  <Link
-                    href="/admin/users"
-                    className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
-                  >
-                    User Management
-                    <span className="material-icons text-sm ml-1">people</span>
-                  </Link>
-                )}
                 {!siteConfig?.requireLogin && (
                   <Link href="/bless" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">
                     Manage Blessing

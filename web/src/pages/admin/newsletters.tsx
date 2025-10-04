@@ -2,10 +2,9 @@ import React, { useState, useEffect, useMemo } from "react";
 import Head from "next/head";
 import type { GetServerSideProps, NextApiRequest } from "next";
 import { isSuperuserPageAllowed } from "@/utils/server/adminPageGate";
-import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
-import { Breadcrumb } from "@/components/Breadcrumb";
+import { AdminLayout } from "@/components/AdminLayout";
 import { getToken } from "@/utils/client/tokenManager";
 import { marked } from "marked";
 
@@ -366,148 +365,147 @@ export default function NewslettersPage({ siteConfig }: NewsletterPageProps) {
     }
   }
 
-  return (
-    <Layout siteConfig={siteConfig}>
-      <Head>
-        <title>Admin · Newsletters</title>
-      </Head>
-      <div className="mx-auto max-w-4xl p-6">
-        <Breadcrumb items={[{ label: "Admin Dashboard", href: "/admin" }, { label: "Newsletters" }]} />
+  const mainContent = (
+    <>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Newsletters</h1>
+        <p className="text-sm text-gray-600 mt-1">Send newsletters to users</p>
+      </div>
 
-        {/* Status Message */}
-        {message && (
-          <div
-            className={`mb-6 rounded border p-3 text-sm ${
-              messageType === "error"
-                ? "border-red-300 bg-red-50 text-red-800"
-                : "border-green-300 bg-green-50 text-green-800"
-            }`}
+      {/* Status Message */}
+      {message && (
+        <div
+          className={`mb-6 rounded border p-3 text-sm ${
+            messageType === "error"
+              ? "border-red-300 bg-red-50 text-red-800"
+              : "border-green-300 bg-green-50 text-green-800"
+          }`}
+        >
+          {message}
+        </div>
+      )}
+
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Newsletter Management</h1>
+      </div>
+
+      {/* Newsletter Queue Processor */}
+      <div className="bg-white rounded-lg border shadow-sm mb-8">
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold">Newsletter Queue Processor</h2>
+          <p className="text-sm text-gray-600 mt-1">Process queued newsletters in batches of 50 emails</p>
+        </div>
+        <div className="p-6">
+          <select
+            value={selectedNewsletterId}
+            onChange={(e) => setSelectedNewsletterId(e.target.value)}
+            className="mb-4 p-2 border rounded w-full"
           >
-            {message}
-          </div>
-        )}
-
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Newsletter Management</h1>
-        </div>
-
-        {/* Newsletter Queue Processor */}
-        <div className="bg-white rounded-lg border shadow-sm mb-8">
-          <div className="p-6 border-b">
-            <h2 className="text-lg font-semibold">Newsletter Queue Processor</h2>
-            <p className="text-sm text-gray-600 mt-1">Process queued newsletters in batches of 50 emails</p>
-          </div>
-          <div className="p-6">
-            <select
-              value={selectedNewsletterId}
-              onChange={(e) => setSelectedNewsletterId(e.target.value)}
-              className="mb-4 p-2 border rounded w-full"
+            <option value="">Select a newsletter to process</option>
+            {newsletters.map((nl) => (
+              <option key={nl.id} value={nl.id}>
+                {nl.subject} ({nl.totalQueued - nl.sentCount - nl.failedCount} remaining)
+              </option>
+            ))}
+          </select>
+          <div className="flex gap-3">
+            <button
+              onClick={handleProcessBatch}
+              disabled={!selectedNewsletterId || !selectedNewsletterHasRemaining}
+              className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50 hover:bg-blue-700"
             >
-              <option value="">Select a newsletter to process</option>
-              {newsletters.map((nl) => (
-                <option key={nl.id} value={nl.id}>
-                  {nl.subject} ({nl.totalQueued - nl.sentCount - nl.failedCount} remaining)
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-3">
-              <button
-                onClick={handleProcessBatch}
-                disabled={!selectedNewsletterId || !selectedNewsletterHasRemaining}
-                className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50 hover:bg-blue-700"
-              >
-                Process Next 50 Emails
-              </button>
-              <button
-                onClick={handleDeleteQueue}
-                disabled={!selectedNewsletterId || !selectedNewsletterHasRemaining}
-                className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50 hover:bg-red-700"
-              >
-                Delete remaining {selectedNewsletterRemainingCount} messages
-              </button>
+              Process Next 50 Emails
+            </button>
+            <button
+              onClick={handleDeleteQueue}
+              disabled={!selectedNewsletterId || !selectedNewsletterHasRemaining}
+              className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50 hover:bg-red-700"
+            >
+              Delete remaining {selectedNewsletterRemainingCount} messages
+            </button>
+          </div>
+          {progress && (
+            <div className="mt-4 p-3 bg-gray-50 rounded">
+              <p className="text-sm">
+                Sent: <span className="font-semibold text-green-600">{progress.sent}</span>
+              </p>
+              <p className="text-sm">
+                Failed: <span className="font-semibold text-red-600">{progress.failed}</span>
+              </p>
+              <p className="text-sm">
+                Remaining: <span className="font-semibold">{progress.remaining}</span>
+              </p>
+              {progress.errors.length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-sm text-red-600">
+                    View Errors ({progress.errors.length})
+                  </summary>
+                  <div className="mt-1 text-xs text-red-600 max-h-32 overflow-y-auto">
+                    {progress.errors.map((error, index) => (
+                      <div key={index} className="mb-1">
+                        {error}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
-            {progress && (
-              <div className="mt-4 p-3 bg-gray-50 rounded">
-                <p className="text-sm">
-                  Sent: <span className="font-semibold text-green-600">{progress.sent}</span>
-                </p>
-                <p className="text-sm">
-                  Failed: <span className="font-semibold text-red-600">{progress.failed}</span>
-                </p>
-                <p className="text-sm">
-                  Remaining: <span className="font-semibold">{progress.remaining}</span>
-                </p>
-                {progress.errors.length > 0 && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-sm text-red-600">
-                      View Errors ({progress.errors.length})
-                    </summary>
-                    <div className="mt-1 text-xs text-red-600 max-h-32 overflow-y-auto">
-                      {progress.errors.map((error, index) => (
-                        <div key={index} className="mb-1">
-                          {error}
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
-              </div>
-            )}
+          )}
+        </div>
+      </div>
+
+      {/* Newsletter Composer */}
+      <div className="bg-white rounded-lg border shadow-sm mb-8">
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold">Compose Newsletter</h2>
+          <p className="text-gray-600 mt-2">
+            Compose and send newsletters to subscribed users. All subscribers will receive the newsletter with a
+            personalized unsubscribe link.
+          </p>
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <p className="text-sm text-blue-800">
+              <strong>Image Hosting:</strong> Images can be hosted in <code>/public/newsletter</code> within S3 or
+              hosted wherever else you prefer. Use standard Markdown image syntax: <code>![Alt text](image-url)</code>
+            </p>
           </div>
         </div>
-
-        {/* Newsletter Composer */}
-        <div className="bg-white rounded-lg border shadow-sm mb-8">
-          <div className="p-6 border-b">
-            <h2 className="text-lg font-semibold">Compose Newsletter</h2>
-            <p className="text-gray-600 mt-2">
-              Compose and send newsletters to subscribed users. All subscribers will receive the newsletter with a
-              personalized unsubscribe link.
-            </p>
-            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-              <p className="text-sm text-blue-800">
-                <strong>Image Hosting:</strong> Images can be hosted in <code>/public/newsletter</code> within S3 or
-                hosted wherever else you prefer. Use standard Markdown image syntax: <code>![Alt text](image-url)</code>
-              </p>
-            </div>
+        <div className="p-6 space-y-6">
+          {/* Subject */}
+          <div>
+            <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-2">
+              Subject Line *
+            </label>
+            <input
+              id="subject"
+              type="text"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Enter newsletter subject..."
+              className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+              maxLength={200}
+            />
+            <p className="text-xs text-gray-500 mt-1">{subject.length}/200 characters</p>
           </div>
-          <div className="p-6 space-y-6">
-            {/* Subject */}
-            <div>
-              <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-2">
-                Subject Line *
-              </label>
-              <input
-                id="subject"
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Enter newsletter subject..."
-                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                maxLength={200}
-              />
-              <p className="text-xs text-gray-500 mt-1">{subject.length}/200 characters</p>
-            </div>
 
-            {/* Content */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label htmlFor="content" className="block text-sm font-medium text-gray-700">
-                  Newsletter Content * (Markdown)
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowPreview(!showPreview)}
-                  className="text-xs text-blue-600 hover:text-blue-800 underline"
-                >
-                  {showPreview ? "Hide Preview" : "Show Preview"}
-                </button>
-              </div>
-              <textarea
-                id="content"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={`Write your newsletter in Markdown...
+          {/* Content */}
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label htmlFor="content" className="block text-sm font-medium text-gray-700">
+                Newsletter Content * (Markdown)
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowPreview(!showPreview)}
+                className="text-xs text-blue-600 hover:text-blue-800 underline"
+              >
+                {showPreview ? "Hide Preview" : "Show Preview"}
+              </button>
+            </div>
+            <textarea
+              id="content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={`Write your newsletter in Markdown...
 
 Examples:
 # Main Heading
@@ -533,219 +531,229 @@ Images can be hosted in /public/newsletter within S3 or hosted wherever else you
 For S3 images: ![Alt text](https://your-s3-bucket.s3.amazonaws.com/public/newsletter/image.jpg)
 For external images: ![Alt text](https://external-site.com/image.jpg)
 `}
-                rows={16}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
-                maxLength={50000}
-              />
-              <div className="flex justify-between items-center mt-1">
-                <p className="text-xs text-gray-500">{content.length}/50,000 characters</p>
-                <div className="text-xs text-gray-600 space-x-4">
-                  <span>**bold**</span>
-                  <span>*italic*</span>
-                  <span>[link](url)</span>
-                  <span>![image](url)</span>
-                  <span># heading</span>
-                </div>
+              rows={16}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
+              maxLength={50000}
+            />
+            <div className="flex justify-between items-center mt-1">
+              <p className="text-xs text-gray-500">{content.length}/50,000 characters</p>
+              <div className="text-xs text-gray-600 space-x-4">
+                <span>**bold**</span>
+                <span>*italic*</span>
+                <span>[link](url)</span>
+                <span>![image](url)</span>
+                <span># heading</span>
               </div>
             </div>
+          </div>
 
-            {/* Call-to-Action (Optional) */}
+          {/* Call-to-Action (Optional) */}
+          <div className="border-t pt-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-4">Call-to-Action Button (Optional)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="ctaText" className="block text-sm font-medium text-gray-700 mb-2">
+                  Button Text
+                </label>
+                <input
+                  id="ctaText"
+                  type="text"
+                  value={ctaText}
+                  onChange={(e) => {
+                    const newText = e.target.value;
+                    setCtaText(newText);
+                    saveCtaToLocalStorage(ctaUrl, newText);
+                  }}
+                  placeholder="e.g., Visit Our Website"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="ctaUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                  Button URL
+                </label>
+                <input
+                  id="ctaUrl"
+                  type="url"
+                  value={ctaUrl}
+                  onChange={(e) => {
+                    const newUrl = e.target.value;
+                    setCtaUrl(newUrl);
+                    saveCtaToLocalStorage(newUrl, ctaText);
+                  }}
+                  placeholder="https://example.com"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              💾 CTA button settings are automatically saved and will be remembered for future newsletters
+            </p>
+          </div>
+
+          {/* Recipient Role Selection */}
+          <div className="border-t pt-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-4">Newsletter Recipients</h3>
+            <p className="text-xs text-gray-500 mb-4">Select which user roles should receive this newsletter:</p>
+            <div className="space-y-3">
+              <div className="flex items-center">
+                <input
+                  id="includeUsers"
+                  type="checkbox"
+                  checked={includeUsers}
+                  onChange={(e) => setIncludeUsers(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="includeUsers" className="ml-2 text-sm text-gray-700">
+                  <span className="font-medium">Users</span> - Regular users with basic access
+                </label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  id="includeAdmins"
+                  type="checkbox"
+                  checked={includeAdmins}
+                  onChange={(e) => setIncludeAdmins(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="includeAdmins" className="ml-2 text-sm text-gray-700">
+                  <span className="font-medium">Admins</span> - Administrative users with elevated privileges
+                </label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  id="includeSuperUsers"
+                  type="checkbox"
+                  checked={includeSuperUsers}
+                  onChange={(e) => setIncludeSuperUsers(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="includeSuperUsers" className="ml-2 text-sm text-gray-700">
+                  <span className="font-medium">Super Users</span> - Highest level administrators
+                </label>
+              </div>
+            </div>
+            {!includeUsers && !includeAdmins && !includeSuperUsers && (
+              <p className="text-xs text-red-600 mt-2">⚠️ At least one user role must be selected</p>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="pt-6 border-t">
+            <div className="flex justify-end">
+              <button
+                onClick={handleSend}
+                disabled={
+                  sending ||
+                  !subject.trim() ||
+                  !content.trim() ||
+                  (!includeUsers && !includeAdmins && !includeSuperUsers)
+                }
+                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {sending ? "Queueing..." : "Queue Newsletter"}
+              </button>
+            </div>
+          </div>
+
+          {/* Preview */}
+          {showPreview && (
             <div className="border-t pt-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-4">Call-to-Action Button (Optional)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="ctaText" className="block text-sm font-medium text-gray-700 mb-2">
-                    Button Text
-                  </label>
-                  <input
-                    id="ctaText"
-                    type="text"
-                    value={ctaText}
-                    onChange={(e) => {
-                      const newText = e.target.value;
-                      setCtaText(newText);
-                      saveCtaToLocalStorage(ctaUrl, newText);
-                    }}
-                    placeholder="e.g., Visit Our Website"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="ctaUrl" className="block text-sm font-medium text-gray-700 mb-2">
-                    Button URL
-                  </label>
-                  <input
-                    id="ctaUrl"
-                    type="url"
-                    value={ctaUrl}
-                    onChange={(e) => {
-                      const newUrl = e.target.value;
-                      setCtaUrl(newUrl);
-                      saveCtaToLocalStorage(newUrl, ctaText);
-                    }}
-                    placeholder="https://example.com"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                💾 CTA button settings are automatically saved and will be remembered for future newsletters
-              </p>
-            </div>
+              <h3 className="text-sm font-medium text-gray-700 mb-4">Preview</h3>
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <div className="bg-white rounded border max-w-2xl mx-auto">
+                  {/* Email Header */}
+                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 text-center">
+                    <h1 className="text-xl font-bold">{siteConfig?.name || "Ananda Library"} Newsletter</h1>
+                  </div>
 
-            {/* Recipient Role Selection */}
-            <div className="border-t pt-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-4">Newsletter Recipients</h3>
-              <p className="text-xs text-gray-500 mb-4">Select which user roles should receive this newsletter:</p>
-              <div className="space-y-3">
-                <div className="flex items-center">
-                  <input
-                    id="includeUsers"
-                    type="checkbox"
-                    checked={includeUsers}
-                    onChange={(e) => setIncludeUsers(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="includeUsers" className="ml-2 text-sm text-gray-700">
-                    <span className="font-medium">Users</span> - Regular users with basic access
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    id="includeAdmins"
-                    type="checkbox"
-                    checked={includeAdmins}
-                    onChange={(e) => setIncludeAdmins(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="includeAdmins" className="ml-2 text-sm text-gray-700">
-                    <span className="font-medium">Admins</span> - Administrative users with elevated privileges
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    id="includeSuperUsers"
-                    type="checkbox"
-                    checked={includeSuperUsers}
-                    onChange={(e) => setIncludeSuperUsers(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="includeSuperUsers" className="ml-2 text-sm text-gray-700">
-                    <span className="font-medium">Super Users</span> - Highest level administrators
-                  </label>
-                </div>
-              </div>
-              {!includeUsers && !includeAdmins && !includeSuperUsers && (
-                <p className="text-xs text-red-600 mt-2">⚠️ At least one user role must be selected</p>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="pt-6 border-t">
-              <div className="flex justify-end">
-                <button
-                  onClick={handleSend}
-                  disabled={
-                    sending ||
-                    !subject.trim() ||
-                    !content.trim() ||
-                    (!includeUsers && !includeAdmins && !includeSuperUsers)
-                  }
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {sending ? "Queueing..." : "Queue Newsletter"}
-                </button>
-              </div>
-            </div>
-
-            {/* Preview */}
-            {showPreview && (
-              <div className="border-t pt-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-4">Preview</h3>
-                <div className="border rounded-lg p-4 bg-gray-50">
-                  <div className="bg-white rounded border max-w-2xl mx-auto">
-                    {/* Email Header */}
-                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 text-center">
-                      <h1 className="text-xl font-bold">{siteConfig?.name || "Ananda Library"} Newsletter</h1>
+                  {/* Email Content */}
+                  <div className="p-6">
+                    <div className="mb-4">
+                      <strong>Subject:</strong> {subject || "Your newsletter subject"}
                     </div>
+                    <div className="mb-4">Hello Friend,</div>
+                    <div
+                      className="prose prose-sm max-w-none mb-6"
+                      dangerouslySetInnerHTML={{ __html: generatePreviewContent() }}
+                    />
 
-                    {/* Email Content */}
-                    <div className="p-6">
-                      <div className="mb-4">
-                        <strong>Subject:</strong> {subject || "Your newsletter subject"}
-                      </div>
-                      <div className="mb-4">Hello Friend,</div>
-                      <div
-                        className="prose prose-sm max-w-none mb-6"
-                        dangerouslySetInnerHTML={{ __html: generatePreviewContent() }}
-                      />
-
-                      {/* CTA Button */}
-                      {ctaText && ctaUrl && (
-                        <div className="text-center mb-6">
-                          <div className="inline-block bg-blue-600 text-white px-6 py-3 rounded-md font-medium">
-                            {ctaText}
-                          </div>
+                    {/* CTA Button */}
+                    {ctaText && ctaUrl && (
+                      <div className="text-center mb-6">
+                        <div className="inline-block bg-blue-600 text-white px-6 py-3 rounded-md font-medium">
+                          {ctaText}
                         </div>
-                      )}
-
-                      {/* Footer */}
-                      <div className="text-xs text-gray-500 border-t pt-4">
-                        <p>
-                          You're receiving this newsletter because you're subscribed to{" "}
-                          {siteConfig?.name || "Ananda Library"} updates.
-                        </p>
-                        <p>
-                          If you no longer wish to receive these emails, you can{" "}
-                          <span className="text-blue-600 underline">unsubscribe instantly</span>.
-                        </p>
                       </div>
+                    )}
+
+                    {/* Footer */}
+                    <div className="text-xs text-gray-500 border-t pt-4">
+                      <p>
+                        You're receiving this newsletter because you're subscribed to{" "}
+                        {siteConfig?.name || "Ananda Library"} updates.
+                      </p>
+                      <p>
+                        If you no longer wish to receive these emails, you can{" "}
+                        <span className="text-blue-600 underline">unsubscribe instantly</span>.
+                      </p>
                     </div>
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Newsletter History */}
-        <div className="bg-white rounded-lg border shadow-sm">
-          <div className="p-6 border-b">
-            <h2 className="text-lg font-semibold">Newsletter History</h2>
-          </div>
-          <div className="p-6">
-            {loadingHistory ? (
-              <div className="text-center py-8 text-gray-500">Loading history...</div>
-            ) : history.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">No newsletters sent yet.</div>
-            ) : (
-              <div className="space-y-4">
-                {history.map((newsletter) => (
-                  <div key={newsletter.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-medium text-gray-900">{newsletter.subject}</h3>
-                      <span className="text-xs text-gray-500">
-                        {new Date(newsletter.sentAt).toLocaleDateString()} at{" "}
-                        {new Date(newsletter.sentAt).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 mb-2">
-                      Sent by: {newsletter.sentBy} • Recipients: {newsletter.recipientCount} • Success:{" "}
-                      {newsletter.successCount}
-                      {newsletter.errorCount > 0 && ` • Errors: ${newsletter.errorCount}`}
-                    </div>
-                    <div className="text-sm text-gray-700 line-clamp-3">
-                      {newsletter.content.substring(0, 200)}
-                      {newsletter.content.length > 200 && "..."}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
-    </Layout>
+
+      {/* Newsletter History */}
+      <div className="bg-white rounded-lg border shadow-sm">
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold">Newsletter History</h2>
+        </div>
+        <div className="p-6">
+          {loadingHistory ? (
+            <div className="text-center py-8 text-gray-500">Loading history...</div>
+          ) : history.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No newsletters sent yet.</div>
+          ) : (
+            <div className="space-y-4">
+              {history.map((newsletter) => (
+                <div key={newsletter.id} className="border rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-medium text-gray-900">{newsletter.subject}</h3>
+                    <span className="text-xs text-gray-500">
+                      {new Date(newsletter.sentAt).toLocaleDateString()} at{" "}
+                      {new Date(newsletter.sentAt).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    Sent by: {newsletter.sentBy} • Recipients: {newsletter.recipientCount} • Success:{" "}
+                    {newsletter.successCount}
+                    {newsletter.errorCount > 0 && ` • Errors: ${newsletter.errorCount}`}
+                  </div>
+                  <div className="text-sm text-gray-700 line-clamp-3">
+                    {newsletter.content.substring(0, 200)}
+                    {newsletter.content.length > 200 && "..."}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <Head>
+        <title>Admin · Newsletters</title>
+      </Head>
+      <AdminLayout siteConfig={siteConfig} pageTitle="Newsletters">
+        {mainContent}
+      </AdminLayout>
+    </>
   );
 }
 

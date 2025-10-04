@@ -14,6 +14,11 @@ jest.mock("@/components/layout", () => ({
   default: ({ children }: any) => <div>{children}</div>,
 }));
 
+// Mock AdminLayout to simplify rendering
+jest.mock("@/components/AdminLayout", () => ({
+  AdminLayout: ({ children }: any) => <div data-testid="admin-layout">{children}</div>,
+}));
+
 // Mock site config loader used by Layout props (SSR not exercised here)
 jest.mock("@/utils/server/loadSiteConfig", () => ({
   loadSiteConfig: jest.fn(async () => ({ name: "Test Site", siteId: "test" }) as Partial<SiteConfig>),
@@ -249,6 +254,6 @@ describe("Admin UI · Edit User page", () => {
     render(<EditUserPage siteConfig={{ siteId: "test" } as any} />);
     expect(await screen.findByDisplayValue("user@example.com")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(mockRouter.push).toHaveBeenCalledWith("/admin/users");
+    expect(mockRouter.push).toHaveBeenCalledWith("/admin");
   });
 });
