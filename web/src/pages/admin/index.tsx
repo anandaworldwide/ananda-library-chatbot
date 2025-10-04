@@ -485,7 +485,7 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
         <title>Admin · Dashboard</title>
       </Head>
       <AdminLayout siteConfig={siteConfig} pageTitle="Admin Dashboard">
-        {mainContent}
+        <div className="max-w-4xl">{mainContent}</div>
       </AdminLayout>
     </>
   );

@@ -7,6 +7,8 @@ import AnandaPublicHeader from "./Header/AnandaPublicHeader";
 import JairamHeader from "./Header/JairamHeader";
 import CrystalHeader from "./Header/CrystalHeader";
 import PhotoHeader from "./Header/PhotoHeader";
+import Footer from "./Footer";
+import { SudoProvider } from "@/contexts/SudoContext";
 
 interface AdminLayoutProps {
   siteConfig: SiteConfig | null;
@@ -225,54 +227,59 @@ export function AdminLayout({ siteConfig, children, pageTitle }: AdminLayoutProp
   );
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      {/* Site Header */}
-      {renderHeader()}
+    <SudoProvider>
+      <div className="min-h-screen bg-white flex flex-col">
+        {/* Site Header */}
+        {renderHeader()}
 
-      {/* Admin Content Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Mobile Header */}
-        <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200 bg-white">
-          <div className="flex items-center">
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              aria-label="Toggle navigation menu"
-            >
-              <span className="material-icons">{isMobileMenuOpen ? "close" : "menu"}</span>
-            </button>
-            <h1 className="ml-3 text-lg font-semibold text-gray-900">{pageTitle || "Admin Dashboard"}</h1>
-          </div>
-        </div>
-
-        {/* Mobile Menu Overlay */}
-        {isMobileMenuOpen && (
-          <div
-            className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            <div
-              className="fixed left-0 top-0 bottom-0 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <LeftRail />
+        {/* Admin Content Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Mobile Header */}
+          <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+            <div className="flex items-center">
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                aria-label="Toggle navigation menu"
+              >
+                <span className="material-icons">{isMobileMenuOpen ? "close" : "menu"}</span>
+              </button>
+              <h1 className="ml-3 text-lg font-semibold text-gray-900">{pageTitle || "Admin Dashboard"}</h1>
             </div>
           </div>
-        )}
 
-        {/* Desktop Layout */}
-        <div className="flex">
-          {/* Desktop Left Rail */}
-          <div className="hidden lg:block">
-            <LeftRail />
-          </div>
+          {/* Mobile Menu Overlay */}
+          {isMobileMenuOpen && (
+            <div
+              className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <div
+                className="fixed left-0 top-0 bottom-0 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <LeftRail />
+              </div>
+            </div>
+          )}
 
-          {/* Main Content */}
-          <div className="flex-1 min-w-0">
-            <div className="max-w-screen-2xl mx-auto p-6">{children}</div>
+          {/* Desktop Layout */}
+          <div className="flex">
+            {/* Desktop Left Rail */}
+            <div className="hidden lg:block">
+              <LeftRail />
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 min-w-0">
+              <div className="max-w-screen-2xl mx-auto p-6">{children}</div>
+            </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <Footer siteConfig={siteConfig} />
       </div>
-    </div>
+    </SudoProvider>
   );
 }

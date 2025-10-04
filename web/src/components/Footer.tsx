@@ -14,6 +14,7 @@ interface FooterProps {
 
 const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
   const [isAdminRole, setIsAdminRole] = useState(false);
+  const [isSuperuser, setIsSuperuser] = useState(false);
   const { isSudoUser } = useSudo();
   const router = useRouter();
 
@@ -66,6 +67,7 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
         const data = await res.json();
         const role = (data?.role as string) || "user";
         const isAdmin = role === "admin" || role === "superuser";
+        const isSuper = role === "superuser";
 
         // Cache the result
         try {
@@ -80,7 +82,10 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
           // sessionStorage failed, continue without caching
         }
 
-        if (mounted) setIsAdminRole(isAdmin);
+        if (mounted) {
+          setIsAdminRole(isAdmin);
+          setIsSuperuser(isSuper);
+        }
       } catch {
         if (mounted) setIsAdminRole(false);
       }
@@ -102,7 +107,15 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
         <div className="bg-gray-100 text-gray-700 py-2 border-t border-t-slate-200 mt-4">
           <div className="mx-auto max-w-[800px] px-4">
             <div className="flex flex-col items-center w-full">
-              <div className="flex flex-row justify-center items-center w-full">
+              <div className="flex flex-row justify-center items-center w-full gap-2">
+                {isSuperuser && siteConfig?.requireLogin && (
+                  <>
+                    <Link href="/answers" className="text-sm hover:text-slate-600 cursor-pointer flex items-center">
+                      View all answers
+                    </Link>
+                    <span className="text-gray-400">|</span>
+                  </>
+                )}
                 <Link href="/admin" className="text-sm hover:text-slate-600 cursor-pointer flex items-center">
                   Admin Dashboard
                   <span className="material-icons text-sm ml-1">dashboard</span>
