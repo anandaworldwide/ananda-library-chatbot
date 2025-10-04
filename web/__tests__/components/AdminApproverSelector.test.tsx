@@ -292,4 +292,42 @@ describe("AdminApproverSelector", () => {
 
     expect(select).toBeDisabled();
   });
+
+  it("should show fallback Support admin when S3 file is missing", async () => {
+    const fallbackData = {
+      lastUpdated: "2025-10-04T12:00:00.000Z",
+      regions: [
+        {
+          name: "General",
+          admins: [
+            {
+              name: "Support",
+              email: "support@ananda.org",
+              location: "Global Support Team",
+            },
+          ],
+        },
+      ],
+    };
+
+    fetchWithAuth.mockResolvedValueOnce({
+      ok: true,
+      json: async () => fallbackData,
+    });
+
+    render(<AdminApproverSelector requesterEmail="test@example.com" requesterName="Test User" />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/select an admin to contact/i)).toBeInTheDocument();
+    });
+
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(select).toBeInTheDocument();
+
+    // Check that the Support option is available
+    const options = Array.from(select.options);
+    const supportOption = options.find((option) => option.value.includes("support@ananda.org"));
+    expect(supportOption).toBeTruthy();
+    expect(supportOption?.textContent).toBe("Support (Global Support Team)");
+  });
 });

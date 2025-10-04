@@ -97,6 +97,7 @@ describe("/api/admin/requestApproval", () => {
     // Set required environment variables
     process.env = {
       ...originalEnv,
+      NODE_ENV: "development",
       NEXT_PUBLIC_BASE_URL: "https://test.ananda.org",
       CONTACT_EMAIL: "test@ananda.org",
       SITE_ID: "ananda",
@@ -261,5 +262,111 @@ describe("/api/admin/requestApproval", () => {
 
     expect(res.statusCode).toBe(500);
     expect(res._getJSONData()).toEqual({ error: "Internal server error" });
+  });
+
+  it("should return error when email sending fails and cleanup the request", async () => {
+    /* eslint-disable @typescript-eslint/no-var-requires */
+    const mockSend = require("@aws-sdk/client-ses").mockSend;
+    const mockDelete = jest.fn().mockResolvedValue(undefined);
+    const mockDoc = jest.fn(() => ({
+      delete: mockDelete,
+    }));
+    const mockCollection = jest.fn(() => ({
+      doc: mockDoc,
+    }));
+
+    genericRateLimiter.mockResolvedValue(true);
+    loadSiteConfig.loadSiteConfig.mockResolvedValue({ siteId: "ananda" });
+    firestoreRetryUtils.firestoreSet.mockResolvedValue(undefined);
+    writeAuditLog.mockResolvedValue(undefined);
+
+    // Mock the db collection
+    const { db } = require("@/services/firebase");
+    /* eslint-enable @typescript-eslint/no-var-requires */
+    db.collection = mockCollection;
+
+    // Mock SES send to throw an error
+    mockSend.mockRejectedValueOnce({
+      name: "MessageRejected",
+      message:
+        "Email address is not verified. The following identities failed the check in region US-WEST-1: admin@example.com",
+    });
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "POST",
+      body: {
+        requesterEmail: "requester@example.com",
+        requesterName: "Test Requester",
+        adminEmail: "admin@example.com",
+        adminName: "Test Admin",
+        adminLocation: "Test City, CA",
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(500);
+    const responseData = res._getJSONData();
+    expect(responseData.error).toBe(
+      "Email sending failed due to unverified email addresses. Please contact support for assistance."
+    );
+    expect(responseData.details).toBe(
+      "Email address is not verified. The following identities failed the check in region US-WEST-1: admin@example.com"
+    ); // Should include details in development
+
+    // Verify the request was cleaned up
+    expect(mockCollection).toHaveBeenCalledWith("dev_ananda_admin_approval_requests");
+    expect(mockDoc).toHaveBeenCalled();
+    expect(mockDelete).toHaveBeenCalled();
+  });
+
+  it("should return generic error message for other email failures", async () => {
+    /* eslint-disable @typescript-eslint/no-var-requires */
+    const mockSend = require("@aws-sdk/client-ses").mockSend;
+    const mockDelete = jest.fn().mockResolvedValue(undefined);
+    const mockDoc = jest.fn(() => ({
+      delete: mockDelete,
+    }));
+    const mockCollection = jest.fn(() => ({
+      doc: mockDoc,
+    }));
+
+    genericRateLimiter.mockResolvedValue(true);
+    loadSiteConfig.loadSiteConfig.mockResolvedValue({ siteId: "ananda" });
+    firestoreRetryUtils.firestoreSet.mockResolvedValue(undefined);
+    writeAuditLog.mockResolvedValue(undefined);
+
+    // Mock the db collection
+    const { db } = require("@/services/firebase");
+    /* eslint-enable @typescript-eslint/no-var-requires */
+    db.collection = mockCollection;
+
+    // Mock SES send to throw a generic error
+    mockSend.mockRejectedValueOnce({
+      name: "UnknownError",
+      message: "Some unexpected email error occurred",
+    });
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "POST",
+      body: {
+        requesterEmail: "requester@example.com",
+        requesterName: "Test Requester",
+        adminEmail: "admin@example.com",
+        adminName: "Test Admin",
+        adminLocation: "Test City, CA",
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(500);
+    const responseData = res._getJSONData();
+    expect(responseData.error).toBe("Failed to send approval emails. Please try again or contact support.");
+
+    // Verify cleanup was attempted
+    expect(mockCollection).toHaveBeenCalledWith("dev_ananda_admin_approval_requests");
+    expect(mockDoc).toHaveBeenCalled();
+    expect(mockDelete).toHaveBeenCalled();
   });
 });

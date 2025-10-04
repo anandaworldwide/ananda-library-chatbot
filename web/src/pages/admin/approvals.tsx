@@ -78,11 +78,23 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
           },
         });
 
+        const data = await res.json();
+
         if (!res.ok) {
-          throw new Error("Failed to fetch pending requests");
+          // Check if this is a Firestore index error
+          if (data.type === "firestore_index_error") {
+            const adminMessage = data.adminMessage || "Database configuration required";
+            const indexUrl = data.indexUrl;
+            const errorMessage = indexUrl ? `${adminMessage}\n\nFirebase Console: ${indexUrl}` : adminMessage;
+
+            setMessage(errorMessage);
+            setMessageType("error");
+            return;
+          }
+
+          throw new Error(data.error || "Failed to fetch pending requests");
         }
 
-        const data = await res.json();
         setRequests(data.requests || []);
 
         // If there's a specific request ID in the URL, select it
@@ -185,7 +197,7 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
 
         {message && (
           <div
-            className={`p-4 mb-6 rounded-md ${
+            className={`p-4 mb-6 rounded-md whitespace-pre-line ${
               messageType === "error"
                 ? "bg-red-50 text-red-800"
                 : messageType === "success"

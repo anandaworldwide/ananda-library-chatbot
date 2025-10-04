@@ -8,6 +8,7 @@ import { firestoreSet } from "@/utils/server/firestoreRetryUtils";
 import { writeAuditLog } from "@/utils/server/auditLog";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { createEmailParams } from "@/utils/server/emailTemplates";
+import { isDevelopment } from "@/utils/env";
 
 const ses = new SESClient({
   region: process.env.AWS_REGION || "us-west-2",
@@ -199,7 +200,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // Store in Firestore
     const siteConfig = await loadSiteConfig();
     const siteId = siteConfig?.siteId || "default";
-    const collectionName = `${siteId}_admin_approval_requests`;
+    const envPrefix = isDevelopment() ? "dev_" : "prod_";
+    const collectionName = `${envPrefix}${siteId}_admin_approval_requests`;
 
     await firestoreSet(
       db.collection(collectionName).doc(requestId),
@@ -218,7 +220,33 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       await Promise.all(emailPromises);
     } catch (emailError) {
       console.error("Error sending approval emails:", emailError);
-      // Continue with success response even if emails fail - the request is still created
+
+      // If emails fail to send, we should inform the user rather than silently succeed
+      // Clean up the created request since emails couldn't be sent
+      try {
+        await db.collection(collectionName).doc(requestId).delete();
+        console.log(`Cleaned up approval request ${requestId} due to email failure`);
+      } catch (cleanupError) {
+        console.error("Failed to clean up approval request after email error:", cleanupError);
+      }
+
+      // Return appropriate error message based on the email error type
+      let errorMessage = "Failed to send approval emails. Please try again or contact support.";
+
+      if (emailError && typeof emailError === "object" && "message" in emailError) {
+        const message = (emailError as any).message || "";
+        if (message.includes("not verified") || message.includes("MessageRejected")) {
+          errorMessage =
+            "Email sending failed due to unverified email addresses. Please contact support for assistance.";
+        } else if (message.includes("rate limit") || message.includes("throttling")) {
+          errorMessage = "Email sending is temporarily unavailable due to rate limits. Please try again later.";
+        }
+      }
+
+      return res.status(500).json({
+        error: errorMessage,
+        details: process.env.NODE_ENV === "development" ? (emailError as any)?.message : undefined,
+      });
     }
 
     // Log audit event
