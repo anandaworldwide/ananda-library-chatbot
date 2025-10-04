@@ -49,7 +49,7 @@ export async function sendActivationEmail(email: string, token: string, req?: an
   let message = "";
 
   if (customMessage) {
-    message = `Your request for access to ${brand} has been approved!
+    message = `Your request for access to ${brand} has been approved.
 
 ${customMessage}
 
@@ -59,7 +59,7 @@ Click here to activate your account.
 
 This link expires in 14 days.`;
   } else {
-    message = `Your request for access to ${brand} has been approved!
+    message = `Your request for access to ${brand} has been approved.
 
 Click here to activate your account.
 
