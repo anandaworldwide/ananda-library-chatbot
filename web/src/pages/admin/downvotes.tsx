@@ -126,7 +126,7 @@ const DownvotesReview = ({ siteConfig }: DownvotesReviewProps) => {
           <title>Review Downvotes - Admin</title>
         </Head>
         <AdminLayout siteConfig={siteConfig} pageTitle="Review Downvotes">
-          {mainContent}
+          <div className="max-w-4xl">{mainContent}</div>
         </AdminLayout>
       </>
     </SudoProvider>
@@ -142,6 +142,13 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
     res as unknown as NextApiResponse,
     siteConfig
   );
-  if (!allowed) return { notFound: true };
+  if (!allowed) {
+    return {
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
+    };
+  }
   return { props: { siteConfig } };
 };

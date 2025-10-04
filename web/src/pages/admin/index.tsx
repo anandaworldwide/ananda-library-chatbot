@@ -496,7 +496,14 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardProps> = async
   const res = ctx.res as unknown as NextApiResponse;
   const siteConfig = await loadSiteConfig();
   const allowed = await isAdminPageAllowed(req, res, siteConfig);
-  if (!allowed) return { notFound: true };
+  if (!allowed) {
+    return {
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
+    };
+  }
   // For render, treat allowed as sudo/admin presence
   return { props: { isSudoAdmin: true, siteConfig } };
 };

@@ -350,7 +350,7 @@ export default function AddUsersPage({ siteConfig }: AddUsersPageProps) {
         <title>Add Users - Admin</title>
       </Head>
       <AdminLayout siteConfig={siteConfig} pageTitle="Add Users">
-        {mainContent}
+        <div className="max-w-4xl">{mainContent}</div>
       </AdminLayout>
     </>
   );
@@ -359,6 +359,13 @@ export default function AddUsersPage({ siteConfig }: AddUsersPageProps) {
 export const getServerSideProps: GetServerSideProps<AddUsersPageProps> = async ({ req }) => {
   const siteConfig = await loadSiteConfig();
   const allowed = await isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
-  if (!allowed) return { notFound: true };
+  if (!allowed) {
+    return {
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
+    };
+  }
   return { props: { siteConfig } };
 };

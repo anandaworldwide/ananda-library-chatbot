@@ -363,7 +363,7 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
         <title>Pending Approvals - Admin</title>
       </Head>
       <AdminLayout siteConfig={siteConfig} pageTitle="Pending Approvals">
-        {mainContent}
+        <div className="max-w-4xl">{mainContent}</div>
       </AdminLayout>
     </>
   );

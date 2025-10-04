@@ -171,6 +171,13 @@ export const getServerSideProps: GetServerSideProps<AdminLeaderboardPageProps> =
   const res = ctx.res as unknown as NextApiResponse;
   const siteConfig = await loadSiteConfig();
   const allowed = await isAdminPageAllowed(req, res, siteConfig);
-  if (!allowed) return { notFound: true };
+  if (!allowed) {
+    return {
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
+    };
+  }
   return { props: { isSudoAdmin: true, siteConfig } };
 };

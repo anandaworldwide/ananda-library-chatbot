@@ -36,11 +36,13 @@ describe("Admin UI · Edit User page", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
-    // Default fetch mocks: web-token and GET user
+    // Default fetch mocks: web-token, profile (for current user role), and GET user
     global.fetch = jest
       .fn()
       // /api/web-token
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) } as any)
+      // /api/profile (current user's role)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) } as any)
       // GET /api/admin/users/:id (now includes conversationCount for admin users)
       .mockResolvedValueOnce({
         ok: true,
@@ -79,7 +81,7 @@ describe("Admin UI · Edit User page", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) }) // web-token
-
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) }) // profile
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -139,6 +141,7 @@ describe("Admin UI · Edit User page", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) }) // web-token
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) }) // profile
 
       .mockResolvedValueOnce({
         ok: true,
@@ -208,7 +211,7 @@ describe("Admin UI · Edit User page", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) }) // web-token
-
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) }) // profile
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Forbidden" }) }); // GET user fails
 
     render(<EditUserPage siteConfig={{ siteId: "test" } as any} />);
@@ -220,7 +223,7 @@ describe("Admin UI · Edit User page", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) }) // web-token
-
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) }) // profile
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({

@@ -344,7 +344,7 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
         <title>Admin · Pending Users</title>
       </Head>
       <AdminLayout siteConfig={siteConfig} pageTitle="Pending Users">
-        {mainContent}
+        <div className="max-w-4xl">{mainContent}</div>
       </AdminLayout>
     </>
   );
@@ -353,6 +353,13 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
 export const getServerSideProps: GetServerSideProps<AdminPendingUsersPageProps> = async ({ req }) => {
   const siteConfig = await loadSiteConfig();
   const allowed = await isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
-  if (!allowed) return { notFound: true };
+  if (!allowed) {
+    return {
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
+    };
+  }
   return { props: { siteConfig } };
 };

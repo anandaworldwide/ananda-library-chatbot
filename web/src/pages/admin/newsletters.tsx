@@ -751,7 +751,7 @@ For external images: ![Alt text](https://external-site.com/image.jpg)
         <title>Admin · Newsletters</title>
       </Head>
       <AdminLayout siteConfig={siteConfig} pageTitle="Newsletters">
-        {mainContent}
+        <div className="max-w-4xl">{mainContent}</div>
       </AdminLayout>
     </>
   );
@@ -763,12 +763,22 @@ export const getServerSideProps: GetServerSideProps<NewsletterPageProps> = async
     const isAllowed = await isSuperuserPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
 
     if (!isAllowed) {
-      return { notFound: true };
+      return {
+        redirect: {
+          destination: "/unauthorized",
+          permanent: false,
+        },
+      };
     }
 
     return { props: { siteConfig } };
   } catch (error) {
     console.error("Failed to load admin newsletters page:", error);
-    return { notFound: true };
+    return {
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
+    };
   }
 };

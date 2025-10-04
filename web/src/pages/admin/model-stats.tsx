@@ -44,7 +44,10 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
 
   if (!isAllowed) {
     return {
-      notFound: true,
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
     };
   }
 
