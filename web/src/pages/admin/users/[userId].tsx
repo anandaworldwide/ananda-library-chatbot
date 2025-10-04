@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import type { GetServerSideProps, NextApiRequest } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
-import { Breadcrumb } from "@/components/Breadcrumb";
+import { AdminLayout } from "@/components/AdminLayout";
 
 interface UserDetail {
   id: string;
@@ -157,153 +156,142 @@ export default function EditUserPage({ siteConfig }: PageProps) {
     }
   }
 
-  return (
-    <Layout siteConfig={siteConfig}>
-      <Head>
-        <title>Admin · Edit User</title>
-      </Head>
-      <div className="mx-auto max-w-3xl p-6">
-        <Breadcrumb
-          items={[
-            { label: "Admin Dashboard", href: "/admin" },
-            { label: "Users", href: "/admin/users" },
-            { label: user ? getDisplayName(user) : "User" },
-          ]}
-        />
-        {loading ? (
-          <div>Loading…</div>
-        ) : error ? (
-          <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>
-        ) : !user ? (
-          <div className="text-sm text-gray-700">User not found</div>
-        ) : (
-          <>
-            {/* User Information Section */}
-            <div className="mb-6 rounded border bg-gray-50 p-4">
-              <h2 className="text-lg font-semibold mb-3">User Information</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-medium text-gray-700">UUID:</span>
-                  <div className="mt-1 font-mono text-xs bg-white p-2 rounded border">{user.uuid || "–"}</div>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-700">Verified:</span>
-                  <div className="mt-1">
-                    {user.verifiedAt ? (
-                      <span className="text-green-600">✓ {new Date(user.verifiedAt).toLocaleString()}</span>
-                    ) : (
-                      <span className="text-gray-500">Not verified</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-700">Last Login:</span>
-                  <div className="mt-1">
-                    {user.lastLoginAt ? (
-                      new Date(user.lastLoginAt).toLocaleString()
-                    ) : (
-                      <span className="text-gray-500">Never</span>
-                    )}
-                  </div>
-                </div>
+  const mainContent = (
+    <>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">{user ? getDisplayName(user) : "User"}</h1>
+        <p className="text-sm text-gray-600 mt-1">Manage user account details and settings</p>
+      </div>
+
+      {loading ? (
+        <div>Loading…</div>
+      ) : error ? (
+        <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>
+      ) : !user ? (
+        <div className="text-sm text-gray-700">User not found</div>
+      ) : (
+        <>
+          {/* User Information Section */}
+          <div className="mb-6 rounded border bg-gray-50 p-4">
+            <h2 className="text-lg font-semibold mb-3">User Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="font-medium text-gray-700">UUID:</span>
+                <div className="mt-1 font-mono text-xs bg-white p-2 rounded border">{user.uuid || "–"}</div>
               </div>
-            </div>
-
-            {/* Question Activity Section */}
-            <div className="mb-6 rounded border bg-gray-50 p-4">
-              <h2 className="text-lg font-semibold mb-3">Questions Asked</h2>
-              <div className="text-3xl font-bold text-blue-600">{user.conversationCount || 0}</div>
-            </div>
-
-            <form onSubmit={onSave} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="firstName" className="block text-sm font-medium mb-1">
-                    First name
-                  </label>
-                  <input
-                    id="firstName"
-                    className="w-full rounded border px-3 py-2"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="First name"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="lastName" className="block text-sm font-medium mb-1">
-                    Last name
-                  </label>
-                  <input
-                    id="lastName"
-                    className="w-full rounded border px-3 py-2"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Last name"
-                  />
+              <div>
+                <span className="font-medium text-gray-700">Verified:</span>
+                <div className="mt-1">
+                  {user.verifiedAt ? (
+                    <span className="text-green-600">✓ {new Date(user.verifiedAt).toLocaleString()}</span>
+                  ) : (
+                    <span className="text-gray-500">Not verified</span>
+                  )}
                 </div>
               </div>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium mb-1">
-                  Email
+                <span className="font-medium text-gray-700">Last Login:</span>
+                <div className="mt-1">
+                  {user.lastLoginAt ? (
+                    new Date(user.lastLoginAt).toLocaleString()
+                  ) : (
+                    <span className="text-gray-500">Never</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Question Activity Section */}
+          <div className="mb-6 rounded border bg-gray-50 p-4">
+            <h2 className="text-lg font-semibold mb-3">Questions Asked</h2>
+            <div className="text-3xl font-bold text-blue-600">{user.conversationCount || 0}</div>
+          </div>
+
+          <form onSubmit={onSave} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="firstName" className="block text-sm font-medium mb-1">
+                  First name
                 </label>
                 <input
-                  id="email"
-                  type="email"
+                  id="firstName"
                   className="w-full rounded border px-3 py-2"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="First name"
                 />
-                <p className="mt-1 text-xs text-gray-600">Changing email keeps UUID and sessions intact.</p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Role</label>
-                <select className="rounded border px-3 py-2" value={role} onChange={(e) => setRole(e.target.value)}>
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                  <option value="superuser">superuser</option>
-                </select>
-                <p className="mt-1 text-xs text-gray-600">Only superusers can change roles.</p>
-              </div>
-              <div>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={newsletterSubscribed}
-                    onChange={(e) => setNewsletterSubscribed(e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium">Newsletter subscription</span>
+                <label htmlFor="lastName" className="block text-sm font-medium mb-1">
+                  Last name
                 </label>
+                <input
+                  id="lastName"
+                  className="w-full rounded border px-3 py-2"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Last name"
+                />
               </div>
-              <div className="flex justify-between">
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
-                  >
-                    {saving ? "Saving…" : "Save Changes"}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded px-4 py-2 border"
-                    onClick={() => router.push("/admin/users")}
-                  >
-                    Back
-                  </button>
-                </div>
+            </div>
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium mb-1">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                className="w-full rounded border px-3 py-2"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-gray-600">Changing email keeps UUID and sessions intact.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Role</label>
+              <select className="rounded border px-3 py-2" value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+                <option value="superuser">superuser</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-600">Only superusers can change roles.</p>
+            </div>
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={newsletterSubscribed}
+                  onChange={(e) => setNewsletterSubscribed(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium">Newsletter subscription</span>
+              </label>
+            </div>
+            <div className="flex justify-between">
+              <div className="flex gap-3">
                 <button
-                  type="button"
-                  onClick={() => setShowDeleteModal(true)}
-                  className="inline-flex items-center rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 transition-colors"
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
                 >
-                  Delete User
+                  {saving ? "Saving…" : "Save Changes"}
+                </button>
+                <button type="button" className="rounded px-4 py-2 border" onClick={() => router.push("/admin")}>
+                  Back
                 </button>
               </div>
-            </form>
-          </>
-        )}
-      </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className="inline-flex items-center rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 transition-colors"
+              >
+                Delete User
+              </button>
+            </div>
+          </form>
+        </>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && user && (
@@ -337,7 +325,18 @@ export default function EditUserPage({ siteConfig }: PageProps) {
           </div>
         </div>
       )}
-    </Layout>
+    </>
+  );
+
+  return (
+    <>
+      <Head>
+        <title>Admin · Edit User</title>
+      </Head>
+      <AdminLayout siteConfig={siteConfig} pageTitle={`Edit User: ${user ? getDisplayName(user) : "User"}`}>
+        {mainContent}
+      </AdminLayout>
+    </>
   );
 }
 

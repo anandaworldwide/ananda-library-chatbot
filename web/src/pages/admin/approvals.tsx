@@ -2,12 +2,11 @@
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import type { GetServerSideProps } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
-import { Breadcrumb } from "@/components/Breadcrumb";
+import { AdminLayout } from "@/components/AdminLayout";
 import { Modal } from "@/components/ui/Modal";
 
 interface ApprovalRequest {
@@ -178,136 +177,125 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
   const pendingRequests = requests.filter((r) => r.status === "pending");
   const processedRequests = requests.filter((r) => r.status !== "pending");
 
-  return (
-    <Layout siteConfig={siteConfig}>
-      <Head>
-        <title>Pending Approvals - Admin</title>
-      </Head>
+  const mainContent = (
+    <>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Pending Access Requests</h1>
+        <p className="text-sm text-gray-600 mt-1">Review and process pending access requests</p>
+      </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <Breadcrumb
-          items={[
-            { label: "Admin", href: "/admin" },
-            { label: "Users", href: "/admin/users" },
-            { label: "Approvals", href: "/admin/approvals" },
-          ]}
-        />
+      {message && (
+        <div
+          className={`p-4 mb-6 rounded-md whitespace-pre-line ${
+            messageType === "error"
+              ? "bg-red-50 text-red-800"
+              : messageType === "success"
+                ? "bg-green-50 text-green-800"
+                : "bg-blue-50 text-blue-800"
+          }`}
+        >
+          {message}
+        </div>
+      )}
 
-        <h1 className="text-3xl font-bold mb-6">Pending Access Requests</h1>
+      {loading && (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading requests...</p>
+        </div>
+      )}
 
-        {message && (
-          <div
-            className={`p-4 mb-6 rounded-md whitespace-pre-line ${
-              messageType === "error"
-                ? "bg-red-50 text-red-800"
-                : messageType === "success"
-                  ? "bg-green-50 text-green-800"
-                  : "bg-blue-50 text-blue-800"
-            }`}
-          >
-            {message}
-          </div>
-        )}
+      {!loading && pendingRequests.length === 0 && (
+        <div className="bg-gray-50 rounded-lg p-8 text-center">
+          <p className="text-gray-600">No pending requests</p>
+        </div>
+      )}
 
-        {loading && (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading requests...</p>
-          </div>
-        )}
+      {!loading && pendingRequests.length > 0 && (
+        <div className="space-y-4">
+          {pendingRequests.map((request) => (
+            <div
+              key={request.requestId}
+              className={`bg-white border rounded-lg p-6 shadow-sm ${
+                requestId === request.requestId ? "border-blue-500 border-2" : "border-gray-200"
+              }`}
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{request.requesterName}</h3>
+                  <p className="text-sm text-gray-600">{request.requesterEmail}</p>
+                </div>
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                  Pending
+                </span>
+              </div>
 
-        {!loading && pendingRequests.length === 0 && (
-          <div className="bg-gray-50 rounded-lg p-8 text-center">
-            <p className="text-gray-600">No pending requests</p>
-          </div>
-        )}
+              <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Requested:</span>
+                  <span className="ml-2 text-gray-900">{new Date(request.createdAt).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Location:</span>
+                  <span className="ml-2 text-gray-900">{request.adminLocation}</span>
+                </div>
+              </div>
 
-        {!loading && pendingRequests.length > 0 && (
-          <div className="space-y-4">
-            {pendingRequests.map((request) => (
-              <div
-                key={request.requestId}
-                className={`bg-white border rounded-lg p-6 shadow-sm ${
-                  requestId === request.requestId ? "border-blue-500 border-2" : "border-gray-200"
-                }`}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{request.requesterName}</h3>
-                    <p className="text-sm text-gray-600">{request.requesterEmail}</p>
-                  </div>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-                    Pending
+              {userRole === "superuser" && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-md text-sm">
+                  <span className="text-blue-700 font-medium">Assigned to: </span>
+                  <span className="text-blue-900">
+                    {request.adminName} ({request.adminEmail})
                   </span>
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={() => handleOpenActionModal(request, "approve")}
+                  className="flex-1 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors font-medium"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => handleOpenActionModal(request, "deny")}
+                  className="flex-1 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors font-medium"
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && processedRequests.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold mb-4">Recently Processed</h2>
+          <div className="space-y-4">
+            {processedRequests.slice(0, 5).map((request) => (
+              <div key={request.requestId} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-gray-500">Requested:</span>
-                    <span className="ml-2 text-gray-900">{new Date(request.createdAt).toLocaleString()}</span>
+                    <h3 className="font-semibold text-gray-900">{request.requesterName}</h3>
+                    <p className="text-sm text-gray-600">{request.requesterEmail}</p>
                   </div>
-                  <div>
-                    <span className="text-gray-500">Location:</span>
-                    <span className="ml-2 text-gray-900">{request.adminLocation}</span>
-                  </div>
+                  <span
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                      request.status === "approved" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    }`}
+                  >
+                    {request.status === "approved" ? "Approved" : "Denied"}
+                  </span>
                 </div>
-
-                {userRole === "superuser" && (
-                  <div className="mb-4 p-3 bg-blue-50 rounded-md text-sm">
-                    <span className="text-blue-700 font-medium">Assigned to: </span>
-                    <span className="text-blue-900">
-                      {request.adminName} ({request.adminEmail})
-                    </span>
-                  </div>
+                {request.adminMessage && (
+                  <p className="mt-2 text-sm text-gray-600 italic">&ldquo;{request.adminMessage}&rdquo;</p>
                 )}
-
-                <div className="flex gap-3 mt-4">
-                  <button
-                    onClick={() => handleOpenActionModal(request, "approve")}
-                    className="flex-1 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors font-medium"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleOpenActionModal(request, "deny")}
-                    className="flex-1 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors font-medium"
-                  >
-                    Deny
-                  </button>
-                </div>
               </div>
             ))}
           </div>
-        )}
-
-        {!loading && processedRequests.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold mb-4">Recently Processed</h2>
-            <div className="space-y-4">
-              {processedRequests.slice(0, 5).map((request) => (
-                <div key={request.requestId} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{request.requesterName}</h3>
-                      <p className="text-sm text-gray-600">{request.requesterEmail}</p>
-                    </div>
-                    <span
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                        request.status === "approved" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {request.status === "approved" ? "Approved" : "Denied"}
-                    </span>
-                  </div>
-                  {request.adminMessage && (
-                    <p className="mt-2 text-sm text-gray-600 italic">&ldquo;{request.adminMessage}&rdquo;</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Action Modal */}
       <Modal
@@ -366,7 +354,18 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
           </div>
         )}
       </Modal>
-    </Layout>
+    </>
+  );
+
+  return (
+    <>
+      <Head>
+        <title>Pending Approvals - Admin</title>
+      </Head>
+      <AdminLayout siteConfig={siteConfig} pageTitle="Pending Approvals">
+        {mainContent}
+      </AdminLayout>
+    </>
   );
 }
 
