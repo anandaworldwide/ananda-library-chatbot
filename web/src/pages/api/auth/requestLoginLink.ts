@@ -1,5 +1,5 @@
 // API: Email-first login request. If user exists: send login magic link. If pending: resend activation.
-// If not found: return { next: "verify-access" } to trigger shared-password screen.
+// If not found: return { next: "request-approval" } to trigger admin approval flow.
 import type { NextApiRequest, NextApiResponse } from "next";
 import firebase from "firebase-admin";
 import { db } from "@/services/firebase";
@@ -68,8 +68,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(200).json({ message: "activation-resent" });
       }
     }
-    // Not found → ask frontend to go to verify-access (shared password)
-    return res.status(200).json({ next: "verify-access" });
+    // Not found → ask frontend to go to request-approval (admin approval)
+    return res.status(200).json({ next: "request-approval" });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ error: message });

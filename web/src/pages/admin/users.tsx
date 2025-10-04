@@ -79,6 +79,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
   const [messageType, setMessageType] = useState<"info" | "error">("info");
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [pendingLoading, setPendingLoading] = useState<boolean>(true);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
   const [active, setActive] = useState<ActiveUser[]>([]);
   const [activeLoading, setActiveLoading] = useState(false);
   const [showLoading, setShowLoading] = useState(false);
@@ -150,6 +151,23 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
       setMessage(e?.message || "Failed to load pending users count");
       setMessageType("error");
       setPendingLoading(false);
+    }
+  }
+
+  async function fetchPendingApprovalsCount() {
+    try {
+      const { data, refreshedToken } = await fetchWithTokenRefresh<{ requests: any[] }>("/api/admin/pendingRequests");
+
+      // Update JWT if it was refreshed
+      if (refreshedToken) {
+        setJwt(refreshedToken);
+      }
+
+      const pendingRequests = data.requests?.filter((r: any) => r.status === "pending") || [];
+      setPendingApprovalsCount(pendingRequests.length);
+    } catch (e: any) {
+      console.error("Failed to load pending approvals count:", e);
+      // Don't show error message for this, it's not critical
     }
   }
 
@@ -270,6 +288,7 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
   useEffect(() => {
     if (!jwt) return;
     fetchPendingCount();
+    fetchPendingApprovalsCount();
     fetchActive(currentPage);
     // Intentionally only depends on jwt to refetch if token is refreshed
   }, [jwt]);
@@ -437,6 +456,18 @@ export default function AdminUsersPage({ siteConfig }: AdminUsersPageProps) {
             <span className="material-icons text-sm mr-2">person_add</span>
             Add Users
           </button>
+          <Link
+            href="/admin/approvals"
+            className="relative inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          >
+            <span className="material-icons text-sm mr-2">pending_actions</span>
+            Pending Approvals
+            {pendingApprovalsCount > 0 && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500 text-white">
+                {pendingApprovalsCount}
+              </span>
+            )}
+          </Link>
           <Link
             href="/admin/leaderboard"
             className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"

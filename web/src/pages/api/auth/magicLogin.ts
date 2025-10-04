@@ -118,7 +118,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
       cookies.set("auth", authToken, {
         httpOnly: true,
-        sameSite: "strict",
+        sameSite: "lax",
         secure: isSecure,
         maxAge: 180 * 24 * 60 * 60 * 1000,
         path: "/",

@@ -18,6 +18,9 @@ export const isPublicPage = (path: string, siteConfig: SiteConfig | null): boole
   // Contact page is always public
   if (path === "/contact") return true;
 
+  // Request submitted page is always public (shown after access request)
+  if (path === "/request-submitted") return true;
+
   // Individual answer pages (with ID) are public
   if (path.startsWith("/answers/") && path.length > 9) return true;
 
