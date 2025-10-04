@@ -5,6 +5,7 @@ import AnandaHeader from "./Header/AnandaHeader";
 import AnandaPublicHeader from "./Header/AnandaPublicHeader";
 import JairamHeader from "./Header/JairamHeader";
 import CrystalHeader from "./Header/CrystalHeader";
+import PhotoHeader from "./Header/PhotoHeader";
 import Footer from "./Footer";
 import NPSSurvey from "./NPSSurvey";
 import FeedbackButton from "./FeedbackButton";
@@ -78,6 +79,8 @@ export default function Layout({
         return <JairamHeader {...headerPropsNoTempSessions} />;
       case "crystal":
         return <CrystalHeader {...headerPropsNoTempSessions} />;
+      case "photo":
+        return <PhotoHeader {...headerProps} />;
       default:
         return null;
     }
