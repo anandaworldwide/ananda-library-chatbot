@@ -102,40 +102,11 @@ const Footer: React.FC<FooterProps> = ({ siteConfig }) => {
         <div className="bg-gray-100 text-gray-700 py-2 border-t border-t-slate-200 mt-4">
           <div className="mx-auto max-w-[800px] px-4">
             <div className="flex flex-col items-center w-full">
-              <span className="font-bold mb-2 text-center w-full">ADMIN:</span>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full sm:flex sm:flex-row sm:space-x-2 sm:space-y-0 sm:grid-cols-1">
-                {!siteConfig?.allowAllAnswersPage && (
-                  <Link
-                    href="/answers"
-                    className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
-                  >
-                    All Answers
-                    <span className="material-icons text-sm ml-1">list_alt</span>
-                  </Link>
-                )}
-                <Link href="/admin" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">
+              <div className="flex flex-row justify-center items-center w-full">
+                <Link href="/admin" className="text-sm hover:text-slate-600 cursor-pointer flex items-center">
                   Admin Dashboard
                   <span className="material-icons text-sm ml-1">dashboard</span>
                 </Link>
-                {!siteConfig?.requireLogin && (
-                  <Link href="/bless" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">
-                    Manage Blessing
-                    <span className="material-icons text-sm ml-1">auto_fix_high</span>
-                  </Link>
-                )}
-                <Link href="/stats" className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full">
-                  Statistics
-                  <span className="material-icons text-sm ml-1">trending_up</span>
-                </Link>
-                {!siteConfig?.enableModelComparison && (
-                  <Link
-                    href="/compare-models"
-                    className="text-sm hover:text-slate-600 cursor-pointer flex items-center w-full"
-                  >
-                    Compare Models
-                    <span className="material-icons text-sm ml-1">compare</span>
-                  </Link>
-                )}
               </div>
             </div>
           </div>

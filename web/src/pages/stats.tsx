@@ -3,8 +3,12 @@
 
 import { SiteConfig } from "@/types/siteConfig";
 import { useState, useEffect } from "react";
-import Layout from "@/components/layout";
+import Head from "next/head";
+import type { GetServerSideProps, NextApiRequest } from "next";
+import { AdminLayout } from "@/components/AdminLayout";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
+import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
+import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 
 // Structure for the statistics data
 interface StatsData {
@@ -59,25 +63,40 @@ const Stats = ({ siteConfig }: StatsProps) => {
   // Show loading state
   if (isLoading)
     return (
-      <Layout siteConfig={siteConfig}>
-        <div>Loading stats...</div>
-      </Layout>
+      <>
+        <Head>
+          <title>Statistics - Admin</title>
+        </Head>
+        <AdminLayout siteConfig={siteConfig} pageTitle="Statistics">
+          <div>Loading stats...</div>
+        </AdminLayout>
+      </>
     );
 
   // Show error state
   if (error)
     return (
-      <Layout siteConfig={siteConfig}>
-        <div>Error: {error}</div>
-      </Layout>
+      <>
+        <Head>
+          <title>Statistics - Admin</title>
+        </Head>
+        <AdminLayout siteConfig={siteConfig} pageTitle="Statistics">
+          <div>Error: {error}</div>
+        </AdminLayout>
+      </>
     );
 
   // Show no data state
   if (!stats)
     return (
-      <Layout siteConfig={siteConfig}>
-        <div>No data available</div>
-      </Layout>
+      <>
+        <Head>
+          <title>Statistics - Admin</title>
+        </Head>
+        <AdminLayout siteConfig={siteConfig} pageTitle="Statistics">
+          <div>No data available</div>
+        </AdminLayout>
+      </>
     );
 
   // Sort dates in descending order
@@ -102,84 +121,96 @@ const Stats = ({ siteConfig }: StatsProps) => {
   const ninetyDayStats = calculateAggregateStats(90);
 
   return (
-    <Layout siteConfig={siteConfig}>
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">User Engagement Statistics</h1>
+    <>
+      <Head>
+        <title>Statistics - Admin</title>
+      </Head>
+      <AdminLayout siteConfig={siteConfig} pageTitle="Statistics">
+        <div className="bg-white shadow rounded-lg p-6">
+          <h1 className="text-2xl font-semibold text-gray-900 mb-6">User Engagement Statistics</h1>
 
-        {/* Summary Statistics */}
-        <div className="mb-8 p-6 bg-gray-50 rounded-lg">
-          <h2 className="text-xl font-semibold mb-4">Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{stats.totalQuestions}</div>
-              <div className="text-sm text-gray-600">Total Questions (90 days)</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{sevenDayStats.averageQuestions}</div>
-              <div className="text-sm text-gray-600">Avg Questions/Day (7 days)</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{thirtyDayStats.averageQuestions}</div>
-              <div className="text-sm text-gray-600">Avg Questions/Day (30 days)</div>
+          {/* Summary Statistics */}
+          <div className="mb-8 p-6 bg-gray-50 rounded-lg">
+            <h2 className="text-xl font-semibold mb-4">Summary</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{stats.totalQuestions}</div>
+                <div className="text-sm text-gray-600">Total Questions (90 days)</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{sevenDayStats.averageQuestions}</div>
+                <div className="text-sm text-gray-600">Avg Questions/Day (7 days)</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">{thirtyDayStats.averageQuestions}</div>
+                <div className="text-sm text-gray-600">Avg Questions/Day (30 days)</div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Daily Statistics Table */}
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="py-2 px-4 border-b">Date</th>
-                <th className="py-2 px-4 border-b">Questions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedDates.slice(0, 30).map((date) => (
-                <tr key={date} className="hover:bg-gray-50">
-                  <td className="py-2 px-4 border-b">{formatDate(date)}</td>
-                  <td className="py-2 px-4 border-b text-center">{stats.questionsPerDay[date] || 0}</td>
+          {/* Daily Statistics Table */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white border border-gray-300">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="py-2 px-4 border-b">Date</th>
+                  <th className="py-2 px-4 border-b">Questions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sortedDates.slice(0, 30).map((date) => (
+                  <tr key={date} className="hover:bg-gray-50">
+                    <td className="py-2 px-4 border-b">{formatDate(date)}</td>
+                    <td className="py-2 px-4 border-b text-center">{stats.questionsPerDay[date] || 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Period Statistics */}
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 border border-gray-300 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">7-Day Statistics</h3>
+              <p>
+                Average Questions/Day: <strong>{sevenDayStats.averageQuestions}</strong>
+              </p>
+              <p>
+                Total Questions: <strong>{sevenDayStats.totalQuestions}</strong>
+              </p>
+            </div>
+
+            <div className="bg-white p-6 border border-gray-300 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">30-Day Statistics</h3>
+              <p>
+                Average Questions/Day: <strong>{thirtyDayStats.averageQuestions}</strong>
+              </p>
+              <p>
+                Total Questions: <strong>{thirtyDayStats.totalQuestions}</strong>
+              </p>
+            </div>
+
+            <div className="bg-white p-6 border border-gray-300 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">90-Day Statistics</h3>
+              <p>
+                Average Questions/Day: <strong>{ninetyDayStats.averageQuestions}</strong>
+              </p>
+              <p>
+                Total Questions: <strong>{ninetyDayStats.totalQuestions}</strong>
+              </p>
+            </div>
+          </div>
         </div>
-
-        {/* Period Statistics */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 border border-gray-300 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">7-Day Statistics</h3>
-            <p>
-              Average Questions/Day: <strong>{sevenDayStats.averageQuestions}</strong>
-            </p>
-            <p>
-              Total Questions: <strong>{sevenDayStats.totalQuestions}</strong>
-            </p>
-          </div>
-
-          <div className="bg-white p-6 border border-gray-300 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">30-Day Statistics</h3>
-            <p>
-              Average Questions/Day: <strong>{thirtyDayStats.averageQuestions}</strong>
-            </p>
-            <p>
-              Total Questions: <strong>{thirtyDayStats.totalQuestions}</strong>
-            </p>
-          </div>
-
-          <div className="bg-white p-6 border border-gray-300 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">90-Day Statistics</h3>
-            <p>
-              Average Questions/Day: <strong>{ninetyDayStats.averageQuestions}</strong>
-            </p>
-            <p>
-              Total Questions: <strong>{ninetyDayStats.totalQuestions}</strong>
-            </p>
-          </div>
-        </div>
-      </div>
-    </Layout>
+      </AdminLayout>
+    </>
   );
+};
+
+export const getServerSideProps: GetServerSideProps<StatsProps> = async ({ req }) => {
+  const siteConfig = await loadSiteConfig();
+  const allowed = await isAdminPageAllowed(req as NextApiRequest, undefined as any, siteConfig);
+  if (!allowed) return { notFound: true };
+  return { props: { siteConfig } };
 };
 
 export default Stats;
