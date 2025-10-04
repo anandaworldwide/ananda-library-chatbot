@@ -10,6 +10,8 @@ import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { createEmailParams } from "@/utils/server/emailTemplates";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
+import { isDevelopment } from "@/utils/env";
+import { createIndexErrorResponse } from "@/utils/server/firestoreIndexErrorHandler";
 import {
   generateInviteToken,
   hashInviteToken,
@@ -160,7 +162,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const siteConfig = await loadSiteConfig();
   const siteId = siteConfig?.siteId || "default";
-  const collectionName = `${siteId}_admin_approval_requests`;
+  const envPrefix = isDevelopment() ? "dev_" : "prod_";
+  const collectionName = `${envPrefix}${siteId}_admin_approval_requests`;
 
   // GET - List pending requests for this admin (or all if superuser)
   if (req.method === "GET") {
@@ -187,6 +190,21 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
       return res.status(200).json({ requests });
     } catch (error: any) {
+      // Check if this is a Firestore index error
+      const errorResponse = createIndexErrorResponse(error, {
+        endpoint: "/api/admin/pendingRequests",
+        collection: collectionName,
+        fields: token.role !== "superuser" ? ["status", "adminEmail", "createdAt"] : ["status", "createdAt"],
+        query:
+          token.role !== "superuser"
+            ? "pending requests filtered by admin email, ordered by creation date"
+            : "all pending requests ordered by creation date",
+      });
+
+      if (errorResponse.type === "firestore_index_error") {
+        return res.status(500).json(errorResponse);
+      }
+
       console.error("Error fetching pending requests:", error);
       return res.status(500).json({ error: "Internal server error" });
     }

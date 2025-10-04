@@ -107,8 +107,9 @@ export default function AdminApproverSelector({
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || "Failed to submit approval request");
       }
 

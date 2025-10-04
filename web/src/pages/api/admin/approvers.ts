@@ -93,11 +93,38 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     return res.status(200).json(approversData);
   } catch (error: any) {
-    console.error("Error fetching admin approvers:", error);
-
     // Handle specific S3 errors
-    if (error.name === "NoSuchKey") {
-      return res.status(404).json({ error: "Admin approvers configuration not found for this site" });
+    if (error.name === "NoSuchKey" || error.name === "NoSuchBucket") {
+      // Log as warning since this is expected fallback behavior
+      console.warn("No admin approvers configuration found, using fallback Support admin");
+
+      // Return fallback admin approver using CONTACT_EMAIL
+      const contactEmail = process.env.CONTACT_EMAIL;
+      if (!contactEmail) {
+        return res
+          .status(404)
+          .json({ error: "Admin approvers configuration not found for this site and CONTACT_EMAIL not configured" });
+      }
+
+      console.error("Error fetching admin approvers:", error);
+
+      const fallbackData: AdminApproversData = {
+        lastUpdated: new Date().toISOString(),
+        regions: [
+          {
+            name: "General",
+            admins: [
+              {
+                name: "Support",
+                email: contactEmail,
+                location: "Global Support Team",
+              },
+            ],
+          },
+        ],
+      };
+
+      return res.status(200).json(fallbackData);
     }
 
     if (error.name === "AccessDenied" || error.name === "Forbidden") {

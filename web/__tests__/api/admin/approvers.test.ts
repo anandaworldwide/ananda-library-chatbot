@@ -186,11 +186,81 @@ describe("/api/admin/approvers", () => {
     expect(res._getJSONData()).toEqual({ error: "Site configuration not available" });
   });
 
-  it("should return 404 when S3 file does not exist", async () => {
+  it("should return fallback admin approver when S3 file does not exist and CONTACT_EMAIL is set", async () => {
     genericRateLimiter.mockResolvedValue(true);
     loadSiteConfig.loadSiteConfig.mockResolvedValue({ siteId: "ananda" });
     redisUtils.getFromCache.mockResolvedValue(null);
     s3Client.send.mockRejectedValue({ name: "NoSuchKey" });
+
+    // Mock CONTACT_EMAIL environment variable
+    const originalContactEmail = process.env.CONTACT_EMAIL;
+    process.env.CONTACT_EMAIL = "support@ananda.org";
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "GET",
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    const data = res._getJSONData();
+    expect(data).toHaveProperty("lastUpdated");
+    expect(data).toHaveProperty("regions");
+    expect(data.regions).toHaveLength(1);
+    expect(data.regions[0].name).toBe("General");
+    expect(data.regions[0].admins).toHaveLength(1);
+    expect(data.regions[0].admins[0]).toEqual({
+      name: "Support",
+      email: "support@ananda.org",
+      location: "Global Support Team",
+    });
+
+    // Restore original env var
+    process.env.CONTACT_EMAIL = originalContactEmail;
+  });
+
+  it("should return fallback admin approver when S3 bucket does not exist and CONTACT_EMAIL is set", async () => {
+    genericRateLimiter.mockResolvedValue(true);
+    loadSiteConfig.loadSiteConfig.mockResolvedValue({ siteId: "photo" });
+    redisUtils.getFromCache.mockResolvedValue(null);
+    s3Client.send.mockRejectedValue({ name: "NoSuchBucket" });
+
+    // Mock CONTACT_EMAIL environment variable
+    const originalContactEmail = process.env.CONTACT_EMAIL;
+    process.env.CONTACT_EMAIL = "support@ananda.org";
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "GET",
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    const data = res._getJSONData();
+    expect(data).toHaveProperty("lastUpdated");
+    expect(data).toHaveProperty("regions");
+    expect(data.regions).toHaveLength(1);
+    expect(data.regions[0].name).toBe("General");
+    expect(data.regions[0].admins).toHaveLength(1);
+    expect(data.regions[0].admins[0]).toEqual({
+      name: "Support",
+      email: "support@ananda.org",
+      location: "Global Support Team",
+    });
+
+    // Restore original env var
+    process.env.CONTACT_EMAIL = originalContactEmail;
+  });
+
+  it("should return 404 when S3 file does not exist and CONTACT_EMAIL is not set", async () => {
+    genericRateLimiter.mockResolvedValue(true);
+    loadSiteConfig.loadSiteConfig.mockResolvedValue({ siteId: "ananda" });
+    redisUtils.getFromCache.mockResolvedValue(null);
+    s3Client.send.mockRejectedValue({ name: "NoSuchKey" });
+
+    // Mock CONTACT_EMAIL not set
+    const originalContactEmail = process.env.CONTACT_EMAIL;
+    delete process.env.CONTACT_EMAIL;
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "GET",
@@ -199,7 +269,12 @@ describe("/api/admin/approvers", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(404);
-    expect(res._getJSONData()).toEqual({ error: "Admin approvers configuration not found for this site" });
+    expect(res._getJSONData()).toEqual({
+      error: "Admin approvers configuration not found for this site and CONTACT_EMAIL not configured",
+    });
+
+    // Restore original env var
+    process.env.CONTACT_EMAIL = originalContactEmail;
   });
 
   it("should return 403 for access denied errors", async () => {
