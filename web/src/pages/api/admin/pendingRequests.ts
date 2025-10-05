@@ -160,10 +160,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(403).json({ error: "Admin privileges required" });
   }
 
-  const siteConfig = await loadSiteConfig();
-  const siteId = siteConfig?.siteId || "default";
   const envPrefix = isDevelopment() ? "dev_" : "prod_";
-  const collectionName = `${envPrefix}${siteId}_admin_approval_requests`;
+  const collectionName = `${envPrefix}admin_approval_requests`;
 
   // GET - List pending requests for this admin (or all if superuser)
   if (req.method === "GET") {

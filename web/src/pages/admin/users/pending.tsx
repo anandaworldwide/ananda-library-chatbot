@@ -38,6 +38,8 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
   const [resending, setResending] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [showLoading, setShowLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Shared function to handle token refresh and retry logic
   async function fetchWithTokenRefresh<T>(
@@ -86,6 +88,13 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
 
   async function fetchPending(page: number = 1) {
     setLoading(true);
+    setDataLoaded(false);
+
+    // Show loading spinner only after 2 seconds
+    const loadingTimer = setTimeout(() => {
+      setShowLoading(true);
+    }, 2000);
+
     try {
       // Build query parameters
       const params = new URLSearchParams({
@@ -114,7 +123,10 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
       setMessage(e?.message || "Failed to load pending users");
       setMessageType("error");
     } finally {
+      clearTimeout(loadingTimer);
       setLoading(false);
+      setShowLoading(false);
+      setDataLoaded(true);
     }
   }
 
@@ -247,16 +259,21 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
         </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="text-gray-600">Loading pending users...</div>
+      {loading && showLoading && (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading pending users...</p>
         </div>
-      ) : pending.length === 0 ? (
+      )}
+
+      {dataLoaded && pending.length === 0 && (
         <div className="text-center py-8">
           <div className="text-gray-500 text-lg mb-2">No pending invitations</div>
           <p className="text-gray-400 text-sm">All users have completed their activation.</p>
         </div>
-      ) : (
+      )}
+
+      {dataLoaded && pending.length > 0 && (
         <div className="bg-white shadow-sm rounded-lg overflow-hidden">
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-50">
@@ -288,8 +305,8 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
         </div>
       )}
 
-      {/* Pagination Controls - only show when not loading and have data */}
-      {!loading && pagination && pagination.totalPages > 1 && (
+      {/* Pagination Controls - only show when data is loaded and have data */}
+      {dataLoaded && pagination && pagination.totalPages > 1 && (
         <div className="flex justify-center items-center gap-2 mt-6">
           <button
             onClick={() => setCurrentPage(1)}

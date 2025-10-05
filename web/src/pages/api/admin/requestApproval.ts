@@ -198,10 +198,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     };
 
     // Store in Firestore
-    const siteConfig = await loadSiteConfig();
-    const siteId = siteConfig?.siteId || "default";
-    const envPrefix = isDevelopment() ? "dev_" : "prod_";
-    const collectionName = `${envPrefix}${siteId}_admin_approval_requests`;
+    const envPrefix = isDevelopment() ? "dev" : "prod";
+    const collectionName = `${envPrefix}_admin_approval_requests`;
 
     await firestoreSet(
       db.collection(collectionName).doc(requestId),

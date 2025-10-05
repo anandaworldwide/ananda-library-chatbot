@@ -41,6 +41,8 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState<"approve" | "deny" | null>(null);
   const [adminMessage, setAdminMessage] = useState("");
+  const [showLoading, setShowLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Initialize JWT and get user role
   useEffect(() => {
@@ -70,6 +72,13 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
 
     const fetchRequests = async () => {
       setLoading(true);
+      setDataLoaded(false);
+
+      // Show loading spinner only after 2 seconds
+      const loadingTimer = setTimeout(() => {
+        setShowLoading(true);
+      }, 2000);
+
       try {
         const res = await fetch("/api/admin/pendingRequests", {
           headers: {
@@ -108,7 +117,10 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
         setMessage("Failed to load pending requests");
         setMessageType("error");
       } finally {
+        clearTimeout(loadingTimer);
         setLoading(false);
+        setShowLoading(false);
+        setDataLoaded(true);
       }
     };
 
@@ -198,20 +210,20 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
         </div>
       )}
 
-      {loading && (
+      {loading && showLoading && (
         <div className="text-center py-8">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading requests...</p>
         </div>
       )}
 
-      {!loading && pendingRequests.length === 0 && (
+      {dataLoaded && pendingRequests.length === 0 && (
         <div className="bg-gray-50 rounded-lg p-8 text-center">
           <p className="text-gray-600">No pending requests</p>
         </div>
       )}
 
-      {!loading && pendingRequests.length > 0 && (
+      {dataLoaded && pendingRequests.length > 0 && (
         <div className="space-y-4">
           {pendingRequests.map((request) => (
             <div
@@ -269,7 +281,7 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
         </div>
       )}
 
-      {!loading && processedRequests.length > 0 && (
+      {dataLoaded && processedRequests.length > 0 && (
         <div className="mt-8">
           <h2 className="text-2xl font-bold mb-4">Recently Processed</h2>
           <div className="space-y-4">

@@ -315,7 +315,7 @@ describe("/api/admin/requestApproval", () => {
     ); // Should include details in development
 
     // Verify the request was cleaned up
-    expect(mockCollection).toHaveBeenCalledWith("dev_ananda_admin_approval_requests");
+    expect(mockCollection).toHaveBeenCalledWith("dev_admin_approval_requests");
     expect(mockDoc).toHaveBeenCalled();
     expect(mockDelete).toHaveBeenCalled();
   });
@@ -365,7 +365,7 @@ describe("/api/admin/requestApproval", () => {
     expect(responseData.error).toBe("Failed to send approval emails. Please try again or contact support.");
 
     // Verify cleanup was attempted
-    expect(mockCollection).toHaveBeenCalledWith("dev_ananda_admin_approval_requests");
+    expect(mockCollection).toHaveBeenCalledWith("dev_admin_approval_requests");
     expect(mockDoc).toHaveBeenCalled();
     expect(mockDelete).toHaveBeenCalled();
   });

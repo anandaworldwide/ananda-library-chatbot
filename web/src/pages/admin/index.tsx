@@ -63,7 +63,7 @@ function getDisplayName(user: ActiveUser): string {
 }
 
 // Helper function to truncate email for display
-function truncateEmail(email: string, maxLength: number = 15): string {
+function truncateEmail(email: string, maxLength: number = 35): string {
   if (email.length <= maxLength) {
     return email;
   }
@@ -365,8 +365,8 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm table-fixed">
             <colgroup>
-              <col className="w-1/4" />
-              <col className="w-1/4" />
+              <col className="w-1/5" />
+              <col className="w-2/5" />
               <col className="w-28" />
               <col className="w-24" />
               <col className="w-auto" />
@@ -432,17 +432,24 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
                 </tr>
               ) : dataLoaded && active.length > 0 ? (
                 active.map((u) => (
-                  <tr key={u.email} className="hover:bg-gray-50">
+                  <tr
+                    key={u.email}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => {
+                      window.location.href = `/admin/users/${encodeURIComponent(u.email)}`;
+                    }}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <a
                         className="text-blue-600 hover:text-blue-800 font-medium"
                         href={`/admin/users/${encodeURIComponent(u.email)}`}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {getDisplayName(u)}
                       </a>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span title={u.email} className="cursor-help text-gray-900">
+                      <span title={u.email} className="text-gray-900">
                         {truncateEmail(u.email)}
                       </span>
                     </td>
