@@ -361,8 +361,89 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
           </div>
         </div>
 
-        {/* Users Table */}
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="lg:hidden">
+          {activeLoading ? (
+            <div className="px-6 py-8 text-center text-sm text-gray-600">
+              {showLoading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                  <span>Loading users...</span>
+                </div>
+              ) : (
+                <div className="py-4"></div>
+              )}
+            </div>
+          ) : dataLoaded && active.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-gray-600">
+              {debouncedSearchQuery && showAdminsOnly
+                ? `No admins/superusers found matching "${debouncedSearchQuery}"`
+                : debouncedSearchQuery
+                  ? `No users found matching "${debouncedSearchQuery}"`
+                  : showAdminsOnly
+                    ? "No admins or superusers found"
+                    : "No active users"}
+            </div>
+          ) : dataLoaded && active.length > 0 ? (
+            <div className="space-y-3 px-4 py-4">
+              {active.map((u) => (
+                <div
+                  key={u.email}
+                  className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
+                  onClick={() => {
+                    window.location.href = `/admin/users/${encodeURIComponent(u.email)}`;
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <a
+                      className="text-blue-600 hover:text-blue-800 font-semibold text-base"
+                      href={`/admin/users/${encodeURIComponent(u.email)}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {getDisplayName(u)}
+                    </a>
+                    <span
+                      className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                        u.role === "superuser"
+                          ? "bg-purple-100 text-purple-700"
+                          : u.role === "admin"
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {u.role || "user"}
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex items-start gap-2">
+                      <span className="material-icons text-gray-400 text-sm mt-0.5">email</span>
+                      <span className="text-gray-700 break-all">{u.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="material-icons text-gray-400 text-sm">schedule</span>
+                      <span className="text-gray-600">
+                        <DateDisplay dateString={u.lastLoginAt} />
+                      </span>
+                    </div>
+                    {Object.keys(u.entitlements).length > 0 && (
+                      <div className="flex items-start gap-2 mt-2 pt-2 border-t border-gray-100">
+                        <span className="material-icons text-gray-400 text-sm mt-0.5">verified_user</span>
+                        <span className="text-gray-600 text-xs">
+                          {Object.keys(u.entitlements)
+                            .filter((key) => u.entitlements[key])
+                            .join(", ")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left text-sm table-fixed">
             <colgroup>
               <col className="w-1/5" />

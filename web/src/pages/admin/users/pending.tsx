@@ -274,35 +274,69 @@ export default function AdminPendingUsersPage({ siteConfig }: AdminPendingUsersP
       )}
 
       {dataLoaded && pending.length > 0 && (
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50">
-              <tr className="border-b">
-                <th className="py-3 px-4 font-medium text-gray-900">Email</th>
-                <th className="py-3 px-4 font-medium text-gray-900">Invited</th>
-                <th className="py-3 px-4 font-medium text-gray-900">Expires</th>
-                <th className="py-3 px-4 font-medium text-gray-900">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {pending.map((u) => (
-                <tr key={u.email} className="hover:bg-gray-50">
-                  <td className="py-3 px-4 font-medium text-gray-900">{u.email}</td>
-                  <td className="py-3 px-4 text-gray-600">{u.invitedAt || "–"}</td>
-                  <td className="py-3 px-4 text-gray-600">{u.expiresAt || "–"}</td>
-                  <td className="py-3 px-4">
-                    <button
-                      className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-                      onClick={() => handleResendClick(u.email)}
-                    >
-                      Resend
-                    </button>
-                  </td>
+        <>
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-3">
+            {pending.map((u) => (
+              <div key={u.email} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2">
+                    <span className="material-icons text-gray-400 text-sm mt-0.5">email</span>
+                    <span className="text-gray-900 font-medium break-all flex-1">{u.email}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-gray-500 text-xs mb-1">Invited</div>
+                      <div className="text-gray-700">{u.invitedAt || "–"}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500 text-xs mb-1">Expires</div>
+                      <div className="text-gray-700">{u.expiresAt || "–"}</div>
+                    </div>
+                  </div>
+                  <button
+                    className="w-full inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
+                    onClick={() => handleResendClick(u.email)}
+                  >
+                    <span className="material-icons text-sm mr-1">send</span>
+                    Resend Invitation
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden lg:block bg-white shadow-sm rounded-lg overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50">
+                <tr className="border-b">
+                  <th className="py-3 px-4 font-medium text-gray-900">Email</th>
+                  <th className="py-3 px-4 font-medium text-gray-900">Invited</th>
+                  <th className="py-3 px-4 font-medium text-gray-900">Expires</th>
+                  <th className="py-3 px-4 font-medium text-gray-900">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {pending.map((u) => (
+                  <tr key={u.email} className="hover:bg-gray-50">
+                    <td className="py-3 px-4 font-medium text-gray-900">{u.email}</td>
+                    <td className="py-3 px-4 text-gray-600">{u.invitedAt || "–"}</td>
+                    <td className="py-3 px-4 text-gray-600">{u.expiresAt || "–"}</td>
+                    <td className="py-3 px-4">
+                      <button
+                        className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
+                        onClick={() => handleResendClick(u.email)}
+                      >
+                        Resend
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Pagination Controls - only show when data is loaded and have data */}

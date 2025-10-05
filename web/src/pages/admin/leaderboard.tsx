@@ -94,60 +94,95 @@ export default function AdminLeaderboardPage({ siteConfig }: AdminLeaderboardPag
           )}
 
           {!loading && !error && users.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Rank
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Questions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {users.map((user, index) => (
-                    <tr key={user.uuid} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="flex items-center">
-                          <span className="font-medium">#{index + 1}</span>
-                          {index === 0 && (
-                            <span className="ml-2 text-yellow-500 material-icons text-lg">emoji_events</span>
-                          )}
-                          {index === 1 && (
-                            <span className="ml-2 text-gray-400 material-icons text-lg">emoji_events</span>
-                          )}
-                          {index === 2 && (
-                            <span className="ml-2 text-amber-600 material-icons text-lg">emoji_events</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Link
-                          href={`/admin/users/${encodeURIComponent(user.email)}`}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          {user.displayName}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {user.questionCount.toLocaleString()}
-                        </span>
-                      </td>
+            <>
+              {/* Mobile Card View */}
+              <div className="lg:hidden space-y-3">
+                {users.map((user, index) => (
+                  <div
+                    key={user.uuid}
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
+                        {index === 0 && <span className="text-yellow-500 material-icons text-xl">emoji_events</span>}
+                        {index === 1 && <span className="text-gray-400 material-icons text-xl">emoji_events</span>}
+                        {index === 2 && <span className="text-amber-600 material-icons text-xl">emoji_events</span>}
+                      </div>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                        {user.questionCount.toLocaleString()} questions
+                      </span>
+                    </div>
+                    <Link
+                      href={`/admin/users/${encodeURIComponent(user.email)}`}
+                      className="text-blue-600 hover:text-blue-800 font-semibold text-base block mb-2"
+                    >
+                      {user.displayName}
+                    </Link>
+                    <div className="flex items-start gap-2 text-sm">
+                      <span className="material-icons text-gray-400 text-sm mt-0.5">email</span>
+                      <span className="text-gray-600 break-all">{user.email}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Rank
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        User
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Questions
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {users.map((user, index) => (
+                      <tr key={user.uuid} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex items-center">
+                            <span className="font-medium">#{index + 1}</span>
+                            {index === 0 && (
+                              <span className="ml-2 text-yellow-500 material-icons text-lg">emoji_events</span>
+                            )}
+                            {index === 1 && (
+                              <span className="ml-2 text-gray-400 material-icons text-lg">emoji_events</span>
+                            )}
+                            {index === 2 && (
+                              <span className="ml-2 text-amber-600 material-icons text-lg">emoji_events</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Link
+                            href={`/admin/users/${encodeURIComponent(user.email)}`}
+                            className="text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            {user.displayName}
+                          </Link>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {user.questionCount.toLocaleString()}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

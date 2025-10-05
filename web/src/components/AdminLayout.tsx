@@ -92,6 +92,15 @@ export function AdminLayout({ siteConfig, children, pageTitle }: AdminLayoutProp
 
   const LeftRail = () => (
     <div className="w-64 bg-gray-50 border-r border-gray-200 p-6 overflow-y-auto">
+      {/* Admin Panel Header */}
+      <div className="mb-6 pb-6 border-b-2 border-blue-600">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="material-icons text-blue-600 text-2xl">admin_panel_settings</span>
+          <h2 className="text-xl font-bold text-gray-900">Admin Panel</h2>
+        </div>
+        <p className="text-xs text-gray-600">System Management</p>
+      </div>
+
       <div className="space-y-8">
         {/* USERS Section */}
         <div>
@@ -235,7 +244,7 @@ export function AdminLayout({ siteConfig, children, pageTitle }: AdminLayoutProp
         {/* Admin Content Area */}
         <div className="flex-1 flex flex-col">
           {/* Mobile Header */}
-          <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+          <div className="lg:hidden flex items-center justify-between p-4 border-b-2 border-blue-600 bg-white">
             <div className="flex items-center">
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -244,7 +253,8 @@ export function AdminLayout({ siteConfig, children, pageTitle }: AdminLayoutProp
               >
                 <span className="material-icons">{isMobileMenuOpen ? "close" : "menu"}</span>
               </button>
-              <h1 className="ml-3 text-lg font-semibold text-gray-900">{pageTitle || "Admin Dashboard"}</h1>
+              <span className="material-icons text-blue-600 text-xl ml-2">admin_panel_settings</span>
+              <h1 className="ml-2 text-lg font-semibold text-gray-900">{pageTitle || "Admin Dashboard"}</h1>
             </div>
           </div>
 
