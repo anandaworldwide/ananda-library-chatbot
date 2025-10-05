@@ -7,7 +7,7 @@ PRs.
 
 ### Step 1: Access Repository Settings
 
-1. Go to your repository: <https://github.com/anandaworldwide/ananda-library-chatbot>
+1. Go to your repository: <https://github.com/anandaworldwide/mega-rag-chatbot>
 2. Click the **Settings** tab
 3. Click **Branches** in the left sidebar
 

@@ -1,7 +1,7 @@
-# 🚀 Enterprise RAG System - Multi-Site AI Knowledge Platform
+# 🚀 Mega RAG Chatbot - Enterprise Multi-Site AI Knowledge Platform
 
-[![Run All Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/tests.yml)
-[![Comprehensive Tests](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml/badge.svg)](https://github.com/anandaworldwide/ananda-library-chatbot/actions/workflows/comprehensive-tests.yml)
+[![Run All Tests](https://github.com/anandaworldwide/mega-rag-chatbot/actions/workflows/tests.yml/badge.svg)](https://github.com/anandaworldwide/mega-rag-chatbot/actions/workflows/tests.yml)
+[![Comprehensive Tests](https://github.com/anandaworldwide/mega-rag-chatbot/actions/workflows/comprehensive-tests.yml/badge.svg)](https://github.com/anandaworldwide/mega-rag-chatbot/actions/workflows/comprehensive-tests.yml)
 
 **The most advanced open-source RAG (Retrieval-Augmented Generation) system for building intelligent chatbots that
 understand your content.** Transform any organization's knowledge base into an AI-powered assistant that provides
@@ -57,8 +57,8 @@ This system powers AI assistants for:
 
 ```bash
 # Clone and setup
-git clone https://github.com/anandaworldwide/ananda-library-chatbot
-cd ananda-library-chatbot
+git clone https://github.com/anandaworldwide/mega-rag-chatbot
+cd mega-rag-chatbot
 npm install
 
 # Configure your first site
@@ -331,13 +331,13 @@ avoid charges for using the Firebase services.
 3. Create a virtual environment with pyenv:
 
    ```bash
-   pyenv virtualenv 3.12.3 ananda-library-chatbot
+   pyenv virtualenv 3.12.3 mega-rag-chatbot
    ```
 
 4. Activate it automatically when you enter the directory:
 
    ```bash
-   pyenv local ananda-library-chatbot
+   pyenv local mega-rag-chatbot
    ```
 
 5. Install Python dependencies:
@@ -548,8 +548,8 @@ Go to `http://localhost:3000` and type a question in the chat interface!
 
 ## Testing Framework
 
-The Ananda Library Chatbot includes a testing suite to help ensure code quality. We're continually improving our test
-coverage to make the codebase more robust.
+The Mega RAG Chatbot includes a testing suite to help ensure code quality. We're continually improving our test coverage
+to make the codebase more robust.
 
 ### Test Types
 

@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This document maps out the directory and file organization of the `ananda-library-chatbot` project. It outlines the
-folder hierarchy, naming conventions, and the purpose of key directories and files. This helps in understanding the
-codebase structure and navigating it effectively.
+This document maps out the directory and file organization of the `mega-rag-chatbot` project. It outlines the folder
+hierarchy, naming conventions, and the purpose of key directories and files. This helps in understanding the codebase
+structure and navigating it effectively.
 
 This structure organizes the codebase by concern (e.g., API routes, UI components, utilities, tests, configuration) and
 by technology stack (e.g., separating Python code).
@@ -12,7 +12,7 @@ by technology stack (e.g., separating Python code).
 ## Folder Hierarchy
 
 ```plaintext
-ananda-library-chatbot/
+mega-rag-chatbot/
 │
 ├── __tests__/                     # Contains unit and integration tests for the project.
 │   ├── api/                      # Tests specifically for API routes (both pages and app router).

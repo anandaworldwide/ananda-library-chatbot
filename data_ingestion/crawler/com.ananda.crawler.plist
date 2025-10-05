@@ -7,21 +7,21 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/Michael/.pyenv/versions/ananda-library-chatbot/bin/python</string>
-        <string>/Users/Michael/Documents/development/ananda-library-chatbot/data_ingestion/crawler/crawler_supervisor.py</string>
+        <string>/Users/Michael/.pyenv/versions/mega-rag-chatbot/bin/python</string>
+        <string>/Users/Michael/Documents/development/mega-rag-chatbot/data_ingestion/crawler/crawler_supervisor.py</string>
         <string>--site</string>
         <string>ananda-public</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/Michael/Documents/development/ananda-library-chatbot/data_ingestion/crawler</string>
+    <string>/Users/Michael/Documents/development/mega-rag-chatbot/data_ingestion/crawler</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>PYTHONPATH</key>
-        <string>/Users/Michael/Documents/development/ananda-library-chatbot/data_ingestion</string>
+        <string>/Users/Michael/Documents/development/mega-rag-chatbot/data_ingestion</string>
     </dict>
 
     <key>RunAtLoad</key>

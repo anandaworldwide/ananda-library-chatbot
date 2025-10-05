@@ -287,10 +287,7 @@ export default function Login({ siteConfig }: LoginProps) {
         <p className="mt-4 text-center">For access, please contact the Free Joe Hunt team.</p>
       )}
       <p className="mt-4">
-        <a
-          href="https://github.com/anandaworldwide/ananda-library-chatbot"
-          className="text-blue-400 hover:underline mx-2"
-        >
+        <a href="https://github.com/anandaworldwide/mega-rag-chatbot" className="text-blue-400 hover:underline mx-2">
           Open Source Project
         </a>
       </p>

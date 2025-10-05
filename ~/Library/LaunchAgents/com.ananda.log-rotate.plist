@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/Michael/.pyenv/shims/python3</string>
-        <string>/Users/Michael/Documents/development/ananda-library-chatbot/data_ingestion/crawler/log_rotate.py</string>
+        <string>/Users/Michael/Documents/development/mega-rag-chatbot/data_ingestion/crawler/log_rotate.py</string>
         <string>--log-dir</string>
         <string>/Users/Michael/Library/Logs/AnandaCrawler</string>
     </array>
@@ -34,7 +34,7 @@
     <false/>
     
     <key>WorkingDirectory</key>
-    <string>/Users/Michael/Documents/development/ananda-library-chatbot/data_ingestion/crawler</string>
+    <string>/Users/Michael/Documents/development/mega-rag-chatbot/data_ingestion/crawler</string>
     
     <key>EnvironmentVariables</key>
     <dict>

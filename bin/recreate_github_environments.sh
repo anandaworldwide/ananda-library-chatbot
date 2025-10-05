@@ -27,7 +27,7 @@
 #
 # =============================================================================
 
-REPO="anandaworldwide/ananda-library-chatbot"
+REPO="anandaworldwide/mega-rag-chatbot"
 ENVIRONMENTS=(
   "Preview-ananda-public-chatbot"
   "Production-ananda-public-chatbot"
@@ -36,9 +36,9 @@ ENVIRONMENTS=(
   "Preview-crystal-chatbot"
   "Production-crystal-chatbot"
   "Preview-jairam-chatbot"
-  "Production-ananda-library-chatbot"
+  "Production-mega-rag-chatbot"
   "Production-jairam-chatbot"
-  "Production-ananda-library-chatbot-jairam"
+  "Production-mega-rag-chatbot-jairam"
   "Preview"
   "Production"
 )

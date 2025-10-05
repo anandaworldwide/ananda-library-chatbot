@@ -26,7 +26,7 @@ needs_server_tests() {
         # Normalize paths - handle both absolute and relative paths
         if [[ "$file" == /* ]]; then
             # Absolute path - strip workspace root and web/ prefix
-            workspace_root="/Users/Michael/Documents/development/ananda-library-chatbot"
+            workspace_root="/Users/Michael/Documents/development/mega-rag-chatbot"
             normalized_file="${file#$workspace_root/}"
             normalized_file="${normalized_file#web/}"
         else
@@ -90,7 +90,7 @@ for file in "$@"; do
     # Normalize paths - handle both absolute and relative paths
     if [[ "$file" == /* ]]; then
         # Absolute path - strip workspace root and web/ prefix
-        workspace_root="/Users/Michael/Documents/development/ananda-library-chatbot"
+        workspace_root="/Users/Michael/Documents/development/mega-rag-chatbot"
         normalized_file="${file#$workspace_root/}"
         normalized_file="${normalized_file#web/}"
     else
@@ -130,7 +130,7 @@ if [ "$run_server_tests" = true ]; then
         # Normalize paths - handle both absolute and relative paths
         if [[ "$file" == /* ]]; then
             # Absolute path - strip workspace root and web/ prefix
-            workspace_root="/Users/Michael/Documents/development/ananda-library-chatbot"
+            workspace_root="/Users/Michael/Documents/development/mega-rag-chatbot"
             normalized_file="${file#$workspace_root/}"
             normalized_file="${normalized_file#web/}"
         else

@@ -1,6 +1,6 @@
 # Bin Directory
 
-This directory contains utility scripts for the Ananda Library Chatbot project.
+This directory contains utility scripts for the Mega RAG Chatbot project.
 
 ## Available Scripts
 
@@ -99,8 +99,8 @@ various checks, including:
 
 ### `recreate_github_environments.sh`
 
-Recreates specified GitHub environments for a given repository (`anandaworldwide/ananda-library-chatbot` by default). It
-uses the `gh` CLI to PUT environment configurations, effectively resetting them or creating them if they don't exist.
+Recreates specified GitHub environments for a given repository (`anandaworldwide/mega-rag-chatbot` by default). It uses
+the `gh` CLI to PUT environment configurations, effectively resetting them or creating them if they don't exist.
 
 ### `upload_secrets_to_github.py`
 

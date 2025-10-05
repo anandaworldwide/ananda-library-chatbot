@@ -59,7 +59,7 @@ def query_url_vectors(site: str, url: str, limit: int = 100):
         sys.exit(1)
 
     pc = Pinecone(api_key=api_key)
-    index_name = os.getenv("PINECONE_INDEX_NAME", "ananda-library-chatbot")
+    index_name = os.getenv("PINECONE_INDEX_NAME", "mega-rag-chatbot")
     index = pc.Index(index_name)
 
     # Normalize URL for consistent matching
