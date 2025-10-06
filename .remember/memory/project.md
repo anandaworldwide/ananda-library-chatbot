@@ -99,6 +99,7 @@
 - **Environment files**: `.env.[site]` pattern
 - **Pinecone namespaces**: One per site
 - **Config location**: `site-config/config.json`
+- **System prompts**: Located in `web/site-config/prompts/[site]-base.txt`
 
 ## Authentication and Onboarding (Decisions)
 
