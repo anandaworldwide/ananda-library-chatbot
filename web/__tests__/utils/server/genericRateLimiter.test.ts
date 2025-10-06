@@ -86,7 +86,7 @@ describe("genericRateLimiter", () => {
     firebase.mockUpdate.mockResolvedValue(undefined);
 
     // Mock retryOnCode14 to execute the callback directly by default
-    firestoreRetryUtils.retryOnCode14.mockImplementation(async (callback) => {
+    firestoreRetryUtils.retryOnCode14.mockImplementation(async (callback: () => Promise<any>) => {
       return await callback();
     });
     firestoreRetryUtils.isCode14Error.mockReturnValue(false);
@@ -257,7 +257,7 @@ describe("genericRateLimiter", () => {
 
       // Mock retryOnCode14 to simulate retry behavior
       let callCount = 0;
-      firestoreRetryUtils.retryOnCode14.mockImplementation(async (callback) => {
+      firestoreRetryUtils.retryOnCode14.mockImplementation(async (callback: () => Promise<any>) => {
         callCount++;
         if (callCount === 1) {
           throw code14Error; // First call fails
@@ -290,7 +290,7 @@ describe("genericRateLimiter", () => {
 
       // Mock retryOnCode14 to simulate retry behavior
       let callCount = 0;
-      firestoreRetryUtils.retryOnCode14.mockImplementation(async (callback) => {
+      firestoreRetryUtils.retryOnCode14.mockImplementation(async (callback: () => Promise<any>) => {
         callCount++;
         if (callCount === 1) {
           throw policyError; // First call fails
@@ -761,7 +761,7 @@ describe("deleteRateLimitCounter", () => {
 
       // Mock retryOnCode14 to simulate retry behavior
       let callCount = 0;
-      firestoreRetryUtils.retryOnCode14.mockImplementation(async (operation) => {
+      firestoreRetryUtils.retryOnCode14.mockImplementation(async (operation: () => Promise<any>) => {
         callCount++;
         if (callCount === 1) {
           throw code14Error; // First call fails
@@ -787,7 +787,7 @@ describe("deleteRateLimitCounter", () => {
 
       // Mock retryOnCode14 to simulate retry behavior
       let callCount = 0;
-      firestoreRetryUtils.retryOnCode14.mockImplementation(async (operation) => {
+      firestoreRetryUtils.retryOnCode14.mockImplementation(async (operation: () => Promise<any>) => {
         callCount++;
         if (callCount === 1) {
           throw policyError; // First call fails
