@@ -370,7 +370,7 @@ describe("/api/admin/leaderboard", () => {
 
     // Rate limiter handles the response, so we just verify it was called
     expect(mockGenericRateLimiter).toHaveBeenCalledWith(req, res, {
-      max: 30,
+      max: 6,
       windowMs: 60 * 1000,
       name: "admin-leaderboard",
     });

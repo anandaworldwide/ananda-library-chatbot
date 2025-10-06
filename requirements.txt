@@ -98,6 +98,8 @@ filelock==3.18.0
     #   huggingface-hub
     #   torch
     #   transformers
+firebase-admin==7.1.0
+    # via -r requirements.in
 flatbuffers==25.2.10
     # via onnxruntime
 fonttools==4.58.1

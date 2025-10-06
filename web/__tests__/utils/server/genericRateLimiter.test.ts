@@ -142,11 +142,15 @@ describe("genericRateLimiter", () => {
     });
 
     expect(result).toBe(true);
-    expect(firebase.mockCollection).toHaveBeenCalledWith("test_test_rateLimits");
-    expect(firebase.mockDoc).toHaveBeenCalledWith("127_0_0_1");
+    expect(firebase.mockCollection).toHaveBeenCalledWith("test_rateLimits");
+    expect(firebase.mockDoc).toHaveBeenCalledWith("127_0_0_1_test");
     expect(firebase.mockSet).toHaveBeenCalledWith({
+      ip: "127.0.0.1",
+      sanitizedIP: "127_0_0_1",
+      category: "test",
       count: 1,
       firstRequestTime: now,
+      lastRequestTime: now,
     });
   });
 
@@ -171,6 +175,7 @@ describe("genericRateLimiter", () => {
     expect(result).toBe(true);
     expect(firebase.mockUpdate).toHaveBeenCalledWith({
       count: 6,
+      lastRequestTime: now,
     });
   });
 
@@ -194,8 +199,12 @@ describe("genericRateLimiter", () => {
 
     expect(result).toBe(true);
     expect(firebase.mockSet).toHaveBeenCalledWith({
+      ip: "127.0.0.1",
+      sanitizedIP: "127_0_0_1",
+      category: "test",
       count: 1,
       firstRequestTime: now,
+      lastRequestTime: now,
     });
   });
 
@@ -222,7 +231,7 @@ describe("genericRateLimiter", () => {
     expect(mockRes.json).toHaveBeenCalledWith({
       message: "Too many test requests, please try again later.",
     });
-    expect(consoleLogSpy).toHaveBeenCalledWith("Rate limit exceeded for IP 127.0.0.1");
+    expect(consoleLogSpy).toHaveBeenCalledWith("Rate limit exceeded for IP 127.0.0.1, category: test");
   });
 
   it("should handle errors gracefully", async () => {
@@ -479,7 +488,7 @@ describe("genericRateLimiter", () => {
       customIp
     );
 
-    expect(firebase.mockDoc).toHaveBeenCalledWith("192_168_1_1");
+    expect(firebase.mockDoc).toHaveBeenCalledWith("192_168_1_1_test");
     expect(ipUtils.getClientIp).not.toHaveBeenCalled();
   });
 
@@ -535,8 +544,12 @@ describe("genericRateLimiter", () => {
 
     expect(secondResult).toBe(true);
     expect(firebase.mockSet).toHaveBeenCalledWith({
+      ip: "127.0.0.1",
+      sanitizedIP: "127_0_0_1",
+      category: "test",
       count: 1, // Counter reset to 1
       firstRequestTime: laterTime, // Time updated to current
+      lastRequestTime: laterTime,
     });
 
     // Verify we didn't get any 429 response on the second attempt
@@ -566,7 +579,7 @@ describe("genericRateLimiter", () => {
 
     expect(firstIpResult).toBe(false);
     expect(mockRes.status).toHaveBeenCalledWith(429);
-    expect(firebase.mockDoc).toHaveBeenCalledWith("127_0_0_1");
+    expect(firebase.mockDoc).toHaveBeenCalledWith("127_0_0_1_test");
 
     // Reset mocks for second IP attempt
     jest.clearAllMocks();
@@ -593,10 +606,14 @@ describe("genericRateLimiter", () => {
 
     expect(secondIpResult).toBe(true);
     expect(mockRes.status).not.toHaveBeenCalled();
-    expect(firebase.mockDoc).toHaveBeenCalledWith("192_168_1_1");
+    expect(firebase.mockDoc).toHaveBeenCalledWith("192_168_1_1_test");
     expect(firebase.mockSet).toHaveBeenCalledWith({
+      ip: "192.168.1.1",
+      sanitizedIP: "192_168_1_1",
+      category: "test",
       count: 1,
       firstRequestTime: now,
+      lastRequestTime: now,
     });
   });
 
@@ -626,7 +643,8 @@ describe("genericRateLimiter", () => {
 
     expect(firstEndpointResult).toBe(false);
     expect(mockRes.status).toHaveBeenCalledWith(429);
-    expect(firebase.mockCollection).toHaveBeenCalledWith("prod_login_rateLimits");
+    expect(firebase.mockCollection).toHaveBeenCalledWith("prod_rateLimits");
+    expect(firebase.mockDoc).toHaveBeenCalledWith("127_0_0_1_login");
 
     // Reset mocks for second endpoint attempt
     jest.clearAllMocks();
@@ -653,9 +671,11 @@ describe("genericRateLimiter", () => {
 
     expect(secondEndpointResult).toBe(true);
     expect(mockRes.status).not.toHaveBeenCalled();
-    expect(firebase.mockCollection).toHaveBeenCalledWith("prod_search_rateLimits");
+    expect(firebase.mockCollection).toHaveBeenCalledWith("prod_rateLimits");
+    expect(firebase.mockDoc).toHaveBeenCalledWith("127_0_0_1_search");
     expect(firebase.mockUpdate).toHaveBeenCalledWith({
       count: 4,
+      lastRequestTime: now,
     });
   });
 });
@@ -704,8 +724,8 @@ describe("deleteRateLimitCounter", () => {
 
     await deleteRateLimitCounter(mockReq, "test");
 
-    expect(firebase.mockCollection).toHaveBeenCalledWith("prod_test_rateLimits");
-    expect(firebase.mockDoc).toHaveBeenCalledWith("127.0.0.1");
+    expect(firebase.mockCollection).toHaveBeenCalledWith("prod_rateLimits");
+    expect(firebase.mockDoc).toHaveBeenCalledWith("127_0_0_1_test");
     expect(firebase.mockDelete).toHaveBeenCalled();
   });
 
@@ -715,7 +735,9 @@ describe("deleteRateLimitCounter", () => {
     await deleteRateLimitCounter(mockReq, "test");
 
     expect(firebase.mockDelete).not.toHaveBeenCalled();
-    expect(consoleWarnSpy).toHaveBeenCalledWith("No rate limit counter found for 127.0.0.1. Nothing to delete.");
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      "No rate limit counter found for IP 127.0.0.1, category: test. Nothing to delete."
+    );
   });
 
   it("should handle errors gracefully", async () => {
@@ -723,7 +745,10 @@ describe("deleteRateLimitCounter", () => {
 
     await deleteRateLimitCounter(mockReq, "test");
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith("Error deleting rate limit counter for 127.0.0.1:", expect.any(Error));
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Error deleting rate limit counter for IP 127.0.0.1, category: test:",
+      expect.any(Error)
+    );
   });
 
   describe("Google Cloud Code 14 Error Retry Logic for Deletion", () => {
@@ -836,7 +861,10 @@ describe("deleteRateLimitCounter", () => {
       await deleteRateLimitCounter(mockReq, "test");
 
       expect(firestoreRetryUtils.retryOnCode14).toHaveBeenCalledTimes(1);
-      expect(consoleErrorSpy).toHaveBeenCalledWith("Error deleting rate limit counter for 127.0.0.1:", regularError);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        "Error deleting rate limit counter for IP 127.0.0.1, category: test:",
+        regularError
+      );
     });
 
     it("should handle mixed error types correctly during deletion", async () => {

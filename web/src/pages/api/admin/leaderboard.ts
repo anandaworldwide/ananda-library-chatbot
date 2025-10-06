@@ -23,7 +23,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   // Apply rate limiting
   const isAllowed = await genericRateLimiter(req, res, {
-    max: 30,
+    max: 6,
     windowMs: 60 * 1000, // 1 minute
     name: "admin-leaderboard",
   });

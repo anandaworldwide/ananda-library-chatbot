@@ -23,8 +23,12 @@ service cloud.firestore {
 
 
 
-        // Match the rateLimits collection
-        match /rateLimits/{document=**} {
+        // Match the unified rate limits collections (dev_rateLimits, prod_rateLimits)
+        match /dev_rateLimits/{docId} {
+            allow read, write: if isServerRequest();
+        }
+        
+        match /prod_rateLimits/{docId} {
             allow read, write: if isServerRequest();
         }
 

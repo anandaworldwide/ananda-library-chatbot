@@ -36,10 +36,11 @@ export async function genericRateLimiter(
   };
 
   const clientIP = ip || getClientIp(req) || "unknown";
-  const docId = clientIP.replace(/[/.]/g, "_"); // Only sanitize for Firestore doc ID
+  const sanitizedIP = clientIP.replace(/[/.]/g, "_");
+  const docId = `${sanitizedIP}_${name}`;
 
   const now = Date.now();
-  const rateLimitRef = db!.collection(`${collectionPrefix}_${name}_rateLimits`).doc(docId);
+  const rateLimitRef = db!.collection(`${collectionPrefix}_rateLimits`).doc(docId);
 
   try {
     const result = await retryOnCode14(
@@ -47,8 +48,12 @@ export async function genericRateLimiter(
         const rateLimitDoc = await rateLimitRef.get();
         if (!rateLimitDoc.exists) {
           await rateLimitRef.set({
+            ip: clientIP,
+            sanitizedIP,
+            category: name,
             count: 1,
             firstRequestTime: now,
+            lastRequestTime: now,
           });
           return true;
         }
@@ -58,7 +63,7 @@ export async function genericRateLimiter(
           const { count, firstRequestTime } = rateLimitData;
           if (now - firstRequestTime < windowMs) {
             if (count >= max) {
-              console.log(`Rate limit exceeded for IP ${clientIP}`);
+              console.log(`Rate limit exceeded for IP ${clientIP}, category: ${name}`);
               if (res) {
                 if ("status" in res && typeof res.status === "function") {
                   res.status(429).json({
@@ -72,11 +77,16 @@ export async function genericRateLimiter(
             }
             await rateLimitRef.update({
               count: count + 1,
+              lastRequestTime: now,
             });
           } else {
             await rateLimitRef.set({
+              ip: clientIP,
+              sanitizedIP,
+              category: name,
               count: 1,
               firstRequestTime: now,
+              lastRequestTime: now,
             });
           }
           return true;
@@ -84,7 +94,7 @@ export async function genericRateLimiter(
         return true;
       },
       "rate limiting",
-      `IP: ${clientIP}, endpoint: ${name}`
+      `IP: ${clientIP}, category: ${name}`
     );
 
     return result;
@@ -106,29 +116,30 @@ export async function deleteRateLimitCounter(req: NextApiRequest, name: string):
   }
 
   const ip = getClientIp(req);
-  const key = `${ip}`;
-  const collectionName = `${defaultRateLimitConfig.collectionPrefix}_${name}_rateLimits`;
+  const sanitizedIP = ip.replace(/[/.]/g, "_");
+  const docId = `${sanitizedIP}_${name}`;
+  const collectionName = `${defaultRateLimitConfig.collectionPrefix}_rateLimits`;
 
   try {
     await retryOnCode14(
       async () => {
-        const docRef = db!.collection(collectionName).doc(key);
+        const docRef = db!.collection(collectionName).doc(docId);
         const doc = await docRef.get();
 
         if (doc.exists) {
           await docRef.delete();
         } else {
-          console.warn(`No rate limit counter found for ${key}. Nothing to delete.`);
+          console.warn(`No rate limit counter found for IP ${ip}, category: ${name}. Nothing to delete.`);
         }
       },
       "rate limit deletion",
-      `IP: ${key}, endpoint: ${name}`
+      `IP: ${ip}, category: ${name}`
     );
   } catch (error) {
     if (isCode14Error(error)) {
       console.error("Google Cloud policy checks failed after 3 attempts for rate limit deletion:", error);
     } else {
-      console.error(`Error deleting rate limit counter for ${key}:`, error);
+      console.error(`Error deleting rate limit counter for IP ${ip}, category: ${name}:`, error);
     }
   }
 }
