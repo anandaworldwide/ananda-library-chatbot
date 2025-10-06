@@ -1654,7 +1654,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                 <div ref={scrollButtonContainerRef} className="relative w-full">
                   {/* Animated Scroll Down Button */}
                   <div
-                    className={`fixed z-50 right-5 bottom-5 transition-all duration-300 ease-out transform 
+                    className={`fixed z-50 right-52 bottom-6 transition-all duration-300 ease-out transform 
                   ${showScrollDownButton ? "translate-y-0 opacity-100 pointer-events-auto" : "translate-y-8 opacity-0 pointer-events-none"}`}
                     style={{ willChange: "transform, opacity" }}
                   >
