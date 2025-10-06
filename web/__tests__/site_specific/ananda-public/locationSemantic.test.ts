@@ -41,6 +41,7 @@
 // Polyfill fetch for Node environment
 import fetch from "node-fetch";
 import jwt from "jsonwebtoken";
+import { v4 as uuidv4 } from "uuid";
 import { getEmbedding, cosineSimilarity } from "../../utils/embeddingUtils";
 
 // Skip all tests unless running with explicit flag
@@ -87,6 +88,9 @@ testRunner("Vivek Location Response Semantic Validation (ananda-public)", () => 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
     const endpoint = `${baseUrl}/api/chat/v1`;
 
+    // Generate a valid v4 UUID for the conversation
+    const uuid = uuidv4();
+
     // Default body parameters for location testing
     const requestBody = {
       question: query,
@@ -96,6 +100,7 @@ testRunner("Vivek Location Response Semantic Validation (ananda-public)", () => 
       mediaTypes: { text: true },
       sourceCount: 3,
       siteId: "ananda-public", // Use ananda-public for geo-awareness testing
+      uuid: uuid, // Required UUID for conversation tracking
     };
 
     // Generate a fresh token for this request
@@ -471,6 +476,30 @@ testRunner("Vivek Location Response Semantic Validation (ananda-public)", () => 
   });
 
   describe("Edge Cases and Boundary Testing", () => {
+    test.concurrent("should NOT treat pure spiritual queries as location queries", async () => {
+      console.log(`Running test: should NOT treat pure spiritual queries as location queries`);
+      const query = "What is superconsciousness?";
+
+      const actualResponse = await getVivekLocationResponse(query);
+      const actualEmbedding = await getEmbedding(actualResponse);
+
+      const similarityToLocationResponses = getMaxSimilarity(actualEmbedding, locationResponseEmbeddings);
+      const similarityToNonLocationResponses = getMaxSimilarity(actualEmbedding, nonLocationResponseEmbeddings);
+
+      console.log(
+        `Query: "${query}"\nResponse: "${actualResponse}"\nSimilarity to Location Responses: ${similarityToLocationResponses}\nSimilarity to Non-Location Responses: ${similarityToNonLocationResponses}`
+      );
+
+      // Should NOT be similar to location responses
+      expect(similarityToLocationResponses).toBeLessThan(0.6);
+      // Should be about spiritual content
+      expect(actualResponse.toLowerCase()).toMatch(/superconsciousness|awareness|spiritual/i);
+      // Should NOT contain location blurb
+      expect(actualResponse).not.toMatch(
+        /Ananda has locations worldwide.*To find information about meditation groups or centers/i
+      );
+    });
+
     test.concurrent('should handle ambiguous queries like "Where can I learn about meditation?"', async () => {
       console.log(`Running test: should handle ambiguous queries like "Where can I learn about meditation?"`);
       const query = "Where can I learn about meditation?";
