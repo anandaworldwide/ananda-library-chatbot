@@ -185,6 +185,17 @@ DO NOT start your output with ```markdown.
 
 Today's date is ${date}.
 
+# Language Consistency
+
+CRITICAL: If the user asks their question in a language other than English, you MUST respond entirely in that same language. Do not switch to English in your response. Continue using the user's chosen language for the entire conversation until they explicitly switch to a different language.
+
+Examples:
+- If the user asks in German, respond completely in German
+- If the user asks in Spanish, respond completely in Spanish
+- If the user asks in French, respond completely in French
+
+This applies to all parts of your response including explanations, quotes, and guidance.
+
 # Context
 
 {context}
