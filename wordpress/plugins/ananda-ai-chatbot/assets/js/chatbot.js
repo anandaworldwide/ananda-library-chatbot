@@ -1028,6 +1028,85 @@ document.addEventListener("DOMContentLoaded", () => {
     return html;
   }
 
+  /**
+   * Helper function to format error messages with Intercom support link
+   * @param {string} errorHtml - HTML content for the error message
+   * @returns {string} - Formatted error HTML with Intercom support link
+   */
+  function formatErrorWithIntercomSupport(errorHtml) {
+    return `
+      ${errorHtml}
+      <small style="display: block; margin-top: 10px;">
+        Need help? <span class="aichatbot-intercom-trigger" style="color:#4a90e2; text-decoration:underline; cursor:pointer;">Click here for support</span>.
+      </small>
+    `;
+  }
+
+  /**
+   * Handle error display in the chat interface
+   * @param {Error} error - The error object
+   * @param {HTMLElement} messagesContainer - The messages container element
+   * @param {HTMLElement} typingIndicator - The typing indicator element
+   */
+  function handleChatError(error, messagesContainer, typingIndicator) {
+    // Remove typing indicator if it exists
+    if (messagesContainer.contains(typingIndicator)) {
+      messagesContainer.removeChild(typingIndicator);
+    }
+
+    // Show error message
+    const errorMessage = document.createElement("div");
+    errorMessage.className = "aichatbot-error-message";
+
+    if (error.name === "AbortError") {
+      errorMessage.textContent = "Request was canceled.";
+    } else if (error.name === "TypeError" && error.message.includes("Failed to fetch")) {
+      errorMessage.innerHTML = formatErrorWithIntercomSupport("Chatbot server is unavailable. Please try again later.");
+    } else if (error.message.includes("NetworkError") || error.message.includes("CORS")) {
+      errorMessage.innerHTML = formatErrorWithIntercomSupport(
+        "Connection to chatbot server failed. Please try again later."
+      );
+    } else if (error.message.includes("Site mismatch")) {
+      errorMessage.innerHTML = formatErrorWithIntercomSupport(`
+        <strong>Configuration Error:</strong> ${error.message}<br>
+        <small>Please contact the site administrator to update the chatbot settings.</small>
+      `);
+    } else if (error.message.includes("Invalid token")) {
+      errorMessage.innerHTML = formatErrorWithIntercomSupport(`
+        <strong>Authentication Error:</strong> Unable to connect to the chat backend.<br>
+        <small>Please check your internet connection and try again.</small>
+      `);
+      console.error("Token error details:", error.message);
+    } else if (error.message.includes("session has expired")) {
+      // Session expiration is special - has reload button, no Intercom link
+      errorMessage.innerHTML = `
+        <strong>Session Expired:</strong> Your authentication has expired.<br>
+        <small>Please reload the page to continue using the chatbot.</small><br>
+        <button id="aichatbot-reload-button" style="margin-top: 10px; padding: 5px 10px; background-color: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer;">Reload Page</button>
+      `;
+
+      // Add reload functionality after the message is added to DOM
+      setTimeout(() => {
+        const reloadButton = document.getElementById("aichatbot-reload-button");
+        if (reloadButton) {
+          reloadButton.addEventListener("click", () => {
+            window.location.reload();
+          });
+        }
+      }, 100);
+    } else {
+      // Format other errors to be more readable
+      const cleanErrorMessage = error.message.replace(/Server error \((.*)\)/, "$1").replace(/Error: /, "");
+
+      errorMessage.innerHTML = formatErrorWithIntercomSupport(`
+        <strong>Error:</strong> ${cleanErrorMessage}<br>
+        <small>If this problem persists, please contact support.</small>
+      `);
+    }
+
+    messagesContainer.appendChild(errorMessage);
+  }
+
   async function sendMessage() {
     const message = input.value.trim();
     if (!message) return;
@@ -1369,65 +1448,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     } catch (error) {
-      // Remove typing indicator if it exists
-      if (messages.contains(typingIndicator)) {
-        messages.removeChild(typingIndicator);
-      }
-
-      // Show error message
-      const errorMessage = document.createElement("div");
-      errorMessage.className = "aichatbot-error-message";
-
-      if (error.name === "AbortError") {
-        errorMessage.textContent = "Request was canceled.";
-      } else if (error.name === "TypeError" && error.message.includes("Failed to fetch")) {
-        // This typically happens when the server is completely down/unreachable
-        errorMessage.textContent = "Chatbot server is unavailable. Please try again later.";
-      } else if (error.message.includes("NetworkError") || error.message.includes("CORS")) {
-        errorMessage.textContent = "Connection to chatbot server failed. Please try again later.";
-      } else if (error.message.includes("Site mismatch")) {
-        // Handle site mismatch errors specifically
-        errorMessage.innerHTML = `
-          <strong>Configuration Error:</strong> ${error.message}<br>
-          <small>Please contact the site administrator to update the chatbot settings.</small>
-        `;
-      } else if (error.message.includes("Invalid token")) {
-        // Handle authentication errors
-        errorMessage.innerHTML = `
-          <strong>Authentication Error:</strong> Unable to connect to the chat backend.<br>
-          <small>Please check your internet connection and try again, or contact the site administrator.</small>
-        `;
-        console.error("Token error details:", error.message);
-      } else if (error.message.includes("session has expired")) {
-        // Handle session expiration with reload button
-        errorMessage.innerHTML = `
-          <strong>Session Expired:</strong> Your authentication has expired.<br>
-          <small>Please reload the page to continue using the chatbot.</small><br>
-          <button id="aichatbot-reload-button" style="margin-top: 10px; padding: 5px 10px; background-color: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer;">Reload Page</button>
-        `;
-
-        // Add reload functionality after the message is added to DOM
-        setTimeout(() => {
-          const reloadButton = document.getElementById("aichatbot-reload-button");
-          if (reloadButton) {
-            reloadButton.addEventListener("click", () => {
-              window.location.reload();
-            });
-          }
-        }, 100);
-      } else {
-        // Format other errors to be more readable
-        const cleanErrorMessage = error.message
-          .replace(/Server error \((.*)\)/, "$1") // Remove "Server error" wrapper
-          .replace(/Error: /, ""); // Remove "Error:" prefix if present
-
-        errorMessage.innerHTML = `
-          <strong>Error:</strong> ${cleanErrorMessage}<br>
-          <small>If this problem persists, please contact the site administrator.</small>
-        `;
-      }
-
-      messages.appendChild(errorMessage);
+      // Use helper function to handle error display
+      handleChatError(error, messages, typingIndicator);
 
       // Send error email to administrators for all errors except AbortError (user clicked stop button)
       if (error.name !== "AbortError") {
