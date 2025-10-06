@@ -160,6 +160,39 @@ npm run test:ci  # includes coverage reports
 npm test && npm run test:server
 ```
 
+### Running Semantic LLM Response Tests
+
+These specialized tests validate chatbot responses using embedding similarity and are **skipped by default** in the
+standard test suite:
+
+```bash
+cd web
+
+# Run all Ananda semantic and location tests (60 tests total)
+npm run test:queries:ananda-public
+
+# Run only location/geo-awareness tests (20 tests)
+npm run test:location:ananda-public
+```
+
+**Requirements:**
+
+- Valid `OPENAI_API_KEY` environment variable (for embedding similarity calculations)
+- Valid `SECURE_TOKEN` environment variable (for JWT token generation)
+- Running backend server at `http://localhost:3000` (or set `NEXT_PUBLIC_BASE_URL`)
+
+**Test Files:**
+
+- `web/__tests__/site_specific/ananda-public/semanticSearch.test.ts` - 40 semantic response tests
+- `web/__tests__/site_specific/ananda-public/locationSemantic.test.ts` - 20 location/geo-awareness tests
+
+These tests validate:
+
+- Language consistency (maintaining German/Spanish in follow-up questions)
+- Location awareness and geo-tool integration
+- Prompt compliance (identity, rejection handling, format requirements)
+- Content appropriateness and policy adherence
+
 ## API Security Testing
 
 The `bin/test_api_security.sh` script provides comprehensive security testing for the API endpoints. It tests:

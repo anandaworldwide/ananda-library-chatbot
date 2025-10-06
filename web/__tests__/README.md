@@ -51,7 +51,8 @@ These thresholds are enforced during CI builds but not during pre-commit hooks t
 
 ## Pre-commit Hooks
 
-We use Husky and lint-staged to run tests on changed files before each commit. This helps catch bugs early and prevents regressions.
+We use Husky and lint-staged to run tests on changed files before each commit. This helps catch bugs early and prevents
+regressions.
 
 ### How it works
 
@@ -86,6 +87,22 @@ git commit -m "WIP commit" --no-verify
 - `npm run test:changed -- file1.ts file2.ts` - Run tests for specific files
 - `npm run test:watch` - Run tests in watch mode during development
 - `npm run test:ci` - Run tests with coverage reporting
+
+#### Specialized Semantic Tests
+
+These tests validate LLM responses using embedding similarity (skipped by default):
+
+- `npm run test:queries:ananda-public` - Run all Ananda semantic and location tests (60 tests total)
+- `npm run test:location:ananda-public` - Run only location/geo-awareness tests (20 tests)
+
+**Requirements:**
+
+- Valid `OPENAI_API_KEY` environment variable (for embeddings)
+- Valid `SECURE_TOKEN` environment variable (for JWT generation)
+- Running backend server (default: `http://localhost:3000`)
+
+See `__tests__/site_specific/ananda-public/semanticSearch.test.ts` and `locationSemantic.test.ts` for implementation
+details.
 
 ## Test Organization
 

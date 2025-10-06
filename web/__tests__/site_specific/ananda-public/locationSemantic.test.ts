@@ -28,8 +28,9 @@
  *
  * These tests are SKIPPED by default when running the full test suite.
  *
- * To run these tests specifically:
- * - Use `npm run test:location:ananda-public` - This runs location semantic tests with geo-awareness enabled
+ * To run these tests:
+ * - Use `npm run test:queries:ananda-public` - Runs all Ananda semantic and location tests (60 tests total)
+ * - Use `npm run test:location:ananda-public` - Runs only location tests (20 tests)
  * - Or set environment variable: `RUN_LOCATION_TESTS=true` when running tests
  *
  * Important: Running these tests requires:
