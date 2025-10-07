@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
+import { SiteConfig } from "@/types/siteConfig";
 
 interface AdminApprover {
   name: string;
@@ -20,6 +21,7 @@ interface AdminApproversConfig {
 interface AdminApproverSelectorProps {
   requesterEmail: string;
   requesterName?: string;
+  siteConfig?: SiteConfig | null;
   onSuccess?: () => void;
   onError?: (error: string) => void;
   onBack?: () => void;
@@ -28,6 +30,7 @@ interface AdminApproverSelectorProps {
 export default function AdminApproverSelector({
   requesterEmail,
   requesterName: initialName,
+  siteConfig,
   onSuccess,
   onError,
   onBack,
@@ -37,6 +40,7 @@ export default function AdminApproverSelector({
   const [submitting, setSubmitting] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<AdminApprover | null>(null);
   const [name, setName] = useState(initialName || "");
+  const [referenceNote, setReferenceNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -89,6 +93,11 @@ export default function AdminApproverSelector({
       return;
     }
 
+    if (siteConfig?.accessRequestNoteLabel && !referenceNote.trim()) {
+      setError("Please provide a reference");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -104,6 +113,7 @@ export default function AdminApproverSelector({
           adminEmail: selectedAdmin.email,
           adminName: selectedAdmin.name,
           adminLocation: selectedAdmin.location,
+          referenceNote: referenceNote.trim() || undefined,
         }),
       });
 
@@ -226,6 +236,24 @@ export default function AdminApproverSelector({
           </select>
         </div>
 
+        {siteConfig?.accessRequestNoteLabel && (
+          <div>
+            <label htmlFor="reference-note" className="block text-sm font-medium text-gray-700 mb-2">
+              {siteConfig.accessRequestNoteLabel}
+            </label>
+            <textarea
+              id="reference-note"
+              value={referenceNote}
+              onChange={(e) => setReferenceNote(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter the name of someone who knows you"
+              rows={3}
+              disabled={submitting}
+              required
+            />
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3">
             <p className="text-red-800 text-sm">{error}</p>
@@ -245,7 +273,12 @@ export default function AdminApproverSelector({
           )}
           <button
             type="submit"
-            disabled={!name.trim() || !selectedAdmin || submitting}
+            disabled={
+              !name.trim() ||
+              !selectedAdmin ||
+              (siteConfig?.accessRequestNoteLabel && !referenceNote.trim()) ||
+              submitting
+            }
             className="flex-1 bg-blue-500 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {submitting ? "Submitting Request..." : "Request Access"}

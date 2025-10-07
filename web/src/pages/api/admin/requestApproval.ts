@@ -24,6 +24,7 @@ interface ApprovalRequestData {
   adminEmail: string;
   adminName: string;
   adminLocation: string;
+  referenceNote?: string;
   requestId: string;
   status: "pending";
   createdAt: firebase.firestore.Timestamp;
@@ -36,6 +37,7 @@ export async function sendApprovalRequestEmail(
   adminEmail: string,
   adminName: string,
   requestId: string,
+  referenceNote: string | undefined,
   req?: any
 ) {
   // Use request domain if available, otherwise fall back to configured domain
@@ -58,9 +60,13 @@ export async function sendApprovalRequestEmail(
   // Create review URL for admin
   const reviewUrl = `${baseUrl}/admin/approvals?request=${requestId}`;
 
-  const message = `${requesterName} (${requesterEmail}) has requested access to ${brand}.
+  let message = `${requesterName} (${requesterEmail}) has requested access to ${brand}.`;
 
-Please review this request and approve or deny access.
+  if (referenceNote) {
+    message += `\n\nReference: ${referenceNote}`;
+  }
+
+  message += `\n\nPlease review this request and approve or deny access.
 
 Review Request
 
@@ -148,12 +154,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (!db) return res.status(503).json({ error: "Database not available" });
 
-  const { requesterEmail, requesterName, adminEmail, adminName, adminLocation } = req.body as {
+  const { requesterEmail, requesterName, adminEmail, adminName, adminLocation, referenceNote } = req.body as {
     requesterEmail?: string;
     requesterName?: string;
     adminEmail?: string;
     adminName?: string;
     adminLocation?: string;
+    referenceNote?: string;
   };
 
   // Validate required fields
@@ -191,6 +198,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       adminEmail: adminEmail.toLowerCase(),
       adminName: adminName.trim(),
       adminLocation: adminLocation.trim(),
+      ...(referenceNote && { referenceNote: referenceNote.trim() }),
       requestId,
       status: "pending",
       createdAt: now,
@@ -210,7 +218,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // Send emails (in parallel for better performance)
     const emailPromises = [
-      sendApprovalRequestEmail(requesterEmail, requesterName, adminEmail, adminName, requestId, req),
+      sendApprovalRequestEmail(requesterEmail, requesterName, adminEmail, adminName, requestId, referenceNote, req),
       sendRequesterConfirmationEmail(requesterEmail, requesterName, adminName, adminLocation, req),
     ];
 

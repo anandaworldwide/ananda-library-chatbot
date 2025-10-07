@@ -116,7 +116,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
         // Set the updated auth cookie
         res.setHeader("Set-Cookie", [
-          `auth=${newAuthToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${180 * 24 * 60 * 60}`,
+          `auth=${newAuthToken}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${180 * 24 * 60 * 60}`,
         ]);
       }
     } catch (cookieError) {

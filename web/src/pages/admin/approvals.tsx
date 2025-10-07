@@ -16,6 +16,7 @@ interface ApprovalRequest {
   adminEmail: string;
   adminName: string;
   adminLocation: string;
+  referenceNote?: string;
   status: "pending" | "approved" | "denied";
   createdAt: string;
   updatedAt: string;
@@ -253,6 +254,13 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
                 </div>
               </div>
 
+              {request.referenceNote && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-md text-sm">
+                  <span className="text-gray-700 font-medium">Reference: </span>
+                  <span className="text-gray-900">{request.referenceNote}</span>
+                </div>
+              )}
+
               {userRole === "superuser" && (
                 <div className="mb-4 p-3 bg-blue-50 rounded-md text-sm">
                   <span className="text-blue-700 font-medium">Assigned to: </span>
@@ -324,6 +332,12 @@ export default function AdminApprovalsPage({ siteConfig }: AdminApprovalsPagePro
               <p className="text-sm text-gray-600 mb-1">Requester</p>
               <p className="font-semibold">{selectedRequest.requesterName}</p>
               <p className="text-sm text-gray-600">{selectedRequest.requesterEmail}</p>
+              {selectedRequest.referenceNote && (
+                <>
+                  <p className="text-sm text-gray-600 mt-3 mb-1">Reference</p>
+                  <p className="text-sm text-gray-900">{selectedRequest.referenceNote}</p>
+                </>
+              )}
             </div>
 
             <div>

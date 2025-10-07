@@ -319,7 +319,7 @@ describe("/api/admin/users/[userId] update user", () => {
     expect(authCookie).toBeDefined();
     expect(authCookie).toContain("HttpOnly");
     expect(authCookie).toContain("Secure");
-    expect(authCookie).toContain("SameSite=Strict");
+    expect(authCookie).toContain("SameSite=Lax");
 
     // Verify audit log was written
     expect(writeAuditLogSpy).toHaveBeenCalledWith(expect.anything(), "admin_change_email", "admin@example.com", {

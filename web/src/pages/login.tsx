@@ -189,6 +189,7 @@ export default function Login({ siteConfig }: LoginProps) {
           <div>
             <AdminApproverSelector
               requesterEmail={email}
+              siteConfig={siteConfig}
               onSuccess={handleApprovalSuccess}
               onError={handleApprovalError}
               onBack={handleBackToEmail}

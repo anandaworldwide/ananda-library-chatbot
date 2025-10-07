@@ -261,7 +261,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
               // Set the updated auth cookie
               const isSecure = req.headers["x-forwarded-proto"] === "https" || !isDevelopment();
               res.setHeader("Set-Cookie", [
-                `auth=${newAuthToken}; HttpOnly; ${isSecure ? "Secure; " : ""}SameSite=Strict; Path=/; Max-Age=${180 * 24 * 60 * 60}`,
+                `auth=${newAuthToken}; HttpOnly; ${isSecure ? "Secure; " : ""}SameSite=Lax; Path=/; Max-Age=${180 * 24 * 60 * 60}`,
               ]);
             }
           }

@@ -174,6 +174,7 @@ describe("AdminApproverSelector", () => {
         adminEmail: "admin1@example.com",
         adminName: "Admin User One",
         adminLocation: "Test City, CA",
+        referenceNote: undefined,
       }),
     });
   });

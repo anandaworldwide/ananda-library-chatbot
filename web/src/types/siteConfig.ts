@@ -67,4 +67,5 @@ export interface SiteConfig {
       description: string;
     };
   };
+  accessRequestNoteLabel?: string; // Label text for reference note field in access request form
 }

@@ -89,7 +89,8 @@
         "event": "Minister Guidance Click",
         "description": "Connect with minister for private spiritual counseling"
       }
-    }
+    },
+    "accessRequestNoteLabel": "Please let us know the name and location of an Ananda leader who knows you."
   },
   "ananda-public": {
     "name": "The Ananda.org Chatbot",
@@ -225,7 +226,8 @@
     "showSourceCountSelector": true,
     "temperature": 0.2,
     "modelName": "gpt-4o",
-    "feedbackIcon": "michael.jpeg"
+    "feedbackIcon": "michael.jpeg",
+    "accessRequestNoteLabel": "Please let us know the name of someone on the Free Joe Hunt team who knows you."
   },
   "crystal": {
     "name": "Crystal Clarity Library Magic",

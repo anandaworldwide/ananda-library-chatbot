@@ -214,7 +214,7 @@ describe("/api/admin/requestApproval", () => {
     expect(response.message).toBe("Approval request submitted successfully");
     expect(response.requestId).toMatch(/^req_\d+_[a-z0-9]+$/);
 
-    // Verify Firestore was called
+    // Verify Firestore was called without referenceNote
     expect(firestoreRetryUtils.firestoreSet).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -238,6 +238,48 @@ describe("/api/admin/requestApproval", () => {
         outcome: "request_created",
         adminEmail: "admin@example.com",
       })
+    );
+  });
+
+  it("should create approval request with reference note", async () => {
+    genericRateLimiter.mockResolvedValue(true);
+    loadSiteConfig.loadSiteConfig.mockResolvedValue({ siteId: "ananda" });
+    firestoreRetryUtils.firestoreSet.mockResolvedValue(undefined);
+    writeAuditLog.mockResolvedValue(undefined);
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "POST",
+      body: {
+        requesterEmail: "requester@example.com",
+        requesterName: "Test Requester",
+        adminEmail: "admin@example.com",
+        adminName: "Test Admin",
+        adminLocation: "Test City, CA",
+        referenceNote: "I know Swami Kriyananda",
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    const response = res._getJSONData();
+    expect(response.message).toBe("Approval request submitted successfully");
+    expect(response.requestId).toMatch(/^req_\d+_[a-z0-9]+$/);
+
+    // Verify Firestore was called with referenceNote
+    expect(firestoreRetryUtils.firestoreSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        requesterEmail: "requester@example.com",
+        requesterName: "Test Requester",
+        adminEmail: "admin@example.com",
+        adminName: "Test Admin",
+        adminLocation: "Test City, CA",
+        referenceNote: "I know Swami Kriyananda",
+        status: "pending",
+      }),
+      undefined,
+      "create admin approval request"
     );
   });
 
