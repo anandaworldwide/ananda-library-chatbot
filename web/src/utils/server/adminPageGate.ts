@@ -32,9 +32,13 @@ export async function isAdminPageAllowed(
   if (requireLogin) {
     try {
       const cookieJwt = req.cookies?.["auth"];
-      if (!cookieJwt) return false;
+      if (!cookieJwt) {
+        console.log("[isAdminPageAllowed] No auth cookie found");
+        return false;
+      }
       const payload: any = verifyToken(cookieJwt);
       const role = typeof payload?.role === "string" ? (payload.role as string).toLowerCase() : "user";
+      console.log(`[isAdminPageAllowed] JWT role: ${role}, email: ${payload?.email}`);
       if (role === "admin" || role === "superuser") return true;
       // Fallback to live Firestore role by email if present
       const email = typeof payload?.email === "string" ? payload.email.toLowerCase() : undefined;
@@ -43,13 +47,17 @@ export async function isAdminPageAllowed(
           const usersCol = getUsersCollectionName();
           const snap = await firestoreGet(db.collection(usersCol).doc(email), "gating: get user role", email);
           const liveRole = snap.exists ? ((snap.data() as any)?.role as string | undefined) : undefined;
+          console.log(`[isAdminPageAllowed] Firestore role: ${liveRole}`);
           return liveRole === "admin" || liveRole === "superuser";
-        } catch {
+        } catch (error) {
+          console.error("[isAdminPageAllowed] Firestore lookup error:", error);
           return false;
         }
       }
+      console.log("[isAdminPageAllowed] No email in token or no db connection");
       return false;
-    } catch {
+    } catch (error) {
+      console.error("[isAdminPageAllowed] Token verification error:", error);
       return false;
     }
   }

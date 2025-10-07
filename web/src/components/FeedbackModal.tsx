@@ -17,7 +17,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [fieldsAutoFilled, setFieldsAutoFilled] = useState(false);
 
   // Auto-fill user data for logged-in users
   useEffect(() => {
@@ -26,27 +26,32 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
 
       try {
         const token = await getToken();
-        if (token) {
-          setIsLoggedIn(true);
+        if (token && siteConfig?.requireLogin) {
+          // Only try to fetch profile if login is required
+          const profileResponse = await fetch("/api/profile", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
 
-          // Fetch user profile if login is required
-          if (siteConfig?.requireLogin) {
-            const profileResponse = await fetch("/api/profile", {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            });
+          if (profileResponse.ok) {
+            const profileData = await profileResponse.json();
+            let autoFilled = false;
 
-            if (profileResponse.ok) {
-              const profileData = await profileResponse.json();
-              if (profileData.firstName || profileData.lastName) {
-                const nameParts = [profileData.firstName, profileData.lastName].filter(Boolean);
-                const fullName = nameParts.join(" ");
-                setName(fullName);
-              }
-              if (profileData.email) {
-                setEmail(profileData.email);
-              }
+            if (profileData.firstName || profileData.lastName) {
+              const nameParts = [profileData.firstName, profileData.lastName].filter(Boolean);
+              const fullName = nameParts.join(" ");
+              setName(fullName);
+              autoFilled = true;
+            }
+            if (profileData.email) {
+              setEmail(profileData.email);
+              autoFilled = true;
+            }
+
+            // Only set as auto-filled if we actually got data
+            if (autoFilled) {
+              setFieldsAutoFilled(true);
             }
           }
         }
@@ -68,7 +73,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
       setError(null);
       setIsSubmitting(false);
       setIsSubmitted(false);
-      setIsLoggedIn(false);
+      setFieldsAutoFilled(false);
     }
   }, [isOpen]);
 
@@ -180,12 +185,12 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className={`mt-1 block w-full border rounded-xl shadow-sm px-3 py-2 ${
-                    isLoggedIn && siteConfig?.requireLogin
+                    fieldsAutoFilled
                       ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
                       : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                   }`}
                   required
-                  readOnly={isLoggedIn && siteConfig?.requireLogin}
+                  readOnly={fieldsAutoFilled}
                   disabled={isSubmitting}
                   maxLength={100}
                 />
@@ -201,12 +206,12 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, siteConf
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className={`mt-1 block w-full border rounded-xl shadow-sm px-3 py-2 ${
-                    isLoggedIn && siteConfig?.requireLogin
+                    fieldsAutoFilled
                       ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
                       : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                   }`}
                   required
-                  readOnly={isLoggedIn && siteConfig?.requireLogin}
+                  readOnly={fieldsAutoFilled}
                   disabled={isSubmitting}
                 />
               </div>

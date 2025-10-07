@@ -19,7 +19,6 @@ import { ChatInput } from "@/components/ChatInput";
 import MessageItem from "@/components/MessageItem";
 import DownvoteFeedbackModal from "@/components/DownvoteFeedbackModal";
 import ChatHistorySidebar from "@/components/ChatHistorySidebar";
-import AnswersPageLink from "@/components/AnswersPageLink";
 
 // Hook imports
 import usePopup from "@/hooks/usePopup";
@@ -1725,9 +1724,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
               <span className="block sm:inline">{voteError}</span>
             </div>
           )}
-
-        {/* Discrete link to answers page for authorized users */}
-        <AnswersPageLink siteConfig={siteConfig} />
       </Layout>
     </SudoProvider>
   );

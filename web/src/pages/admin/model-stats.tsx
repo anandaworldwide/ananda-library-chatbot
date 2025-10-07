@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import { GetServerSideProps } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
 import { NextApiRequest } from "next";
+import { AdminLayout } from "@/components/AdminLayout";
 import { fetchWithAuth } from "@/utils/client/tokenManager";
 
 interface ModelComparison {
@@ -44,7 +44,10 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
 
   if (!isAllowed) {
     return {
-      notFound: true,
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
     };
   }
 
@@ -98,110 +101,117 @@ const ModelStats = ({ siteConfig }: ModelStatsProps) => {
       .join(", ");
   };
 
-  return (
-    <Layout siteConfig={siteConfig}>
-      <div className="px-4 py-8 max-w-[1600px] mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Model Comparison Stats</h1>
-
-        {isLoading ? (
-          <div className="flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full bg-white border border-gray-200">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="whitespace-normal px-6 py-2 border w-[90px]">Timestamp</th>
-                    <th className="whitespace-nowrap px-6 py-2 border w-[200px]">Question</th>
-                    <th className="whitespace-nowrap px-6 py-2 border">Win</th>
-                    <th className="whitespace-nowrap px-6 py-2 border w-[150px]">Model A</th>
-                    <th className="whitespace-nowrap px-6 py-2 border w-[80px]">Ans. A</th>
-                    <th className="whitespace-nowrap px-6 py-2 border w-[150px]">Model B</th>
-                    <th className="whitespace-nowrap px-6 py-2 border w-[80px]">Ans. B</th>
-                    <th className="whitespace-nowrap px-6 py-2 border w-[200px]">Reasons</th>
-                    <th className="whitespace-nowrap px-6 py-2 border w-[200px]">Comments</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {comparisons.map((comparison) => (
-                    <tr key={comparison.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-2 border whitespace-normal">{formatDate(comparison.timestamp)}</td>
-                      <td className="px-6 py-2 border relative group">
-                        {comparison.question.split(" ").slice(0, 10).join(" ")}
-                        {comparison.question.split(" ").length > 10 && (
-                          <>
-                            ...
-                            <div className="invisible group-hover:visible absolute z-50 left-0 mt-2 p-4 bg-white border rounded-lg shadow-lg w-96 max-h-96 overflow-y-auto">
-                              <pre className="whitespace-pre-wrap text-sm">{comparison.question}</pre>
-                            </div>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-6 py-2 border text-center">{comparison.winner}</td>
-                      <td className="px-6 py-2 border">
-                        {comparison.modelAConfig.model} ({comparison.modelAConfig.temperature})
-                      </td>
-                      <td className="px-6 py-2 border text-center relative group">
-                        <span className="material-icons cursor-help">chat</span>
-                        <div className="invisible group-hover:visible absolute z-50 left-0 mt-2 p-4 bg-white border rounded-lg shadow-lg w-96 max-h-96 overflow-y-auto">
-                          <pre className="whitespace-pre-wrap text-sm">{comparison.modelAConfig.response}</pre>
-                        </div>
-                      </td>
-                      <td className="px-6 py-2 border">
-                        {comparison.modelBConfig.model} ({comparison.modelBConfig.temperature})
-                      </td>
-                      <td className="px-6 py-2 border text-center relative group">
-                        <span className="material-icons cursor-help">chat</span>
-                        <div className="invisible group-hover:visible absolute z-50 left-0 mt-2 p-4 bg-white border rounded-lg shadow-lg w-96 max-h-96 overflow-y-auto">
-                          <pre className="whitespace-pre-wrap text-sm">{comparison.modelBConfig.response}</pre>
-                        </div>
-                      </td>
-                      <td className="px-6 py-2 border">
-                        {comparison.reasons &&
-                          Object.values(comparison.reasons).some((v) => v) &&
-                          getReasonsList(comparison.reasons)}
-                      </td>
-                      <td className="px-6 py-2 border text-center">
-                        {comparison.userComments && (
-                          <div className="relative group">
-                            <span className="material-icons cursor-help">comment</span>
-                            <div className="invisible group-hover:visible absolute z-50 left-0 mt-2 p-4 bg-white border rounded-lg shadow-lg w-96 max-h-96 overflow-y-auto">
-                              <pre className="whitespace-pre-wrap text-sm">{comparison.userComments}</pre>
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-center mt-6 gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
-              >
-                Previous
-              </button>
-              <span className="px-4 py-2">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
-              >
-                Next
-              </button>
-            </div>
-          </>
-        )}
+  const mainContent = (
+    <>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Model Comparison Stats</h1>
+        <p className="text-sm text-gray-600 mt-1">View AI model performance comparisons</p>
       </div>
-    </Layout>
+
+      {isLoading ? (
+        <div className="flex justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full bg-white border border-gray-200">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="whitespace-normal px-6 py-2 border w-[90px]">Timestamp</th>
+                  <th className="whitespace-nowrap px-6 py-2 border w-[200px]">Question</th>
+                  <th className="whitespace-nowrap px-6 py-2 border">Win</th>
+                  <th className="whitespace-nowrap px-6 py-2 border w-[150px]">Model A</th>
+                  <th className="whitespace-nowrap px-6 py-2 border w-[80px]">Ans. A</th>
+                  <th className="whitespace-nowrap px-6 py-2 border w-[150px]">Model B</th>
+                  <th className="whitespace-nowrap px-6 py-2 border w-[80px]">Ans. B</th>
+                  <th className="whitespace-nowrap px-6 py-2 border w-[200px]">Reasons</th>
+                  <th className="whitespace-nowrap px-6 py-2 border w-[200px]">Comments</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparisons.map((comparison) => (
+                  <tr key={comparison.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-2 border whitespace-normal">{formatDate(comparison.timestamp)}</td>
+                    <td className="px-6 py-2 border relative group">
+                      {comparison.question.split(" ").slice(0, 10).join(" ")}
+                      {comparison.question.split(" ").length > 10 && (
+                        <>
+                          ...
+                          <div className="invisible group-hover:visible absolute z-50 left-0 mt-2 p-4 bg-white border rounded-lg shadow-lg w-96 max-h-96 overflow-y-auto">
+                            <pre className="whitespace-pre-wrap text-sm">{comparison.question}</pre>
+                          </div>
+                        </>
+                      )}
+                    </td>
+                    <td className="px-6 py-2 border text-center">{comparison.winner}</td>
+                    <td className="px-6 py-2 border">
+                      {comparison.modelAConfig.model} ({comparison.modelAConfig.temperature})
+                    </td>
+                    <td className="px-6 py-2 border text-center relative group">
+                      <span className="material-icons cursor-help">chat</span>
+                      <div className="invisible group-hover:visible absolute z-50 left-0 mt-2 p-4 bg-white border rounded-lg shadow-lg w-96 max-h-96 overflow-y-auto">
+                        <pre className="whitespace-pre-wrap text-sm">{comparison.modelAConfig.response}</pre>
+                      </div>
+                    </td>
+                    <td className="px-6 py-2 border">
+                      {comparison.modelBConfig.model} ({comparison.modelBConfig.temperature})
+                    </td>
+                    <td className="px-6 py-2 border text-center relative group">
+                      <span className="material-icons cursor-help">chat</span>
+                      <div className="invisible group-hover:visible absolute z-50 left-0 mt-2 p-4 bg-white border rounded-lg shadow-lg w-96 max-h-96 overflow-y-auto">
+                        <pre className="whitespace-pre-wrap text-sm">{comparison.modelBConfig.response}</pre>
+                      </div>
+                    </td>
+                    <td className="px-6 py-2 border">
+                      {comparison.reasons &&
+                        Object.values(comparison.reasons).some((v) => v) &&
+                        getReasonsList(comparison.reasons)}
+                    </td>
+                    <td className="px-6 py-2 border text-center">
+                      {comparison.userComments && (
+                        <div className="relative group">
+                          <span className="material-icons cursor-help">comment</span>
+                          <div className="invisible group-hover:visible absolute z-50 left-0 mt-2 p-4 bg-white border rounded-lg shadow-lg w-96 max-h-96 overflow-y-auto">
+                            <pre className="whitespace-pre-wrap text-sm">{comparison.userComments}</pre>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-center mt-6 gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+            >
+              Previous
+            </button>
+            <span className="px-4 py-2">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+            >
+              Next
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <AdminLayout siteConfig={siteConfig} pageTitle="Model Stats">
+      {mainContent}
+    </AdminLayout>
   );
 };
 

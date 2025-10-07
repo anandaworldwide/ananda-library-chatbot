@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
-import Layout from "@/components/layout";
 import { SiteConfig } from "@/types/siteConfig";
 import type { GetServerSideProps, NextApiRequest, NextApiResponse } from "next";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 import { isAdminPageAllowed } from "@/utils/server/adminPageGate";
-import { Breadcrumb } from "@/components/Breadcrumb";
+import { AdminLayout } from "@/components/AdminLayout";
 import Link from "next/link";
 import { getToken } from "@/utils/client/tokenManager";
 
@@ -69,45 +68,67 @@ export default function AdminLeaderboardPage({ siteConfig }: AdminLeaderboardPag
     fetchData();
   }, []);
 
-  return (
-    <Layout siteConfig={siteConfig}>
-      <Head>
-        <title>Admin · User Leaderboard</title>
-      </Head>
-      <div className="mx-auto max-w-4xl p-6 space-y-6">
-        <Breadcrumb
-          items={[
-            { label: "Admin Dashboard", href: "/admin" },
-            { label: "Users", href: "/admin/users" },
-            { label: "User Leaderboard" },
-          ]}
-        />
+  const mainContent = (
+    <>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">User Leaderboard</h1>
+        <p className="text-sm text-gray-600 mt-1">Top 20 users by number of questions asked</p>
+      </div>
 
-        <div className="bg-white rounded-lg shadow-sm border">
-          <div className="px-6 py-4 border-b">
-            <h1 className="text-2xl font-semibold text-gray-900">User Leaderboard</h1>
-            <p className="text-sm text-gray-600 mt-1">Top 20 users by number of questions asked</p>
-          </div>
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="p-6">
+          {loading && (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-gray-500">Loading leaderboard...</div>
+            </div>
+          )}
 
-          <div className="p-6">
-            {loading && (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-gray-500">Loading leaderboard...</div>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-4">
+              <div className="text-red-800 text-sm">{error}</div>
+            </div>
+          )}
+
+          {!loading && !error && users.length === 0 && (
+            <div className="text-center py-8 text-gray-500">No users with questions found.</div>
+          )}
+
+          {!loading && !error && users.length > 0 && (
+            <>
+              {/* Mobile Card View */}
+              <div className="lg:hidden space-y-3">
+                {users.map((user, index) => (
+                  <div
+                    key={user.uuid}
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
+                        {index === 0 && <span className="text-yellow-500 material-icons text-xl">emoji_events</span>}
+                        {index === 1 && <span className="text-gray-400 material-icons text-xl">emoji_events</span>}
+                        {index === 2 && <span className="text-amber-600 material-icons text-xl">emoji_events</span>}
+                      </div>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                        {user.questionCount.toLocaleString()} questions
+                      </span>
+                    </div>
+                    <Link
+                      href={`/admin/users/${encodeURIComponent(user.email)}`}
+                      className="text-blue-600 hover:text-blue-800 font-semibold text-base block mb-2"
+                    >
+                      {user.displayName}
+                    </Link>
+                    <div className="flex items-start gap-2 text-sm">
+                      <span className="material-icons text-gray-400 text-sm mt-0.5">email</span>
+                      <span className="text-gray-600 break-all">{user.email}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <div className="text-red-800 text-sm">{error}</div>
-              </div>
-            )}
-
-            {!loading && !error && users.length === 0 && (
-              <div className="text-center py-8 text-gray-500">No users with questions found.</div>
-            )}
-
-            {!loading && !error && users.length > 0 && (
-              <div className="overflow-x-auto">
+              {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -161,11 +182,22 @@ export default function AdminLeaderboardPage({ siteConfig }: AdminLeaderboardPag
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
-    </Layout>
+    </>
+  );
+
+  return (
+    <>
+      <Head>
+        <title>Admin · User Leaderboard</title>
+      </Head>
+      <AdminLayout siteConfig={siteConfig} pageTitle="User Leaderboard">
+        {mainContent}
+      </AdminLayout>
+    </>
   );
 }
 
@@ -174,6 +206,13 @@ export const getServerSideProps: GetServerSideProps<AdminLeaderboardPageProps> =
   const res = ctx.res as unknown as NextApiResponse;
   const siteConfig = await loadSiteConfig();
   const allowed = await isAdminPageAllowed(req, res, siteConfig);
-  if (!allowed) return { notFound: true };
+  if (!allowed) {
+    return {
+      redirect: {
+        destination: "/unauthorized",
+        permanent: false,
+      },
+    };
+  }
   return { props: { isSudoAdmin: true, siteConfig } };
 };

@@ -14,6 +14,11 @@ jest.mock("@/components/layout", () => ({
   default: ({ children }: any) => <div>{children}</div>,
 }));
 
+// Mock AdminLayout to simplify rendering
+jest.mock("@/components/AdminLayout", () => ({
+  AdminLayout: ({ children }: any) => <div data-testid="admin-layout">{children}</div>,
+}));
+
 // Mock site config loader used by Layout props (SSR not exercised here)
 jest.mock("@/utils/server/loadSiteConfig", () => ({
   loadSiteConfig: jest.fn(async () => ({ name: "Test Site", siteId: "test" }) as Partial<SiteConfig>),
@@ -31,11 +36,13 @@ describe("Admin UI · Edit User page", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
-    // Default fetch mocks: web-token and GET user
+    // Default fetch mocks: web-token, profile (for current user role), and GET user
     global.fetch = jest
       .fn()
       // /api/web-token
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) } as any)
+      // /api/profile (current user's role)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) } as any)
       // GET /api/admin/users/:id (now includes conversationCount for admin users)
       .mockResolvedValueOnce({
         ok: true,
@@ -74,7 +81,7 @@ describe("Admin UI · Edit User page", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) }) // web-token
-
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) }) // profile
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -134,6 +141,7 @@ describe("Admin UI · Edit User page", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) }) // web-token
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) }) // profile
 
       .mockResolvedValueOnce({
         ok: true,
@@ -203,7 +211,7 @@ describe("Admin UI · Edit User page", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) }) // web-token
-
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) }) // profile
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Forbidden" }) }); // GET user fails
 
     render(<EditUserPage siteConfig={{ siteId: "test" } as any} />);
@@ -215,7 +223,7 @@ describe("Admin UI · Edit User page", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "test-jwt" }) }) // web-token
-
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ role: "superuser" }) }) // profile
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -249,6 +257,6 @@ describe("Admin UI · Edit User page", () => {
     render(<EditUserPage siteConfig={{ siteId: "test" } as any} />);
     expect(await screen.findByDisplayValue("user@example.com")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(mockRouter.push).toHaveBeenCalledWith("/admin/users");
+    expect(mockRouter.push).toHaveBeenCalledWith("/admin");
   });
 });
