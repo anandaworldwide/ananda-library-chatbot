@@ -73,6 +73,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
   const [sourceCount, setSourceCount] = useState<number>(savedState.sourceCount);
   const modelOptions = useMemo(
     () => [
+      { value: "gpt-4.1", label: "GPT-4.1" },
       { value: "gpt-4o", label: "GPT-4 Optimized" },
       { value: "gpt-4o-mini", label: "GPT-4 Optimized Mini" },
       { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
@@ -81,7 +82,6 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
     ],
     []
   );
-  const hasRandomized = useRef(false);
 
   const handleModelChange = useCallback((modelKey: "A" | "B", value: string) => {
     if (modelKey === "A") {
@@ -121,13 +121,6 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
     setTemperatureA(newTempA);
     setTemperatureB(newTempB);
   }, [modelOptions]);
-
-  useEffect(() => {
-    if (!hasRandomized.current) {
-      handleRandomize();
-      hasRandomized.current = true;
-    }
-  }, [handleRandomize]);
 
   useEffect(() => {
     if (modelA === modelB && Math.abs(temperatureA - temperatureB) < 0.3) {
@@ -185,7 +178,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
     }
   }, []); // Empty dependency array means this runs once on mount
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setConversationStarted(false);
     setMessagesA([]);
     setMessagesB([]);
@@ -195,11 +188,17 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
     accumulatedResponseB.current = "";
     setHasVoted(false);
 
+    // Restore the last saved model settings from savedState
+    setModelA(savedState.modelA);
+    setModelB(savedState.modelB);
+    setTemperatureA(savedState.temperatureA);
+    setTemperatureB(savedState.temperatureB);
+
     // Focus the input after reset
     if (textAreaRef.current) {
       textAreaRef.current.focus();
     }
-  };
+  }, [savedState]);
 
   const handleSubmit = async (e: React.FormEvent, query: string) => {
     e.preventDefault();
@@ -478,7 +477,6 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
       console.error("Error recording skip:", error);
     } finally {
       handleReset();
-      handleRandomize();
       if (textAreaRef.current) {
         textAreaRef.current.focus();
       }
@@ -608,7 +606,6 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
     logEvent(`${PAGE}_click_compare_another`, PAGE, "User clicked Compare Another");
     setShowThankYouMessage(false);
     handleReset();
-    handleRandomize();
   };
 
   return (
@@ -623,10 +620,7 @@ const ModelComparisonChat: React.FC<ModelComparisonChatProps> = ({ siteConfig, s
         </button>
         {conversationStarted && (
           <button
-            onClick={() => {
-              handleReset();
-              handleRandomize();
-            }}
+            onClick={handleReset}
             className="ml-2 px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
           >
             Reset
