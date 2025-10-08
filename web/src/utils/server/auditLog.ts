@@ -2,6 +2,7 @@ import type { NextApiRequest } from "next";
 import firebase from "firebase-admin";
 import { db } from "@/services/firebase";
 import { isDevelopment } from "@/utils/env";
+import { verifyToken } from "./jwtUtils";
 
 export interface AuditEntry {
   action: string;
@@ -22,8 +23,20 @@ export async function writeAuditLog(
 ) {
   if (!db) return;
   try {
-    const email = typeof req.body?.requesterEmail === "string" ? req.body.requesterEmail : undefined;
-    const role = typeof req.body?.requesterRole === "string" ? req.body.requesterRole : undefined;
+    // Extract admin identity from JWT token
+    let email: string | undefined;
+    let role: string | undefined;
+
+    try {
+      const cookieJwt = req.cookies?.["auth"];
+      if (cookieJwt) {
+        const payload: any = verifyToken(cookieJwt);
+        email = typeof payload?.email === "string" ? payload.email : undefined;
+        role = typeof payload?.role === "string" ? payload.role : undefined;
+      }
+    } catch {
+      // JWT verification failed, email/role will remain undefined
+    }
 
     // Extract IP address from request headers
     const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket?.remoteAddress ?? null;

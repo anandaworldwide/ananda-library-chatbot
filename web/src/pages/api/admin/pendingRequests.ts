@@ -326,10 +326,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
 
       // Log audit event
-      await writeAuditLog(req, `admin_approval_${action}`, adminEmail, {
+      await writeAuditLog(req, `admin_approval_${action}`, request.requesterEmail.toLowerCase(), {
         outcome: "success",
         requestId,
-        requesterEmail: request.requesterEmail,
       });
 
       return res.status(200).json({
@@ -338,7 +337,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     } catch (error: any) {
       console.error(`Error processing approval request:`, error);
-      await writeAuditLog(req, "admin_approval_action", adminEmail, {
+      await writeAuditLog(req, "admin_approval_error", undefined, {
         outcome: "server_error",
         error: error.message,
         requestId,

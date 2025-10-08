@@ -23,6 +23,11 @@ jest.mock("@/utils/env", () => ({
   isDevelopment: jest.fn(),
 }));
 
+// Mock JWT utils
+jest.mock("@/utils/server/jwtUtils", () => ({
+  verifyToken: jest.fn(),
+}));
+
 // Mock firebase-admin
 jest.mock("firebase-admin", () => ({
   firestore: {
@@ -38,16 +43,21 @@ jest.mock("firebase-admin", () => ({
 
 import { writeAuditLog } from "@/utils/server/auditLog";
 import { isDevelopment } from "@/utils/env";
+import { verifyToken } from "@/utils/server/jwtUtils";
 import { db } from "@/services/firebase";
 
 describe("Audit Log Security", () => {
   const mockIsDevelopment = isDevelopment as jest.Mock;
+  const mockVerifyToken = verifyToken as jest.Mock;
   let mockDbCollection: jest.Mock;
   let mockDbAdd: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsDevelopment.mockReturnValue(false); // Default to production
+    mockVerifyToken.mockImplementation(() => {
+      throw new Error("No JWT token");
+    }); // Default to no JWT
 
     // Get references to the mocked functions from the mocked module
     mockDbCollection = (db as any).collection;
@@ -64,14 +74,18 @@ describe("Audit Log Security", () => {
 
   describe("Firestore Security Rules Validation", () => {
     it("uses correct collection names for environment-based access control", async () => {
+      mockVerifyToken.mockReturnValue({
+        email: "admin@example.com",
+        role: "admin",
+      });
+
       const { req } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
           "x-forwarded-for": "192.168.1.100",
         },
-        body: {
-          requesterEmail: "admin@example.com",
-          requesterRole: "admin",
+        cookies: {
+          auth: "valid-jwt-token",
         },
       });
 
@@ -83,15 +97,18 @@ describe("Audit Log Security", () => {
 
     it("uses development collection in development environment", async () => {
       mockIsDevelopment.mockReturnValue(true);
+      mockVerifyToken.mockReturnValue({
+        email: "admin@example.com",
+        role: "admin",
+      });
 
       const { req } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
           "x-forwarded-for": "192.168.1.100",
         },
-        body: {
-          requesterEmail: "admin@example.com",
-          requesterRole: "admin",
+        cookies: {
+          auth: "valid-jwt-token",
         },
       });
 
@@ -102,15 +119,19 @@ describe("Audit Log Security", () => {
     });
 
     it("stores complete audit entry with security-relevant fields", async () => {
+      mockVerifyToken.mockReturnValue({
+        email: "admin@example.com",
+        role: "admin",
+      });
+
       const { req } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
           "x-forwarded-for": "192.168.1.100",
           "x-request-id": "req-12345",
         },
-        body: {
-          requesterEmail: "admin@example.com",
-          requesterRole: "admin",
+        cookies: {
+          auth: "valid-jwt-token",
         },
       });
 
@@ -166,15 +187,19 @@ describe("Audit Log Security", () => {
     });
 
     it("preserves audit data integrity with proper typing", async () => {
+      mockVerifyToken.mockReturnValue({
+        email: "superuser@example.com",
+        role: "superuser",
+      });
+
       const { req } = createMocks<NextApiRequest, NextApiResponse>({
         method: "POST",
         headers: {
           "x-forwarded-for": "10.0.0.1, 192.168.1.100",
           "x-request-id": "trace-abc123",
         },
-        body: {
-          requesterEmail: "superuser@example.com",
-          requesterRole: "superuser",
+        cookies: {
+          auth: "valid-jwt-token",
         },
       });
 

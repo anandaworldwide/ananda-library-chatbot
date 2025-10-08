@@ -19,6 +19,8 @@ interface UserDetail {
   lastName?: string | null;
   conversationCount?: number;
   newsletterSubscribed?: boolean;
+  addedBy?: string | null;
+  addedAt?: string | null;
 }
 
 interface PageProps {
@@ -231,6 +233,21 @@ export default function EditUserPage({ siteConfig }: PageProps) {
                     new Date(user.lastLoginAt).toLocaleString()
                   ) : (
                     <span className="text-gray-500">Never</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Added/Approved By:</span>
+                <div className="mt-1">
+                  {user.addedBy ? (
+                    <>
+                      <div className="font-medium text-gray-900">{user.addedBy}</div>
+                      {user.addedAt && (
+                        <div className="text-xs text-gray-500 mt-0.5">{new Date(user.addedAt).toLocaleString()}</div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-500">Unknown</span>
                   )}
                 </div>
               </div>

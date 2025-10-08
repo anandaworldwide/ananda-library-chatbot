@@ -79,6 +79,34 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         }
       }
 
+      // Fetch audit log to determine who added or approved this user
+      let addedBy: string | null = null;
+      let addedAt: Date | null = null;
+
+      try {
+        const prefix = isDevelopment() ? "dev_" : "prod_";
+        const auditQuery = db
+          .collection(`${prefix}admin_audit`)
+          .where("target", "==", currentId)
+          .where("action", "in", ["admin_add_user", "admin_approval_approve"])
+          .orderBy("createdAt", "desc")
+          .limit(1);
+
+        const auditSnapshot = await firestoreQueryGet(
+          auditQuery,
+          "admin audit log for user creation",
+          `target: ${currentId}`
+        );
+
+        if (!auditSnapshot.empty) {
+          const auditDoc = auditSnapshot.docs[0].data();
+          addedBy = auditDoc?.requester?.email || null;
+          addedAt = auditDoc?.createdAt?.toDate?.() ?? null;
+        }
+      } catch (auditError: any) {
+        console.warn("Failed to fetch audit log for user:", auditError?.message);
+      }
+
       return res.status(200).json({
         user: {
           id: currentId,
@@ -94,6 +122,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           newsletterSubscribed:
             typeof (data as any)?.newsletterSubscribed === "boolean" ? (data as any).newsletterSubscribed : false,
           conversationCount,
+          addedBy,
+          addedAt,
         },
       });
     } catch (err: any) {
