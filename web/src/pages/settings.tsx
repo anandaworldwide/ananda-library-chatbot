@@ -8,6 +8,7 @@ import type { SiteConfig } from "@/types/siteConfig";
 import { loadSiteConfig } from "@/utils/server/loadSiteConfig";
 
 import { EmailChangeModal } from "@/components/EmailChangeModal";
+import { PasswordChangeModal } from "@/components/PasswordChangeModal";
 
 export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | null }) {
   const [email, setEmail] = useState<string | null>(null);
@@ -23,6 +24,10 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
   // Email change state
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [isEmailChangeModalOpen, setIsEmailChangeModalOpen] = useState(false);
+
+  // Password management state
+  const [hasPassword, setHasPassword] = useState<boolean>(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -52,6 +57,7 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
               typeof profile?.newsletterSubscribed === "boolean" ? profile.newsletterSubscribed : true
             );
             setPendingEmail(typeof profile?.pendingEmail === "string" ? profile.pendingEmail : null);
+            setHasPassword(typeof profile?.hasPassword === "boolean" ? profile.hasPassword : false);
           } else {
             setEmail(null);
             setRole("user");
@@ -110,6 +116,11 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
   function handleEmailChangeCancelled() {
     setPendingEmail(null);
     setMessage("Email change cancelled");
+  }
+
+  function handlePasswordChanged(successMessage: string) {
+    setHasPassword(true);
+    setMessage(successMessage);
   }
 
   return (
@@ -209,11 +220,30 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
                   <button
                     type="submit"
                     disabled={savingProfile}
-                    className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+                    className="rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50 hover:bg-blue-700"
                   >
                     {savingProfile ? "Saving…" : "Save Profile"}
                   </button>
                 </form>
+              </section>
+
+              <section className="mb-6">
+                <h2 className="text-lg font-semibold mb-1">Security</h2>
+                <div className="text-sm text-gray-700 mb-3">
+                  {hasPassword ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-600">✓ Password is set</span>
+                    </div>
+                  ) : (
+                    <div className="text-gray-600">No password set - using magic link authentication</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => setIsPasswordModalOpen(true)}
+                  className="rounded bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"
+                >
+                  {hasPassword ? "Change Password" : "Set Password"}
+                </button>
               </section>
 
               <button onClick={handleLogout} className="rounded bg-gray-800 px-3 py-1 text-white disabled:opacity-50">
@@ -230,6 +260,13 @@ export default function SettingsPage({ siteConfig }: { siteConfig: SiteConfig | 
           pendingEmail={pendingEmail}
           onEmailChangeRequested={handleEmailChangeRequested}
           onEmailChangeCancelled={handleEmailChangeCancelled}
+        />
+
+        <PasswordChangeModal
+          isOpen={isPasswordModalOpen}
+          onClose={() => setIsPasswordModalOpen(false)}
+          hasPassword={hasPassword}
+          onPasswordChanged={handlePasswordChanged}
         />
       </Layout>
     </>

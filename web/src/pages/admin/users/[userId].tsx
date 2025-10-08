@@ -21,6 +21,8 @@ interface UserDetail {
   newsletterSubscribed?: boolean;
   addedBy?: string | null;
   addedAt?: string | null;
+  passwordSet?: boolean;
+  passwordSetAt?: string | null;
 }
 
 interface PageProps {
@@ -248,6 +250,23 @@ export default function EditUserPage({ siteConfig }: PageProps) {
                     </>
                   ) : (
                     <span className="text-gray-500">Unknown</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Password:</span>
+                <div className="mt-1">
+                  {user.passwordSet ? (
+                    <>
+                      <span className="text-green-600">✓ Set</span>
+                      {user.passwordSetAt && (
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {new Date(user.passwordSetAt).toLocaleString()}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-500">Not set - using magic link</span>
                   )}
                 </div>
               </div>

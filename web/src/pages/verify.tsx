@@ -53,11 +53,11 @@ export default function VerifyPage() {
     })();
   }, [token, email, status]);
 
-  // After profile save, redirect to home after 2 seconds
+  // After profile save, redirect to auth method choice page after 2 seconds
   useEffect(() => {
     if (status !== "success") return;
     const t = setTimeout(() => {
-      router.replace("/");
+      router.replace("/choose-auth-method");
     }, 2000);
     return () => clearTimeout(t);
   }, [status, router]);
@@ -137,7 +137,7 @@ export default function VerifyPage() {
         {status === "success" ? (
           <div className="rounded border border-green-300 bg-green-50 p-3 text-sm mb-3">
             {message}
-            <div className="mt-1">Redirecting to home…</div>
+            <div className="mt-1">Redirecting…</div>
           </div>
         ) : null}
         {status === "already-activated" ? (

@@ -15,6 +15,14 @@ export const isPublicPage = (path: string, siteConfig: SiteConfig | null): boole
   // Magic login page must be public to avoid redirect loops when consuming sign-in links
   if (path === "/magic-login") return true;
 
+  // Password reset pages must be public (users can't authenticate if they forgot their password)
+  if (path === "/forgot-password") return true;
+  if (path === "/reset-password") return true;
+
+  // Account activation and setup pages must be public
+  if (path === "/verify") return true;
+  if (path === "/choose-auth-method") return true;
+
   // Contact page is always public
   if (path === "/contact") return true;
 

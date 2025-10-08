@@ -19,6 +19,7 @@ import { ChatInput } from "@/components/ChatInput";
 import MessageItem from "@/components/MessageItem";
 import DownvoteFeedbackModal from "@/components/DownvoteFeedbackModal";
 import ChatHistorySidebar from "@/components/ChatHistorySidebar";
+import { PasswordPromoBanner } from "@/components/PasswordPromoBanner";
 
 // Hook imports
 import usePopup from "@/hooks/usePopup";
@@ -1616,6 +1617,8 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                   </span>
                 </div>
               )}
+              {/* Password promotion banner - only on sites that require login */}
+              {siteConfig?.requireLogin && <PasswordPromoBanner />}
               <div className="flex-grow overflow-hidden answers-container">
                 <div ref={messageListRef} className="h-full overflow-y-auto">
                   {/* Render chat messages */}

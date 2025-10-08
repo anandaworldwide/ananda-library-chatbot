@@ -133,6 +133,145 @@ These endpoints use the `withJwtOnlyAuth` middleware which:
 - Does not require the siteAuth cookie
 - Applies common security checks (CSRF, rate limiting, etc.)
 
+### Password Authentication System
+
+The system supports optional password-based authentication alongside magic link authentication for sites with
+`requireLogin: true`. This provides users with faster login options while maintaining security.
+
+#### Authentication Methods
+
+Users can authenticate using either method:
+
+1. **Magic Link Authentication** (Default)
+
+   - Email-based authentication with temporary tokens
+   - No password required
+   - Ideal for infrequent users
+   - Always available as backup
+
+2. **Password Authentication** (Optional)
+   - Traditional email + password login
+   - Faster for frequent users
+   - Optional - users can choose to set or not set a password
+   - bcrypt-hashed password storage
+
+#### Password Security Implementation
+
+**Password Storage**:
+
+- Passwords are hashed using bcrypt with 10 salt rounds
+- Stored in Firestore `users` collection as `passwordHash` field
+- Never stored in plaintext
+- `passwordSetAt` timestamp tracks when password was first set
+
+**Password Requirements**:
+
+- Minimum 8 characters
+- At least one uppercase letter
+- At least one lowercase letter
+- At least one number
+- Validated on both client and server side
+
+**Password Management Endpoints**:
+
+- `/api/auth/setPassword` - Set initial password (requires JWT Bearer token)
+- `/api/auth/changePassword` - Change existing password (requires JWT Bearer token)
+- `/api/auth/loginWithPassword` - Login with email + password (issues session cookie)
+- `/api/auth/requestPasswordReset` - Request password reset link via email
+- `/api/auth/resetPassword` - Reset password using email token
+- `/api/auth/checkAuthMethod` - Check if user has password set (for login UI)
+
+**Rate Limiting**:
+
+- Password login: 5 attempts per 15 minutes per IP
+- Password reset request: 3 attempts per hour per IP
+- Change password: 5 attempts per 15 minutes per IP
+
+**Security Features**:
+
+- No user enumeration - reset requests always return success message
+- Reset tokens are cryptographically secure (32-byte random)
+- Reset tokens are bcrypt-hashed before storage
+- Reset tokens expire after 1 hour
+- Failed login attempts don't reveal whether email or password is incorrect
+
+#### User Experience Flow
+
+**Initial Account Activation**:
+
+1. User receives activation email
+2. Clicks link, verifies email, enters name
+3. Redirected to `/choose-auth-method` interstitial
+4. Can choose to set password or skip and use magic links
+
+**Login Flow**:
+
+1. User enters email on `/login`
+2. System checks if user has password via `/api/auth/checkAuthMethod`
+3. If password set: Shows password input with "Email me a Magic Login Link" option
+4. If no password: Proceeds with magic link flow
+
+**Password Promotion**:
+
+- Dismissible banner shown to users without passwords after magic link login
+- Banner links to settings page
+- Once dismissed via `/api/profile` PATCH, never shown again
+- Only shown on sites with `requireLogin: true`
+
+**Settings Page**:
+
+- Shows password status (set/not set with timestamp)
+- "Set Password" button if no password
+- "Change Password" button if password exists
+- Validates password strength in real-time
+- Show/hide toggles for all password fields
+
+**Admin Visibility**:
+
+- Admin user detail page shows if user has password set
+- Shows `passwordSetAt` timestamp
+- Never shows actual password or hash
+
+#### Implementation Files
+
+**Backend APIs**:
+
+- `web/src/pages/api/auth/setPassword.ts`
+- `web/src/pages/api/auth/changePassword.ts`
+- `web/src/pages/api/auth/loginWithPassword.ts`
+- `web/src/pages/api/auth/requestPasswordReset.ts`
+- `web/src/pages/api/auth/resetPassword.ts`
+- `web/src/pages/api/auth/checkAuthMethod.ts`
+
+**Frontend Pages**:
+
+- `web/src/pages/login.tsx` - Email-first login with dynamic password/magic link options
+- `web/src/pages/settings.tsx` - Password management section
+- `web/src/pages/set-password.tsx` - Standalone password setup page
+- `web/src/pages/forgot-password.tsx` - Password reset request page
+- `web/src/pages/reset-password.tsx` - Password reset with token page
+- `web/src/pages/choose-auth-method.tsx` - Post-activation interstitial
+
+**Components**:
+
+- `web/src/components/PasswordPromoBanner.tsx` - Dismissible promotion banner
+- `web/src/components/PasswordStrengthIndicator.tsx` - Real-time password validation
+
+**Utilities**:
+
+- `web/src/utils/server/passwordUtils.ts` - Password hashing, comparison, validation
+- `web/src/utils/server/passwordResetUtils.ts` - Reset token generation, email sending
+
+**Types**:
+
+- `web/src/types/user.ts` - Extended with `hasPassword`, `passwordSetAt`, `dismissedPasswordPromo`, `PasswordValidation`
+
+#### Site Configuration
+
+Password authentication is only available on sites with `requireLogin: true` in `site-config/config.json`.
+
+All password-related endpoints check `siteConfig?.requireLogin` and return 403 if not enabled.
+
 ### Best Practices for JWT Implementation
 
 #### Frontend Implementation

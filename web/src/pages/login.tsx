@@ -14,8 +14,10 @@ interface LoginProps {
 
 export default function Login({ siteConfig }: LoginProps) {
   const router = useRouter();
-  const [step, setStep] = useState<"email" | "request-approval">("email");
+  const [step, setStep] = useState<"email" | "password" | "request-approval">("email");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,6 +26,7 @@ export default function Login({ siteConfig }: LoginProps) {
   const [lastSendType, setLastSendType] = useState<"login" | "activation" | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
 
   // Tick countdown while active; when it reaches 0, re-enable button
   useEffect(() => {
@@ -46,6 +49,16 @@ export default function Login({ siteConfig }: LoginProps) {
     }
   }, [step]);
 
+  // Desktop-only autofocus for the password field when on password step
+  useEffect(() => {
+    if (step !== "password") return;
+    if (typeof window === "undefined" || !("matchMedia" in window)) return;
+    const isDesktop = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (isDesktop && passwordInputRef.current) {
+      passwordInputRef.current.focus();
+    }
+  }, [step]);
+
   const submitEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -59,6 +72,27 @@ export default function Login({ siteConfig }: LoginProps) {
     }
 
     try {
+      // Check if user has password set
+      const checkRes = await fetchWithAuth("/api/auth/checkAuthMethod", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+
+        if (checkData.hasPassword) {
+          // User has password - show password field
+          setStep("password");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // User doesn't have password or check failed - proceed with magic link flow
       const res = await fetchWithAuth("/api/auth/requestLoginLink", {
         method: "POST",
         headers: {
@@ -111,6 +145,86 @@ export default function Login({ siteConfig }: LoginProps) {
       }
     } catch (error) {
       console.error("Login error:", error);
+      setError("An error occurred. Please try again.");
+      setIsSubmitting(false);
+    }
+  };
+
+  const submitPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setInfo("");
+    setIsSubmitting(true);
+
+    if (!password.trim()) {
+      setError("Password cannot be empty");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const res = await fetchWithAuth("/api/auth/loginWithPassword", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (res.ok) {
+        // Redirect to chat or original destination
+        const redirect =
+          typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("redirect") : null;
+        router.push(redirect || "/");
+      } else if (res.status === 429) {
+        setError("Too many attempts. Please try again later.");
+        setIsSubmitting(false);
+      } else {
+        const errorData = await res.json();
+        setError(errorData.error || "Invalid email or password");
+        setIsSubmitting(false);
+      }
+    } catch (error) {
+      console.error("Password login error:", error);
+      setError("An error occurred. Please try again.");
+      setIsSubmitting(false);
+    }
+  };
+
+  const useMagicLinkInstead = async () => {
+    setError("");
+    setInfo("");
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetchWithAuth("/api/auth/requestLoginLink", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          redirect:
+            typeof window !== "undefined"
+              ? new URLSearchParams(window.location.search).get("redirect") || undefined
+              : undefined,
+        }),
+      });
+
+      if (res.ok) {
+        setInfo("We sent you a sign-in link. Please check your email.");
+        setEmailSent(true);
+        setResendSeconds(60);
+        setLastSendType("login");
+        setStep("email");
+        setIsSubmitting(false);
+      } else {
+        const errorData = await res.json();
+        setError(errorData.error || "Something went wrong");
+        setIsSubmitting(false);
+      }
+    } catch (error) {
+      console.error("Magic link error:", error);
       setError("An error occurred. Please try again.");
       setIsSubmitting(false);
     }
@@ -181,6 +295,69 @@ export default function Login({ siteConfig }: LoginProps) {
                   {resendSeconds}s
                 </span>
               )}
+            </div>
+          </form>
+        )}
+
+        {step === "password" && (
+          <form onSubmit={submitPassword} aria-busy={isSubmitting}>
+            <p className="mb-4 text-sm text-gray-600">
+              Enter your password for <strong>{email}</strong>
+            </p>
+
+            <div className="mb-4">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  ref={passwordInputRef}
+                  className="p-2 border border-gray-300 rounded w-full pr-16"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+
+            {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
+            {info && (
+              <p className="text-green-600 mb-4 text-sm" aria-live="polite">
+                {info}
+              </p>
+            )}
+
+            <div className="flex flex-col gap-3">
+              <button
+                type="submit"
+                className="w-full p-2 bg-blue-500 text-white rounded disabled:opacity-60 hover:bg-blue-600"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Logging in..." : "Log In"}
+              </button>
+              <div className="flex flex-col gap-2 text-sm text-center">
+                <button
+                  type="button"
+                  onClick={useMagicLinkInstead}
+                  className="text-blue-500 hover:underline"
+                  disabled={isSubmitting}
+                >
+                  Email me a Magic Login Link
+                </button>
+                <a href="/forgot-password" className="text-blue-500 hover:underline">
+                  Forgot password?
+                </a>
+              </div>
             </div>
           </form>
         )}

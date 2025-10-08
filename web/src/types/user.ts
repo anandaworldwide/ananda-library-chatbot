@@ -15,7 +15,25 @@ export interface User {
   emailChangeExpiresAt?: any;
   inviteStatus?: string | null;
   newsletterSubscribed?: boolean;
+  // Password authentication fields
+  hasPassword?: boolean; // Computed field for client - whether user has password set
+  passwordSetAt?: string | null; // When password was first set
+  dismissedPasswordPromo?: boolean; // Whether user dismissed the password promotion banner
   // Admin-specific fields (when needed)
   id?: string; // For admin user detail pages (this will be the email/doc ID)
   conversationCount?: number; // For admin user detail pages
+}
+
+/**
+ * Password validation response
+ */
+export interface PasswordValidation {
+  valid: boolean;
+  message?: string;
+  requirements?: {
+    minLength: boolean;
+    hasUppercase: boolean;
+    hasLowercase: boolean;
+    hasNumber: boolean;
+  };
 }

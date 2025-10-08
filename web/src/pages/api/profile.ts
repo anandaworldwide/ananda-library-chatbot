@@ -54,6 +54,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         pendingEmail: typeof data?.pendingEmail === "string" ? data.pendingEmail : null,
         emailChangeExpiresAt: data?.emailChangeExpiresAt || null,
         newsletterSubscribed: typeof data?.newsletterSubscribed === "boolean" ? data.newsletterSubscribed : true, // Default to true for existing users
+        hasPassword: !!data?.passwordHash, // Boolean indicating if user has password set
+        dismissedPasswordPromo: typeof data?.dismissedPasswordPromo === "boolean" ? data.dismissedPasswordPromo : false,
       });
     }
 
@@ -63,6 +65,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         lastName?: string;
         cancelEmailChange?: boolean;
         newsletterSubscribed?: boolean;
+        dismissedPasswordPromo?: boolean;
       };
       const updates: Record<string, any> = {};
 
@@ -88,6 +91,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           return res.status(400).json({ error: "Invalid newsletter subscription value" });
         }
         updates.newsletterSubscribed = body.newsletterSubscribed;
+      }
+      if (body.dismissedPasswordPromo !== undefined) {
+        if (typeof body.dismissedPasswordPromo !== "boolean") {
+          return res.status(400).json({ error: "Invalid dismissedPasswordPromo value" });
+        }
+        updates.dismissedPasswordPromo = body.dismissedPasswordPromo;
       }
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No updates provided" });

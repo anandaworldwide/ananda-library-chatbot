@@ -124,6 +124,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           conversationCount,
           addedBy,
           addedAt,
+          passwordSet: !!data.passwordHash, // Boolean - whether user has password set
+          passwordSetAt: data.passwordSetAt?.toDate?.() ?? null, // When password was set
         },
       });
     } catch (err: any) {
