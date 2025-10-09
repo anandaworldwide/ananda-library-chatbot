@@ -26,6 +26,7 @@ import { verifyToken } from "@/utils/server/jwtUtils";
 import { db } from "@/services/firebase";
 import { getUsersCollectionName } from "@/utils/server/firestoreUtils";
 import { firestoreGet } from "@/utils/server/firestoreRetryUtils";
+import { PUBLIC_PATHS } from "@/config/publicPaths";
 
 /**
  * API handler for the web token endpoint
@@ -58,14 +59,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // Get referer to check if it's a special case
     const referer = req.headers.referer || "";
 
-    // Define paths that should receive tokens without login (siteAuth cookie)
-    // These are pages that use withJwtOnlyAuth middleware
-    const publicJwtPaths = [
-      "/contact", // Contact form
-      "/answers/", // Public answers
-      "/share/", // Public share
-      "/verify", // Activation page must be able to fetch a token without siteAuth
-    ];
+    // Use centralized list of public pages that can receive tokens without authentication
+    const publicJwtPaths = PUBLIC_PATHS.alwaysPublicPages;
 
     // Check if this is a request from a public JWT-only path
     const isPublicJwtPath = typeof referer === "string" && publicJwtPaths.some((path) => referer.includes(path));
@@ -86,14 +81,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
           // Verify the JWT token
           jwt.verify(authJwt, jwtSecret);
-          console.log("[200] Valid JWT auth cookie found");
           // JWT is valid, proceed to token generation
         } catch (jwtError) {
-          console.log("[401] Invalid JWT auth cookie:", jwtError);
           return res.status(401).json({ error: "Invalid authentication" });
         }
       } else {
-        console.log("[401] Missing authentication - no valid auth cookie found");
         return res.status(401).json({ error: "Authentication required" });
       }
     }
@@ -133,8 +125,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       } catch (error) {
         // If auth cookie is invalid, continue with anonymous token
         // This allows graceful degradation for expired/invalid sessions
-        // Invalid auth cookie is expected for anonymous users - issue anonymous token
-        console.log("Invalid auth cookie, issuing anonymous token");
       }
     }
 

@@ -354,7 +354,10 @@ export default function Login({ siteConfig }: LoginProps) {
                 >
                   Email me a Magic Login Link
                 </button>
-                <a href="/forgot-password" className="text-blue-500 hover:underline">
+                <a
+                  href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
+                  className="text-blue-500 hover:underline"
+                >
                   Forgot password?
                 </a>
               </div>

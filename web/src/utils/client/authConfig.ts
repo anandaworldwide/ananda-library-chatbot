@@ -1,5 +1,6 @@
 // Utility functions for determining authentication requirements based on site config
 import { SiteConfig } from "@/types/siteConfig";
+import { PUBLIC_PATHS } from "@/config/publicPaths";
 
 /**
  * Returns whether a specific page is public (doesn't require authentication)
@@ -10,30 +11,21 @@ import { SiteConfig } from "@/types/siteConfig";
  * @returns True if the page is public, false if it requires authentication
  */
 export const isPublicPage = (path: string, siteConfig: SiteConfig | null): boolean => {
-  // Login page is always public
-  if (path === "/login") return true;
-  // Magic login page must be public to avoid redirect loops when consuming sign-in links
-  if (path === "/magic-login") return true;
+  // Check against centralized public paths
+  const isInPublicList = PUBLIC_PATHS.alwaysPublicPages.some((publicPath) => {
+    // Handle trailing slash patterns (e.g., "/answers/")
+    if (publicPath.endsWith("/")) {
+      return path.startsWith(publicPath) && path !== publicPath.slice(0, -1);
+    }
+    return path === publicPath;
+  });
 
-  // Password reset pages must be public (users can't authenticate if they forgot their password)
-  if (path === "/forgot-password") return true;
-  if (path === "/reset-password") return true;
-
-  // Account activation and setup pages must be public
-  if (path === "/verify") return true;
-  if (path === "/choose-auth-method") return true;
-
-  // Contact page is always public
-  if (path === "/contact") return true;
+  if (isInPublicList) {
+    return true;
+  }
 
   // Request submitted page is always public (shown after access request)
   if (path === "/request-submitted") return true;
-
-  // Individual answer pages (with ID) are public
-  if (path.startsWith("/answers/") && path.length > 9) return true;
-
-  // Shared conversation pages are public (/share/<docId>)
-  if (path.startsWith("/share/") && path.length > 7) return true;
 
   // If no site config is available, default to requiring authentication
   if (!siteConfig) return false;
@@ -52,8 +44,8 @@ export const isPublicPage = (path: string, siteConfig: SiteConfig | null): boole
  * @returns True if the endpoint is public, false if it requires authentication
  */
 export const isPublicEndpoint = (url: string, method: string): boolean => {
-  // Authentication endpoints are always public
-  if (url.includes("/api/web-token") || url.includes("/api/get-token") || url.includes("/api/login")) {
+  // Check against centralized public API paths
+  if (PUBLIC_PATHS.alwaysPublicApis.some((apiPath) => url.includes(apiPath))) {
     return true;
   }
 
@@ -64,11 +56,6 @@ export const isPublicEndpoint = (url: string, method: string): boolean => {
 
   // Answers GET requests are public
   if (url.includes("/api/answers") && method === "GET") {
-    return true;
-  }
-
-  // Contact form submissions are public
-  if (url.includes("/api/contact")) {
     return true;
   }
 

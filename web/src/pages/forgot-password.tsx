@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import Head from "next/head";
 import Link from "next/link";
 import { SiteConfig } from "@/types/siteConfig";
 import { getSiteName } from "@/utils/client/siteConfig";
-import { fetchWithAuth } from "@/utils/client/tokenManager";
 import Layout from "@/components/layout";
 
 interface ForgotPasswordProps {
@@ -11,10 +11,18 @@ interface ForgotPasswordProps {
 }
 
 export default function ForgotPasswordPage({ siteConfig }: ForgotPasswordProps) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+
+  // Pre-fill email from query parameter if present
+  useEffect(() => {
+    if (router.isReady && router.query.email && typeof router.query.email === "string") {
+      setEmail(decodeURIComponent(router.query.email));
+    }
+  }, [router.isReady, router.query.email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +36,7 @@ export default function ForgotPasswordPage({ siteConfig }: ForgotPasswordProps) 
     setIsSubmitting(true);
 
     try {
-      const res = await fetchWithAuth("/api/auth/requestPasswordReset", {
+      const res = await fetch("/api/auth/requestPasswordReset", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

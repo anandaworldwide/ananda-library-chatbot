@@ -1,121 +1,92 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { isDevelopment } from './src/utils/env'; // Adjusted path
-import { isTokenValid } from './src/utils/server/passwordUtils'; // Adjusted path
-import CryptoJS from 'crypto-js';
-import { loadSiteConfigSync } from './src/utils/server/loadSiteConfig'; // Adjusted path
-import { getClientIp } from './src/utils/server/ipUtils'; // Adjusted path
-import {
-  createErrorCorsHeaders,
-  handleCors,
-  addCorsHeaders,
-} from './src/utils/server/corsMiddleware';
+import { NextRequest, NextResponse } from "next/server";
+import { isTokenValid } from "./src/utils/server/passwordUtils"; // Adjusted path
+import CryptoJS from "crypto-js";
+import { loadSiteConfigSync } from "./src/utils/server/loadSiteConfig"; // Adjusted path
+import { getClientIp } from "./src/utils/server/ipUtils"; // Adjusted path
+import { createErrorCorsHeaders, handleCors, addCorsHeaders } from "./src/utils/server/corsMiddleware";
+import { getAllPublicPaths } from "./src/config/publicPaths";
 
 // Log suspicious activity with details
 const logSuspiciousActivity = (req: NextRequest, reason: string) => {
   const clientIP = getClientIp(req);
-  const userAgent = req.headers.get('user-agent') || 'unknown';
+  const userAgent = req.headers.get("user-agent") || "unknown";
   const method = req.method;
   const url = req.url;
   console.warn(
-    `Suspicious activity detected: ${reason}. IP: ${clientIP}, User-Agent: ${userAgent}, Method: ${method}, URL: ${url}`,
+    `Suspicious activity detected: ${reason}. IP: ${clientIP}, User-Agent: ${userAgent}, Method: ${method}, URL: ${url}`
   );
 };
 
 // Perform various security checks on the incoming request (Copy from root middleware.ts)
 const performSecurityChecks = (req: NextRequest, url: URL) => {
-  if (url.pathname.includes('..') || url.pathname.includes('//')) {
-    logSuspiciousActivity(req, 'Potential path traversal attempt');
+  if (url.pathname.includes("..") || url.pathname.includes("//")) {
+    logSuspiciousActivity(req, "Potential path traversal attempt");
   }
 
-  if (req.headers.get('x-forwarded-for')?.includes(',')) {
-    logSuspiciousActivity(
-      req,
-      'Multiple IP addresses in X-Forwarded-For header',
-    );
+  if (req.headers.get("x-forwarded-for")?.includes(",")) {
+    logSuspiciousActivity(req, "Multiple IP addresses in X-Forwarded-For header");
   }
 
   // Check for unusually long URLs
   if (url.pathname.length > 255) {
-    logSuspiciousActivity(req, 'Unusually long URL');
+    logSuspiciousActivity(req, "Unusually long URL");
   }
 
   // Check for SQL injection attempts in query parameters
   const sqlInjectionPattern = /(\\%27)|(\')|(\\-\\-)|(\\%23)|(#)/i;
   if (sqlInjectionPattern.test(url.search)) {
-    logSuspiciousActivity(
-      req,
-      'Potential SQL injection attempt in query parameters',
-    );
+    logSuspiciousActivity(req, "Potential SQL injection attempt in query parameters");
   }
 
   // Check for unusual or suspicious user agents
-  const suspiciousUserAgents = [
-    'sqlmap',
-    'nikto',
-    'nmap',
-    'masscan',
-    'python-requests',
-    'curl',
-    'wget',
-    'burp',
-  ];
-  const userAgent = req.headers.get('user-agent')?.toLowerCase() || '';
+  const suspiciousUserAgents = ["sqlmap", "nikto", "nmap", "masscan", "python-requests", "curl", "wget", "burp"];
+  const userAgent = req.headers.get("user-agent")?.toLowerCase() || "";
   if (suspiciousUserAgents.some((agent) => userAgent.includes(agent))) {
-    logSuspiciousActivity(req, 'Suspicious user agent detected');
+    logSuspiciousActivity(req, "Suspicious user agent detected");
   }
 
   // Check for attempts to access sensitive files (adjust paths if needed for web context)
   const sensitiveFiles: string[] = []; // Simplified definition, removed internal comments
-  if (
-    sensitiveFiles.some((file) => url.pathname.toLowerCase().includes(file))
-  ) {
-    logSuspiciousActivity(req, 'Attempt to access potentially sensitive file');
+  if (sensitiveFiles.some((file) => url.pathname.toLowerCase().includes(file))) {
+    logSuspiciousActivity(req, "Attempt to access potentially sensitive file");
   }
 
   // Check for unusual HTTP methods
-  const allowedMethods = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
+  const allowedMethods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"];
   if (!allowedMethods.includes(req.method)) {
     logSuspiciousActivity(req, `Unusual HTTP method: ${req.method}`);
   }
 
   // Check for missing or suspicious referer header for POST requests
-  if (req.method === 'POST') {
-    const referer = req.headers.get('referer');
+  if (req.method === "POST") {
+    const referer = req.headers.get("referer");
     if (
       !referer ||
-      !referer.startsWith(process.env.NEXT_PUBLIC_BASE_URL || '') // Assumes BASE_URL is correct for /web context
+      !referer.startsWith(process.env.NEXT_PUBLIC_BASE_URL || "") // Assumes BASE_URL is correct for /web context
     ) {
-      logSuspiciousActivity(
-        req,
-        'Missing or suspicious referer for POST request',
-      );
+      logSuspiciousActivity(req, "Missing or suspicious referer for POST request");
     }
   }
 
   // Check for excessive number of cookies
-  const cookieHeader = req.headers.get('cookie');
-  if (cookieHeader && cookieHeader.split(';').length > 30) {
-    logSuspiciousActivity(req, 'Excessive number of cookies');
+  const cookieHeader = req.headers.get("cookie");
+  if (cookieHeader && cookieHeader.split(";").length > 30) {
+    logSuspiciousActivity(req, "Excessive number of cookies");
   }
 
   // Check for potential XSS attempts in query parameters
-  const xssPattern = new RegExp(
-    '<script\\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>',
-    'gi',
-  );
+  const xssPattern = new RegExp("<script\\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>", "gi");
   if (xssPattern.test(decodeURIComponent(url.search))) {
-    logSuspiciousActivity(req, 'Potential XSS attempt in query parameters');
+    logSuspiciousActivity(req, "Potential XSS attempt in query parameters");
   }
 
   // Check for unusual content-type headers
-  const contentType = req.headers.get('content-type');
+  const contentType = req.headers.get("content-type");
   if (
     contentType &&
-    ![
-      'application/json',
-      'application/x-www-form-urlencoded',
-      'multipart/form-data',
-    ].includes(contentType.split(';')[0])
+    !["application/json", "application/x-www-form-urlencoded", "multipart/form-data"].includes(
+      contentType.split(";")[0]
+    )
   ) {
     logSuspiciousActivity(req, `Unusual content-type header: ${contentType}`);
   }
@@ -130,26 +101,19 @@ export function middleware(req: NextRequest) {
   performSecurityChecks(req, url);
 
   // Redirect /all to /answers (relative to /web)
-  if (url.pathname === '/all') {
-    url.pathname = '/answers';
+  if (url.pathname === "/all") {
+    url.pathname = "/answers";
     return NextResponse.redirect(url, { status: 308 });
-  }
-
-  // Only log certain information in development
-  if (isDevelopment()) {
-    console.log(`[Web Middleware] Processing request for ${url.pathname}`);
   }
 
   // NOTE: HTTP to HTTPS redirect is usually handled by hosting (Vercel)
 
   // Load site configuration (ensure paths are correct for /web context)
-  const siteId = process.env.SITE_ID || 'default';
+  const siteId = process.env.SITE_ID || "default";
   const siteConfig = loadSiteConfigSync(siteId); // Uses adjusted import path
 
   if (!siteConfig) {
-    console.error(
-      `[Web Middleware] Configuration not found for site ID: ${siteId}`,
-    );
+    console.error(`[Web Middleware] Configuration not found for site ID: ${siteId}`);
     // Decide appropriate action: return error, allow, or redirect?
     // Allowing for now, but might need adjustment.
     return response; // Allow request to proceed, might show error later
@@ -157,83 +121,55 @@ export function middleware(req: NextRequest) {
 
   const { requireLogin } = siteConfig;
 
-  // Define allowed paths that don't require authentication (relative to /web)
-  const allowed_paths_starts = [
-    '/login',
-    '/robots.txt',
-    '/favicon.ico',
-    '/contact',
-    '/api/get-token', // Adjust if API paths change within /web
-    '/api/web-token', // Adjust if API paths change within /web
-    '/api/answers', // Adjust if API paths change within /web
-    '/api/contact', // Add any other public API paths
-    // '/_next', // Usually handled by Next.js, not middleware explicitly
-    '/survey',
-  ];
+  // Get centralized list of public paths
+  const allowed_paths_starts = getAllPublicPaths();
 
   // Check if the current path requires authentication (relative to /web)
   const pathname_is_private =
     !allowed_paths_starts.some((path) => url.pathname.startsWith(path)) &&
-    !(url.pathname.startsWith('/answers/') && url.pathname !== '/answers/') && // Exclude specific answer pages
-    !url.pathname.includes('/_next/') && // Explicitly allow Next.js internals
-    !url.pathname.startsWith('/static/') && // Allow static assets if served from /public/static
+    !(url.pathname.startsWith("/answers/") && url.pathname !== "/answers/") && // Exclude specific answer pages
+    !url.pathname.includes("/_next/") && // Explicitly allow Next.js internals
+    !url.pathname.startsWith("/static/") && // Allow static assets if served from /public/static
     !url.pathname.match(/\\.(png|jpg|jpeg|gif|ico|svg|css|js)$/); // Allow common static file types
 
   if (pathname_is_private && requireLogin) {
-    const cookie = req.cookies.get('siteAuth');
+    const cookie = req.cookies.get("siteAuth");
     const storedHashedToken = process.env.SECURE_TOKEN_HASH; // Ensure this env var is available to the /web build
-
-    // Enhanced debugging for auth issues
-    console.log(`[Web Middleware] Checking auth for: ${url.pathname}`);
-    console.log(`[Web Middleware] Cookie present: ${!!cookie}`);
-    console.log(
-      `[Web Middleware] SECURE_TOKEN_HASH present: ${!!storedHashedToken}`,
-    );
 
     let authFailed = false;
     if (!cookie) {
-      console.log('[Web Middleware] Auth check: Missing siteAuth cookie.');
       authFailed = true;
     } else {
-      const tokenValue = cookie.value.split(':')[0];
+      const tokenValue = cookie.value.split(":")[0];
       const hashedTokenValue = CryptoJS.SHA256(tokenValue).toString();
 
-      console.log(
-        `[Web Middleware] Token timestamp check: ${isTokenValid(cookie.value)}`,
-      );
-
       if (hashedTokenValue !== storedHashedToken) {
-        console.log('[Web Middleware] Auth check: Token hash mismatch.');
         authFailed = true;
       } else if (!isTokenValid(cookie.value)) {
-        // isTokenValid uses adjusted import
-        console.log('[Web Middleware] Auth check: Token timestamp invalid.');
         authFailed = true;
       }
     }
 
     if (authFailed) {
-      console.log('[Web Middleware] Authentication failed');
-
       // For API routes within /web/src/pages/api, return a 401
-      if (url.pathname.startsWith('/api')) {
+      if (url.pathname.startsWith("/api")) {
         const apiResponse = new NextResponse(
           JSON.stringify({
             success: false,
-            message: 'Authentication required (Web Middleware)',
+            message: "Authentication required (Web Middleware)",
           }),
           {
             status: 401,
             headers: createErrorCorsHeaders(req),
-          },
+          }
         );
         return apiResponse;
       }
 
       // For page routes, redirect to /login (relative to /web)
       const fullPath = `${url.pathname}${url.search}`;
-      const loginUrl = new URL('/login', req.url); // req.url should have correct base
-      loginUrl.searchParams.set('redirect', fullPath);
+      const loginUrl = new URL("/login", req.url); // req.url should have correct base
+      loginUrl.searchParams.set("redirect", fullPath);
 
       return NextResponse.redirect(loginUrl);
     }
@@ -247,14 +183,14 @@ export function middleware(req: NextRequest) {
   }
 
   // Handle OPTIONS request
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     const optionsResponse = new NextResponse(null, { status: 204 });
     return addCorsHeaders(optionsResponse, req, siteConfig);
   }
 
   // Add security headers
   const securityHeaders = {
-    'Content-Security-Policy': `
+    "Content-Security-Policy": `
       default-src 'self';
       script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com;
       connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com;
@@ -269,14 +205,14 @@ export function middleware(req: NextRequest) {
       form-action 'self';
       object-src 'none';
     `
-      .replace(/\s{2,}/g, ' ')
+      .replace(/\s{2,}/g, " ")
       .trim(),
-    'X-XSS-Protection': '1; mode=block',
-    'X-Frame-Options': 'SAMEORIGIN',
-    'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+    "X-XSS-Protection": "1; mode=block",
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
   };
 
   // Apply security headers
@@ -301,8 +237,8 @@ export const config = {
      *
      * This ensures middleware runs on pages and most API routes.
      */
-    '/((?!api/auth|_next/static|_next/image|favicon.ico|robots.txt|images/|fonts/).*)',
+    "/((?!api/auth|_next/static|_next/image|favicon.ico|robots.txt|images/|fonts/).*)",
     // Explicitly include root path '/' if not covered by the above
-    '/',
+    "/",
   ],
 };

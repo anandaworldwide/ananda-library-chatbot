@@ -6,7 +6,6 @@ import { SiteConfig } from "@/types/siteConfig";
 import { PasswordValidation } from "@/types/user";
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 import { getSiteName } from "@/utils/client/siteConfig";
-import { fetchWithAuth } from "@/utils/client/tokenManager";
 import Layout from "@/components/layout";
 
 interface ResetPasswordProps {
@@ -85,7 +84,7 @@ export default function ResetPasswordPage({ siteConfig }: ResetPasswordProps) {
     setIsSubmitting(true);
 
     try {
-      const res = await fetchWithAuth("/api/auth/resetPassword", {
+      const res = await fetch("/api/auth/resetPassword", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
