@@ -76,14 +76,14 @@ export function PasswordPromoBanner({ onDismiss }: PasswordPromoBannerProps) {
                 clipRule="evenodd"
               />
             </svg>
-            <h3 className="text-sm font-medium text-blue-800">Tip: Set a password for faster logins</h3>
+            <h3 className="text-sm font-medium text-blue-800">Password login is now available (optional)</h3>
           </div>
           <p className="text-sm text-blue-700 ml-7">
-            You can optionally set a password in your{" "}
+            You can add a password in your{" "}
             <a href="/settings" className="font-medium underline hover:text-blue-900">
               settings
             </a>{" "}
-            for quicker access. Magic links will always work as a backup.
+            if you prefer typing credentials. Or continue using magic links — both options work equally well.
           </p>
         </div>
         <button
