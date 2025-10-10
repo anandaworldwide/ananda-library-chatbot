@@ -1,7 +1,89 @@
-# Document Relevance Labeling Tool
+# Reranking Module
 
-This tool helps create fine-tuning and evaluation datasets for a cross-encoder reranker by letting you
-manually label the relevance of documents retrieved from Pinecone.
+This module contains tools for fine-tuning and evaluating cross-encoder reranking models to improve document retrieval
+relevance.
+
+## ⚠️ Separate Virtual Environment Required
+
+**This module requires its own isolated virtual environment** due to dependency conflicts with the main project
+(specifically numpy 2.x vs 1.x). Do not install these requirements in the root project environment.
+
+### Quick Setup
+
+```bash
+# From the project root, navigate to reranking directory
+cd reranking
+
+# Create isolated virtual environment
+python3 -m venv venv
+
+# Install dependencies
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+deactivate
+```
+
+### Automatic Environment Activation (Recommended)
+
+This module includes a `.envrc` file for automatic environment activation using `direnv`. Once set up, the virtual
+environment will automatically activate when you `cd` into the `reranking` directory and deactivate when you leave.
+
+**One-time direnv setup:**
+
+```bash
+# Install direnv (if not already installed)
+brew install direnv  # macOS with Homebrew
+# OR
+sudo apt install direnv  # Ubuntu/Debian
+
+# Add direnv hook to your shell profile
+# For bash, add to ~/.bashrc:
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
+
+# For zsh, add to ~/.zshrc:
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
+
+# Restart your shell or source the config
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+**First time in the reranking directory:**
+
+```bash
+cd reranking
+direnv allow  # Grant permission for this directory
+```
+
+Now the environment will automatically activate/deactivate:
+
+```bash
+cd reranking              # Automatically activates venv
+python label_relevance.py --site ananda
+cd ..                     # Automatically deactivates venv
+```
+
+### Manual Activation (Alternative)
+
+If you prefer not to use direnv, manually activate the environment:
+
+```bash
+cd reranking
+source venv/bin/activate  # macOS/Linux
+# OR
+venv\Scripts\activate     # Windows
+
+python label_relevance.py --site ananda
+
+deactivate  # When done
+```
+
+## Module Contents
+
+### 1. Document Relevance Labeling Tool (`label_relevance.py`)
+
+This tool helps create fine-tuning and evaluation datasets for a cross-encoder reranker by letting you manually label
+the relevance of documents retrieved from Pinecone.
 
 ## Features
 
@@ -26,20 +108,19 @@ manually label the relevance of documents retrieved from Pinecone.
 - Site-specific environment file (`.env.<site>`)
 - Site configuration in `web/site-config/config.json`
 
-## Required Python Libraries
+## Dependencies
 
-The necessary Python libraries are already included in the root `requirements.in` file of this project. Simply run:
+This module has its own `requirements.txt` file with pinned versions. The dependencies are:
 
-```bash
-pip-compile requirements.in
-pip install -r requirements.txt
-```
+- `transformers` - Hugging Face transformers library
+- `optimum[onnxruntime]` - Optimized inference with ONNX Runtime
+- `torch` - PyTorch for model training and inference
+- `scikit-learn` - Machine learning utilities
+- `numpy` - Numerical computing (version 2.x)
+- `protobuf` - Protocol buffers for serialization
 
-If you want to install just the dependencies needed for this tool:
-
-```bash
-pip install openai pinecone-client nltk python-dotenv
-```
+**Important:** These requirements are **separate from** and **incompatible with** the root project requirements. Always
+use the isolated virtual environment (see setup instructions above).
 
 ## Environment Setup
 
@@ -60,7 +141,8 @@ The site name specified in the `--site` parameter must match:
 
 ## Site Configuration and Library Filtering
 
-The tool uses the site configuration from `web/site-config/config.json` to determine which libraries to include in the search. For example:
+The tool uses the site configuration from `web/site-config/config.json` to determine which libraries to include in the
+search. For example:
 
 ```json
 "ananda": {
@@ -73,7 +155,8 @@ The tool uses the site configuration from `web/site-config/config.json` to deter
 }
 ```
 
-Documents in Pinecone are filtered based on their `library` metadata field matching one of these included libraries. This ensures that only relevant documents for the specific site are included in the labeling process.
+Documents in Pinecone are filtered based on their `library` metadata field matching one of these included libraries.
+This ensures that only relevant documents for the specific site are included in the labeling process.
 
 ## How to Use
 
@@ -91,7 +174,6 @@ Documents in Pinecone are filtered based on their `library` metadata field match
    ```
 
 2. For each query, the tool will:
-
    - Retrieve documents from Pinecone (filtered by libraries from site config)
    - Create a markdown file with the documents
    - Open the file in Typora (or default application)
@@ -99,7 +181,6 @@ Documents in Pinecone are filtered based on their `library` metadata field match
    - Parse your scores and save them to the datasets
 
 3. To assign scores:
-
    - For each document, replace `[Enter 0-3]` with a number:
      - `3`: Highly Relevant - Directly answers the query
      - `2`: Relevant - Contains information related to the query
@@ -117,35 +198,35 @@ If you're not getting any results from Pinecone:
    ```
 
 2. The diagnostics will:
-
    - Check your connection to the Pinecone index
    - Verify if your libraries exist in the index
    - Test the embedding generation
    - Report any dimension mismatches or other issues
 
 3. Common issues:
-
    - Libraries from your site config not found in the index
    - Empty index (no vectors uploaded)
    - Incorrect Pinecone API key or index name
    - Embedding dimension mismatch
 
-4. When no documents are found for a query, the tool will offer to retry without the library filter to help determine if the issue is with the library filter or the query itself.
+4. When no documents are found for a query, the tool will offer to retry without the library filter to help determine if
+   the issue is with the library filter or the query itself.
 
 ## Output Files
 
 For each site (specified with `--site`), the tool produces:
 
 - `reranking/evaluation_dataset_<site_id>.jsonl`: Contains all labeled documents with graded relevance scores (0-3)
-- `reranking/fine_tuning_dataset_<site_id>.jsonl`: Contains binary labeled documents (1.0 for relevant, 0.0 for irrelevant)
+- `reranking/fine_tuning_dataset_<site_id>.jsonl`: Contains binary labeled documents (1.0 for relevant, 0.0 for
+  irrelevant)
 - `reranking/relevance_labeling_progress_<site_id>.json`: Progress tracking file
 - `reranking/markdown_files/<site_id>/`: Directory with generated markdown files
 - `reranking/labeled_data/<site_id>/`: Directory for additional labeled data
 
 ## JSONL Format
 
-JSONL (JSON Lines) is a text format where each line is a valid JSON object. Each line in the output files
-represents one document/query pair:
+JSONL (JSON Lines) is a text format where each line is a valid JSON object. Each line in the output files represents one
+document/query pair:
 
 ### Evaluation Dataset Example
 

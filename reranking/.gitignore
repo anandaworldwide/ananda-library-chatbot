@@ -1,2 +1,26 @@
 markdown_files/
 relevance_labeling_progress*
+
+# Virtual environment
+venv/
+
+# Local environment overrides (use for personal customization)
+.envrc.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Generated files
+*.onnx
+*.json.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

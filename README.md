@@ -457,7 +457,6 @@ Use this method for PDF files that _do not_ originate from the WordPress databas
    ```
 
    Arguments:
-
    - `--file-path`: Path to the directory containing the PDFs
    - `--site`: Your site configuration name (for `.env` loading)
    - `--library-name`: Name for this library in Pinecone
@@ -698,7 +697,6 @@ changes as they will affect all environments immediately.
    ```
 
    Features:
-
    - 5-minute file locking to prevent concurrent edits
    - Automatic versioning through S3 versioning
    - Local staging directory (.prompts-staging)

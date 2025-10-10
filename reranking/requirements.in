@@ -4,7 +4,7 @@
 
 transformers
 optimum[onnxruntime]
-torch
+torch<3.0,>=2.0
 scikit-learn
 numpy
 protobuf # Often a dependency for ONNX
