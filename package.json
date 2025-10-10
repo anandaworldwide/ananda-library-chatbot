@@ -12,10 +12,8 @@
   "scripts": {
     "dev:root": "node scripts/dev.js"
   },
-  "dependencies": {
-    "commander": "^14.0.1"
-  },
   "devDependencies": {
+    "commander": "^14.0.1",
     "lint-staged": "^15.5.2"
   },
   "keywords": [],
