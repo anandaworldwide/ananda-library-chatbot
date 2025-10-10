@@ -1,4 +1,3 @@
-import "openai/shims/node";
 // Add custom jest matchers for DOM elements
 import "@testing-library/jest-dom";
 

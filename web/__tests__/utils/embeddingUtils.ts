@@ -1,5 +1,10 @@
-import "openai/shims/node";
 import OpenAI from "openai";
+import fetch from "node-fetch";
+
+// Polyfill fetch for Node.js test environment (OpenAI v6 requirement)
+if (typeof globalThis.fetch === "undefined") {
+  (globalThis as any).fetch = fetch;
+}
 
 // Initialize OpenAI client with a fallback mock API key for testing
 const openai = new OpenAI({

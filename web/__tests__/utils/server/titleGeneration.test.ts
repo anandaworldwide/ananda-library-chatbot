@@ -2,7 +2,6 @@
  * Tests for title generation utility
  */
 
-import "openai/shims/node";
 import { generateTitle, generateAndUpdateTitle } from "@/utils/server/titleGeneration";
 import { firestoreUpdate } from "@/utils/server/firestoreRetryUtils";
 import { db } from "@/services/firebase";
