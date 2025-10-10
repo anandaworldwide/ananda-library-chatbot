@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.ananda.crawler</string>
+    <string>com.ananda.crawler.ananda-public</string>
 
     <key>ProgramArguments</key>
     <array>
