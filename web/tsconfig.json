@@ -32,13 +32,6 @@
     "typeRoots": ["./node_modules/@types", "../node_modules/@types", "./src/types"],
     "types": ["node"]
   },
-  "include": [
-    "next-env.d.ts",
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    ".next/types/**/*.ts",
-    "src/types/**/*.d.ts",
-    "scripts/**/*.ts"
-  ],
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts", "src/types/**/*.d.ts"],
   "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx", "jest.setup.ts", "jest.config.cjs"]
 }
