@@ -1,6 +1,7 @@
 // Magic Login page: consumes token/email from query, calls /api/auth/magicLogin, sets session cookie
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
+import Link from "next/link";
 import { useRouter } from "next/router";
 
 export default function MagicLoginPage() {
@@ -49,7 +50,7 @@ export default function MagicLoginPage() {
         setMessage(e?.message || "Sign-in failed");
       }
     })();
-  }, [token, email, status, router]);
+  }, [token, email, status, router, redirect]);
 
   return (
     <>
@@ -69,9 +70,9 @@ export default function MagicLoginPage() {
         ) : null}
         {status === "success" ? (
           <div className="mt-4">
-            <a href="/" className="text-blue-600 underline">
+            <Link href="/" className="text-blue-600 underline">
               Go to Home
-            </a>
+            </Link>
           </div>
         ) : null}
       </main>

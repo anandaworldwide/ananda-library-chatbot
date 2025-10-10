@@ -84,16 +84,6 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
   const [showAdminsOnly, setShowAdminsOnly] = useState<boolean>(false);
-  if (!isSudoAdmin) {
-    return (
-      <Layout siteConfig={siteConfig}>
-        <div className="mx-auto max-w-3xl p-6">
-          <h1 className="text-2xl font-semibold mb-4">Admin Dashboard</h1>
-          <div className="rounded border bg-yellow-50 p-3 text-sm">Access denied. Set sudo cookie to proceed.</div>
-        </div>
-      </Layout>
-    );
-  }
 
   // Shared function to handle token refresh and retry logic
   async function fetchWithTokenRefresh<T>(
@@ -255,14 +245,18 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
 
     window.addEventListener("focus", handleWindowFocus);
     return () => window.removeEventListener("focus", handleWindowFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jwt, currentPage]);
+  // Note: fetchActive is not included to avoid infinite loops - it's defined inline and changes on every render
 
   // Fetch active users once JWT is available
   useEffect(() => {
     if (!jwt) return;
     fetchActive(currentPage);
     // Intentionally only depends on jwt to refetch if token is refreshed
-  }, [jwt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jwt, currentPage]);
+  // Note: fetchActive is not included to avoid infinite loops
 
   // Debounce search query to prevent excessive API calls
   useEffect(() => {
@@ -277,7 +271,9 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
   useEffect(() => {
     if (!jwt) return;
     fetchActive(currentPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, jwt, sortBy, debouncedSearchQuery, showAdminsOnly]);
+  // Note: fetchActive is not included to avoid infinite loops
 
   // Handle sort change
   const handleSortChange = (newSort: SortOption) => {
@@ -296,6 +292,17 @@ export default function AdminDashboardPage({ isSudoAdmin, siteConfig }: AdminDas
     setShowAdminsOnly(checked);
     setCurrentPage(1); // Reset to first page when filter changes
   };
+
+  if (!isSudoAdmin) {
+    return (
+      <Layout siteConfig={siteConfig}>
+        <div className="mx-auto max-w-3xl p-6">
+          <h1 className="text-2xl font-semibold mb-4">Admin Dashboard</h1>
+          <div className="rounded border bg-yellow-50 p-3 text-sm">Access denied. Set sudo cookie to proceed.</div>
+        </div>
+      </Layout>
+    );
+  }
 
   const mainContent = (
     <>

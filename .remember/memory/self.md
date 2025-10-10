@@ -623,3 +623,50 @@ failed.
 compilation unless scripts are explicitly needed for build processes.
 
 **Files Modified**: `web/tsconfig.json` - removed `scripts/**/*.ts` from include array.
+
+### 25. React Hooks exhaustive-deps with Refs and Forward Dependencies
+
+**Issue**: ESLint `react-hooks/exhaustive-deps` warnings occur when:
+
+1. Mutable refs (e.g., `pathRef.current`) are included in dependency arrays
+2. Functions used in callbacks are defined later in the code
+3. Stable function references don't need to be in dependency arrays
+
+**Wrong**: Including mutable ref values in dependency arrays.
+
+```typescript
+useEffect(() => {
+  previousPathRef.current = pathRef.current;
+}, [pathRef.current]); // Refs don't trigger re-renders, making this unnecessary
+```
+
+**Correct**: Omit mutable refs and use eslint-disable for forward references.
+
+```typescript
+useEffect(() => {
+  previousPathRef.current = pathRef.current;
+}, []); // Empty array - runs once on mount
+
+// For callbacks using functions defined later:
+const handleStreamingResponse = useCallback(
+  (data) => {
+    // Uses reportMissingSourcesToBacked defined later
+  },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [
+    updateMessageState,
+    // ... other deps
+  ]
+  // Note: reportMissingSourcesToBacked is defined after this callback
+);
+```
+
+**Pattern**: For forward references (functions used before declaration), either:
+
+1. Reorder code to define functions first, or
+2. Use `eslint-disable-next-line react-hooks/exhaustive-deps` with a comment explaining why
+
+**Additional Fixes**:
+
+- Unescaped entities: Use `&apos;` instead of `'` in JSX text
+- Next.js links: Use `<Link>` from `next/link` instead of `<a>` for internal navigation

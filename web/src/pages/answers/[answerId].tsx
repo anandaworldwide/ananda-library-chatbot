@@ -28,25 +28,7 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   const router = useRouter();
   const { answerId } = router.query;
 
-  // Redirect to new share URL format
-  useEffect(() => {
-    if (router.isReady && answerId && typeof answerId === "string") {
-      router.replace(`/share/${answerId}`);
-    }
-  }, [router.isReady, answerId, router]);
-
-  // Show loading while redirecting
-  if (!router.isReady || (answerId && typeof answerId === "string")) {
-    return (
-      <Layout siteConfig={siteConfig}>
-        <div className="flex justify-center items-center h-screen">
-          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
-          <p className="text-lg text-gray-600 ml-4">Redirecting...</p>
-        </div>
-      </Layout>
-    );
-  }
-
+  // All hooks must be called before any conditional returns
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -55,6 +37,13 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
   const [error, setError] = useState<string | null>(null);
   // Add ref to track initial load
   const initialLoadRef = useRef(true);
+
+  // Redirect to new share URL format
+  useEffect(() => {
+    if (router.isReady && answerId && typeof answerId === "string") {
+      router.replace(`/share/${answerId}`);
+    }
+  }, [router.isReady, answerId, router]);
 
   // Custom link component to handle GETHUMAN links, similar to TruncatedMarkdown
   const LinkComponent: Components["a"] = ({ href, children, ...props }) => {
@@ -132,6 +121,18 @@ const SingleAnswer = ({ siteConfig }: SingleAnswerProps) => {
       return () => clearTimeout(timer); // Cleanup timeout
     }
   }, [answer]); // Still depends on answer, but now checks initialLoadRef
+
+  // Show loading while redirecting - early return after all hooks
+  if (!router.isReady || (answerId && typeof answerId === "string")) {
+    return (
+      <Layout siteConfig={siteConfig}>
+        <div className="flex justify-center items-center h-screen">
+          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-blue-600"></div>
+          <p className="text-lg text-gray-600 ml-4">Redirecting...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   // Handle copying the answer link to clipboard
   const handleCopyLink = () => {

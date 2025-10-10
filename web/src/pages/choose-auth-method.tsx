@@ -28,7 +28,9 @@ export default function ChooseAuthMethodPage({ siteConfig }: ChooseAuthMethodPro
         <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
           <div className="p-6 bg-white rounded shadow-md max-w-md w-full">
             <h1 className="mb-4 text-2xl font-semibold">Welcome! Choose Your Login Method</h1>
-            <p className="mb-6 text-gray-600">Your account is now active. Choose how you'd like to log in next time:</p>
+            <p className="mb-6 text-gray-600">
+              Your account is now active. Choose how you&apos;d like to log in next time:
+            </p>
 
             <div className="space-y-4">
               <div className="border border-gray-200 rounded-lg p-4">

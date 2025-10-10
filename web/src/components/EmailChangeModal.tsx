@@ -137,7 +137,7 @@ export function EmailChangeModal({
 
           <div className="text-sm text-gray-600 bg-blue-50 border border-blue-200 rounded p-3">
             <p>
-              We've sent a verification email to <strong>{pendingEmail}</strong>.
+              We&apos;ve sent a verification email to <strong>{pendingEmail}</strong>.
             </p>
             <p className="mt-1">Check your inbox and click the verification link to complete the change.</p>
           </div>
@@ -192,7 +192,7 @@ export function EmailChangeModal({
 
           <div className="text-sm text-gray-600 bg-yellow-50 border border-yellow-200 rounded p-3">
             <p>
-              <strong>Important:</strong> We'll send a verification email to your new address.
+              <strong>Important:</strong> We&apos;ll send a verification email to your new address.
             </p>
             <p className="mt-1">You must click the verification link within 24 hours to complete the change.</p>
           </div>

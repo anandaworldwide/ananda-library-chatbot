@@ -1,5 +1,6 @@
 // Password promotion banner: Subtle, dismissible banner to promote password authentication after magic link login
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 
 interface PasswordPromoBannerProps {
   onDismiss?: () => void;
@@ -80,9 +81,9 @@ export function PasswordPromoBanner({ onDismiss }: PasswordPromoBannerProps) {
           </div>
           <p className="text-sm text-blue-700 ml-7">
             You can add a password in your{" "}
-            <a href="/settings" className="font-medium underline hover:text-blue-900">
+            <Link href="/settings" className="font-medium underline hover:text-blue-900">
               settings
-            </a>{" "}
+            </Link>{" "}
             if you prefer typing credentials. Or continue using magic links — both options work equally well.
           </p>
         </div>

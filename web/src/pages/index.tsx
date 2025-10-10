@@ -360,8 +360,6 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       return;
     }
   }, [
-    pathRef.current,
-    currentConvId,
     loading,
     chatError,
     siteConfig,
@@ -383,7 +381,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   // Update previous path after each path change
   useEffect(() => {
     previousPathRef.current = pathRef.current;
-  }, [pathRef.current]);
+  }, []);
 
   // Handle browser back/forward navigation
   useEffect(() => {
@@ -425,7 +423,9 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [siteConfig, setMessageState, setError, setLoading, handleUrlBasedLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteConfig, setMessageState, setError, setLoading, handleUrlBasedLoading, loading]);
+  // Note: handleStop is used inside handlePopState but is defined later. It's a stable function reference.
 
   // Custom hook for displaying popup messages
   const { showPopup, closePopup, popupMessage } = usePopup("1.03", "");
@@ -703,7 +703,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         }
       }, 50);
     },
-    [setMessageState, loading]
+    [setMessageState, scrollClickState]
   );
 
   const handleStreamingResponse = useCallback(
@@ -990,6 +990,7 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
         setError(data.error);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       updateMessageState,
       sourceCount,
@@ -1002,7 +1003,13 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
       setShowScrollDownButton,
       setTimingMetrics,
       siteConfig?.siteId,
+      siteConfig?.requireLogin,
+      messages,
+      savedDocId,
+      showScrollDownButton,
     ]
+    // Note: reportMissingSourcesToBacked and reportPartialSourcesToBacked are defined after this callback
+    // but are stable functions that don't need to be in the dependency array
   );
 
   // Helper function to report missing sources to backend

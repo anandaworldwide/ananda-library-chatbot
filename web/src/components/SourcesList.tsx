@@ -767,7 +767,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
                   >
                     <span className="material-icons">download</span>
                     <div>
-                      <div className="font-medium">I don't have access to {getInterstitialLibraryName()}</div>
+                      <div className="font-medium">I don&apos;t have access to {getInterstitialLibraryName()}</div>
                       <div className="text-sm text-green-600">
                         {currentSourceDoc?.metadata.pdf_s3_key
                           ? "Download PDF instead"
@@ -793,7 +793,7 @@ const SourcesList: React.FC<SourcesListProps> = ({
                   }}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                Don't show me this pop-up again
+                Don&apos;t show me this pop-up again
               </label>
             </div>
           </div>

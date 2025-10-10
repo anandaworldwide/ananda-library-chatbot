@@ -73,7 +73,7 @@ export default function ForgotPasswordPage({ siteConfig }: ForgotPasswordProps) 
                 If an account exists with that email address, a password reset link has been sent.
               </p>
               <p className="mb-6 text-gray-600 text-sm">
-                The link will expire in one hour. If you don't see the email, check your spam folder.
+                The link will expire in one hour. If you don&apos;t see the email, check your spam folder.
               </p>
               <Link
                 href="/login"
@@ -98,7 +98,7 @@ export default function ForgotPasswordPage({ siteConfig }: ForgotPasswordProps) 
           <div className="p-6 bg-white rounded shadow-md max-w-md w-full">
             <h1 className="mb-4 text-2xl font-semibold">Forgot Your Password?</h1>
             <p className="mb-6 text-gray-600">
-              Enter your email address and we'll send you a link to reset your password.
+              Enter your email address and we&apos;ll send you a link to reset your password.
             </p>
 
             <form onSubmit={handleSubmit}>

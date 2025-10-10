@@ -690,7 +690,7 @@ For external images: ![Alt text](https://external-site.com/image.jpg)
                     {/* Footer */}
                     <div className="text-xs text-gray-500 border-t pt-4">
                       <p>
-                        You're receiving this newsletter because you're subscribed to{" "}
+                        You&apos;re receiving this newsletter because you&apos;re subscribed to{" "}
                         {siteConfig?.name || "Ananda Library"} updates.
                       </p>
                       <p>
