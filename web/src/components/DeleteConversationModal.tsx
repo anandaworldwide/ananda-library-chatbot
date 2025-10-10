@@ -73,7 +73,7 @@ export default function DeleteConversationModal({
 
           <div className="bg-gray-50 rounded-xl p-3 border-l-4 border-red-400">
             <p className="text-sm font-medium text-gray-900 mb-1">Conversation to delete:</p>
-            <p className="text-sm text-gray-700 italic">"{conversationTitle}"</p>
+            <p className="text-sm text-gray-700 italic">&ldquo;{conversationTitle}&rdquo;</p>
           </div>
 
           <div className="mt-4 text-sm text-gray-600">

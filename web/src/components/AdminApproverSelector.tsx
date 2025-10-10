@@ -289,7 +289,7 @@ export default function AdminApproverSelector({
       {selectedAdmin && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
           <p className="text-gray-700 text-sm">
-            Your request will be sent to <strong>{selectedAdmin.name}</strong> in {selectedAdmin.location}. You'll
+            Your request will be sent to <strong>{selectedAdmin.name}</strong> in {selectedAdmin.location}. You&apos;ll
             receive a confirmation email and be notified once your request is reviewed.
           </p>
         </div>

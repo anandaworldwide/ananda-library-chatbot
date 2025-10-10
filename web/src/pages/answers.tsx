@@ -310,7 +310,7 @@ const AllAnswers = ({ siteConfig, authorizationError, errorMessage }: AllAnswers
                 <h1 className="text-6xl font-bold text-gray-400 mb-4">403</h1>
                 <h2 className="text-2xl font-semibold text-gray-800 mb-4">{errorMessage || "Access Restricted"}</h2>
                 <p className="text-gray-600 mb-8 max-w-md">
-                  You don't have permission to access this page. This page is restricted to authorized users only.
+                  You don&apos;t have permission to access this page. This page is restricted to authorized users only.
                 </p>
                 <button
                   onClick={() => router.push("/")}

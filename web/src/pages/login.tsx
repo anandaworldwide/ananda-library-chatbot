@@ -377,7 +377,7 @@ export default function Login({ siteConfig }: LoginProps) {
 
             <div className="mt-4 p-3 bg-gray-50 rounded text-sm text-gray-600">
               <p>
-                Don't see an admin for your area? Please{" "}
+                Don&apos;t see an admin for your area? Please{" "}
                 <button
                   type="button"
                   onClick={() => setShowFeedbackModal(true)}
@@ -400,7 +400,7 @@ export default function Login({ siteConfig }: LoginProps) {
       </div>
       {step === "email" && siteConfig?.siteId === "ananda" && (
         <p className="mt-4 text-center text-sm text-gray-700">
-          If your email isn't recognized, we'll help you request access from an admin.
+          If your email isn&apos;t recognized, we&apos;ll help you request access from an admin.
         </p>
       )}
       {siteConfig?.siteId === "jairam" && (
