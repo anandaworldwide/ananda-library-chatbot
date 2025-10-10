@@ -6,7 +6,7 @@
 #
 aiohappyeyeballs==2.6.1
     # via aiohttp
-aiohttp==3.12.14
+aiohttp==3.13.0
     # via
     #   datasets
     #   fsspec
@@ -37,7 +37,6 @@ filelock==3.18.0
     #   huggingface-hub
     #   torch
     #   transformers
-    #   triton
 flatbuffers==25.2.10
     # via onnxruntime
 frozenlist==1.6.0
@@ -152,7 +151,7 @@ propcache==0.3.1
     # via
     #   aiohttp
     #   yarl
-protobuf==6.30.2
+protobuf==6.31.1
     # via
     #   -r requirements.in
     #   onnx
@@ -171,7 +170,7 @@ pyyaml==6.0.2
     #   transformers
 regex==2024.11.6
     # via transformers
-requests==2.32.3
+requests==2.32.4
     # via
     #   datasets
     #   evaluate
@@ -216,7 +215,7 @@ typing-extensions==4.13.2
     #   torch
 tzdata==2025.2
     # via pandas
-urllib3==2.4.0
+urllib3==2.5.0
     # via requests
 xxhash==3.5.0
     # via
