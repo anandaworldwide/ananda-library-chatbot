@@ -6,11 +6,11 @@
 #
 aiohappyeyeballs==2.6.1
     # via aiohttp
-aiohttp==3.11.18
+aiohttp==3.12.14
     # via
     #   datasets
     #   fsspec
-aiosignal==1.3.2
+aiosignal==1.4.0
     # via aiohttp
 attrs==25.3.0
     # via aiohttp
@@ -37,6 +37,7 @@ filelock==3.18.0
     #   huggingface-hub
     #   torch
     #   transformers
+    #   triton
 flatbuffers==25.2.10
     # via onnxruntime
 frozenlist==1.6.0
@@ -210,6 +211,7 @@ triton==3.4.0
     # via torch
 typing-extensions==4.13.2
     # via
+    #   aiosignal
     #   huggingface-hub
     #   torch
 tzdata==2025.2
