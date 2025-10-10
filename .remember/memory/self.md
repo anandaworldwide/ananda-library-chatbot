@@ -581,3 +581,45 @@ API response format, not assumptions about the format.
 
 **Files Modified**: `web/src/hooks/useChatHistory.ts` - completely rewrote `fetchStarredConversations` function to match
 API response format and implement proper conversation grouping.
+
+### 24. TypeScript Build Error - Dev Scripts Included in Production Build
+
+**Issue**: Vercel build failed with `Cannot find module 'commander'` error when TypeScript tried to compile dev-only
+scripts during production build.
+
+**Root Cause**: The `tsconfig.json` included `scripts/**/*.ts` in the compilation, causing all scripts (including
+dev-only tools) to be type-checked. When these scripts imported packages not in production dependencies, the build
+failed.
+
+**Solution**: Remove dev script directories from TypeScript `include` array in `tsconfig.json`.
+
+**Wrong**: Including script directories in production TypeScript compilation.
+
+```json
+"include": [
+  "next-env.d.ts",
+  "src/**/*.ts",
+  "src/**/*.tsx",
+  ".next/types/**/*.ts",
+  "src/types/**/*.d.ts",
+  "scripts/**/*.ts"  // Causes build failures for dev-only scripts
+]
+```
+
+**Correct**: Only include production source code in TypeScript compilation.
+
+```json
+"include": [
+  "next-env.d.ts",
+  "src/**/*.ts",
+  "src/**/*.tsx",
+  ".next/types/**/*.ts",
+  "src/types/**/*.d.ts"
+  // scripts directory excluded - dev-only tools
+]
+```
+
+**Pattern**: Keep dev-only scripts separate from production builds. Only include `src/**` directories in TypeScript
+compilation unless scripts are explicitly needed for build processes.
+
+**Files Modified**: `web/tsconfig.json` - removed `scripts/**/*.ts` from include array.
