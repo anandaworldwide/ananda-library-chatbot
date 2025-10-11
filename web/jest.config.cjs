@@ -30,6 +30,7 @@ const customJestConfig = {
     "^react-markdown$": "<rootDir>/__mocks__/react-markdown.js",
     "^remark-gfm$": "<rootDir>/__mocks__/remark-gfm.js",
     "^next/server$": "<rootDir>/__mocks__/next/server.js",
+    "^uuid$": "<rootDir>/__mocks__/uuid.js",
   },
   // Assuming tests are now within web/, e.g., web/__tests__ or web/src/**/__tests__
   testMatch: ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[jt]s?(x)"],

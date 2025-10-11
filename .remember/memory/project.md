@@ -124,6 +124,22 @@
 
 - Extended entitlements initial set: `kriyaban`, `minister` (final list TBD by user)
 
+## Model Comparison Feature
+
+- **Feature**: "Try GPT-4.1" button on every answer for anecdotal user feedback
+- **Implementation**: Side-by-side comparison UI (responsive for mobile/desktop)
+- **Components**:
+  - `ModelComparisonFeedbackModal.tsx` - feedback collection with consent checkbox
+  - `AnswerComparison.tsx` - side-by-side comparison display
+  - `MessageItem.tsx` - updated with regeneration button and state tracking
+- **API**: `/api/model-comparison-vote` - shared endpoint with compare-models page
+- **Backend**: `modelOverride` parameter in chat API for testing different models
+- **Database**: Firestore collection `${prefix}model_comparison_votes` (shared with compare-models)
+- **Distinction**: Inline comparisons have `source: "inline_comparison"` field
+- **Privacy**: User consent checkbox controls whether Q&A is stored in database
+- **Current model**: Using "gpt-4.1" model for comparison
+- **UI Flow**: Button appears below comparison after streaming completes (user-controlled, no auto-popup)
+
 ## Never Do Again
 
 1. Cross-evaluate between different embedding model generations

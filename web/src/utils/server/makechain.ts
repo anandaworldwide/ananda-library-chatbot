@@ -1063,7 +1063,8 @@ export async function setupAndExecuteLanguageModelChain(
   startTime?: number,
   temporarySession: boolean = false,
   request?: NextRequest,
-  timingMetrics?: any // Accept timing metrics for detailed tracking
+  timingMetrics?: any, // Accept timing metrics for detailed tracking
+  modelOverride?: string // Optional model override for testing/comparison
 ): Promise<{ fullResponse: string; finalDocs: Document[]; restatedQuestion: string; suggestions: string[] }> {
   const TIMEOUT_MS = process.env.NODE_ENV === "test" ? 1000 : 30000;
   const RETRY_DELAY_MS = process.env.NODE_ENV === "test" ? 10 : 1000;
@@ -1075,7 +1076,7 @@ export async function setupAndExecuteLanguageModelChain(
 
   while (retryCount < MAX_RETRIES) {
     try {
-      const modelName = siteConfig?.modelName || "gpt-4o";
+      const modelName = modelOverride || siteConfig?.modelName || "gpt-4o";
       const temperature = siteConfig?.temperature || 0.3;
       const rephraseModelName = "gpt-3.5-turbo";
       const rephraseTemperature = 0.1;

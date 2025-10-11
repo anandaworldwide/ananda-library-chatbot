@@ -20,6 +20,8 @@ import MessageItem from "@/components/MessageItem";
 import DownvoteFeedbackModal from "@/components/DownvoteFeedbackModal";
 import ChatHistorySidebar from "@/components/ChatHistorySidebar";
 import { PasswordPromoBanner } from "@/components/PasswordPromoBanner";
+import AnswerComparison from "@/components/AnswerComparison";
+import ModelComparisonFeedbackModal from "@/components/ModelComparisonFeedbackModal";
 
 // Hook imports
 import usePopup from "@/hooks/usePopup";
@@ -1082,6 +1084,14 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     // Reset timing metrics when starting a new query
     setTimingMetrics(null);
 
+    // Clear any active comparison UI when submitting a new question
+    if (regeneratingMessageIndex !== null || regeneratedAnswer) {
+      setRegeneratingMessageIndex(null);
+      setRegeneratedAnswer(null);
+      setIsRegenerating(false);
+      setShowComparisonFeedbackModal(false);
+    }
+
     if (submittedQuery.length > 4000) {
       setError("Input must be 4000 characters or less");
       return;
@@ -1334,6 +1344,13 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
   const [currentFeedbackDocId, setCurrentFeedbackDocId] = useState<string | null>(null);
   const [feedbackSubmitError, setFeedbackSubmitError] = useState<string | null>(null);
 
+  // State for GPT-4.1 regeneration and comparison
+  const [regeneratingMessageIndex, setRegeneratingMessageIndex] = useState<number | null>(null);
+  const [regeneratedAnswer, setRegeneratedAnswer] = useState<ExtendedAIMessage | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
+  const [showComparisonFeedbackModal, setShowComparisonFeedbackModal] = useState<boolean>(false);
+  const regeneratedAnswerRef = useRef<string>("");
+
   // Function to handle voting on answers - MODIFIED
   const handleVote = (docId: string, isUpvote: boolean) => {
     setVoteError(null); // Clear previous errors
@@ -1401,6 +1418,204 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
     setCurrentFeedbackDocId(null);
     setFeedbackSubmitError(null); // Clear any errors shown in modal
     logEvent("cancel_feedback", "Engagement", "");
+  };
+
+  // Function to handle GPT-4.1 regeneration
+  const handleTryGPT41 = useCallback(
+    async (messageIndex: number) => {
+      if (isRegenerating) return; // Prevent multiple regenerations
+
+      const apiMessage = messages[messageIndex];
+      if (apiMessage.type !== "apiMessage") return;
+
+      const userMessage = messages[messageIndex - 1];
+      if (!userMessage || userMessage.type !== "userMessage") return;
+
+      logEvent("try_gpt41_clicked", "Model Comparison", `Message Index: ${messageIndex}`);
+
+      setRegeneratingMessageIndex(messageIndex);
+      setIsRegenerating(true);
+      regeneratedAnswerRef.current = "";
+
+      // Create placeholder for regenerated answer
+      setRegeneratedAnswer({
+        message: "",
+        type: "apiMessage",
+        sourceDocs: apiMessage.sourceDocs || [], // Reuse same sources
+      });
+
+      try {
+        const response = await fetchWithAuth("/api/chat/v1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: userMessage.message,
+            history: messageState.history.slice(0, messageIndex), // Include conversation history up to this point
+            collection: apiMessage.collection || collection,
+            mediaTypes: mediaTypes,
+            sourceCount: apiMessage.sourceDocs?.length || sourceCount,
+            temporarySession: temporarySession,
+            uuid: getOrCreateUUID(),
+            convId: currentConvIdRef.current,
+            // Override model to gpt-4.1 for comparison
+            modelOverride: "gpt-4.1",
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error("No response body");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(5));
+
+                if (data.token) {
+                  regeneratedAnswerRef.current += data.token;
+                  setRegeneratedAnswer((prev) => ({
+                    ...prev!,
+                    message: regeneratedAnswerRef.current,
+                  }));
+                }
+
+                if (data.done) {
+                  setIsRegenerating(false);
+                }
+              } catch (e) {
+                console.error("Error parsing SSE data:", e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error regenerating with GPT-4.1:", error);
+        toast.error("Failed to regenerate answer. Please try again.");
+        setIsRegenerating(false);
+        setRegeneratingMessageIndex(null);
+        setRegeneratedAnswer(null);
+      }
+    },
+    [isRegenerating, messages, collection, mediaTypes, sourceCount, temporarySession, messageState.history]
+  );
+
+  // Function to submit comparison feedback
+  const handleComparisonFeedbackSubmit = async (preference: string, comment: string, shareConsent: boolean) => {
+    if (regeneratingMessageIndex === null || !regeneratedAnswer) return;
+
+    const originalAnswer = messages[regeneratingMessageIndex];
+    const userMessage = messages[regeneratingMessageIndex - 1];
+
+    // Map preference to winner format
+    let winner: "A" | "B" | "skip";
+    if (preference === "original") {
+      winner = "A";
+    } else if (preference === "new") {
+      winner = "B";
+    } else {
+      winner = "skip"; // "same"
+    }
+
+    try {
+      const response = await fetchWithAuth("/api/model-comparison-vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: getOrCreateUUID(),
+          timestamp: new Date(),
+          winner,
+          modelAConfig: {
+            model: siteConfig?.modelName || "gpt-4",
+            temperature: 0.3,
+            response:
+              shareConsent && originalAnswer.message ? originalAnswer.message : "[User did not consent to share]",
+          },
+          modelBConfig: {
+            model: "gpt-4.1",
+            temperature: 0.3,
+            response:
+              shareConsent && regeneratedAnswer.message ? regeneratedAnswer.message : "[User did not consent to share]",
+          },
+          question: shareConsent && userMessage?.message ? userMessage.message : "[User did not consent to share]",
+          collection: originalAnswer.collection || collection,
+          mediaTypes: mediaTypes,
+          userComments: comment || "",
+          shareConsent,
+          siteId: siteConfig?.siteId || "unknown",
+          source: "inline_comparison",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to submit feedback");
+      }
+
+      // If user preferred the new answer, replace the original with it
+      if (preference === "new" && originalAnswer.docId) {
+        // Update the message in the UI
+        setMessageState((prevState) => {
+          const newMessages = [...prevState.messages];
+          newMessages[regeneratingMessageIndex] = {
+            ...originalAnswer,
+            message: regeneratedAnswer.message,
+            // Keep the original docId, sourceDocs, etc.
+          };
+          return {
+            ...prevState,
+            messages: newMessages,
+          };
+        });
+
+        // Update the database record with the new answer
+        try {
+          await fetchWithAuth(`/api/answers/${originalAnswer.docId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              response: regeneratedAnswer.message,
+              modelUsed: "gpt-4.1",
+            }),
+          });
+        } catch (updateError) {
+          console.error("Error updating answer in database:", updateError);
+          // Don't show error to user since the vote was recorded successfully
+        }
+      }
+
+      toast.success("Thank you for your feedback!");
+      logEvent("comparison_feedback_submitted", "Model Comparison", preference);
+    } catch (error) {
+      console.error("Error submitting comparison feedback:", error);
+      toast.error("Failed to submit feedback. Please try again.");
+    } finally {
+      setShowComparisonFeedbackModal(false);
+      setRegeneratingMessageIndex(null);
+      setRegeneratedAnswer(null);
+      regeneratedAnswerRef.current = "";
+    }
+  };
+
+  // Function to close comparison feedback modal
+  const handleComparisonFeedbackClose = () => {
+    setShowComparisonFeedbackModal(false);
+    setRegeneratingMessageIndex(null);
+    setRegeneratedAnswer(null);
+    regeneratedAnswerRef.current = "";
+    logEvent("comparison_feedback_skipped", "Model Comparison", "");
   };
 
   // Function to handle copying answer links
@@ -1630,27 +1845,54 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
                 <div ref={messageListRef} className="h-full overflow-y-auto">
                   {/* Render chat messages */}
                   {messages.map((message, index) => (
-                    <MessageItem
-                      key={`chatMessage-${index}`}
-                      messageKey={`chatMessage-${index}`}
-                      message={message}
-                      previousMessage={index > 0 ? messages[index - 1] : undefined}
-                      index={index}
-                      isLastMessage={index === messages.length - 1}
-                      loading={loading}
-                      temporarySession={temporarySession}
-                      collectionChanged={collectionChanged}
-                      hasMultipleCollections={hasMultipleCollections}
-                      linkCopied={linkCopied}
-                      votes={votes}
-                      siteConfig={siteConfig}
-                      handleCopyLink={handleCopyLink}
-                      handleVote={handleVote}
-                      lastMessageRef={lastMessageRef}
-                      voteError={voteError}
-                      allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
-                      onSuggestionClick={handleSuggestionClick}
-                    />
+                    <React.Fragment key={`chatMessage-${index}`}>
+                      <MessageItem
+                        messageKey={`chatMessage-${index}`}
+                        message={message}
+                        previousMessage={index > 0 ? messages[index - 1] : undefined}
+                        index={index}
+                        isLastMessage={index === messages.length - 1}
+                        loading={loading}
+                        temporarySession={temporarySession}
+                        collectionChanged={collectionChanged}
+                        hasMultipleCollections={hasMultipleCollections}
+                        linkCopied={linkCopied}
+                        votes={votes}
+                        siteConfig={siteConfig}
+                        handleCopyLink={handleCopyLink}
+                        handleVote={handleVote}
+                        lastMessageRef={lastMessageRef}
+                        voteError={voteError}
+                        allowAllAnswersPage={siteConfig?.allowAllAnswersPage ?? false}
+                        onSuggestionClick={handleSuggestionClick}
+                        onTryGPT41={handleTryGPT41}
+                        isRegenerating={isRegenerating && regeneratingMessageIndex === index}
+                      />
+
+                      {/* Show comparison UI if this message is being regenerated */}
+                      {regeneratingMessageIndex === index && regeneratedAnswer && (
+                        <div className="px-4 pb-4">
+                          <AnswerComparison
+                            originalAnswer={message}
+                            newAnswer={regeneratedAnswer}
+                            originalModel={siteConfig?.modelName || "GPT-4"}
+                            newModel="GPT-4.1"
+                            isStreaming={isRegenerating}
+                          />
+                          {/* Feedback button - only show after streaming completes */}
+                          {!isRegenerating && (
+                            <div className="mt-4 flex justify-center">
+                              <button
+                                onClick={() => setShowComparisonFeedbackModal(true)}
+                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-md transition-colors"
+                              >
+                                Which answer was better?
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </React.Fragment>
                   ))}
                   {/* Display timing metrics for sudo users */}
                   {isSudoUser && timingMetrics && !loading && messages.length > 0 && (
@@ -1724,6 +1966,15 @@ export default function Home({ siteConfig }: { siteConfig: SiteConfig | null }) 
           onConfirm={submitFeedback}
           onCancel={cancelFeedback}
           error={feedbackSubmitError} // Pass feedback-specific error
+        />
+
+        {/* Render the Model Comparison Feedback Modal */}
+        <ModelComparisonFeedbackModal
+          isOpen={showComparisonFeedbackModal}
+          onClose={handleComparisonFeedbackClose}
+          onSubmit={handleComparisonFeedbackSubmit}
+          originalModel={siteConfig?.modelName || "GPT-4"}
+          newModel="GPT-4.1"
         />
 
         {/* Display general vote errors (e.g., from upvoting) */}

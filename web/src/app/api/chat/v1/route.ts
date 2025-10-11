@@ -127,6 +127,7 @@ interface ChatRequestBody {
   siteId?: string;
   uuid: string; // required client UUID (persisted regardless of auth)
   convId?: string; // conversation ID for follow-up messages
+  modelOverride?: string; // optional model override for testing/comparison
 }
 
 interface ComparisonRequestBody extends ChatRequestBody {
@@ -987,7 +988,8 @@ async function handleChatRequest(req: NextRequest) {
           timingMetrics.startTime,
           sanitizedInput.temporarySession || false,
           req, // Pass the request object for geo-awareness
-          timingMetrics // Pass timing metrics for detailed tracking
+          timingMetrics, // Pass timing metrics for detailed tracking
+          sanitizedInput.modelOverride // Pass model override if provided
         );
         // --- End of Encapsulated Call ---
         timingMetrics.answerStreamingComplete = Date.now();

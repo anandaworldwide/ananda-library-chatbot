@@ -36,6 +36,8 @@ interface MessageItemProps {
   showSourcesBelow?: boolean;
   onSuggestionClick?: (suggestion: string) => void;
   readOnly?: boolean; // New prop to disable interactive elements
+  onTryGPT41?: (messageIndex: number) => void; // New prop for regenerating with GPT-4.1
+  isRegenerating?: boolean; // Track if this message is being regenerated
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({
@@ -57,6 +59,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
   showSourcesBelow = false,
   onSuggestionClick,
   readOnly = false,
+  onTryGPT41,
+  isRegenerating = false,
 }) => {
   const { isSudoUser } = useSudo();
 
@@ -222,6 +226,26 @@ const MessageItem: React.FC<MessageItemProps> = ({
                           </button>
                         </div>
                       ))}
+
+                    {/* Try GPT-4.1 button - only show if handler provided and not already regenerating */}
+                    {!readOnly && onTryGPT41 && !isRegenerating && (
+                      <button
+                        onClick={() => onTryGPT41(index)}
+                        className="flex items-center space-x-1 px-2 py-1 rounded bg-gradient-to-r from-purple-500 to-blue-500 text-white text-sm hover:from-purple-600 hover:to-blue-600 transition-all"
+                        title="Regenerate this answer using GPT-4.1 for comparison"
+                      >
+                        <span className="material-icons text-sm">auto_awesome</span>
+                        <span>Try GPT-4.1</span>
+                      </button>
+                    )}
+
+                    {/* Show loading state when regenerating */}
+                    {isRegenerating && (
+                      <div className="flex items-center space-x-1 px-2 py-1 text-sm text-gray-600">
+                        <span className="material-icons text-sm animate-spin">refresh</span>
+                        <span>Generating...</span>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
